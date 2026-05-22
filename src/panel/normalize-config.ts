@@ -52,6 +52,15 @@ export const DEFAULT_ROUTE_CORRIDOR_WIDTH_METERS = 500
 export const DEFAULT_OPENSEAMAP_ENDPOINT = 'https://overpass-api.de/api/interpreter'
 
 /**
+ * Fallback merge radius, in meters, for OpenSeaMap dedupe against the
+ * ActiveCaptain base. Mirrors the `openSeaMapDedupeRadiusMeters` schema
+ * default and the `DEFAULT_DEDUPE_RADIUS_METERS` constant in
+ * src/inputs/dedupe-pois.ts; keep them in step so the panel and the plugin
+ * agree.
+ */
+export const DEFAULT_OPENSEAMAP_DEDUPE_RADIUS_METERS = 150
+
+/**
  * Coerce the admin UI's untyped `configuration` prop into a fully populated
  * PluginConfig. A POI-type flag absent from the stored config defaults to
  * true, matching the plugin schema, so a never-configured plugin shows every
@@ -123,6 +132,14 @@ export function normalizeConfig (configuration: unknown): PluginConfig {
   // still merges OpenSeaMap duplicates of an ActiveCaptain marker. Only an
   // explicit false turns it off.
   config.openSeaMapDedupe = raw.openSeaMapDedupe !== false
+
+  // A zero or negative dedupe radius would leave dedupe enabled but unable to
+  // ever match, so it is treated as unusable and falls back to the default.
+  const dedupeRadius = raw.openSeaMapDedupeRadiusMeters
+  config.openSeaMapDedupeRadiusMeters =
+    typeof dedupeRadius === 'number' && Number.isFinite(dedupeRadius) && dedupeRadius > 0
+      ? dedupeRadius
+      : DEFAULT_OPENSEAMAP_DEDUPE_RADIUS_METERS
 
   return config
 }
