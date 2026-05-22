@@ -4,20 +4,22 @@
  * Given the points of interest that the route-corridor scan flagged as lying
  * on the route ahead, this module raises a SignalK notification for each one
  * and clears it once the point of interest is no longer on the route ahead.
- * It mirrors `proximityAlarms.ts`: a notification is raised once when a point
+ * It mirrors `proximity-alarms.ts`: a notification is raised once when a point
  * of interest first appears on the route and cleared once when it drops off,
  * so an alarm does not re-fire on every tick.
  *
  * The geometry (which points of interest are in the corridor, their along-track
- * distance, and ETA) is the job of `routeCorridor.ts`. This module is the
+ * distance, and ETA) is the job of `route-corridor.ts`. This module is the
  * stateful raise/clear layer on top of that pure scan.
  *
  * The notification is emitted through `app.handleMessage` on the path
  * `notifications.navigation.activecaptain.route.<poiId>`, in the
- * `vessels.self` context. It carries `state: 'warn'` rather than `'alert'`:
+ * `vessels.self` context. It carries `state: 'warn'` rather than `'alarm'`:
  * a hazard, bridge, or lock several miles ahead on the route is an advisory
  * the crew should plan around, not the imminent danger that the proximity
- * alarm signals.
+ * alarm signals. The SignalK severity order is nominal, normal, alert, warn,
+ * alarm, then emergency, so `'warn'` correctly ranks below the proximity
+ * alarm's `'alarm'`.
  */
 
 import type { Delta, Path, SourceRef, Timestamp } from '@signalk/server-api'

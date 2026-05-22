@@ -45,7 +45,7 @@ function northOfOrigin (metersNorth: number): Position {
 
 const ORIGIN: Position = { latitude: 0, longitude: 0 }
 
-test('raises an alert for a hazard within the radius', () => {
+test('raises an alarm for a hazard within the radius', () => {
   const { app, captured } = createMockApp()
   const alarms = createProximityAlarms(app, 500)
 
@@ -53,14 +53,14 @@ test('raises an alert for a hazard within the radius', () => {
 
   assert.equal(captured.length, 1)
   assert.equal(captured[0].path, 'notifications.navigation.activecaptain.hazard.h1')
-  assert.equal(captured[0].value.state, 'alert')
+  assert.equal(captured[0].value.state, 'alarm')
   assert.deepEqual(captured[0].value.method, ['visual', 'sound'])
   assert.ok(captured[0].value.message.includes('Submerged rock'), 'message names the hazard')
   assert.ok(/\d+\s*m/.test(captured[0].value.message), 'message reports the distance')
   assert.ok(captured[0].value.timestamp.length > 0, 'a timestamp is present')
 })
 
-test('does not raise an alert for a hazard outside the radius', () => {
+test('does not raise an alarm for a hazard outside the radius', () => {
   const { app, captured } = createMockApp()
   const alarms = createProximityAlarms(app, 500)
 
@@ -91,7 +91,7 @@ test('does not re-fire while a hazard stays within the radius', () => {
   alarms.evaluate(ORIGIN, pois)
 
   assert.equal(captured.length, 1, 'the alarm is raised exactly once on entry')
-  assert.equal(captured[0].value.state, 'alert')
+  assert.equal(captured[0].value.state, 'alarm')
 })
 
 test('clears the alarm exactly once when the hazard leaves the radius', () => {
@@ -104,8 +104,8 @@ test('clears the alarm exactly once when the hazard leaves the radius', () => {
   alarms.evaluate(northOfOrigin(5000), [hazard])
   alarms.evaluate(northOfOrigin(5000), [hazard])
 
-  assert.equal(captured.length, 2, 'one alert on entry, one clear on exit')
-  assert.equal(captured[0].value.state, 'alert')
+  assert.equal(captured.length, 2, 'one alarm on entry, one clear on exit')
+  assert.equal(captured[0].value.state, 'alarm')
   assert.equal(captured[1].value.state, 'normal')
   assert.equal(captured[1].path, 'notifications.navigation.activecaptain.hazard.h1')
   assert.ok(captured[1].value.message.includes('Rock'), 'the clear message names the hazard')
@@ -122,7 +122,7 @@ test('re-arms a hazard after it leaves and re-enters the radius', () => {
 
   assert.deepEqual(
     captured.map(entry => entry.value.state),
-    ['alert', 'normal', 'alert']
+    ['alarm', 'normal', 'alarm']
   )
 })
 
@@ -151,12 +151,12 @@ test('tracks several hazards independently', () => {
 
   assert.equal(captured.length, 3)
   assert.equal(captured[0].path, 'notifications.navigation.activecaptain.hazard.near')
-  assert.equal(captured[0].value.state, 'alert')
+  assert.equal(captured[0].value.state, 'alarm')
   // The second pass raises `far` and clears `near`, order independent.
   const secondPass = captured.slice(1)
-  const farAlert = secondPass.find(entry => entry.path.endsWith('.far'))
+  const farAlarm = secondPass.find(entry => entry.path.endsWith('.far'))
   const nearClear = secondPass.find(entry => entry.path.endsWith('.near'))
-  assert.equal(farAlert?.value.state, 'alert')
+  assert.equal(farAlarm?.value.state, 'alarm')
   assert.equal(nearClear?.value.state, 'normal')
 })
 

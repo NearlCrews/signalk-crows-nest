@@ -12,7 +12,15 @@
  * `notifications.navigation.activecaptain.hazard.<poiId>`, in the
  * `vessels.self` context (the default when a delta carries no context). The
  * `notifications.navigation` branch is the standard place for navigational
- * alerts, so consumers categorise it correctly.
+ * alerts, so consumers categorize it correctly.
+ *
+ * A raised alarm carries `state: 'alarm'`, the highest practical SignalK
+ * severity here: a hazard within the radius of the bow is imminent danger.
+ * The route-corridor output, by contrast, carries the lower `state: 'warn'`
+ * for a hazard several miles ahead on the route, which is an advisory the
+ * crew can plan around. The SignalK severity order is nominal, normal, alert,
+ * warn, alarm, then emergency, so `'alarm'` correctly outranks the route
+ * advisory's `'warn'`.
  */
 
 import type { Delta, Path, SourceRef, Timestamp } from '@signalk/server-api'
@@ -76,7 +84,7 @@ export interface ProximityAlarms {
  * design. It is a plain object, so it satisfies the delta `Value` type.
  */
 interface HazardNotificationValue {
-  state: 'alert' | 'normal'
+  state: 'alarm' | 'normal'
   method: Array<'visual' | 'sound'>
   message: string
   timestamp: string
@@ -109,7 +117,7 @@ export function createProximityAlarms (app: AlarmApp, radiusMeters: number): Pro
 
   function raise (poiId: string, name: string, distance: number): void {
     emit(poiId, {
-      state: 'alert',
+      state: 'alarm',
       method: ['visual', 'sound'],
       message: `Hazard "${name}" is ${Math.round(distance)} m away`,
       timestamp: new Date().toISOString()
