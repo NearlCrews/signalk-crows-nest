@@ -147,7 +147,9 @@ function withTempDir (body: (dir: string) => Promise<void>): Promise<void> {
 test('the cache hydrates from the persistent store on creation', async () => {
   await withTempDir(async (dir) => {
     // Seed the store directly, then build a cache pointed at the same store.
-    createPoiStore(dir, TTL_MINUTES).persist('1', makeDetails('1'))
+    const seedStore = createPoiStore(dir, TTL_MINUTES)
+    seedStore.persist('1', makeDetails('1'))
+    seedStore.flush()
 
     const source = createFakeSource()
     const cache = createPoiCache(source, TTL_MINUTES, {}, createPoiStore(dir, TTL_MINUTES))
@@ -163,9 +165,11 @@ test('the cache hydrates from the persistent store on creation', async () => {
 test('a real load is persisted to the store and survives into a new cache', async () => {
   await withTempDir(async (dir) => {
     const firstSource = createFakeSource()
-    const firstCache = createPoiCache(firstSource, TTL_MINUTES, {}, createPoiStore(dir, TTL_MINUTES))
+    const firstStore = createPoiStore(dir, TTL_MINUTES)
+    const firstCache = createPoiCache(firstSource, TTL_MINUTES, {}, firstStore)
     await firstCache.get('1')
     assert.equal(firstSource.callCount(), 1)
+    firstStore.flush() // force the debounced write out before a fresh cache reads it
 
     // A fresh cache over the same directory hydrates from what the first wrote.
     const secondSource = createFakeSource()

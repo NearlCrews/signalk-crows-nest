@@ -70,15 +70,15 @@ export function createActiveCaptainSource (config: ActiveCaptainSourceConfig): P
   const baseStore = createPoiStore(dataDir, cachingDurationMinutes)
   // Wrap the store so a load that resolves after close() does not write to
   // disk: that run is gone, and the entry would only mislead a later cold
-  // start drawn from a partially torn-down run.
+  // start drawn from a partially torn-down run. Every other store method is
+  // delegated to the base store unchanged.
   const store: PoiStore = {
-    load: () => baseStore.load(),
+    ...baseStore,
     persist: (id, details) => {
       if (!closed) {
         baseStore.persist(id, details)
       }
-    },
-    clear: () => { baseStore.clear() }
+    }
   }
 
   const cache = createPoiCache(client, cachingDurationMinutes, {
@@ -155,6 +155,9 @@ export function createActiveCaptainSource (config: ActiveCaptainSourceConfig): P
     cacheSize: () => cache.size(),
     close: () => {
       closed = true
+      // Flush any debounced store write so a clean shutdown persists every
+      // detail loaded during the run.
+      baseStore.flush()
       client.close()
     }
   }

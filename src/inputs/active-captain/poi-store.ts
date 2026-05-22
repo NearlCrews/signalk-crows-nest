@@ -9,6 +9,12 @@
  * file never throws to the caller, the store simply behaves as if it were
  * empty. A failed write is swallowed, the entry survives in memory and is
  * re-fetched on a future cold start.
+ *
+ * Writes are debounced. A `persist` updates the in-memory mirror and schedules
+ * one file write a short while later, so a burst of detail loads collapses into
+ * a single rewrite rather than rewriting the whole file once per POI. `flush`
+ * forces a pending write out at once; the plugin calls it on stop so a clean
+ * shutdown loses nothing.
  */
 
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
@@ -18,6 +24,12 @@ import type { PoiDetails } from '../../shared/types.js'
 
 /** Name of the JSON file the store persists to inside the data directory. */
 const STORE_FILE_NAME = 'poi-cache.json'
+
+/**
+ * How long, in milliseconds, a `persist` waits before the file write runs. A
+ * burst of loads inside this window collapses into one rewrite of the store.
+ */
+const WRITE_DEBOUNCE_MS = 1000
 
 /** On-disk format version, bumped if the file layout ever changes. */
 const STORE_VERSION = 1
@@ -44,8 +56,13 @@ export interface PoiStore {
    * corrupt store file yields an empty map rather than an error.
    */
   load: () => Map<string, StoredPoi>
-  /** Persist (or replace) one entry, stamped with the current time. */
+  /**
+   * Record (or replace) one entry, stamped with the current time, and schedule
+   * a debounced write of the whole store to disk.
+   */
   persist: (id: string, details: PoiDetails) => void
+  /** Write any pending debounced change to disk now. */
+  flush: () => void
   /** Drop every persisted entry and remove the backing file. */
   clear: () => void
 }
@@ -110,6 +127,9 @@ export function createPoiStore (directoryPath: string, ttlMinutes: number): PoiS
   // rewrite the whole file without re-reading it. Populated by load().
   let entries: Record<string, StoredPoi> = {}
 
+  // A pending debounced write, or undefined when no write is scheduled.
+  let writeTimer: NodeJS.Timeout | undefined
+
   // Write the in-memory mirror to disk. Writes go to a temp file that is then
   // renamed over the target, so a crash mid-write cannot corrupt the store.
   // The temp path is fixed (no pid), so at most one stale temp file can ever
@@ -125,6 +145,22 @@ export function createPoiStore (directoryPath: string, ttlMinutes: number): PoiS
     } catch (error) {
       rmSync(tempPath, { force: true })
       throw error
+    }
+  }
+
+  // Run a pending write now, cancelling the debounce timer. A failed write is
+  // swallowed: the entry stays in the in-memory mirror and is re-fetched on a
+  // future cold start.
+  const flush = (): void => {
+    if (writeTimer === undefined) {
+      return
+    }
+    clearTimeout(writeTimer)
+    writeTimer = undefined
+    try {
+      writeFile()
+    } catch {
+      // A failed write must not crash the plugin.
     }
   }
 
@@ -168,15 +204,23 @@ export function createPoiStore (directoryPath: string, ttlMinutes: number): PoiS
 
     persist: (id: string, details: PoiDetails): void => {
       entries[id] = { timestamp: Date.now(), details }
-      try {
-        writeFile()
-      } catch {
-        // A failed write must not crash the plugin: the entry stays in the
-        // in-memory cache and is simply re-fetched on a future cold start.
+      // Coalesce a burst of detail loads into one file write: a dense scan can
+      // persist many POIs in quick succession, and rewriting the whole store
+      // file on each one would block the event loop repeatedly. The timer is
+      // unref'd so a pending write never holds the process open.
+      if (writeTimer === undefined) {
+        writeTimer = setTimeout(flush, WRITE_DEBOUNCE_MS)
+        writeTimer.unref()
       }
     },
 
+    flush,
+
     clear: (): void => {
+      if (writeTimer !== undefined) {
+        clearTimeout(writeTimer)
+        writeTimer = undefined
+      }
       entries = {}
       try {
         rmSync(filePath, { force: true })

@@ -40,6 +40,7 @@ test('persisted entries survive into a fresh store instance', () => {
     const writer = createPoiStore(dir, TTL_MINUTES)
     writer.persist('1', makeDetails('1'))
     writer.persist('2', makeDetails('2'))
+    writer.flush()
 
     const loaded = createPoiStore(dir, TTL_MINUTES).load()
 
@@ -57,6 +58,7 @@ test('persist replaces an existing entry rather than duplicating it', () => {
     const replacement = makeDetails('1')
     replacement.pointOfInterest.name = 'Renamed POI'
     store.persist('1', replacement)
+    store.flush()
 
     const loaded = createPoiStore(dir, TTL_MINUTES).load()
 
@@ -155,6 +157,7 @@ test('clear empties the store and removes the backing file', () => {
   withTempDir((dir) => {
     const store = createPoiStore(dir, TTL_MINUTES)
     store.persist('1', makeDetails('1'))
+    store.flush()
     assert.ok(existsSync(join(dir, STORE_FILE_NAME)))
 
     store.clear()
@@ -176,7 +179,27 @@ test('persist creates the data directory when it does not yet exist', () => {
     const store = createPoiStore(nested, TTL_MINUTES)
 
     assert.doesNotThrow(() => { store.persist('1', makeDetails('1')) })
+    store.flush()
     assert.equal(createPoiStore(nested, TTL_MINUTES).load().size, 1)
+  })
+})
+
+test('persist defers the file write until flush', () => {
+  withTempDir((dir) => {
+    const store = createPoiStore(dir, TTL_MINUTES)
+    store.persist('1', makeDetails('1'))
+    // The write is debounced, so nothing has reached disk yet.
+    assert.ok(!existsSync(join(dir, STORE_FILE_NAME)))
+
+    store.flush()
+    assert.ok(existsSync(join(dir, STORE_FILE_NAME)))
+    assert.equal(createPoiStore(dir, TTL_MINUTES).load().size, 1)
+  })
+})
+
+test('flush is a no-op when no write is pending', () => {
+  withTempDir((dir) => {
+    assert.doesNotThrow(() => { createPoiStore(dir, TTL_MINUTES).flush() })
   })
 })
 
@@ -194,6 +217,7 @@ test('a stale entry is pruned from disk on the next persist', () => {
     const store = createPoiStore(dir, TTL_MINUTES)
     store.load() // drops the stale entry from the in-memory mirror
     store.persist('2', makeDetails('2'))
+    store.flush()
 
     const onDisk = JSON.parse(readFileSync(join(dir, STORE_FILE_NAME), 'utf8'))
     assert.deepEqual(Object.keys(onDisk.entries), ['2'])
