@@ -17,14 +17,21 @@ const RELATIVE_UNITS: ReadonlyArray<readonly [Intl.RelativeTimeFormatUnit, numbe
   ['second', 1]
 ]
 
+/**
+ * Shared RelativeTimeFormat instance. Construction is non-trivial and the
+ * formatter is reentrant, so it is reused across every relativeTime call
+ * rather than rebuilt per call (StatusBar renders multiple rows on each
+ * 5-second status poll).
+ */
+const RELATIVE_TIME_FORMAT = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
+
 /** Render an ISO-8601 timestamp as a localized, relative phrase such as "5 minutes ago". */
-function relativeTime (iso: string): string {
+export function relativeTime (iso: string): string {
   const then = new Date(iso).getTime()
   if (Number.isNaN(then)) return iso
 
   const deltaSeconds = Math.round((then - Date.now()) / 1000)
   const absSeconds = Math.abs(deltaSeconds)
-  const format = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
 
   // Pick the coarsest unit the delta reaches.
   let index = RELATIVE_UNITS.length - 1
@@ -42,7 +49,7 @@ function relativeTime (iso: string): string {
   }
 
   const [unit, unitSeconds] = RELATIVE_UNITS[index]
-  return format.format(Math.round(deltaSeconds / unitSeconds), unit)
+  return RELATIVE_TIME_FORMAT.format(Math.round(deltaSeconds / unitSeconds), unit)
 }
 
 /** Map the tri-state apiReachable flag to a status dot style and label. */

@@ -11,7 +11,7 @@
  */
 
 import type * as React from 'react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import AlertsSection from './components/AlertsSection.js'
 import DataSourcesSection from './components/DataSourcesSection.js'
 import FooterBar from './components/FooterBar.js'
@@ -47,11 +47,15 @@ export default function PluginConfigurationPanel ({ configuration, save }: Props
   // inequality against the last-saved snapshot is a sound dirty check.
   const dirty = state !== savedState
 
-  const handleSave = (): void => {
+  const handleSave = useCallback((): void => {
     save(state)
     markSaved()
     setJustSavedAt(Date.now())
-  }
+  }, [save, state, markSaved])
+
+  const handleDiscard = useCallback((): void => {
+    dispatch({ type: 'discard', config: savedState })
+  }, [dispatch, savedState])
 
   return (
     <div className='ac-config-panel' style={S.root}>
@@ -70,7 +74,7 @@ export default function PluginConfigurationPanel ({ configuration, save }: Props
         dirty={dirty}
         justSavedAt={justSavedAt}
         onSave={handleSave}
-        onDiscard={() => dispatch({ type: 'discard', config: savedState })}
+        onDiscard={handleDiscard}
       />
     </div>
   )

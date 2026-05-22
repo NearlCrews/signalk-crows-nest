@@ -47,7 +47,11 @@ export default function DataSourceCard ({
           style={S.checkbox}
           checked={enabled}
           disabled={onToggleEnabled === undefined}
-          aria-label={`Enable ${name}`}
+          // An always-on source's checkbox is permanently checked-and-disabled,
+          // so the "Enable X" label would misdescribe a control the user
+          // cannot operate. Drop the aria-label there and let assistive tech
+          // read the source name from the visible header text instead.
+          aria-label={onToggleEnabled === undefined ? undefined : `Enable ${name}`}
           onChange={(e) => onToggleEnabled?.(e.target.checked)}
         />
         <button

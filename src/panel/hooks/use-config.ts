@@ -5,7 +5,7 @@
  */
 
 import type { Dispatch } from 'react'
-import { useReducer, useState } from 'react'
+import { useCallback, useReducer, useState } from 'react'
 import type { PluginConfig } from '../../shared/types.js'
 import { configReducer } from '../config-reducer.js'
 import type { ConfigAction } from '../config-reducer.js'
@@ -33,9 +33,9 @@ export function useConfig (configuration: unknown): UseConfigResult {
   const [state, dispatch] = useReducer(configReducer, initial)
   const [savedState, setSavedState] = useState<PluginConfig>(initial)
 
-  const markSaved = (): void => {
+  const markSaved = useCallback((): void => {
     setSavedState(state)
-  }
+  }, [state])
 
   return { state, savedState, dispatch, markSaved }
 }
