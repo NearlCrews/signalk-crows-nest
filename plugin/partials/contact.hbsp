@@ -1,9 +1,0 @@
-<hr/>
-<div>
-    <h4>📞 Contact</h4>
-    {{#if vhfChannel}}📟 VHF {{vhfChannel}}<br/>{{/if}}
-    {{#if phone}}☎️ <a href="tel:{{phone}}">{{phone}}</a><br/>{{/if}}
-    {{#if afterHourContact}}🌙 {{afterHourContact}}<br/>{{/if}}
-    {{#if email}}📧 <a href="mailto:{{email}}">{{email}}</a><br/>{{/if}}
-    {{#if website}}🌐 <a href="website">{{website}}</a><br/>{{/if}}
-<//div>
