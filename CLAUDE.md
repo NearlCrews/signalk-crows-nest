@@ -5,7 +5,8 @@ Guidance for Claude Code (and contributors) working in this repository.
 ## What this is
 
 `signalk-crows-nest` is a single [Signal K server](https://github.com/SignalK/signalk-server)
-plugin. It imports points of interest from the Garmin ActiveCaptain API and
+plugin. It imports points of interest from multiple marine data sources
+(Garmin ActiveCaptain, and OpenSeaMap via the OpenStreetMap Overpass API) and
 exposes them as Signal K `notes` resources so chart plotters such as
 Freeboard-SK can display them.
 
@@ -48,7 +49,13 @@ self-contained module registered on one line in `src/index.ts`.
     - `poi-source.ts` - the `PoiSource` and `InputModule` contracts an input
       implements.
     - `input-registry.ts` - holds the registered inputs and builds the
-      aggregate `PoiSource` for a plugin start.
+      aggregate `PoiSource` for a plugin start: it fans each list request out
+      to every enabled input, namespaces resource ids with the producing
+      source's slug, unions the results, records per-source status, and runs
+      the dedupe pass.
+    - `dedupe-pois.ts` - merges non-base POIs that duplicate an ActiveCaptain
+      base POI, so a feature reported by several sources becomes one
+      corroborated note rather than overlapping markers.
     - `active-captain/` - the ActiveCaptain input: `active-captain-input.ts`
       (the `InputModule`), `active-captain-source.ts` (the `PoiSource` adapter
       over the client, cache, and store), `active-captain-client.ts` (the HTTP
@@ -58,6 +65,13 @@ self-contained module registered on one line in `src/index.ts`.
       helpers and POI detail rendering), `templates.ts` (inlined Handlebars
       templates), and `rating-filter.ts` (drops list entries below the
       configured minimum rating).
+    - `openseamap/` - the OpenSeaMap input (OpenStreetMap marine data via the
+      OSM Overpass API): `openseamap-input.ts` (the `InputModule`),
+      `openseamap-source.ts` (the `PoiSource` adapter over the client and an
+      in-memory detail cache), `overpass-client.ts` (the Overpass HTTP client,
+      with rate limiting, backoff, and the required `User-Agent`), and
+      `seamark-mapping.ts` (maps `seamark:type` values onto the plugin's
+      `PoiType` union and defines the seamark feature groups).
   - `outputs/` - SignalK consumers of POI data.
     - `output.ts` - the `OutputModule`, `OutputHandle`, `OutputContext`, and
       `PositionScanContributor` contracts an output implements.
@@ -93,7 +107,9 @@ self-contained module registered on one line in `src/index.ts`.
     minute-to-millisecond constant shared by the cache and store).
   - `panel/` - federated React configuration panel (`index.tsx`,
     `PluginConfigurationPanel.tsx`, `config-reducer.ts`, `normalize-config.ts`,
-    `poi-type-groups.ts`, `styles.ts`, plus `hooks/` and `components/`).
+    `active-captain-poi-types.ts`, `seamark-groups.ts`, `styles.ts`, plus
+    `hooks/` and `components/`). The panel is a per-source accordion: a
+    collapsible card per data source, then an Alerts section.
 - `test/` - `node:test` test suite, run through `tsx`.
 - `docs/` - project documentation: the development guide, troubleshooting, the
   Garmin API research notes, decision records, and maintainer notes.

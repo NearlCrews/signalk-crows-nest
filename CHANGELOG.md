@@ -1,5 +1,57 @@
 ## Change Log
 
+<a id="v050"></a>
+
+### v0.5.0 (2026/05/22) - multi-source points of interest
+
+**The plugin is now multi-source: it adds OpenSeaMap alongside Garmin
+ActiveCaptain, merges the two into one chart layer, and gives each source its
+own health and settings.**
+
+#### OpenSeaMap source
+
+- A new opt-in source imports OpenSeaMap (OpenStreetMap marine data) through
+  the OSM Overpass API: seamark hazards (rocks, wrecks, obstructions),
+  navigational aids (lights, buoys, beacons), harbours and marinas, and
+  infrastructure (locks, bridges). Each feature group can be toggled
+  independently. The source is off by default; the Overpass endpoint URL is
+  configurable.
+- OpenStreetMap data is published under the Open Database License (ODbL),
+  which requires visible attribution. Every OpenSeaMap point's rendered detail
+  carries an `© OpenStreetMap contributors (ODbL)` footer.
+
+#### Multi-source aggregate
+
+- With more than one source enabled, the plugin fans each `notes` query out to
+  every source, unions the results, and serves them as one layer. A failing
+  source no longer blanks the chart: the layer is served from whichever
+  sources answered.
+- Resource ids gain a source prefix (`activecaptain-123456`,
+  `openseamap-node/987654`). A single-ActiveCaptain install sees its note ids
+  change from `123456` to `activecaptain-123456`; `getResource` round-trips
+  the prefixed id.
+- Per-source dedupe: an OpenSeaMap point of interest that duplicates an
+  ActiveCaptain marker of the same type, within a short radius, is merged into
+  it. The surviving note records every contributing source as a corroboration
+  signal (`properties.sources` and `properties.sourceCount`). Dedupe is on by
+  default and can be turned off per source.
+
+#### Per-source status and the accordion panel
+
+- The status snapshot is now per-source: each enabled source reports its own
+  API reachability and last fetch. The configuration panel restructures into a
+  per-source accordion (a collapsible card per data source) followed by an
+  Alerts section.
+
+#### Notification path rename
+
+- The proximity and route-hazard alarms move from
+  `notifications.navigation.activecaptain.{hazard,route}.*` to
+  `notifications.navigation.crowsNest.{hazard,route}.*`, since a hazard from a
+  non-ActiveCaptain source on an `activecaptain` path is wrong. A hot upgrade
+  leaves any stale `activecaptain.*` notifications in place until the next
+  Signal K server restart.
+
 <a id="v040"></a>
 
 ### v0.4.0 (2026/05/22) - route-corridor hazard scan

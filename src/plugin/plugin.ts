@@ -23,7 +23,7 @@ import type { PluginConfig } from '../shared/types.js'
 
 const PLUGIN_NAME = "Crow's Nest"
 const PLUGIN_DESCRIPTION =
-  'Imports Garmin ActiveCaptain points of interest as SignalK resources, with proximity and route-corridor hazard alarms'
+  'Imports Garmin ActiveCaptain and OpenSeaMap points of interest as SignalK resources, with proximity and route-corridor hazard alarms'
 
 /** OpenAPI description of the plugin's internal status API. */
 const OPEN_API = {
