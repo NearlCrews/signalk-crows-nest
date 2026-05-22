@@ -21,6 +21,18 @@ export const ACTIVE_CAPTAIN_SOURCE_ID = 'activecaptain'
 /** HTTP status for a point of interest that does not exist. */
 const HTTP_NOT_FOUND = 404
 
+/**
+ * True when an error is an abort. A `fetch` aborted by `client.close()` rejects
+ * with a `DOMException` named `AbortError`; some paths surface a plain `Error`
+ * with the same name. Both are matched.
+ */
+function isAbortError (error: unknown): boolean {
+  return (
+    (error instanceof Error || error instanceof DOMException) &&
+    error.name === 'AbortError'
+  )
+}
+
 /** Dependencies for {@link createActiveCaptainSource}. */
 export interface ActiveCaptainSourceConfig {
   /** The ActiveCaptain HTTP client. */
@@ -43,6 +55,12 @@ export function createActiveCaptainSource (config: ActiveCaptainSourceConfig): P
   const cache = createPoiCache(client, cachingDurationMinutes, {
     onLoadSuccess: () => { status.recordDetailSuccess() },
     onLoadError: (error) => {
+      // An abort is benign: a plugin restart calls client.close(), which
+      // aborts the previous run's in-flight detail fetches. Recording that as
+      // an error would clobber the fresh run's status, so it is ignored.
+      if (isAbortError(error)) {
+        return
+      }
       // A 404 is the API answering normally: the point of interest does not
       // exist. That is not a reachability failure.
       if (error instanceof HttpError && error.status === HTTP_NOT_FOUND) {
