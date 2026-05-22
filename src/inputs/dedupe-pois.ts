@@ -1,11 +1,19 @@
 /**
- * Per-source POI dedupe against the ActiveCaptain base layer.
+ * Per-source POI dedupe against the ActiveCaptain base layer, plus a
+ * same-source pass that collapses internal duplicates.
  *
  * With more than one source enabled, the same physical marina, hazard, or lock
  * can appear as separate markers a few meters apart. ActiveCaptain is the fixed
  * "base" layer. A non-base POI of the same `PoiType` within a small radius of a
  * base POI is treated as the same feature: it is dropped, and the base POI
  * survives, recording every contributing source as a corroboration signal.
+ *
+ * After the base-vs-non-base pass, a same-source pass collapses non-base
+ * duplicates of the same `PoiType` within the same radius. The first occurrence
+ * in input order wins; a dropped duplicate carries no cross-source attribution
+ * (it came from the same source), so it is simply removed. This catches the
+ * case where a single source (OpenSeaMap most commonly) tags one physical
+ * feature twice, e.g. an OSM node and an OSM way for the same harbour.
  *
  * Absence of corroboration is NOT a negative signal, since source coverage is
  * uneven, so it is surfaced only as confidence-up: a base POI with no merged
@@ -62,17 +70,10 @@ export function dedupeAgainstBase (
     return pois
   }
 
-  const basePois = pois.filter((poi) => poi.source === BASE_SOURCE_ID)
-  // With no base layer there is nothing to dedupe against: every POI passes
-  // through, a dedupe-enabled one carrying its own source as its sole source.
-  if (basePois.length === 0) {
-    return pois.map((poi) =>
-      dedupeSources.has(poi.source) ? { ...poi, sources: [poi.source] } : poi)
-  }
-
   // Project longitude with a shared reference latitude so the grid is a
   // consistent metric: two points within radiusMeters of each other land at
   // most one cell apart on each axis, so a 3x3 neighbor scan is exhaustive.
+  // Both passes (base merge and same-source collapse) use this projection.
   const meanLatRad =
     (pois.reduce((sum, poi) => sum + poi.position.latitude, 0) / pois.length) * Math.PI / 180
   const lonScale = METERS_PER_DEGREE * Math.cos(meanLatRad)
@@ -81,6 +82,17 @@ export function dedupeAgainstBase (
     Math.floor((poi.position.longitude * lonScale) / radiusMeters),
     Math.floor((poi.position.latitude * METERS_PER_DEGREE) / radiusMeters)
   ]
+
+  const basePois = pois.filter((poi) => poi.source === BASE_SOURCE_ID)
+  // With no base layer there is nothing to dedupe against: every POI passes
+  // through, a dedupe-enabled one carrying its own source as its sole source.
+  // The same-source pass still runs, so a source that tags one feature twice
+  // collapses regardless of whether the base layer is present.
+  if (basePois.length === 0) {
+    const tagged = pois.map((poi) =>
+      dedupeSources.has(poi.source) ? { ...poi, sources: [poi.source] } : poi)
+    return dedupeSameSource(tagged, radiusMeters, cellCoords)
+  }
 
   // Bucket the base POIs by grid cell, and seed each one's corroboration with
   // its own source and attribution.
@@ -144,12 +156,76 @@ export function dedupeAgainstBase (
   }
 
   // Emit the base POIs (always survivors) with their final corroboration, then
-  // the surviving non-base POIs. Every base POI was seeded in the loop above,
-  // so corroboration.get(base) is always defined; the non-null assertion is
-  // safe and documents that invariant.
+  // the surviving non-base POIs after the same-source collapse. Every base POI
+  // was seeded in the loop above, so corroboration.get(base) is always defined;
+  // the non-null assertion is safe and documents that invariant.
   const baseSurvivors = basePois.map((base): PoiSummary => {
     const merged = corroboration.get(base) as Corroboration
     return { ...base, sources: merged.slugs, attribution: merged.attributions.join('; ') }
   })
-  return [...baseSurvivors, ...survivors]
+  return [...baseSurvivors, ...dedupeSameSource(survivors, radiusMeters, cellCoords)]
+}
+
+/**
+ * Collapse same-source same-type POIs within `radiusMeters` into the first
+ * occurrence. A single source occasionally tags one physical feature twice
+ * (OpenSeaMap regularly tags a harbour as both a node and a way); after the
+ * base merge those duplicates are still visible to the chart, so this pass
+ * trims them. Cross-source duplicates have already been collapsed against the
+ * base layer; this is strictly intra-source.
+ */
+function dedupeSameSource (
+  pois: PoiSummary[],
+  radiusMeters: number,
+  cellCoords: (poi: PoiSummary) => [number, number]
+): PoiSummary[] {
+  if (pois.length <= 1) {
+    return pois
+  }
+  // Keyed by `${source}|${x},${y}`: each source has its own grid, so a POI
+  // from a different source never displaces one from this one.
+  const keptByCell = new Map<string, PoiSummary[]>()
+  const out: PoiSummary[] = []
+  for (const poi of pois) {
+    const [x, y] = cellCoords(poi)
+    if (hasNearbyDuplicate(poi, x, y, radiusMeters, keptByCell)) {
+      continue
+    }
+    out.push(poi)
+    const key = `${poi.source}|${x},${y}`
+    const bucket = keptByCell.get(key)
+    if (bucket === undefined) {
+      keptByCell.set(key, [poi])
+    } else {
+      bucket.push(poi)
+    }
+  }
+  return out
+}
+
+/**
+ * True when a same-source same-type POI within `radiusMeters` of `poi` has
+ * already been kept in `keptByCell`. Sweeps the 3x3 neighborhood of the POI's
+ * grid cell, which is exhaustive at this grid scale.
+ */
+function hasNearbyDuplicate (
+  poi: PoiSummary,
+  x: number,
+  y: number,
+  radiusMeters: number,
+  keptByCell: ReadonlyMap<string, PoiSummary[]>
+): boolean {
+  for (let dx = -1; dx <= 1; dx += 1) {
+    for (let dy = -1; dy <= 1; dy += 1) {
+      const bucket = keptByCell.get(`${poi.source}|${x + dx},${y + dy}`)
+      if (bucket === undefined) continue
+      for (const kept of bucket) {
+        if (kept.type === poi.type &&
+          distanceMeters(kept.position, poi.position) <= radiusMeters) {
+          return true
+        }
+      }
+    }
+  }
+  return false
 }
