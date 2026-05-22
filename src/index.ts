@@ -19,14 +19,14 @@ import { createPoiCache, type PoiCache } from './inputs/active-captain/poi-cache
 import { createPoiStore } from './inputs/active-captain/poi-store.js'
 import { createPluginStatus } from './status/plugin-status.js'
 import { createStatusRouter } from './status/status-router.js'
-import { createProximityAlarms } from './proximityAlarms.js'
-import { createCourseReader, type CourseReader } from './courseReader.js'
-import { createRouteHazardAlarms } from './routeHazardAlarms.js'
+import { createProximityAlarms } from './outputs/proximity-alarm/proximity-alarms.js'
+import { createCourseReader, type CourseReader } from './outputs/route-hazard/course-reader.js'
+import { createRouteHazardAlarms } from './outputs/route-hazard/route-hazard-alarms.js'
 import {
   createPositionMonitor,
   type PositionMonitor,
   type PositionMonitorConfig
-} from './positionMonitor.js'
+} from './monitoring/position-monitor.js'
 import { parseApiDate, renderDescription } from './inputs/active-captain/poi-detail-renderer.js'
 import { PLUGIN_ID } from './shared/plugin-id.js'
 import { buildPoiTypesString } from './shared/poi-type-selection.js'

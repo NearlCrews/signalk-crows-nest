@@ -5,7 +5,7 @@ import {
   createCourseReader,
   type CourseReaderApp,
   type CourseStream
-} from '../src/courseReader.js'
+} from '../src/outputs/route-hazard/course-reader.js'
 
 /** A GeoJSON LineString coordinate, `[longitude, latitude]`. */
 type Coordinate = [number, number] | [number, number, number]

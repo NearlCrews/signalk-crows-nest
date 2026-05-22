@@ -221,3 +221,13 @@ export function projectPointOntoLeg (start: Position, end: Position, point: Posi
     alongTrackMeters: directionSign * alongTrackAngular * radiusMeters
   }
 }
+
+/** The smallest bounding box that encloses both inputs. */
+export function unionBbox (a: Bbox, b: Bbox): Bbox {
+  return {
+    north: Math.max(a.north, b.north),
+    south: Math.min(a.south, b.south),
+    east: Math.max(a.east, b.east),
+    west: Math.min(a.west, b.west)
+  }
+}

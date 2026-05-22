@@ -21,8 +21,8 @@
  * and never mutates its inputs.
  */
 
-import { distanceMeters, projectPointOntoLeg } from './geo/position-utilities.js'
-import type { CorridorPoi, PoiSummary, PoiType, Position, RoutePolyline } from './shared/types.js'
+import { distanceMeters, projectPointOntoLeg } from '../../geo/position-utilities.js'
+import type { CorridorPoi, PoiSummary, PoiType, Position, RoutePolyline } from '../../shared/types.js'
 
 /**
  * The point-of-interest types the corridor scan flags. Marinas, anchorages,

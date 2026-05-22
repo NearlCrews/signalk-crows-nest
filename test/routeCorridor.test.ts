@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { scanRouteCorridor } from '../src/routeCorridor.js'
+import { scanRouteCorridor } from '../src/outputs/route-hazard/route-corridor.js'
 import type { PoiSummary, PoiType, Position, RoutePolyline } from '../src/shared/types.js'
 
 /** Assert that two numbers are within `epsilon` of each other. */

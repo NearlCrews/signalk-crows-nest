@@ -6,10 +6,10 @@ import {
   type MonitorApp,
   type PoiListSource,
   type PositionStream
-} from '../src/positionMonitor.js'
-import type { ProximityAlarms } from '../src/proximityAlarms.js'
-import type { CourseReader } from '../src/courseReader.js'
-import { createRouteHazardAlarms, type RouteAlarmApp } from '../src/routeHazardAlarms.js'
+} from '../src/monitoring/position-monitor.js'
+import type { ProximityAlarms } from '../src/outputs/proximity-alarm/proximity-alarms.js'
+import type { CourseReader } from '../src/outputs/route-hazard/course-reader.js'
+import { createRouteHazardAlarms, type RouteAlarmApp } from '../src/outputs/route-hazard/route-hazard-alarms.js'
 import type { Bbox, PoiSummary, Position, RoutePolyline } from '../src/shared/types.js'
 
 /** Resolve once the pending microtasks (an awaited hazard scan) have drained. */

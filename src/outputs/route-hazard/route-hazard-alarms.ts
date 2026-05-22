@@ -21,8 +21,8 @@
  */
 
 import type { Delta, Path, SourceRef, Timestamp } from '@signalk/server-api'
-import { PLUGIN_ID } from './shared/plugin-id.js'
-import type { CorridorPoi } from './shared/types.js'
+import { PLUGIN_ID } from '../../shared/plugin-id.js'
+import type { CorridorPoi } from '../../shared/types.js'
 
 /** Path prefix for the per-point route notification, completed with the POI id. */
 const NOTIFICATION_PATH_PREFIX = 'notifications.navigation.activecaptain.route.'

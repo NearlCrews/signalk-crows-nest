@@ -20,12 +20,12 @@
  */
 
 import type { NormalizedDelta, Path } from '@signalk/server-api'
-import type { CourseReader } from './courseReader.js'
-import { distanceMeters, positionToBbox } from './geo/position-utilities.js'
-import type { ProximityAlarms } from './proximityAlarms.js'
-import { scanRouteCorridor } from './routeCorridor.js'
-import type { RouteHazardAlarms } from './routeHazardAlarms.js'
-import type { Bbox, CorridorPoi, PoiSummary, Position, RoutePolyline } from './shared/types.js'
+import type { CourseReader } from '../outputs/route-hazard/course-reader.js'
+import { distanceMeters, positionToBbox, unionBbox } from '../geo/position-utilities.js'
+import type { ProximityAlarms } from '../outputs/proximity-alarm/proximity-alarms.js'
+import { scanRouteCorridor } from '../outputs/route-hazard/route-corridor.js'
+import type { RouteHazardAlarms } from '../outputs/route-hazard/route-hazard-alarms.js'
+import type { Bbox, CorridorPoi, PoiSummary, Position, RoutePolyline } from '../shared/types.js'
 
 /** The `vessels.self` path the monitor subscribes to. */
 const SELF_POSITION_PATH = 'navigation.position'
@@ -154,16 +154,6 @@ function toPosition (value: unknown): Position | null {
     return null
   }
   return { latitude, longitude }
-}
-
-/** The smallest bounding box that encloses both inputs. */
-function unionBbox (a: Bbox, b: Bbox): Bbox {
-  return {
-    north: Math.max(a.north, b.north),
-    south: Math.min(a.south, b.south),
-    east: Math.max(a.east, b.east),
-    west: Math.min(a.west, b.west)
-  }
 }
 
 /**

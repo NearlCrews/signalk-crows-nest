@@ -33,7 +33,7 @@
  */
 
 import type { CourseInfo, NormalizedDelta, Path } from '@signalk/server-api'
-import type { Position, RoutePolyline, VesselState } from './shared/types.js'
+import type { Position, RoutePolyline, VesselState } from '../../shared/types.js'
 
 /** The `vessels.self` path the reader uses for the vessel position. */
 const SELF_POSITION_PATH = 'navigation.position'

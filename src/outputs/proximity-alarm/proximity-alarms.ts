@@ -16,9 +16,9 @@
  */
 
 import type { Delta, Path, SourceRef, Timestamp } from '@signalk/server-api'
-import { PLUGIN_ID } from './shared/plugin-id.js'
-import { distanceMeters } from './geo/position-utilities.js'
-import type { PoiSummary, Position } from './shared/types.js'
+import { PLUGIN_ID } from '../../shared/plugin-id.js'
+import { distanceMeters } from '../../geo/position-utilities.js'
+import type { PoiSummary, Position } from '../../shared/types.js'
 
 /** Path prefix for the per-hazard notification, completed with the POI id. */
 const NOTIFICATION_PATH_PREFIX = 'notifications.navigation.activecaptain.hazard.'
