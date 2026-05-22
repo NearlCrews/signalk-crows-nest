@@ -8,6 +8,7 @@ import {
   type PositionStream
 } from '../src/monitoring/position-monitor.js'
 import type { PositionScanContributor } from '../src/outputs/output.js'
+import type { PluginStatus } from '../src/status/plugin-status.js'
 import type { Bbox, PoiSummary, Position } from '../src/shared/types.js'
 
 /** Resolve once the pending microtasks (an awaited scan) have drained. */
@@ -92,6 +93,23 @@ function createMockClient (): {
   }
 }
 
+/** A mock PluginStatus recording every per-tick outcome the monitor reports. */
+function createMockStatus (): {
+  status: PluginStatus
+  listFetches: number[]
+  errors: string[]
+} {
+  const listFetches: number[] = []
+  const errors: string[] = []
+  const status: PluginStatus = {
+    recordListFetch: (poiCount) => { listFetches.push(poiCount) },
+    recordDetailSuccess: () => {},
+    recordError: (message) => { errors.push(message) },
+    snapshot: () => { throw new Error('snapshot is not used by the monitor') }
+  }
+  return { status, listFetches, errors }
+}
+
 /** A fake scan contributor recording its buildFetchBox and evaluate calls. */
 function createMockContributor (
   poiTypes: readonly string[],
@@ -136,6 +154,7 @@ test('subscribes to navigation.position and ticks on the first fix', async () =>
 
   const monitor = createPositionMonitor({
     app: mockApp.app,
+    status: createMockStatus().status,
     client: mockClient.client,
     contributors: [scan.contributor],
     poiTypes: 'Hazard',
@@ -165,6 +184,7 @@ test('does not tick again before the minimum interval elapses, then ticks past b
 
   const monitor = createPositionMonitor({
     app: mockApp.app,
+    status: createMockStatus().status,
     client: mockClient.client,
     contributors: [scan.contributor],
     poiTypes: 'Hazard',
@@ -206,6 +226,7 @@ test('does not start an overlapping tick while a scan is in flight, then ticks o
 
   const monitor = createPositionMonitor({
     app: mockApp.app,
+    status: createMockStatus().status,
     client: mockClient.client,
     contributors: [scan.contributor],
     poiTypes: 'Hazard',
@@ -246,6 +267,7 @@ test('runs a deferred tick once the in-flight scan resolves', async () => {
 
   const monitor = createPositionMonitor({
     app: mockApp.app,
+    status: createMockStatus().status,
     client,
     contributors: [scan.contributor],
     poiTypes: 'Hazard',
@@ -286,6 +308,7 @@ test('unions every contributor fetch box into one list request', async () => {
 
   const monitor = createPositionMonitor({
     app: mockApp.app,
+    status: createMockStatus().status,
     client: mockClient.client,
     contributors: [scanA.contributor, scanB.contributor],
     poiTypes: 'Hazard,Bridge',
@@ -316,6 +339,7 @@ test('skips the list request and evaluates an empty result when every fetch box 
 
   const monitor = createPositionMonitor({
     app: mockApp.app,
+    status: createMockStatus().status,
     client: mockClient.client,
     contributors: [scanA.contributor, scanB.contributor],
     poiTypes: 'Hazard,Bridge',
@@ -342,6 +366,7 @@ test('evaluates contributors against the newest fix, not the one the scan starte
 
   const monitor = createPositionMonitor({
     app: mockApp.app,
+    status: createMockStatus().status,
     client: mockClient.client,
     contributors: [scan.contributor],
     poiTypes: 'Hazard',
@@ -374,6 +399,7 @@ test('a failed scan does not throw, does not evaluate, and is logged at debug le
 
   const monitor = createPositionMonitor({
     app: mockApp.app,
+    status: createMockStatus().status,
     client: mockClient.client,
     contributors: [scan.contributor],
     poiTypes: 'Hazard',
@@ -410,6 +436,7 @@ test('a scan that resolves after stop does not evaluate the contributors', async
 
   const monitor = createPositionMonitor({
     app: mockApp.app,
+    status: createMockStatus().status,
     client: mockClient.client,
     contributors: [scan.contributor],
     poiTypes: 'Hazard',
@@ -433,6 +460,7 @@ test('stop() unsubscribes the position stream, is idempotent, and prevents furth
 
   const monitor = createPositionMonitor({
     app: mockApp.app,
+    status: createMockStatus().status,
     client: mockClient.client,
     contributors: [scan.contributor],
     poiTypes: 'Hazard',
@@ -465,6 +493,7 @@ test('ignores malformed position values', async () => {
 
   const monitor = createPositionMonitor({
     app: mockApp.app,
+    status: createMockStatus().status,
     client: mockClient.client,
     contributors: [scan.contributor],
     poiTypes: 'Hazard',
@@ -482,6 +511,66 @@ test('ignores malformed position values', async () => {
   mockApp.emit({ latitude: 10, longitude: 20 })
   await flush()
   assert.equal(mockClient.calls.length, 1)
+
+  monitor.stop()
+})
+
+test('records each per-tick list outcome into the status recorder', async () => {
+  const mockApp = createMockApp()
+  const mockClient = createMockClient()
+  const scan = createMockContributor(['Hazard'], SCAN_BOX)
+  const clock = createClock()
+  const mockStatus = createMockStatus()
+  mockClient.setPois([HAZARD])
+
+  const monitor = createPositionMonitor({
+    app: mockApp.app,
+    status: mockStatus.status,
+    client: mockClient.client,
+    contributors: [scan.contributor],
+    poiTypes: 'Hazard',
+    minIntervalMs: 60_000,
+    now: clock.now
+  })
+
+  // A successful tick records the list fetch with the returned POI count.
+  mockApp.emit({ latitude: 10, longitude: 20 })
+  await flush()
+  assert.deepEqual(mockStatus.listFetches, [1], 'a successful list fetch is recorded with its POI count')
+  assert.equal(mockStatus.errors.length, 0, 'a successful tick records no error')
+
+  // A failed tick records an error and no further list fetch.
+  mockClient.setMode('reject')
+  clock.advance(120_000)
+  mockApp.emit({ latitude: 10.05, longitude: 20 })
+  await flush()
+  assert.deepEqual(mockStatus.listFetches, [1], 'a failed tick records no list fetch')
+  assert.equal(mockStatus.errors.length, 1, 'the failed scan is recorded as an error')
+  assert.match(mockStatus.errors[0], /Position monitor scan failed/)
+
+  monitor.stop()
+})
+
+test('does not record a list outcome when no contributor produces a fetch box', async () => {
+  const mockApp = createMockApp()
+  const mockClient = createMockClient()
+  const scan = createMockContributor(['Hazard'], null)
+  const mockStatus = createMockStatus()
+
+  const monitor = createPositionMonitor({
+    app: mockApp.app,
+    status: mockStatus.status,
+    client: mockClient.client,
+    contributors: [scan.contributor],
+    poiTypes: 'Hazard',
+    now: createClock().now
+  })
+
+  mockApp.emit({ latitude: 10, longitude: 20 })
+  await flush()
+  assert.equal(mockClient.calls.length, 0, 'no list request is issued')
+  assert.equal(mockStatus.listFetches.length, 0, 'no list fetch is recorded without a request')
+  assert.equal(mockStatus.errors.length, 0, 'no error is recorded without a request')
 
   monitor.stop()
 })

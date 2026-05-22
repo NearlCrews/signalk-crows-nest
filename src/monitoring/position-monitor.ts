@@ -22,6 +22,7 @@
 import type { NormalizedDelta, Path } from '@signalk/server-api'
 import { distanceMeters, toPosition, unionBbox } from '../geo/position-utilities.js'
 import type { PositionScanContributor } from '../outputs/output.js'
+import type { PluginStatus } from '../status/plugin-status.js'
 import type { Bbox, PoiSummary, Position } from '../shared/types.js'
 
 /** The `vessels.self` path the monitor subscribes to. */
@@ -65,6 +66,12 @@ export interface PositionMonitorConfig {
   app: MonitorApp
   /** The POI source, used to list nearby points of interest. */
   client: PoiListSource
+  /**
+   * The status recorder. Each per-tick list request reports its outcome here
+   * so the status panel reflects an alarm-only install that never serves the
+   * notes resource yet is failing every scan.
+   */
+  status: PluginStatus
   /** The position-driven outputs that contribute to and consume each tick. */
   contributors: readonly PositionScanContributor[]
   /**
@@ -98,7 +105,7 @@ export interface PositionMonitor {
  * @returns A handle whose `stop()` unsubscribes the monitor.
  */
 export function createPositionMonitor (config: PositionMonitorConfig): PositionMonitor {
-  const { app, client, contributors, poiTypes } = config
+  const { app, client, contributors, poiTypes, status } = config
   const minMoveMeters = config.minMoveMeters ?? DEFAULT_MIN_MOVE_METERS
   const minIntervalMs = config.minIntervalMs ?? DEFAULT_MIN_INTERVAL_MS
   const now = config.now ?? Date.now
@@ -158,6 +165,7 @@ export function createPositionMonitor (config: PositionMonitorConfig): PositionM
       }
 
       const pois = await client.listPointsOfInterest(bbox, poiTypes)
+      status.recordListFetch(pois.length)
       // A response that lands after stop() must not drive an evaluation.
       if (stopped) {
         return
@@ -170,8 +178,11 @@ export function createPositionMonitor (config: PositionMonitorConfig): PositionM
     } catch (error) {
       // A failed scan is non-fatal and expected while offline: this tick simply
       // has no fresh data. Logged at debug level so an offline passage does not
-      // spam the log.
-      app.debug(`Position monitor scan failed: ${String(error)}`)
+      // spam the log, and recorded so the status panel reflects the failure
+      // even on an alarm-only install that never serves the notes resource.
+      const message = `Position monitor scan failed: ${String(error)}`
+      app.debug(message)
+      status.recordError(message)
     } finally {
       tickInFlight = false
       // A position that arrived while the scan was in flight was deferred;

@@ -137,13 +137,13 @@ export function createPlugin (
       })
 
       const outputContext: OutputContext = { app, config, pois: source, status }
-      const handles = outputs.startEnabled(outputContext)
+      const { handles, startedIds } = outputs.startEnabled(outputContext)
       runtime = { source, handles }
 
-      const startedOutputIds = outputs.modules
-        .filter((module) => module.isEnabled(config))
-        .map((module) => module.id)
-      app.debug(`Crow's Nest started outputs: ${startedOutputIds.join(', ') || '(none)'}`)
+      // Log the outputs that actually started, not merely the enabled ones, so
+      // an output whose start() threw and was isolated by the registry is not
+      // reported as started.
+      app.debug(`Crow's Nest started outputs: ${startedIds.join(', ') || '(none)'}`)
 
       // Build the shared position monitor from the outputs' scan contributors.
       const contributors: PositionScanContributor[] = handles
@@ -157,7 +157,8 @@ export function createPlugin (
             app,
             client: source,
             contributors,
-            poiTypes: ensurePoiTypes(poiTypes, requiredTypes)
+            poiTypes: ensurePoiTypes(poiTypes, requiredTypes),
+            status
           })
           app.debug(`Crow's Nest position monitor driving ${contributors.length} position-driven output(s)`)
         } catch (error) {
@@ -169,6 +170,9 @@ export function createPlugin (
           app.setPluginError(
             'Position monitor failed to start; proximity and route-hazard alarms are not running'
           )
+          // Record the failure so the status snapshot the panel polls reflects
+          // that the position-driven alarms are not running.
+          status.recordError(`Position monitor failed to start: ${String(error)}`)
         }
       }
 

@@ -32,9 +32,10 @@ test('startEnabled starts only enabled modules', () => {
     { ...stubModule('a', false, () => {}), start: () => { started += 'a'; return { stop: () => {} } } },
     { ...stubModule('b', true, () => {}), start: () => { started += 'b'; return { stop: () => {} } } }
   ])
-  const handles = registry.startEnabled(context)
+  const { handles, startedIds } = registry.startEnabled(context)
   assert.equal(started, 'b')
   assert.equal(handles.length, 1)
+  assert.deepEqual(startedIds, ['b'], 'startedIds names only the enabled module that started')
 })
 
 test('startEnabled isolates a failing module start and logs it', () => {
@@ -43,9 +44,10 @@ test('startEnabled isolates a failing module start and logs it', () => {
     { ...stubModule('a', true, () => {}), start: () => { throw new Error('boom') } },
     stubModule('b', true, () => {})
   ])
-  const handles = registry.startEnabled(
+  const { handles, startedIds } = registry.startEnabled(
     { app: { error: (message: string) => errors.push(message) }, config: {}, pois: {}, status: {} } as never)
   assert.equal(handles.length, 1, 'the surviving module still starts')
+  assert.deepEqual(startedIds, ['b'], 'startedIds excludes the module whose start threw')
   assert.equal(errors.length, 1, 'the failing start is logged via app.error')
   assert.match(errors[0], /Cannot start output a/, 'the log names the failing module')
   assert.match(errors[0], /boom/, 'the log carries the underlying error')

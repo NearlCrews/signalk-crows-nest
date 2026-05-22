@@ -40,19 +40,28 @@ export function createStatusRouter (
   getSnapshot: () => StatusSnapshot
 ): (router: IRouter) => void {
   return (router: IRouter): void => {
-    // Admin-gate the API subtree. The real signalk-server always provides
-    // securityStrategy; guarding the call means a server that does not still
-    // gets the route mounted, rather than failing registerWithRouter outright
-    // and leaving the panel with no status endpoint at all.
+    // Admin-gate the API subtree before mounting the route. The real
+    // signalk-server always provides securityStrategy; when it is missing or
+    // the gate cannot be installed, the route is NOT mounted, because mounting
+    // it ungated would expose the status snapshot to anyone on the admin port.
+    let adminGated = false
     try {
       const securityAware = app as unknown as Partial<SecurityAwareApp>
       if (typeof securityAware.securityStrategy?.addAdminMiddleware === 'function') {
         securityAware.securityStrategy.addAdminMiddleware(API_PATH)
+        adminGated = true
       } else {
         app.error(`Cannot admin-gate ${API_PATH}: securityStrategy.addAdminMiddleware is unavailable`)
       }
     } catch (error) {
       app.error(`Cannot admin-gate ${API_PATH}: ${String(error)}`)
+    }
+
+    if (!adminGated) {
+      app.error(
+        'Status API unavailable: the /api/status route was not mounted because it could not be admin-gated'
+      )
+      return
     }
 
     router.get('/api/status', (_req, res) => {
