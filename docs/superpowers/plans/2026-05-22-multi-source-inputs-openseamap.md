@@ -953,7 +953,7 @@ prefixed (`activecaptain-*` and `openseamap-*`); a `getResource` of an
 
 - [ ] **Step 2: Run it, verify the gate, commit.**
 
-### Task 6.3: Documentation
+### Task 6.4: Documentation
 
 **Files:**
 - Modify: `CLAUDE.md`, `README.md`, `CHANGELOG.md`, `docs/development.md`
@@ -975,7 +975,7 @@ npm run typecheck && npm run lint && npm test && npm run build
 git add -A && git commit -m "docs: document the OpenSeaMap source and multi-source architecture"
 ```
 
-### Task 6.4: Final verification sweep
+### Task 6.5: Final verification sweep
 
 - [ ] **Step 1: Run every check**
 
