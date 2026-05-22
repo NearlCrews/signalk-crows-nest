@@ -10,9 +10,9 @@
   },
   "include": [
     "src/panel/**/*",
-    "src/types.ts",
-    "src/statusTypes.ts",
-    "src/poiTypeSelection.ts",
-    "src/pluginId.ts"
+    "src/shared/types.ts",
+    "src/status/status-types.ts",
+    "src/shared/poi-type-selection.ts",
+    "src/shared/plugin-id.ts"
   ]
 }

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { configReducer } from '../src/panel/configReducer.js'
-import { POI_TYPE_FLAGS } from '../src/poiTypeSelection.js'
+import { POI_TYPE_FLAGS } from '../src/shared/poi-type-selection.js'
 import type { PluginConfig } from '../src/shared/types.js'
 
 /** A minimal config with only the required cache duration set. */

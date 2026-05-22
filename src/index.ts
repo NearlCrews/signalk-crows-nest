@@ -29,7 +29,7 @@ import {
 } from './positionMonitor.js'
 import { parseApiDate, renderDescription } from './inputs/active-captain/poi-detail-renderer.js'
 import { PLUGIN_ID } from './shared/plugin-id.js'
-import { buildPoiTypesString } from './poiTypeSelection.js'
+import { buildPoiTypesString } from './shared/poi-type-selection.js'
 import { filterByRating } from './inputs/active-captain/rating-filter.js'
 import { resolveBbox } from './resourceQuery.js'
 import type { PluginConfig, PoiSummary, Position } from './shared/types.js'

@@ -3,7 +3,7 @@
  * populated PluginConfig. Kept React-free so it can be unit-tested directly.
  */
 
-import { POI_TYPE_FLAGS } from '../poiTypeSelection.js'
+import { POI_TYPE_FLAGS } from '../shared/poi-type-selection.js'
 import type { PluginConfig } from '../shared/types.js'
 
 /**

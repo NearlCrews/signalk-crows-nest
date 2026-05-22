@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { POI_TYPE_FLAGS, buildPoiTypesString } from '../src/poiTypeSelection.js'
+import { POI_TYPE_FLAGS, buildPoiTypesString } from '../src/shared/poi-type-selection.js'
 
 test('buildPoiTypesString returns every type for a config with no flag keys', () => {
   const result = buildPoiTypesString({})

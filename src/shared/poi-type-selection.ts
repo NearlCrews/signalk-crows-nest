@@ -4,7 +4,7 @@
  * expects.
  */
 
-import type { PluginConfig, PoiType, PoiTypeFlag } from './shared/types.js'
+import type { PluginConfig, PoiType, PoiTypeFlag } from './types.js'
 
 /**
  * Every selectable POI type, paired with the config flag that enables it. When
@@ -51,4 +51,20 @@ export function buildPoiTypesString (config: Partial<PluginConfig>): string | nu
     return null
   }
   return POI_TYPE_FLAGS.map(([, poiType]) => poiType).join(',')
+}
+
+/**
+ * Ensure the POI-types string includes every type in `required`. The position
+ * monitor's per-tick fetch uses it, and the position-driven outputs can only
+ * act on points of interest the fetch returned.
+ */
+export function ensurePoiTypes (poiTypes: string | null, required: readonly string[]): string {
+  const present = (poiTypes === null || poiTypes === '') ? [] : poiTypes.split(',')
+  const merged = [...present]
+  for (const type of required) {
+    if (!merged.includes(type)) {
+      merged.push(type)
+    }
+  }
+  return merged.join(',')
 }

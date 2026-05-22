@@ -4,7 +4,7 @@
  * unit-tested directly.
  */
 
-import { POI_TYPE_FLAGS } from '../poiTypeSelection.js'
+import { POI_TYPE_FLAGS } from '../shared/poi-type-selection.js'
 import type { PluginConfig, PoiTypeFlag } from '../shared/types.js'
 
 /** Actions the panel dispatches to mutate its working configuration. */
