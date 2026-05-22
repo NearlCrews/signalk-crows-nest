@@ -13,7 +13,7 @@ import {
   hasServices,
   isStaleHazard,
   renderDescription
-} from '../src/handlebarsUtilities.js'
+} from '../src/inputs/active-captain/poi-detail-renderer.js'
 import type { PoiDetails } from '../src/shared/types.js'
 
 const NOW = new Date('2026-05-21T12:00:00.000Z')

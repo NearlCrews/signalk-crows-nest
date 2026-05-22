@@ -12,7 +12,7 @@
  * caller (index.ts) is responsible for handling rejections.
  */
 
-import type { Bbox, PoiDetails, PoiListResponse, PoiSummary, Logger } from './shared/types.js'
+import type { Bbox, PoiDetails, PoiListResponse, PoiSummary, Logger } from '../../shared/types.js'
 
 const BASE_URL = 'https://activecaptain.garmin.com'
 const USER_AGENT = 'Signal K Active Captain Plugin'

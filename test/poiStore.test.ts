@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { createPoiStore } from '../src/poiStore.js'
+import { createPoiStore } from '../src/inputs/active-captain/poi-store.js'
 import type { PoiDetails } from '../src/shared/types.js'
 
 /** Generous TTL so entries never expire mid-test unless a test forces it. */

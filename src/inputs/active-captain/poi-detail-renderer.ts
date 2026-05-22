@@ -37,7 +37,7 @@ import {
   SERVICES_PARTIAL
 } from './templates.js'
 
-import type { PoiDetails, PoiNote } from './shared/types.js'
+import type { PoiDetails, PoiNote } from '../../shared/types.js'
 
 /** The root context handed to the point-of-interest template. */
 interface TemplateRoot {

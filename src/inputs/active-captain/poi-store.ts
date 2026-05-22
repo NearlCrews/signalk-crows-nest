@@ -13,7 +13,7 @@
 
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { PoiDetails } from './shared/types.js'
+import type { PoiDetails } from '../../shared/types.js'
 
 /** Name of the JSON file the store persists to inside the data directory. */
 const STORE_FILE_NAME = 'poi-cache.json'

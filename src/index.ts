@@ -14,9 +14,9 @@ import type {
   ResourceProviderMethods
 } from '@signalk/server-api'
 
-import { createActiveCaptainClient, HttpError, type ActiveCaptainClient } from './activeCaptainClient.js'
-import { createPoiCache, type PoiCache } from './poiCache.js'
-import { createPoiStore } from './poiStore.js'
+import { createActiveCaptainClient, HttpError, type ActiveCaptainClient } from './inputs/active-captain/active-captain-client.js'
+import { createPoiCache, type PoiCache } from './inputs/active-captain/poi-cache.js'
+import { createPoiStore } from './inputs/active-captain/poi-store.js'
 import { createPluginStatus } from './status/plugin-status.js'
 import { createStatusRouter } from './status/status-router.js'
 import { createProximityAlarms } from './proximityAlarms.js'
@@ -27,10 +27,10 @@ import {
   type PositionMonitor,
   type PositionMonitorConfig
 } from './positionMonitor.js'
-import { parseApiDate, renderDescription } from './handlebarsUtilities.js'
+import { parseApiDate, renderDescription } from './inputs/active-captain/poi-detail-renderer.js'
 import { PLUGIN_ID } from './shared/plugin-id.js'
 import { buildPoiTypesString } from './poiTypeSelection.js'
-import { filterByRating } from './ratingFilter.js'
+import { filterByRating } from './inputs/active-captain/rating-filter.js'
 import { resolveBbox } from './resourceQuery.js'
 import type { PluginConfig, PoiSummary, Position } from './shared/types.js'
 

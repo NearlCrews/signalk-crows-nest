@@ -5,7 +5,7 @@
  * points of interest. This module applies that threshold.
  */
 
-import type { PoiSummary, PoiType } from './shared/types.js'
+import type { PoiSummary, PoiType } from '../../shared/types.js'
 
 /**
  * Point-of-interest types that carry ActiveCaptain user reviews. Only these
