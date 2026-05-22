@@ -8,8 +8,8 @@
 import type * as React from 'react'
 import type { Dispatch } from 'react'
 import type { ConfigAction } from '../config-reducer.js'
-import { SEAMARK_GROUPS } from '../seamark-groups.js'
 import { POI_TYPE_FLAGS } from '../../shared/poi-type-selection.js'
+import { SEAMARK_GROUP_REFS } from '../../shared/seamark-groups.js'
 import { S } from '../styles.js'
 import type { PluginConfig } from '../../shared/types.js'
 import ActiveCaptainSource from './ActiveCaptainSource.js'
@@ -33,7 +33,7 @@ function activeCaptainSummary (state: PluginConfig): string {
 /** Build the OpenSeaMap card's collapsed one-line summary. */
 function openSeaMapSummary (state: PluginConfig): string {
   const selected = (state.openSeaMapSeamarkGroups ?? []).length
-  return `${selected} of ${SEAMARK_GROUPS.length} feature groups`
+  return `${selected} of ${SEAMARK_GROUP_REFS.length} feature groups`
 }
 
 /** The per-source accordion shown in the configuration panel. */

@@ -4,8 +4,8 @@
  */
 
 import { POI_TYPE_FLAGS } from '../shared/poi-type-selection.js'
+import { SEAMARK_GROUP_IDS } from '../shared/seamark-groups.js'
 import type { PluginConfig } from '../shared/types.js'
-import { SEAMARK_GROUP_IDS } from './seamark-groups.js'
 
 /**
  * Fallback caching duration. Mirrors DEFAULT_CACHING_DURATION_MINUTES in

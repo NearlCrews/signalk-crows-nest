@@ -8,7 +8,7 @@ import {
   DEFAULT_PROXIMITY_ALARM_RADIUS_METERS,
   normalizeConfig
 } from '../src/panel/normalize-config.js'
-import { SEAMARK_GROUP_IDS } from '../src/panel/seamark-groups.js'
+import { SEAMARK_GROUP_IDS } from '../src/shared/seamark-groups.js'
 import { POI_TYPE_FLAGS } from '../src/shared/poi-type-selection.js'
 
 test('normalizeConfig fills every POI flag true and the default duration for an empty config', () => {
