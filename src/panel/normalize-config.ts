@@ -5,6 +5,7 @@
 
 import { POI_TYPE_FLAGS } from '../shared/poi-type-selection.js'
 import type { PluginConfig } from '../shared/types.js'
+import { SEAMARK_GROUP_IDS } from './seamark-groups.js'
 
 /**
  * Fallback caching duration. Mirrors DEFAULT_CACHING_DURATION_MINUTES in
@@ -41,6 +42,14 @@ export const DEFAULT_PROXIMITY_ALARM_RADIUS_METERS = 500
  * panel and the plugin agree.
  */
 export const DEFAULT_ROUTE_CORRIDOR_WIDTH_METERS = 500
+
+/**
+ * Fallback Overpass API endpoint for the OpenSeaMap source. Mirrors the
+ * `openSeaMapEndpoint` schema default in
+ * src/inputs/openseamap/openseamap-input.ts; keep the two in step so the panel
+ * and the plugin agree.
+ */
+export const DEFAULT_OPENSEAMAP_ENDPOINT = 'https://overpass-api.de/api/interpreter'
 
 /**
  * Coerce the admin UI's untyped `configuration` prop into a fully populated
@@ -91,6 +100,24 @@ export function normalizeConfig (configuration: unknown): PluginConfig {
     typeof corridorWidth === 'number' && Number.isFinite(corridorWidth) && corridorWidth > 0
       ? corridorWidth
       : DEFAULT_ROUTE_CORRIDOR_WIDTH_METERS
+
+  config.openSeaMapEnabled = raw.openSeaMapEnabled === true
+
+  // A blank or non-string endpoint would leave the source unable to query, so
+  // it falls back to the default Overpass endpoint.
+  const endpoint = raw.openSeaMapEndpoint
+  config.openSeaMapEndpoint = typeof endpoint === 'string' && endpoint.trim() !== ''
+    ? endpoint
+    : DEFAULT_OPENSEAMAP_ENDPOINT
+
+  // An old config omits the seamark groups entirely; it then imports every
+  // group. An explicit array is kept, filtered to the known group ids, so a
+  // user can legitimately narrow or even clear the selection.
+  const seamarkGroups = raw.openSeaMapSeamarkGroups
+  config.openSeaMapSeamarkGroups = Array.isArray(seamarkGroups)
+    ? (seamarkGroups as unknown[]).filter(
+        (group): group is string => typeof group === 'string' && SEAMARK_GROUP_IDS.includes(group))
+    : [...SEAMARK_GROUP_IDS]
 
   return config
 }

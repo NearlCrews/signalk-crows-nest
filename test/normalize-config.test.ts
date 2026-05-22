@@ -4,9 +4,11 @@ import assert from 'node:assert/strict'
 import {
   DEFAULT_CACHE_DURATION_MINUTES,
   DEFAULT_MINIMUM_RATING,
+  DEFAULT_OPENSEAMAP_ENDPOINT,
   DEFAULT_PROXIMITY_ALARM_RADIUS_METERS,
   normalizeConfig
 } from '../src/panel/normalize-config.js'
+import { SEAMARK_GROUP_IDS } from '../src/panel/seamark-groups.js'
 import { POI_TYPE_FLAGS } from '../src/shared/poi-type-selection.js'
 
 test('normalizeConfig fills every POI flag true and the default duration for an empty config', () => {
@@ -91,4 +93,40 @@ test('normalizeConfig falls back to the default for a zero alarm radius', () => 
     normalizeConfig({ proximityAlarmRadiusMeters: 0 }).proximityAlarmRadiusMeters,
     DEFAULT_PROXIMITY_ALARM_RADIUS_METERS
   )
+})
+
+test('normalizeConfig defaults the OpenSeaMap options for an empty config', () => {
+  const config = normalizeConfig({})
+  assert.equal(config.openSeaMapEnabled, false)
+  assert.equal(config.openSeaMapEndpoint, DEFAULT_OPENSEAMAP_ENDPOINT)
+  assert.deepEqual(config.openSeaMapSeamarkGroups, [...SEAMARK_GROUP_IDS])
+})
+
+test('normalizeConfig preserves an explicitly enabled OpenSeaMap source', () => {
+  const config = normalizeConfig({
+    openSeaMapEnabled: true,
+    openSeaMapEndpoint: 'https://overpass.example/api',
+    openSeaMapSeamarkGroups: ['hazards', 'navaids']
+  })
+  assert.equal(config.openSeaMapEnabled, true)
+  assert.equal(config.openSeaMapEndpoint, 'https://overpass.example/api')
+  assert.deepEqual(config.openSeaMapSeamarkGroups, ['hazards', 'navaids'])
+})
+
+test('normalizeConfig treats a non-true openSeaMapEnabled as false', () => {
+  assert.equal(normalizeConfig({ openSeaMapEnabled: 'yes' }).openSeaMapEnabled, false)
+  assert.equal(normalizeConfig({ openSeaMapEnabled: false }).openSeaMapEnabled, false)
+})
+
+test('normalizeConfig falls back to the default for a blank OpenSeaMap endpoint', () => {
+  assert.equal(normalizeConfig({ openSeaMapEndpoint: '   ' }).openSeaMapEndpoint, DEFAULT_OPENSEAMAP_ENDPOINT)
+  assert.equal(normalizeConfig({ openSeaMapEndpoint: 42 }).openSeaMapEndpoint, DEFAULT_OPENSEAMAP_ENDPOINT)
+})
+
+test('normalizeConfig drops unknown seamark groups and keeps an explicit empty selection', () => {
+  assert.deepEqual(
+    normalizeConfig({ openSeaMapSeamarkGroups: ['hazards', 'bogus', 7] }).openSeaMapSeamarkGroups,
+    ['hazards']
+  )
+  assert.deepEqual(normalizeConfig({ openSeaMapSeamarkGroups: [] }).openSeaMapSeamarkGroups, [])
 })

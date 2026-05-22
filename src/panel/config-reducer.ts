@@ -17,6 +17,9 @@ export type ConfigAction =
   | { type: 'setProximityAlarmRadius', meters: number }
   | { type: 'setRouteHazardScanEnabled', enabled: boolean }
   | { type: 'setRouteCorridorWidth', meters: number }
+  | { type: 'setOpenSeaMapEnabled', enabled: boolean }
+  | { type: 'setOpenSeaMapEndpoint', endpoint: string }
+  | { type: 'setOpenSeaMapSeamarkGroups', groups: string[] }
   | { type: 'discard', config: PluginConfig }
 
 /**
@@ -61,5 +64,19 @@ export function configReducer (state: PluginConfig, action: ConfigAction): Plugi
     case 'setRouteCorridorWidth':
       if (state.routeCorridorWidthMeters === action.meters) return state
       return { ...state, routeCorridorWidthMeters: action.meters }
+    case 'setOpenSeaMapEnabled':
+      if (state.openSeaMapEnabled === action.enabled) return state
+      return { ...state, openSeaMapEnabled: action.enabled }
+    case 'setOpenSeaMapEndpoint':
+      if (state.openSeaMapEndpoint === action.endpoint) return state
+      return { ...state, openSeaMapEndpoint: action.endpoint }
+    case 'setOpenSeaMapSeamarkGroups': {
+      const current = state.openSeaMapSeamarkGroups ?? []
+      if (current.length === action.groups.length &&
+        current.every((group, index) => group === action.groups[index])) {
+        return state
+      }
+      return { ...state, openSeaMapSeamarkGroups: action.groups }
+    }
   }
 }

@@ -121,6 +121,48 @@ test('setProximityAlarmRadius returns the same state when the value is unchanged
   assert.equal(next, state)
 })
 
+test('setOpenSeaMapEnabled enables the OpenSeaMap source', () => {
+  const next = configReducer(baseConfig(), { type: 'setOpenSeaMapEnabled', enabled: true })
+  assert.equal(next.openSeaMapEnabled, true)
+})
+
+test('setOpenSeaMapEnabled returns the same state when the value is unchanged', () => {
+  const state: PluginConfig = { ...baseConfig(), openSeaMapEnabled: true }
+  const next = configReducer(state, { type: 'setOpenSeaMapEnabled', enabled: true })
+  assert.equal(next, state)
+})
+
+test('setOpenSeaMapEndpoint updates the endpoint URL', () => {
+  const next = configReducer(baseConfig(), {
+    type: 'setOpenSeaMapEndpoint',
+    endpoint: 'https://overpass.example/api'
+  })
+  assert.equal(next.openSeaMapEndpoint, 'https://overpass.example/api')
+})
+
+test('setOpenSeaMapEndpoint returns the same state when the value is unchanged', () => {
+  const state: PluginConfig = { ...baseConfig(), openSeaMapEndpoint: 'https://overpass.example/api' }
+  const next = configReducer(state, { type: 'setOpenSeaMapEndpoint', endpoint: 'https://overpass.example/api' })
+  assert.equal(next, state)
+})
+
+test('setOpenSeaMapSeamarkGroups updates the seamark groups', () => {
+  const next = configReducer(baseConfig(), {
+    type: 'setOpenSeaMapSeamarkGroups',
+    groups: ['hazards', 'navaids']
+  })
+  assert.deepEqual(next.openSeaMapSeamarkGroups, ['hazards', 'navaids'])
+})
+
+test('setOpenSeaMapSeamarkGroups returns the same state when the groups are unchanged', () => {
+  const state: PluginConfig = { ...baseConfig(), openSeaMapSeamarkGroups: ['hazards', 'navaids'] }
+  const next = configReducer(state, {
+    type: 'setOpenSeaMapSeamarkGroups',
+    groups: ['hazards', 'navaids']
+  })
+  assert.equal(next, state)
+})
+
 test('discard returns the supplied configuration', () => {
   const edited: PluginConfig = { ...baseConfig(), cachingDurationMinutes: 999, includeMarinas: true }
   const saved: PluginConfig = { ...baseConfig(), includeAnchorages: true }
