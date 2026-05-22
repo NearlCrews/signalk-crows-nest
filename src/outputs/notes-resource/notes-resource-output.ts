@@ -53,15 +53,15 @@ function buildMethods (context: OutputContext): ResourceProviderMethods {
 
       const resources: Record<string, unknown> = {}
       for (const entity of entities) {
-        resources[entity.id] = buildNoteResource(
-          entity.name,
-          { ...entity.position },
-          entity.type.toLowerCase(),
-          entity.url,
-          entity.source,
-          entity.attribution,
-          entity.sources
-        )
+        resources[entity.id] = buildNoteResource({
+          name: entity.name,
+          position: { ...entity.position },
+          skIcon: entity.type.toLowerCase(),
+          url: entity.url,
+          source: entity.source,
+          attribution: entity.attribution,
+          sources: entity.sources
+        })
       }
       return resources
     },
@@ -69,19 +69,18 @@ function buildMethods (context: OutputContext): ResourceProviderMethods {
     getResource: async (id: string, property?: string): Promise<object> => {
       app.debug(`Incoming request to get note ${id}${property != null ? ` property ${property}` : ''}`)
       const view = await pois.getDetails(id)
-      const note = buildNoteResource(
-        view.name,
-        { ...view.position },
-        view.type.toLowerCase(),
-        view.url,
-        view.source,
-        view.attribution,
-        // A single detail fetch routes to one source, so a getResource note
-        // carries no cross-source corroboration.
-        undefined,
-        view.timestamp,
-        view.description
-      )
+      // A single detail fetch routes to one source, so a getResource note
+      // carries no cross-source corroboration.
+      const note = buildNoteResource({
+        name: view.name,
+        position: { ...view.position },
+        skIcon: view.type.toLowerCase(),
+        url: view.url,
+        source: view.source,
+        attribution: view.attribution,
+        timestamp: view.timestamp,
+        description: view.description
+      })
 
       if (property === undefined || property === '') {
         return note

@@ -9,27 +9,42 @@
 import { PLUGIN_ID } from '../../shared/plugin-id.js'
 import type { Position } from '../../shared/types.js'
 
+/** Inputs for {@link buildNoteResource}. */
+export interface NoteResourceInput {
+  /** Display name shown on the chart marker. */
+  name: string
+  /** Map position. */
+  position: Position
+  /** SignalK icon hint; the lowercased POI type. */
+  skIcon: string
+  /** Public web page for this POI (source-specific). */
+  url: string
+  /** Source slug, e.g. `activecaptain` or `openseamap`. */
+  source: string
+  /** Human-readable attribution credit for the source. */
+  attribution: string
+  /**
+   * Every source that corroborates this POI. More than one entry is a
+   * confidence signal: the same physical feature was reported independently
+   * by each listed source. Omitted on detail responses, which always route to
+   * a single source.
+   */
+  sources?: string[]
+  /**
+   * ISO-8601 UTC last-modified time. Omitted when no genuine resource
+   * timestamp is known: the list endpoint does not supply one.
+   */
+  timestamp?: string
+  /** Rendered HTML description (text/html). Omitted when none. */
+  description?: string
+}
+
 /**
  * Build a SignalK `notes` resource object. The shape is shared by the list and
- * single-resource responses. `url`, `source`, and `attribution` are
- * source-specific values carried on the POI data. When `sources` lists more
- * than one source, the POI was corroborated by independent sources, so the
- * note's `properties` carry `sources` and `sourceCount` as a confidence
- * signal. `timestamp` is included only when a genuine resource timestamp is
- * known (the list endpoint does not supply one), and `description`, which is
- * rendered HTML, is included only when supplied.
+ * single-resource responses.
  */
-export function buildNoteResource (
-  name: string,
-  position: Position,
-  skIcon: string,
-  url: string,
-  source: string,
-  attribution: string,
-  sources?: string[],
-  timestamp?: string,
-  description?: string
-): Record<string, unknown> {
+export function buildNoteResource (input: NoteResourceInput): Record<string, unknown> {
+  const { name, position, skIcon, url, source, attribution, sources, timestamp, description } = input
   const properties: Record<string, unknown> = { readOnly: true, skIcon, source, attribution }
   // More than one contributing source is a corroboration signal: the same
   // physical feature was reported independently by each listed source.
