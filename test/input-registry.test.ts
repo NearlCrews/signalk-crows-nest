@@ -42,3 +42,24 @@ test('createSource throws when no module is enabled', () => {
   const registry = createInputRegistry([stubModule('a', false)])
   assert.throws(() => registry.createSource(context), /no input is enabled/i)
 })
+
+test('createSource warns and uses the first input when several are enabled', () => {
+  const errors: string[] = []
+  const registry = createInputRegistry([
+    stubModule('a', true),
+    stubModule('b', true),
+    stubModule('c', false)
+  ])
+  const multiContext = {
+    app: { error: (message: string) => errors.push(message) },
+    config: {},
+    status: {},
+    dataDir: '/tmp'
+  } as never
+  const source = registry.createSource(multiContext)
+  assert.equal(source.id, 'a', 'the first enabled input is used')
+  assert.equal(errors.length, 1, 'the misconfiguration is logged once via app.error')
+  assert.match(errors[0], /Multiple inputs are enabled/, 'the log explains the misconfiguration')
+  assert.match(errors[0], /a, b/, 'the log names only the enabled inputs')
+  assert.match(errors[0], /using "a" only/, 'the log names the input that is used')
+})
