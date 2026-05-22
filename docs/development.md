@@ -65,11 +65,14 @@ src/                      # TypeScript source
 ├── inputs/               # POI data sources
 │   ├── poi-source.ts      # The PoiSource and InputModule contracts
 │   ├── input-registry.ts  # Holds the inputs, builds the aggregate PoiSource
-│   ├── dedupe-pois.ts     # Merges duplicate POIs against the ActiveCaptain base
-│   ├── active-captain/    # The ActiveCaptain input (module, source adapter, client,
-│   │                      #   cache, store, detail renderer, templates, rating filter)
-│   └── openseamap/        # The OpenSeaMap input (module, source adapter, Overpass
-│                          #   client, seamark-type mapping)
+│   ├── http-client.ts     # Shared HTTP plumbing: queue, throttle, retry, Retry-After
+│   ├── dedupe-pois.ts     # Merges duplicates against the ActiveCaptain base layer,
+│   │                      #   then a same-source pass; radius configurable, default 150 m
+│   ├── active-captain/    # The ActiveCaptain input: module, source adapter, client,
+│   │                      #   wire types, cache, store, detail renderer, templates,
+│   │                      #   rating filter
+│   └── openseamap/        # The OpenSeaMap input: module, source adapter, Overpass
+│                          #   client, seamark-type mapping
 ├── outputs/              # SignalK consumers of POI data
 │   ├── output.ts          # The OutputModule and PositionScanContributor contracts
 │   ├── output-registry.ts # Holds the outputs, starts the enabled ones
@@ -79,19 +82,25 @@ src/                      # TypeScript source
 ├── monitoring/           # position-monitor.ts: drives the per-tick scan
 ├── geo/                  # position-utilities.ts: bounding-box and great-circle helpers
 ├── status/               # plugin-status.ts (per-source recorder), status-router.ts, status-types.ts
-├── shared/               # types.ts, plugin-id.ts, poi-type-selection.ts, attribution.ts, notification-path.ts, time.ts
+├── shared/               # Source-agnostic helpers: types.ts (cross-module contracts),
+│                         #   plugin-id.ts, poi-type-selection.ts, seamark-groups.ts,
+│                         #   attribution.ts, notification-path.ts, notification-tracker.ts,
+│                         #   numbers.ts, cache.ts, time.ts
 └── panel/                # Federated React configuration panel (bundled to public/)
     ├── index.tsx          # Federation entry; re-exports PluginConfigurationPanel
     ├── PluginConfigurationPanel.tsx  # Root panel component
     ├── config-reducer.ts  # Pure reducer over the plugin config (testable)
     ├── normalize-config.ts# Normalizes the raw config object
     ├── active-captain-poi-types.ts  # UI metadata: the ActiveCaptain POI-type groups
-    ├── seamark-groups.ts  # UI metadata: the OpenSeaMap seamark groups
+    ├── relative-time.ts   # ISO timestamp to a localized "N minutes ago" phrase
     ├── styles.ts          # Inline style objects
-    ├── hooks/             # use-config, use-status
-    └── components/        # StatusBar, DataSourcesSection, DataSourceCard,
-                           #   ActiveCaptainSource, OpenSeaMapSource, AlertsSection,
-                           #   and the per-field input components
+    ├── hooks/             # use-config, use-status, use-number-draft
+    └── components/        # StatusBar, FooterBar, DataSourcesSection (per-source
+                           #   accordion shell), DataSourceCard (one collapsible card),
+                           #   ActiveCaptainSource, OpenSeaMapSource (card bodies),
+                           #   AlertsSection (the proximity and route-hazard controls);
+                           #   and the per-field input components, including the shared
+                           #   NumberField and AlarmFieldset layouts
 test/                     # node:test suites, run through tsx
 dist/                     # Compiled plugin output (generated, not committed)
 public/                   # Webpack Module Federation output for the panel (generated, not committed)
