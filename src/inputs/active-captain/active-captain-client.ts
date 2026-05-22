@@ -35,7 +35,7 @@ const BASE_HEADERS: Readonly<Record<string, string>> = {
   Accept: 'application/json'
 }
 
-/** Zoom level sent with bounding-box queries, matching the legacy client. */
+/** Zoom level sent with bounding-box queries; the API expects an integer. */
 const ZOOM_LEVEL = 17
 
 /** Per-request HTTP timeout, in milliseconds. */

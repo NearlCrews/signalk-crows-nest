@@ -1,12 +1,8 @@
 /**
- * Handlebars template and partial sources for the
- * signalk-crows-nest plugin.
+ * Handlebars template and partial sources for the signalk-crows-nest plugin.
  *
- * These were previously loaded at runtime from `.hbs` and `.hbsp` files via a
- * hardcoded `./node_modules/signalk-crows-nest/plugin/...` path.
- * That path broke whenever the working directory or the install location
- * differed from the assumed layout. The sources are now inlined here as plain
- * string constants so rendering never touches the filesystem.
+ * The sources are inlined here as plain string constants so rendering never
+ * touches the filesystem and never depends on the install layout.
  *
  * Every capability section renders its tri-state fields through the
  * `availabilityLine` helper, which emits a line only for a definite Yes, No,

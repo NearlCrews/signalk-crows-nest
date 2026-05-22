@@ -1,15 +1,14 @@
 /**
  * Time-bounded cache for point-of-interest detail responses.
  *
- * This module replaces the old @inventivetalent/loading-cache and
- * @inventivetalent/time dependencies with lru-cache (v11). On a cache miss the
- * configured fetchMethod loads the entry from the ActiveCaptain client; a
- * rejected load propagates to the caller and is not stored.
+ * On a cache miss the configured fetchMethod loads the entry from the
+ * ActiveCaptain client; a rejected load propagates to the caller and is not
+ * stored.
  *
- * When a persistent {@link PoiStore} is supplied, the cache hydrates from it on
- * creation so a cold start has offline data without a network round-trip, and
- * persists every real load back to it. The persistent layer is always on; it
- * has no configuration toggle.
+ * When a persistent {@link PoiStore} is supplied, the cache hydrates from it
+ * on creation so a cold start has offline data without a network round-trip,
+ * and persists every real load back to it. The persistent layer is always on;
+ * it has no configuration toggle.
  */
 
 import { LRUCache } from 'lru-cache'

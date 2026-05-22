@@ -1,20 +1,12 @@
 /**
  * Handlebars rendering for the signalk-crows-nest plugin.
  *
- * This module renders a point-of-interest detail response into the HTML
- * snippet shown as a SignalK resource description. The templates and partials
- * live in `./templates.js` as inlined string constants, so rendering never
- * reads from the filesystem.
- *
- * Differences from the original `plugin/handlebars_utilities.js`:
- *  - Templates are inlined (see `templates.ts`), removing the fragile
- *    hardcoded `./node_modules/...` path.
- *  - `moment` is replaced by a small `Intl.RelativeTimeFormat` helper.
- *  - `helpers-for-handlebars` is replaced by the small inline helpers
- *    registered below; the templates need no third-party helper library.
- *  - The `has*` checks use positive tests: a section counts as populated
- *    only when a field carries a definite value. The original used
- *    `field !== 'Unknown'`, which treated an absent field as populated.
+ * Renders a point-of-interest detail response into the HTML snippet shown as a
+ * SignalK resource description. The templates and partials live in
+ * `./templates.js` as inlined string constants, so rendering never touches the
+ * filesystem. The `has*` helpers use positive tests: a section counts as
+ * populated only when a field carries a definite value, so an absent field is
+ * never rendered as a misleading empty section.
  */
 
 import Handlebars from 'handlebars'
@@ -126,10 +118,8 @@ const RELATIVE_UNITS: ReadonlyArray<readonly [Intl.RelativeTimeFormatUnit, numbe
 const relativeTimeFormat = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
 
 /**
- * Format a date relative to `now`, e.g. "3 days ago" or "in 2 hours". This is
- * the native replacement for the single `moment(date).fromNow()` call the
- * original code relied on. An invalid date yields a fallback string rather
- * than throwing, matching moment's "Invalid date" behavior.
+ * Format a date relative to `now`, e.g. "3 days ago" or "in 2 hours". An
+ * invalid date yields a fallback string rather than throwing.
  */
 export function fromNow (date: Date, now: Date = new Date()): string {
   if (!Number.isFinite(date.getTime())) {
