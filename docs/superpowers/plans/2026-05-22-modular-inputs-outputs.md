@@ -1647,6 +1647,15 @@ git add -A && git commit -m "refactor: move position outputs and monitor into di
 
 ### Task 3C.2: Refactor the position monitor to the contributor model
 
+> **EXECUTION NOTE:** refactoring the monitor changes `createPositionMonitor`'s
+> signature, which `src/index.ts` still calls the old way. This task therefore
+> breaks `index.ts` typecheck until Phase 5 rewrites `index.ts`. Do NOT execute
+> or commit Task 3C.2 standalone. Execute it as the first step of Phase 5,
+> together with the `plugin.ts` creation, the `index.ts` rewrite, and the
+> monitor-test rewrite (Task 6.3), producing one green-to-green commit. Phase
+> 3C in parallel execution covers only Tasks 3C.1, 3C.3, and 3C.4, which are
+> all additive and keep the build green.
+
 The monitor currently bakes in optional `alarms` and `routeScan`. Refactor it
 to take a list of `PositionScanContributor`s instead. The per-tick logic
 becomes: ask every contributor for a fetch box, union the non-null boxes, do
@@ -2143,8 +2152,19 @@ git add -A && git commit -m "refactor: rename panel files to kebab-case"
 
 # Phase 5: Plugin shell and integration (Lane A)
 
-Runs after Phases 3A, 3B, and 3C land. Rewrites `index.ts` into a thin
-assembler plus `plugin/plugin.ts`, deleting the now-extracted code.
+Runs after Phases 3A, 3B, and 3C land. This phase is the atomic integration:
+it executes Task 3C.2 (the monitor refactor) and Task 6.3 (the monitor-test
+rewrite) together with the `plugin.ts` creation and the `index.ts` rewrite,
+because the monitor refactor breaks `index.ts` until that rewrite. Do the
+monitor refactor, the monitor-test rewrite, `plugin.ts`, and the `index.ts`
+rewrite first with no commit in between; then run the full gate; then make one
+green commit. The remaining Phase 5 tasks (the build-entrypoint checks) commit
+normally afterward.
+
+Order within the integration commit: (1) Task 3C.2 monitor refactor, (2) Task
+6.3 monitor-test rewrite, (3) Task 5.1 `plugin.ts`, (4) Task 5.2 `index.ts`
+rewrite. Stage all of it, run `npm run typecheck && npm run lint && npm test`,
+confirm green, then one commit: `refactor: wire the modular plugin shell`.
 
 ### Task 5.1: Build the plugin factory
 
@@ -2501,6 +2521,11 @@ git add -A && git commit -m "test: point test imports at the restructured module
 ```
 
 ### Task 6.3: Rewrite the position-monitor test
+
+> **EXECUTION NOTE:** execute this task inside the Phase 5 integration commit,
+> not after it (see the Phase 5 note). It is listed here only because it is a
+> test-suite change. The steps below still apply; the commit is the shared
+> Phase 5 integration commit, so skip this task's own Step 4 commit.
 
 The monitor's interface changed (Task 3C.2): `createPositionMonitor` now takes
 `contributors` instead of `alarms`/`routeScan`/`scanRadiusMeters`. Rewrite the
