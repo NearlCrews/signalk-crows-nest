@@ -12,6 +12,7 @@
  * module supports the `position` plus `distance` form the chart plotter sends.
  */
 
+import { toFiniteNumber } from '../shared/numbers.js'
 import type { Position, Bbox } from '../shared/types.js'
 
 /** Mean radius of the Earth in kilometers, used for great-circle estimates. */
@@ -54,13 +55,12 @@ export function toPosition (value: unknown): Position | null {
     return null
   }
   const { latitude, longitude } = value as Record<string, unknown>
-  if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+  const lat = toFiniteNumber(latitude)
+  const lon = toFiniteNumber(longitude)
+  if (lat === null || lon === null) {
     return null
   }
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-    return null
-  }
-  return { latitude, longitude }
+  return { latitude: lat, longitude: lon }
 }
 
 /**

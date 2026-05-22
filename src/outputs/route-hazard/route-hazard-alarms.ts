@@ -23,7 +23,7 @@
  */
 
 import type { Delta } from '@signalk/server-api'
-import { emitNotification } from '../../shared/notification-path.js'
+import { emitNotification, type NotificationValue } from '../../shared/notification-path.js'
 import type { CorridorPoi } from '../../shared/types.js'
 
 /** Path prefix for the per-point route notification, completed with the POI id. */
@@ -90,17 +90,10 @@ export interface RouteHazardAlarms {
 }
 
 /**
- * The notification value emitted on a route-corridor path. This is a superset
- * of the SignalK `Notification` shape: it also carries a `timestamp`, matching
- * the proximity-alarm convention. It is a plain object, so it satisfies the
- * delta `Value` type.
+ * The notification value emitted on a route-corridor path: the shared
+ * `NotificationValue` shape narrowed to the two states this output raises.
  */
-interface RouteNotificationValue {
-  state: 'warn' | 'normal'
-  method: Array<'visual' | 'sound'>
-  message: string
-  timestamp: string
-}
+type RouteNotificationValue = NotificationValue & { state: 'warn' | 'normal' }
 
 /**
  * Create a route-corridor hazard alarm evaluator.

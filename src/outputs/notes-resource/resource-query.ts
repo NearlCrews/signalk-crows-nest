@@ -4,29 +4,26 @@
  */
 
 import { positionToBbox } from '../../geo/position-utilities.js'
+import { toFiniteNumber } from '../../shared/numbers.js'
 import type { Bbox, Position } from '../../shared/types.js'
 
 /**
  * Coerce a single loosely typed query component into a finite number, or
- * `null` when it is not a genuine number.
+ * `null` when it is not.
  *
  * `Number('')`, `Number('  ')`, `Number(null)`, and `Number([])` all yield 0,
  * a finite number, so a blank, whitespace-only, or absent component would
  * otherwise coerce to a real coordinate of 0. A blank component is rejected as
  * not-a-number here; a genuine numeric string, including `"0"`, is accepted.
  */
-function toFiniteNumber (raw: unknown): number | null {
-  if (typeof raw === 'number') {
-    return Number.isFinite(raw) ? raw : null
-  }
+function parseFiniteNumber (raw: unknown): number | null {
   if (typeof raw === 'string') {
     if (raw.trim() === '') {
       return null
     }
-    const value = Number(raw)
-    return Number.isFinite(value) ? value : null
+    return toFiniteNumber(Number(raw))
   }
-  return null
+  return toFiniteNumber(raw)
 }
 
 /**
@@ -38,8 +35,8 @@ function toFiniteNumber (raw: unknown): number | null {
  */
 export function resolvePosition (raw: unknown): Position | null {
   if (Array.isArray(raw) && raw.length >= 2) {
-    const longitude = toFiniteNumber(raw[0])
-    const latitude = toFiniteNumber(raw[1])
+    const longitude = parseFiniteNumber(raw[0])
+    const latitude = parseFiniteNumber(raw[1])
     if (longitude !== null && latitude !== null) {
       return { latitude, longitude }
     }
@@ -48,8 +45,8 @@ export function resolvePosition (raw: unknown): Position | null {
 
   if (raw !== null && typeof raw === 'object') {
     const candidate = raw as Record<string, unknown>
-    const latitude = toFiniteNumber(candidate.latitude)
-    const longitude = toFiniteNumber(candidate.longitude)
+    const latitude = parseFiniteNumber(candidate.latitude)
+    const longitude = parseFiniteNumber(candidate.longitude)
     if (latitude !== null && longitude !== null) {
       return { latitude, longitude }
     }
@@ -79,7 +76,7 @@ function resolveExplicitBbox (raw: unknown): Bbox | null {
   if (parts.length !== 4) {
     return null
   }
-  const numbers = parts.map(toFiniteNumber)
+  const numbers = parts.map(parseFiniteNumber)
   if (numbers.some(value => value === null)) {
     return null
   }
@@ -102,8 +99,8 @@ export function resolveBbox (query: Record<string, unknown>): Bbox | null {
     return resolveExplicitBbox(query.bbox)
   }
 
-  const distance = Number(query.distance)
-  if (!Number.isFinite(distance) || distance <= 0) {
+  const distance = parseFiniteNumber(query.distance)
+  if (distance === null || distance <= 0) {
     return null
   }
 

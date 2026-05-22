@@ -34,6 +34,7 @@
 
 import type { CourseInfo, NormalizedDelta, Path } from '@signalk/server-api'
 import { toPosition } from '../../geo/position-utilities.js'
+import { toFiniteNumber } from '../../shared/numbers.js'
 import type { Position, RoutePolyline, VesselState } from '../../shared/types.js'
 
 /** The `vessels.self` path the reader uses for the vessel position. */
@@ -118,11 +119,6 @@ export interface CourseReader {
   stop: () => void
 }
 
-/** Return a finite number unchanged, or `null` for anything else. */
-function toFiniteNumber (value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
-}
-
 /**
  * Unwrap one `{ value: ... }` layer, if present. `getSelfPath` returns the
  * leaf value directly on current servers, but some versions wrap it in a data
@@ -145,13 +141,12 @@ function toGeoJsonPosition (entry: unknown): Position | null {
     return null
   }
   const [longitude, latitude] = entry as unknown[]
-  if (typeof longitude !== 'number' || typeof latitude !== 'number') {
+  const lon = toFiniteNumber(longitude)
+  const lat = toFiniteNumber(latitude)
+  if (lon === null || lat === null) {
     return null
   }
-  if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
-    return null
-  }
-  return { latitude, longitude }
+  return { latitude: lat, longitude: lon }
 }
 
 /**

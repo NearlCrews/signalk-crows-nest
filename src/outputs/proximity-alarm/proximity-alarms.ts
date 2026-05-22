@@ -24,7 +24,7 @@
  */
 
 import type { Delta } from '@signalk/server-api'
-import { emitNotification } from '../../shared/notification-path.js'
+import { emitNotification, type NotificationValue } from '../../shared/notification-path.js'
 import { distanceMeters } from '../../geo/position-utilities.js'
 import type { PoiSummary, Position } from '../../shared/types.js'
 
@@ -69,16 +69,10 @@ export interface ProximityAlarms {
 }
 
 /**
- * The notification value emitted on the hazard path. This is a superset of the
- * SignalK `Notification` shape: it also carries a `timestamp`, per the Tier 1
- * design. It is a plain object, so it satisfies the delta `Value` type.
+ * The notification value emitted on the hazard path: the shared
+ * `NotificationValue` shape narrowed to the two states this output raises.
  */
-interface HazardNotificationValue {
-  state: 'alarm' | 'normal'
-  method: Array<'visual' | 'sound'>
-  message: string
-  timestamp: string
-}
+type HazardNotificationValue = NotificationValue & { state: 'alarm' | 'normal' }
 
 /**
  * Create a proximity-alarm evaluator.

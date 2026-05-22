@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import {
   emitNotification,
   sanitizePoiId,
-  type NotificationEmitterApp
+  type NotificationEmitterApp,
+  type NotificationValue
 } from '../src/shared/notification-path.js'
 import { PLUGIN_ID } from '../src/shared/plugin-id.js'
 
@@ -22,7 +23,7 @@ test('emitNotification builds the shared notification delta', () => {
   const app: NotificationEmitterApp = {
     handleMessage: (id, delta) => { captured.push({ id, delta }) }
   }
-  const value = {
+  const value: NotificationValue = {
     state: 'alarm',
     method: ['visual', 'sound'],
     message: 'Rock ahead',
@@ -62,7 +63,12 @@ test('emitNotification sanitizes the POI id embedded in the path', () => {
     app,
     'notifications.navigation.crowsNest.route.',
     'a.b/c',
-    { timestamp: '2026-05-22T00:00:00.000Z' }
+    {
+      state: 'normal',
+      method: [],
+      message: 'cleared',
+      timestamp: '2026-05-22T00:00:00.000Z'
+    }
   )
 
   assert.deepEqual(paths, ['notifications.navigation.crowsNest.route.a_b_c'])

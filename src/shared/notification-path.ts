@@ -13,6 +13,21 @@ import type { Delta, Path, SourceRef, Timestamp } from '@signalk/server-api'
 import { PLUGIN_ID } from './plugin-id.js'
 
 /**
+ * Common shape of a notification value the plugin's alarm outputs emit. Each
+ * output narrows the `state` union to the severities it raises (the proximity
+ * alarm uses `alarm`, the route-hazard scan uses `warn`), but the cleared
+ * state, the method array, the human-readable message, and the timestamp are
+ * the same across both outputs. This is a superset of the SignalK
+ * `Notification` shape: it also carries the `timestamp`, per the Tier 1 design.
+ */
+export interface NotificationValue {
+  state: 'alarm' | 'warn' | 'normal'
+  method: Array<'visual' | 'sound'>
+  message: string
+  timestamp: string
+}
+
+/**
  * Make a POI id safe to embed in a dot-delimited SignalK path. ActiveCaptain
  * ids are numeric, but the alarm outputs' `evaluate` is a public entry point:
  * a stray `.` would silently fork the notification onto a different path, so
@@ -46,7 +61,7 @@ export function emitNotification (
   app: NotificationEmitterApp,
   pathPrefix: string,
   poiId: string,
-  value: { timestamp: string }
+  value: NotificationValue
 ): void {
   app.handleMessage(PLUGIN_ID, {
     updates: [{
