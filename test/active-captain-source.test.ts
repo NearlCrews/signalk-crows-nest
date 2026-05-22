@@ -81,8 +81,13 @@ test('getDetails returns detail through the cache', async () => {
     assert.equal(view.source, 'activecaptain')
     assert.equal(view.url, 'https://activecaptain.garmin.com/en-US/pois/1')
     assert.ok(
-      view.description?.includes('Data from Garmin ActiveCaptain'),
-      'the rendered description carries the attribution footer'
+      view.description?.includes('Garmin Active Captain'),
+      'the rendered description carries the footer attribution once'
+    )
+    assert.equal(
+      view.description?.split('Garmin Active Captain').length,
+      2,
+      'the description credits ActiveCaptain exactly once, not twice'
     )
     assert.equal(source.id, 'activecaptain')
     source.close()

@@ -24,7 +24,6 @@ import type { PoiStore } from './poi-store.js'
 import { parseApiDate, renderDescription } from './poi-detail-renderer.js'
 import { filterByRating } from './rating-filter.js'
 import type { PoiSource } from '../poi-source.js'
-import { appendAttribution } from '../../shared/attribution.js'
 import type { PoiDetailView } from '../../shared/types.js'
 import type { PluginStatus } from '../../status/plugin-status.js'
 
@@ -134,7 +133,10 @@ export function createActiveCaptainSource (config: ActiveCaptainSourceConfig): P
       const poi = entity.pointOfInterest
       let description: string | undefined
       try {
-        description = appendAttribution(renderDescription(entity), ACTIVE_CAPTAIN_ATTRIBUTION)
+        // The rendered template ends with a footer partial that already
+        // credits ActiveCaptain, so the description needs no extra
+        // attribution line appended.
+        description = renderDescription(entity)
       } catch (error) {
         app.debug(`Unable to format description for ${id}: ${String(error)}`)
       }
