@@ -35,10 +35,8 @@
 
 import type { IRouter } from 'express'
 import type { ServerAPI } from '@signalk/server-api'
+import { PLUGIN_ID } from './pluginId.js'
 import type { StatusSnapshot } from './statusTypes.js'
-
-/** Plugin id, the segment the server mounts the router under. */
-const PLUGIN_ID = 'signalk-activecaptain-resources'
 
 /** Subtree to admin-gate, an absolute path under the mounted router. */
 const API_PATH = `/plugins/${PLUGIN_ID}/api`

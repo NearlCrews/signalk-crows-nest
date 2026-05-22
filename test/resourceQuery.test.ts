@@ -73,3 +73,21 @@ test('resolveBbox returns null when the position is missing or unusable', () => 
   assert.equal(resolveBbox({ distance: 3000 }), null)
   assert.equal(resolveBbox({ position: 'here', distance: 3000 }), null)
 })
+
+test('resolveBbox accepts an explicit bbox array', () => {
+  // [minLongitude, minLatitude, maxLongitude, maxLatitude]
+  const bbox = resolveBbox({ bbox: [-80.20, 25.70, -80.10, 25.85] })
+  assert.deepEqual(bbox, { west: -80.20, south: 25.70, east: -80.10, north: 25.85 })
+})
+
+test('resolveBbox accepts an explicit bbox string, plain or bracketed', () => {
+  const expected = { west: 5.4, south: 25.7, east: 6.9, north: 31.2 }
+  assert.deepEqual(resolveBbox({ bbox: '5.4,25.7,6.9,31.2' }), expected)
+  assert.deepEqual(resolveBbox({ bbox: '[5.4, 25.7, 6.9, 31.2]' }), expected)
+})
+
+test('resolveBbox returns null for a malformed bbox', () => {
+  assert.equal(resolveBbox({ bbox: '1,2,3' }), null)
+  assert.equal(resolveBbox({ bbox: [1, 2, 'x', 4] }), null)
+  assert.equal(resolveBbox({ bbox: 42 }), null)
+})

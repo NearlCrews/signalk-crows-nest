@@ -34,8 +34,8 @@
  *  - Templates are inlined (see `templates.ts`), removing the fragile
  *    hardcoded `./node_modules/...` path.
  *  - `moment` is replaced by a small `Intl.RelativeTimeFormat` helper.
- *  - `helpers-for-handlebars` is replaced by a single inline `eq` helper,
- *    the only comparison helper the templates actually use.
+ *  - `helpers-for-handlebars` is replaced by the small inline helpers
+ *    registered below; the templates need no third-party helper library.
  *  - The `has*` checks use positive tests: a section counts as populated
  *    only when a field carries a definite value. The original used
  *    `field !== 'Unknown'`, which treated an absent field as populated.
@@ -94,6 +94,25 @@ function hasText (value: string | undefined): boolean {
 /** True when a notes array is present and non-empty. */
 function hasNotes (notes: PoiNote[] | undefined): boolean {
   return (notes?.length ?? 0) > 0
+}
+
+/** True for a string value that is present and not the API's 'Unknown'. */
+function isKnown (value: string | undefined): boolean {
+  return typeof value === 'string' && value.length > 0 && value !== 'Unknown'
+}
+
+/**
+ * Parse an ActiveCaptain timestamp. The API returns timestamps with no time
+ * zone (for example "2025-08-11T18:51:51.442"), which JavaScript would read as
+ * local time. ActiveCaptain serves them as UTC, so a zone-less value gets a
+ * trailing 'Z' before parsing.
+ */
+function parseApiDate (value: unknown): Date {
+  let text = String(value)
+  if (/^\d{4}-\d{2}-\d{2}T[\d:.]+$/.test(text)) {
+    text += 'Z'
+  }
+  return new Date(text)
 }
 
 /**
@@ -210,7 +229,10 @@ export function hasNavigation (details: PoiDetails): boolean {
   }
 
   return hasDefiniteAvailability(navigation) ||
+    isKnown(navigation.current) ||
     (navigation.bridgeHeight ?? 0) > 0 ||
+    (navigation.tide ?? 0) > 0 ||
+    (navigation.depthApproach ?? 0) > 0 ||
     hasNotes(navigation.notes)
 }
 
@@ -239,10 +261,7 @@ function buildEnvironment (): typeof Handlebars {
     notes: NOTES_PARTIAL
   })
 
-  // The only comparison helper the templates use is `eq`.
-  env.registerHelper('eq', (a: unknown, b: unknown): boolean => a === b)
-
-  env.registerHelper('fromNow', (value: unknown): string => fromNow(new Date(String(value))))
+  env.registerHelper('fromNow', (value: unknown): string => fromNow(parseApiDate(value)))
 
   // Renders a ticked or crossed line for a definite availability value, and
   // nothing for an absent or Unknown one. This keeps sections with many
@@ -256,6 +275,39 @@ function buildEnvironment (): typeof Handlebars {
     // header.
     if (value === 'Nearby') return new env.SafeString(`\u{1F4CD} ${text} (nearby)<br/>`)
     return ''
+  })
+
+  // Renders "label: value" for a known value, and nothing for an absent or
+  // 'Unknown' one. Used for descriptive (non-tri-state) fields.
+  env.registerHelper('knownLine', (label: unknown, value: unknown): Handlebars.SafeString | string => {
+    if (typeof value !== 'string' || value.length === 0 || value === 'Unknown') {
+      return ''
+    }
+    return new env.SafeString(
+      `${env.escapeExpression(String(label))}: ${env.escapeExpression(value)}<br/>`
+    )
+  })
+
+  // Turns a PascalCase API field id (such as "CellReception") into spaced
+  // words ("Cell Reception") for display.
+  env.registerHelper('humanize', (value: unknown): string =>
+    String(value).replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+  )
+
+  // Escapes text and converts its line breaks to <br/>, so a multi-line note
+  // is not collapsed onto one line in the rendered HTML.
+  env.registerHelper('multiline', (value: unknown): Handlebars.SafeString =>
+    new env.SafeString(env.escapeExpression(String(value)).replace(/\r\n|\r|\n/g, '<br/>'))
+  )
+
+  // Renders a "Free" or "Paid" line for a known boolean, and nothing when the
+  // value is absent, so an unknown price is not asserted as "Paid".
+  env.registerHelper('freeLine', (isFree: unknown, noun: unknown): Handlebars.SafeString | string => {
+    if (typeof isFree !== 'boolean') {
+      return ''
+    }
+    const word = isFree ? 'Free' : 'Paid'
+    return new env.SafeString(`\u{1F4B0} ${word} ${env.escapeExpression(String(noun))}<br/>`)
   })
 
   // Each section helper is a block helper that renders its body only when the

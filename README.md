@@ -54,7 +54,7 @@ Through the Signal K server Appstore, search for signalk-activecaptain-resources
 
 In the Signal K menu, head to Server -> Plugin Config, and find Garmin Active Captain Resources then enable the plugin. The default values are fine to start with, so you can just click Save.
 
-The plugin ships its own configuration panel. Instead of the generic settings form, it shows a live status section (Garmin API reachability, cached point-of-interest count, last fetch, and recent errors), a cache-duration field, and the point-of-interest types arranged in labelled groups with All and None buttons. The panel requires Signal K admin UI 2.27.0 or newer; on older servers the plugin still works and falls back to the standard settings form.
+The plugin ships its own configuration panel. Instead of the generic settings form, it shows a live status section (Garmin API reachability, cached point-of-interest count, last fetch, and recent errors), a cache-duration field, and the point-of-interest types arranged in labelled groups with All and None buttons. The panel requires Signal K admin UI 2.26.0 or newer; on older servers the plugin still works and falls back to the standard settings form.
 
 <img width="996" alt="image" src="https://github.com/user-attachments/assets/1f3a0ebd-598d-40e7-847b-ae7ccb7c4607" />
 

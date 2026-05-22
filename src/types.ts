@@ -169,6 +169,10 @@ export interface DockageSection {
   secureAccess?: Availability
   securityPatrol?: Availability
   isFree?: boolean
+  /** Total number of berths. */
+  total?: number
+  /** Number of berths available to transient (visiting) vessels. */
+  transient?: number
   notes?: PoiNote[]
 }
 
@@ -235,9 +239,18 @@ export interface MooringSection {
 
 /** Navigation hazards and constraints, present mainly on anchorages. */
 export interface NavigationSection {
-  current?: Availability
+  /**
+   * Current strength. This is NOT a tri-state availability flag: the API
+   * returns a strength word such as 'Weak', 'Moderate', or 'Strong'.
+   */
+  current?: string
   fixedBridge?: Availability
+  /** Fixed-bridge clearance height, in `distanceUnit`. */
   bridgeHeight?: number
+  /** Tidal range, in `distanceUnit`. */
+  tide?: number
+  /** Approach depth, in `distanceUnit`. */
+  depthApproach?: number
   distanceUnit?: string
   notes?: PoiNote[]
 }
@@ -250,6 +263,8 @@ export interface FeaturedReview {
   createdBy?: string
   dateVisited?: string
   votes?: number
+  /** Moderation status, e.g. 'Published' or 'PendingReview'. */
+  status?: string
 }
 
 /** Full detail response of the point-of-interest summary endpoint. */

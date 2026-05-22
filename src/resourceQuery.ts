@@ -60,15 +60,49 @@ export function resolvePosition (raw: unknown): Position | null {
 }
 
 /**
+ * Parse an explicit `bbox` query value into a Bbox.
+ *
+ * The SignalK resources API expresses a bounding box as four numbers in
+ * `[minLongitude, minLatitude, maxLongitude, maxLatitude]` order, supplied
+ * either as an array or as a comma-separated string (with or without
+ * surrounding brackets). Returns null when the value is not four finite
+ * numbers.
+ */
+function resolveExplicitBbox (raw: unknown): Bbox | null {
+  let parts: unknown[]
+  if (typeof raw === 'string') {
+    parts = raw.replace(/[[\]\s]/g, '').split(',')
+  } else if (Array.isArray(raw)) {
+    parts = raw
+  } else {
+    return null
+  }
+
+  if (parts.length !== 4) {
+    return null
+  }
+  const [west, south, east, north] = parts.map(Number)
+  if (![west, south, east, north].every(value => Number.isFinite(value))) {
+    return null
+  }
+  return { west, south, east, north }
+}
+
+/**
  * Derive a search bounding box from a SignalK resource query.
  *
  * The `notes` resource provider receives the request query as loosely typed
- * key/value pairs. This plugin supports the position + distance form used by
- * chart plotters: `position` is the search centre and `distance` is the radius
- * in metres. Returns null when the query does not carry enough information to
- * build a box.
+ * key/value pairs. Two forms are supported: an explicit `bbox` (the four-number
+ * bounding box of the SignalK resources API), and the `position` + `distance`
+ * form chart plotters send, where `position` is the search centre and
+ * `distance` is the radius in metres. Returns null when the query does not
+ * carry enough information to build a box.
  */
 export function resolveBbox (query: Record<string, unknown>): Bbox | null {
+  if (query.bbox !== undefined) {
+    return resolveExplicitBbox(query.bbox)
+  }
+
   const distance = Number(query.distance)
   if (!Number.isFinite(distance) || distance <= 0) {
     return null

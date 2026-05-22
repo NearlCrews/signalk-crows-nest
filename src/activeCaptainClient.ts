@@ -116,6 +116,11 @@ export interface ActiveCaptainClient {
    * Rejects on any HTTP, network, or parsing failure.
    */
   pointOfInterestDetails: (id: string) => Promise<PoiDetails>
+  /**
+   * Abort any in-flight requests and stop retrying. Call this from
+   * plugin.stop so a late response cannot record onto a later run's state.
+   */
+  close: () => void
 }
 
 const delay = (ms: number): Promise<void> =>
@@ -246,6 +251,10 @@ export function createActiveCaptainClient (
 
   const queue = new RequestQueue(limits.maxConcurrency, limits.minDelayMs)
 
+  // Aborted by close(): cancels in-flight fetches and stops further retries so
+  // a response cannot land after the plugin has stopped.
+  const closeController = new AbortController()
+
   /**
    * Perform a single fetch with retry/backoff. Retries network errors and
    * retryable HTTP statuses (429, 502, 503, 504). A 429 or 503 honours the
@@ -259,7 +268,10 @@ export function createActiveCaptainClient (
       try {
         const response = await fetch(url, {
           ...init,
-          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+          signal: AbortSignal.any([
+            AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+            closeController.signal
+          ])
         })
 
         if (!RETRYABLE_STATUSES.has(response.status) || attempt >= limits.maxRetries) {
@@ -288,7 +300,9 @@ export function createActiveCaptainClient (
         await delay(wait)
         attempt++
       } catch (error) {
-        if (attempt >= limits.maxRetries) {
+        // Do not retry once the client is closed, and do not retry past the
+        // configured limit.
+        if (closeController.signal.aborted || attempt >= limits.maxRetries) {
           throw error
         }
         const wait = backoffDelay(attempt, limits.backoffBaseMs, limits.maxBackoffMs)
@@ -328,19 +342,23 @@ export function createActiveCaptainClient (
         throw new Error('ActiveCaptain list response missing pointsOfInterest array')
       }
 
-      // Drop any malformed entry rather than letting one bad element throw and
-      // fail the whole search area.
+      // Keep only individually addressable points of interest. Malformed
+      // entries are dropped so one bad element cannot fail the whole search.
+      // Cluster entries (poiCount > 1) are also dropped: they carry a synthetic
+      // id with no name, and getResource on that id returns HTTP 404.
       const usable = data.pointsOfInterest.filter(poi =>
         poi != null &&
         poi.id != null &&
         poi.poiType != null &&
+        typeof poi.name === 'string' && poi.name.length > 0 &&
+        (poi.poiCount ?? 1) <= 1 &&
         poi.mapLocation != null &&
         Number.isFinite(poi.mapLocation.latitude) &&
         Number.isFinite(poi.mapLocation.longitude)
       )
       const skipped = data.pointsOfInterest.length - usable.length
       if (skipped > 0) {
-        log.debug(`Skipped ${skipped} malformed point(s) of interest in the list response`)
+        log.debug(`Skipped ${skipped} cluster or malformed point(s) of interest in the list response`)
       }
 
       return usable.map(poi => ({
@@ -383,5 +401,9 @@ export function createActiveCaptainClient (
     }
   }
 
-  return { listPointsOfInterest, pointOfInterestDetails }
+  const close = (): void => {
+    closeController.abort()
+  }
+
+  return { listPointsOfInterest, pointOfInterestDetails, close }
 }

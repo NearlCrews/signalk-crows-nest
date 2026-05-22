@@ -35,17 +35,18 @@ function assertClose (actual: number, expected: number, epsilon: number, message
   )
 }
 
-test('positionToBbox produces the expected box for a known position and distance', () => {
-  // Centre on the origin so the great-circle projection is symmetric.
-  // For a 10 km corner distance the north-west and south-east corners each
-  // sit about 0.0635916 degrees from the centre on both axes. This value was
-  // computed from the great-circle destination formula with R = 6371 km.
+test('positionToBbox encloses the search radius on every cardinal edge', () => {
+  // Centre on the origin so the great-circle projection is symmetric. The box
+  // must enclose the search circle, so each cardinal edge sits at the full
+  // search radius from the centre. For a 10 km radius that is about 0.0899317
+  // degrees (10 km / 6371 km, converted to degrees), not the smaller value an
+  // inscribed box would give.
   const bbox = positionToBbox({ latitude: 0, longitude: 0 }, 10000)
 
-  assertClose(bbox.north, 0.0635916, 1e-4, 'north edge')
-  assertClose(bbox.south, -0.0635916, 1e-4, 'south edge')
-  assertClose(bbox.east, 0.0635916, 1e-4, 'east edge')
-  assertClose(bbox.west, -0.0635916, 1e-4, 'west edge')
+  assertClose(bbox.north, 0.0899317, 1e-4, 'north edge')
+  assertClose(bbox.south, -0.0899317, 1e-4, 'south edge')
+  assertClose(bbox.east, 0.0899317, 1e-4, 'east edge')
+  assertClose(bbox.west, -0.0899317, 1e-4, 'west edge')
 })
 
 test('positionToBbox orders the edges around the centre', () => {

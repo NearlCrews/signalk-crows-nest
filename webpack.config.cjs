@@ -10,12 +10,17 @@ const pkg = require('./package.json')
 const safeName = pkg.name.replace(/[-@/]/g, '_')
 
 module.exports = {
-  entry: './src/panel/index.tsx',
+  // No `entry`: this is a pure Module Federation remote. The admin UI loads
+  // only remoteEntry.js and the exposed panel chunk, so a host entry bundle
+  // would just be dead weight in the published tarball.
+  entry: {},
   mode: 'production',
   output: {
     path: path.resolve(__dirname, 'public'),
-    filename: '[name].js',
-    chunkFilename: '[name].js',
+    // remoteEntry.js keeps its fixed name (set on the plugin below) so the
+    // admin UI can always find it; the panel chunk is content-hashed so a
+    // changed build cannot be served stale from a browser cache.
+    chunkFilename: '[name].[contenthash].js',
     // Wipe stale bundles and chunks on each build: public/ holds nothing but
     // this webpack output, so a renamed or removed chunk leaves no orphan.
     clean: true
@@ -57,9 +62,10 @@ module.exports = {
         // rather than dead code beside the panel.
         './PluginConfigurationPanel': './src/panel/index.tsx'
       },
+      // The panel uses React hooks only; it never imports react-dom (the admin
+      // UI host owns rendering), so only react is shared.
       shared: {
-        react: { singleton: true, requiredVersion: '^19' },
-        'react-dom': { singleton: true, requiredVersion: '^19' }
+        react: { singleton: true, requiredVersion: '^19' }
       }
     })
   ]

@@ -43,11 +43,11 @@ import { createPoiCache, type PoiCache } from './poiCache.js'
 import { createPluginStatus } from './pluginStatus.js'
 import { createStatusRouter } from './statusRouter.js'
 import { renderDescription } from './handlebarsUtilities.js'
+import { PLUGIN_ID } from './pluginId.js'
 import { buildPoiTypesString } from './poiTypeSelection.js'
 import { resolveBbox } from './resourceQuery.js'
 import type { PluginConfig, PoiSummary, Position } from './types.js'
 
-const PLUGIN_ID = 'signalk-activecaptain-resources'
 const PLUGIN_NAME = 'Garmin Active Captain Resources'
 const PLUGIN_DESCRIPTION =
   'Provides points of interest from Garmin Active Captain API as SignalK resources'
@@ -64,6 +64,35 @@ const POI_PAGE_URL_PREFIX = 'https://activecaptain.garmin.com/en-US/pois/'
 /** HTTP status for a point of interest that does not exist. */
 const HTTP_NOT_FOUND = 404
 
+/**
+ * OpenAPI description of the plugin's HTTP API. The SignalK server-api docs
+ * recommend any plugin that exposes an API document it; the paths here are
+ * relative to the plugin's mount point `/plugins/${PLUGIN_ID}`.
+ */
+const OPEN_API = {
+  openapi: '3.0.0',
+  info: {
+    title: 'Garmin Active Captain Resources plugin API',
+    version: '1.0.0',
+    description: 'Internal status API consumed by the plugin configuration panel.'
+  },
+  paths: {
+    '/api/status': {
+      get: {
+        summary: 'Plugin status snapshot',
+        description: 'Returns the current status snapshot. Requires administrator authentication.',
+        responses: {
+          200: {
+            description: 'The current status snapshot.',
+            content: { 'application/json': { schema: { type: 'object' } } }
+          },
+          401: { description: 'The caller is not an authenticated administrator.' }
+        }
+      }
+    }
+  }
+}
+
 /** State rebuilt on every plugin start so configuration changes take effect. */
 interface Runtime {
   client: ActiveCaptainClient
@@ -74,30 +103,36 @@ interface Runtime {
 
 /**
  * Build a SignalK `notes` resource object. The shape is shared by the list and
- * single-resource responses; `description` is included only when supplied.
+ * single-resource responses. `timestamp` is included only when a genuine
+ * resource timestamp is known (the list endpoint does not supply one), and
+ * `description`, which is rendered HTML, is included only when supplied.
  */
 function buildNoteResource (
   id: string,
   name: string,
   position: Position,
   skIcon: string,
-  timestamp: string,
+  timestamp?: string,
   description?: string
 ): Record<string, unknown> {
   const note: Record<string, unknown> = {
     name,
     position,
     url: `${POI_PAGE_URL_PREFIX}${id}`,
-    mimeType: 'text/plain',
     properties: {
       readOnly: true,
       skIcon
     },
-    timestamp,
     $source: PLUGIN_ID
   }
+  if (timestamp !== undefined) {
+    note.timestamp = timestamp
+  }
   if (description !== undefined) {
+    // The description is rendered HTML, so the note must declare text/html
+    // rather than mislabel the markup as plain text.
     note.description = description
+    note.mimeType = 'text/html'
   }
   return note
 }
@@ -113,10 +148,9 @@ function readProperty (note: Record<string, unknown>, path: string): unknown {
 }
 
 export = function (app: ServerAPI): Plugin {
-  // Rebuilt by start(); the resource provider methods read it live so a
-  // config change applies without needing the provider to be re-registered.
+  // Rebuilt on every start(); the resource provider methods read it live so a
+  // configuration change takes effect.
   let runtime: Runtime | undefined
-  let providerRegistered = false
 
   // Records request outcomes and serves the status snapshot the configuration
   // panel polls. Rebuilt by start() so each run reports its own start time and
@@ -145,20 +179,24 @@ export = function (app: ServerAPI): Plugin {
       try {
         entities = await runtime.client.listPointsOfInterest(bbox, runtime.poiTypes)
       } catch (error) {
-        status.recordError(`List request failed: ${String(error)}`)
+        const message = `List request failed: ${String(error)}`
+        status.recordError(message)
+        app.setPluginError(message)
         throw error
       }
       status.recordListFetch(entities.length)
+      app.setPluginStatus(`${entities.length} point(s) of interest from the last search`)
 
-      const timestamp = new Date().toISOString()
+      // The bounding-box endpoint carries no per-POI last-modified time, so
+      // list entries omit `timestamp` rather than report a fetch time that
+      // changes on every call.
       const resources: Record<string, unknown> = {}
       for (const entity of entities) {
         resources[entity.id] = buildNoteResource(
           entity.id,
           entity.name,
           { ...entity.position },
-          entity.type.toLowerCase(),
-          timestamp
+          entity.type.toLowerCase()
         )
       }
       return resources
@@ -197,8 +235,12 @@ export = function (app: ServerAPI): Plugin {
       if (property === undefined || property === '') {
         return note
       }
+      const value = readProperty(note, property)
+      if (value === undefined) {
+        throw new Error(`Resource ${id} has no property ${property}`)
+      }
       return {
-        value: readProperty(note, property),
+        value,
         timestamp: note.timestamp,
         $source: PLUGIN_ID
       }
@@ -279,23 +321,29 @@ export = function (app: ServerAPI): Plugin {
         poiTypes
       }
 
-      // Register exactly once for the plugin's lifetime. start() may be called
-      // again after a config change; the methods above read `runtime` live, so
-      // the single registered provider always serves the current config.
-      if (!providerRegistered) {
-        try {
-          app.registerResourceProvider({ type: RESOURCE_TYPE, methods })
-          providerRegistered = true
-        } catch (error) {
-          app.error(`Cannot register as a ${RESOURCE_TYPE} resource provider: ${String(error)}`)
-        }
+      // Register on every start(). The SignalK server unregisters a plugin's
+      // resource providers on stop, so a config change (stop then start) must
+      // re-register or the `notes` type would be left with no provider.
+      // ResourcesApi.register stores providers in a Map keyed by plugin id, so
+      // this is idempotent.
+      try {
+        app.registerResourceProvider({ type: RESOURCE_TYPE, methods })
+      } catch (error) {
+        app.error(`Cannot register as a ${RESOURCE_TYPE} resource provider: ${String(error)}`)
       }
+
+      app.setPluginStatus('Ready, waiting for resource requests')
     },
 
     stop: (): void => {
+      // Abort in-flight requests so a late response cannot record onto the
+      // next run's status, then drop the cache.
+      runtime?.client.close()
       runtime?.cache.clear()
       runtime = undefined
     },
+
+    getOpenApi: () => OPEN_API,
 
     // Mounts the admin-gated GET /api/status endpoint the configuration panel
     // polls. The cached entry count comes from the live runtime, or zero

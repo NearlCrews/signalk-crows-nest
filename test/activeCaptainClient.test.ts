@@ -108,6 +108,24 @@ test('listPointsOfInterest resolves with an empty array for an empty result', as
   )
 })
 
+test('listPointsOfInterest drops cluster entries with poiCount above 1', async () => {
+  await withMockFetch(
+    () => jsonResponse({
+      pointsOfInterest: [
+        { id: '1', poiType: 'Marina', mapLocation: { latitude: 12, longitude: -70 }, name: 'Real marina' },
+        { id: '99', poiType: 'Marina', mapLocation: { latitude: 12.1, longitude: -70.1 }, poiCount: 4 }
+      ]
+    }),
+    async () => {
+      const client = createActiveCaptainClient(silentLog, fastLimits)
+      const result = await client.listPointsOfInterest(sampleBbox, 'Marina')
+      // The cluster entry (poiCount 4, no name) is dropped: getResource on its
+      // synthetic id would 404.
+      assert.deepEqual(result.map(poi => poi.id), ['1'])
+    }
+  )
+})
+
 test('listPointsOfInterest skips malformed elements instead of failing the whole list', async () => {
   await withMockFetch(
     () => jsonResponse({

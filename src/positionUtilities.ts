@@ -104,15 +104,17 @@ function projectPosition (position: Position, bearingDegrees: number, distanceKm
 }
 
 /**
- * Build a bounding box centred on a position.
+ * Build a bounding box that fully encloses a search circle.
  *
- * The box is derived by projecting the centre point along two great-circle
- * paths: one toward the north-west corner (bearing -45 degrees) and one toward
- * the south-east corner (bearing 135 degrees). The north-west projection
- * supplies the box's `north` and `west` edges, and the south-east projection
- * supplies the `south` and `east` edges. The two corners are diagonally
- * opposite, so `distanceMeters` is the distance from the centre to each
- * corner, not the width of the box.
+ * `distanceMeters` is the search radius: every point within that radius of the
+ * centre must fall inside the returned box. The box is derived by projecting
+ * the centre toward the north-west corner (bearing -45 degrees) and the
+ * south-east corner (bearing 135 degrees). To make each cardinal edge sit at
+ * least `distanceMeters` from the centre, the corners are projected at
+ * `distanceMeters * sqrt(2)` (a corner of a square is that much further from
+ * the centre than an edge). Projecting the corners at only `distanceMeters`
+ * would inscribe the box inside the circle and silently drop points that lie
+ * within the radius but near due north, south, east, or west.
  *
  * Note: the legacy implementation returned a positional array
  * `[west, north, east, south]` and indexed the input position as
@@ -120,13 +122,14 @@ function projectPosition (position: Position, bearingDegrees: number, distanceKm
  * returns a `Bbox` object instead.
  *
  * @param position - The centre of the bounding box.
- * @param distanceMeters - Distance in metres from the centre to each corner.
+ * @param distanceMeters - Search radius in metres that the box must enclose.
  * @returns A `Bbox` with `north`, `south`, `east`, and `west` edges in degrees.
  */
 export function positionToBbox (position: Position, distanceMeters: number): Bbox {
-  const distanceKm = distanceMeters / 1000
-  const northWest = projectPosition(position, NW_BEARING_DEGREES, distanceKm)
-  const southEast = projectPosition(position, SE_BEARING_DEGREES, distanceKm)
+  // Corner-to-centre distance for a square whose edges sit distanceMeters out.
+  const cornerDistanceKm = (distanceMeters * Math.SQRT2) / 1000
+  const northWest = projectPosition(position, NW_BEARING_DEGREES, cornerDistanceKm)
+  const southEast = projectPosition(position, SE_BEARING_DEGREES, cornerDistanceKm)
 
   return {
     north: northWest.latitude,

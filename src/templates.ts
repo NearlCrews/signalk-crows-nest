@@ -32,11 +32,10 @@
  * differed from the assumed layout. The sources are now inlined here as plain
  * string constants so rendering never touches the filesystem.
  *
- * Fixes applied while inlining: the malformed `<//div>` closing tags in the
- * business, fuel, and contact partials are now `</div>`, the contact website
- * link now interpolates `{{website}}` instead of linking to the literal word
- * "website", and the repeated free-form notes block is factored into the
- * shared `NOTES_PARTIAL`.
+ * Every capability section renders its tri-state fields through the
+ * `availabilityLine` helper, which emits a line only for a definite Yes, No,
+ * or Nearby value. An `'Unknown'` field is skipped rather than shown as a
+ * misleading red cross.
  */
 
 /** Root template used for every point-of-interest type. */
@@ -55,12 +54,13 @@ export const POINT_OF_INTEREST_TEMPLATE = `{{> header}}
 /**
  * Shared free-form notes block. The context is the notes array itself, so each
  * section partial invokes it as `{{> notes notes}}`. An absent or empty array
- * renders nothing.
+ * renders nothing. The field id is humanised and the value keeps its line
+ * breaks.
  */
 export const NOTES_PARTIAL = `{{#if this}}
 <div>
 {{#each this}}
-    <p>{{this.field}}: {{this.value}}</p>
+    <p>{{humanize this.field}}: {{multiline this.value}}</p>
 {{/each}}
 </div>
 {{/if}}`
@@ -84,38 +84,36 @@ export const FOOTER_PARTIAL = `<hr/>
 export const BUSINESS_PARTIAL = `<hr/>
 <div>
     <h4>\u{1F4B5} Business</h4>
-    {{#if seasonal}}{{#if (eq seasonal "No")}}\u{2705}{{else}}\u{274C}{{/if}} Open year round<br/>{{/if}}
-    {{#if public}}{{#if (eq public "Yes")}}\u{2705}{{else}}\u{274C}{{/if}} Open to public<br/>{{/if}}
-    {{#if cash}}{{#if (eq cash "Yes")}}\u{2705}{{else}}\u{274C}{{/if}} Cash accepted<br/>{{/if}}
-    {{#if check}}{{#if (eq check "Yes")}}\u{2705}{{else}}\u{274C}{{/if}} Cheques accepted<br/>{{/if}}
-    {{#if credit}}{{#if (eq credit "Yes")}}\u{2705}{{else}}\u{274C}{{/if}} Cards accepted<br/>{{/if}}
+    {{availabilityLine seasonal "Seasonal"}}
+    {{availabilityLine public "Open to public"}}
+    {{availabilityLine cash "Cash accepted"}}
+    {{availabilityLine check "Cheques accepted"}}
+    {{availabilityLine credit "Cards accepted"}}
 </div>
 {{> notes notes}}`
 
-/** Dockage partial: berth pricing and access details. */
+/** Dockage partial: berth pricing, capacity, and access details. */
 export const DOCKAGE_PARTIAL = `<hr/>
 <div>
     <h4>\u{1F17F}\u{FE0F} Dockage</h4>
-    <p>
-        \u{2705} {{#if isFree}}Free{{else}}Paid{{/if}} docks
-    </p>
-    <p>
-        {{#if liveaboard}}{{#if (eq liveaboard "Yes")}}\u{2705}{{else}}\u{274C}{{/if}} Liveaboard<br/>{{/if}}
-        {{#if secureAccess}}{{#if (eq secureAccess "Yes")}}\u{2705}{{else}}\u{274C}{{/if}} Secure access<br/>{{/if}}
-        {{#if securityPatrol}}{{#if (eq securityPatrol "Yes")}}\u{2705}{{else}}\u{274C}{{/if}} Patrolled<br/>{{/if}}
-    </p>
-    {{> notes notes}}
-</div>`
+    {{freeLine isFree "docks"}}
+    {{#if total}}\u{1F6E5}\u{FE0F} {{total}} berths in total<br/>{{/if}}
+    {{#if transient}}\u{1F6E5}\u{FE0F} {{transient}} berths for visiting vessels<br/>{{/if}}
+    {{availabilityLine liveaboard "Liveaboard"}}
+    {{availabilityLine secureAccess "Secure access"}}
+    {{availabilityLine securityPatrol "Patrolled"}}
+</div>
+{{> notes notes}}`
 
 /** Fuel partial: fuel types available at the point. */
 export const FUEL_PARTIAL = `<hr/>
 <div>
     <h4>\u{26FD} Fuel</h4>
-    {{#if diesel}}{{#if (eq diesel "Yes")}}\u{2705}{{else}}\u{274C}{{/if}} Diesel<br/>{{/if}}
-    {{#if ethanolFree}}{{#if (eq ethanolFree "Yes")}}\u{2705}{{else}}\u{274C}{{/if}} Ethanol free<br/>{{/if}}
-    {{#if gas}}{{#if (eq gas "Yes")}}\u{2705}{{else}}\u{274C}{{/if}} Unleaded<br/>{{/if}}
-    {{#if propane}}{{#if (eq propane "Yes")}}\u{2705}{{else}}\u{274C}{{/if}} Propane<br/>{{/if}}
-    {{#if electric}}{{#if (eq electric "Yes")}}\u{2705}{{else}}\u{274C}{{/if}} Electric charging<br/>{{/if}}
+    {{availabilityLine diesel "Diesel"}}
+    {{availabilityLine ethanolFree "Ethanol free"}}
+    {{availabilityLine gas "Unleaded"}}
+    {{availabilityLine propane "Propane"}}
+    {{availabilityLine electric "Electric charging"}}
 </div>
 {{> notes notes}}`
 
@@ -123,20 +121,20 @@ export const FUEL_PARTIAL = `<hr/>
 export const AMENITIES_PARTIAL = `<hr/>
 <div>
     <h4>\u{1F3E8} Amenities</h4>
-    {{#if bar}}{{#if (eq bar "Yes")}}\u{2705}{{else}}\u{274C}{{/if}} Bar<br/>{{/if}}
-    {{#if cellReception}}{{#if (eq cellReception "Yes")}}\u{2705}{{else}}\u{274C}{{/if}} Cell reception<br/>{{/if}}
-    {{#if boatRamp}}{{#if (eq boatRamp "Yes")}}\u{2705}{{else}}\u{274C}{{/if}} Boat ramp<br/>{{/if}}
-    {{#if laundry}}{{#if (eq laundry "Yes")}}\u{2705}{{else}}\u{274C}{{/if}} Laundry<br/>{{/if}}
-    {{#if courtesyCar}}{{#if (eq courtesyCar "Yes")}}\u{2705}{{else}}\u{274C}{{/if}} Courtesy car<br/>{{/if}}
-    {{#if pets}}{{#if (eq pets "Yes")}}\u{2705}{{else}}\u{274C}{{/if}} Pets allowed<br/>{{/if}}
-    {{#if lodging}}{{#if (eq lodging "Yes")}}\u{2705}{{else}}\u{274C}{{/if}} Lodging<br/>{{/if}}
-    {{#if restroom}}{{#if (eq restroom "Yes")}}\u{2705}{{else}}\u{274C}{{/if}} Restrooms<br/>{{/if}}
-    {{#if restaurant}}{{#if (eq restaurant "Yes")}}\u{2705}{{else}}\u{274C}{{/if}} Restaurant<br/>{{/if}}
-    {{#if transportation}}{{#if (eq transportation "Yes")}}\u{2705}{{else}}\u{274C}{{/if}} Transportation<br/>{{/if}}
-    {{#if shower}}{{#if (eq shower "Yes")}}\u{2705}{{else}}\u{274C}{{/if}} Showers<br/>{{/if}}
-    {{#if water}}{{#if (eq water "Yes")}}\u{2705}{{else}}\u{274C}{{/if}} Water<br/>{{/if}}
-    {{#if trash}}{{#if (eq trash "Yes")}}\u{2705}{{else}}\u{274C}{{/if}} Rubbish disposal<br/>{{/if}}
-    {{#if wifi}}{{#if (eq wifi "Yes")}}\u{2705}{{else}}\u{274C}{{/if}} Wifi<br/>{{/if}}
+    {{availabilityLine bar "Bar"}}
+    {{availabilityLine cellReception "Cell reception"}}
+    {{availabilityLine boatRamp "Boat ramp"}}
+    {{availabilityLine laundry "Laundry"}}
+    {{availabilityLine courtesyCar "Courtesy car"}}
+    {{availabilityLine pets "Pets allowed"}}
+    {{availabilityLine lodging "Lodging"}}
+    {{availabilityLine restroom "Restrooms"}}
+    {{availabilityLine restaurant "Restaurant"}}
+    {{availabilityLine transportation "Transportation"}}
+    {{availabilityLine shower "Showers"}}
+    {{availabilityLine water "Water"}}
+    {{availabilityLine trash "Rubbish disposal"}}
+    {{availabilityLine wifi "Wifi"}}
 </div>
 {{> notes notes}}`
 
@@ -157,7 +155,7 @@ export const REVIEW_PARTIAL = '{{averageRating}}/5 \u{2B50} from <a href="https:
 /** Featured-review partial: one highlighted user review. Context is the review itself. */
 export const FEATURED_REVIEW_PARTIAL = `<div>
     <sup>\u{1F4DD} \u{201C}{{title}}\u{201D} ({{rating}}/5 \u{2B50})</sup><br/>
-    <em>{{text}}</em><br/>
+    <em>{{multiline text}}</em><br/>
     <sub>reviewed by {{createdBy}}</sub>
 </div>`
 
@@ -169,6 +167,7 @@ export const FEATURED_REVIEW_PARTIAL = `<div>
 export const MOORING_PARTIAL = `<hr/>
 <div>
     <h4>\u{2693} Mooring</h4>
+    {{freeLine isFree "moorings"}}
     {{availabilityLine hasMoorings "Moorings available"}}
     {{availabilityLine dinghy "Dinghy dock"}}
     {{availabilityLine launch "Launch service"}}
@@ -226,8 +225,10 @@ export const RETAIL_PARTIAL = `<hr/>
 export const NAVIGATION_PARTIAL = `<hr/>
 <div>
     <h4>\u{1F9ED} Navigation</h4>
-    {{availabilityLine current "Notable current"}}
+    {{knownLine "Current" current}}
     {{availabilityLine fixedBridge "Fixed bridge"}}
     {{#if bridgeHeight}}\u{1F309} Bridge clearance {{bridgeHeight}} {{distanceUnit}}<br/>{{/if}}
+    {{#if tide}}\u{1F30A} Tidal range {{tide}} {{distanceUnit}}<br/>{{/if}}
+    {{#if depthApproach}}\u{1F4CF} Approach depth {{depthApproach}} {{distanceUnit}}<br/>{{/if}}
 </div>
 {{> notes notes}}`

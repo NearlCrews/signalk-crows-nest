@@ -30,10 +30,11 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
+import { PLUGIN_ID } from '../../pluginId.js'
 import type { StatusSnapshot } from '../../statusTypes.js'
 
 /** The admin-gated status endpoint the plugin exposes through registerWithRouter. */
-const STATUS_URL = '/plugins/signalk-activecaptain-resources/api/status'
+const STATUS_URL = `/plugins/${PLUGIN_ID}/api/status`
 
 /** How often, in milliseconds, to poll the status endpoint while visible. */
 const POLL_INTERVAL_MS = 5000

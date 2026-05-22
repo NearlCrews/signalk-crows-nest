@@ -74,7 +74,7 @@ function anchorageWithMooring (): PoiDetails {
       dateLastModified: THREE_DAYS_AGO.toISOString()
     },
     mooring: { hasMoorings: 'Yes', dinghy: 'Yes', launch: 'No', liveaboard: 'Unknown', transient: 12 },
-    navigation: { current: 'Yes', fixedBridge: 'No', bridgeHeight: 0 }
+    navigation: { current: 'Weak', fixedBridge: 'No', tide: 1.4, bridgeHeight: 0 }
   }
 }
 
@@ -120,7 +120,9 @@ test('renderDescription renders mooring and navigation for an anchorage', () => 
   assert.match(html, /Dinghy dock/)
   assert.match(html, /12 transient moorings/)
   assert.match(html, /Navigation/)
-  assert.match(html, /Notable current/)
+  // `current` is a strength word, rendered as "Current: Weak", not a tick.
+  assert.match(html, /Current: Weak/)
+  assert.match(html, /Tidal range 1.4/)
 })
 
 test('availabilityLine skips Unknown fields and shows definite ones', () => {
@@ -268,6 +270,17 @@ test('hasNavigation counts a bridge height even when availability is Unknown', (
   const bridgeOnly = bareMarina()
   bridgeOnly.navigation = { current: 'Unknown', bridgeHeight: 13.5 }
   assert.equal(hasNavigation(bridgeOnly), true)
+})
+
+test('an Unknown capability renders no line, not a misleading cross', () => {
+  const poi = bareMarina()
+  poi.amenity = { wifi: 'Yes', shower: 'No', bar: 'Unknown' }
+  const html = renderDescription(poi)
+
+  assert.match(html, /✅ Wifi/, 'a Yes value renders a tick')
+  assert.match(html, /❌ Showers/, 'a No value renders a cross')
+  // An Unknown value must produce no line at all: not a cross, not the label.
+  assert.doesNotMatch(html, /Bar/)
 })
 
 test('a Nearby-only section renders a content line, not an empty header', () => {

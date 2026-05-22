@@ -41,7 +41,7 @@ types rather than fetching nothing.
 ## The configuration panel does not load
 
 The plugin ships a federated React configuration panel that the Signal K admin
-UI loads through Module Federation. It requires Signal K admin UI 2.27.0 or
+UI loads through Module Federation. It requires Signal K admin UI 2.26.0 or
 newer. On an older server the plugin still works: the admin UI falls back to
 the standard generated settings form, which exposes the same caching duration
 and POI-type options without the live status section.

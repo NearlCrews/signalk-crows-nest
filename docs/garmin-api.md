@@ -73,9 +73,12 @@ Response body shape:
 Notes:
 
 - `id` is returned as a **string** here.
-- `poiCount` is the number of POIs represented by the entry. At a clustering
-  zoom level a single entry can stand in for several POIs; at zoom 17 it is
-  normally `1`.
+- `poiCount` is the number of POIs represented by the entry. A single entry
+  can stand in for several POIs, and this clustering happens even at zoom 17
+  in dense harbours (probing Newport at zoom 17 returned clusters of 2, 3, and
+  4). A cluster entry carries a synthetic `id` with no `name`, and the summary
+  endpoint returns HTTP 404 for that id. The plugin therefore drops entries
+  with `poiCount` greater than 1: it cannot expose them as individual notes.
 - An Annapolis test bbox returned 73 POIs; there is no documented page size or
   pagination. Keep bounding boxes modest in size.
 
@@ -261,7 +264,7 @@ Treat the plugin as a good citizen. Concrete values for the API client:
 | Retry on | `429`, `502`, `503`, `504`, and network errors only |
 | Do not retry on | other `4xx` (notably `404` = POI does not exist, permanent) |
 | Backoff | exponential with full jitter: base 1 s, factor 2, cap 30 s, max 4 retries |
-| `Retry-After` | if present on a `429`/`503`, honour it instead of the computed backoff |
+| `Retry-After` | if present on a `429`/`503`, honour it instead of the computed backoff, but cap the wait at the maximum backoff (30 s) so a huge header value cannot stall a request indefinitely |
 | User-Agent | keep `Signal K Active Captain Plugin` |
 
 The single most effective limiter is **caching**, which the plugin already does:
@@ -337,8 +340,8 @@ requires the developer API and an API key. For the current feature set
 - Do not add Garmin login or an API key. They unlock the developer API, whose
   extra value is write/sync/export, not display data.
 - Apply the section 3.3 client settings: concurrency 5, ~5 req/s, exponential
-  backoff (base 1 s, cap 30 s, 4 retries), honour `Retry-After`, retry only
-  `429`/`5xx`/network errors, never retry `404`.
+  backoff (base 1 s, cap 30 s, 4 retries), honour `Retry-After` capped at the
+  30 s maximum, retry only `429`/`5xx`/network errors, never retry `404`.
 - Keep caching summaries (default 60 min) - it is the main load mitigation.
 - The config UI exposes all 13 selectable POI types. The plugin renders every
   boater-useful summary section, including `services`, `mooring`, `navigation`,

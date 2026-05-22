@@ -30,38 +30,10 @@
 
 import type { Dispatch } from 'react'
 import { useReducer, useState } from 'react'
-import { POI_TYPE_FLAGS } from '../../poiTypeSelection.js'
 import type { PluginConfig } from '../../types.js'
 import { configReducer } from '../configReducer.js'
 import type { ConfigAction } from '../configReducer.js'
-
-// Mirrors DEFAULT_CACHING_DURATION_MINUTES in src/index.ts: the fallback used
-// when the incoming configuration carries no cache duration. Keep the two in
-// step so the panel and the plugin agree on the default.
-const DEFAULT_CACHE_DURATION_MINUTES = 60
-
-/**
- * Coerce the admin UI's untyped `configuration` prop into a fully populated
- * PluginConfig. A POI-type flag absent from the stored config defaults to true,
- * matching the plugin schema, so a never-configured plugin shows every type
- * enabled rather than appearing to import nothing.
- */
-function normaliseConfig (configuration: unknown): PluginConfig {
-  const raw = (typeof configuration === 'object' && configuration !== null)
-    ? configuration as Record<string, unknown>
-    : {}
-
-  const minutes = raw.cachingDurationMinutes
-  const config: PluginConfig = {
-    cachingDurationMinutes: typeof minutes === 'number' && Number.isFinite(minutes) && minutes > 0
-      ? minutes
-      : DEFAULT_CACHE_DURATION_MINUTES
-  }
-  for (const [flag] of POI_TYPE_FLAGS) {
-    config[flag] = raw[flag] !== false
-  }
-  return config
-}
+import { normaliseConfig } from '../normaliseConfig.js'
 
 /** The configuration state surface the panel consumes. */
 export interface UseConfigResult {

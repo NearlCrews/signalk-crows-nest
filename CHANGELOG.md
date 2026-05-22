@@ -46,7 +46,7 @@
   All and None buttons.
 - A small admin-gated HTTP endpoint on the plugin side serves the status
   snapshot the panel polls.
-- The panel requires Signal K admin UI 2.27.0 or newer; on older servers the
+- The panel requires Signal K admin UI 2.26.0 or newer; on older servers the
   plugin still works and falls back to the standard generated settings form.
 
 #### Richer point-of-interest detail
@@ -78,3 +78,15 @@
   mooring total is shown; `eslint-plugin-react` is a declared dependency; the
   test suite is now type-checked in CI; and the panel build clears stale
   artifacts.
+- A SignalK and Garmin API expert review drove a further round. The most
+  important fix: the resource provider is now registered on every plugin
+  start, because the SignalK server unregisters it on every stop, so a
+  configuration change previously left the `notes` type with no provider
+  until a full server restart. Also: capability sections render an `'Unknown'`
+  field as no line rather than a misleading red cross; bounding-box cluster
+  entries (which cannot be fetched individually) are dropped; the navigation
+  current strength, tidal range, approach depth, and dockage berth counts are
+  rendered; multi-line notes keep their line breaks; ActiveCaptain timestamps
+  are read as UTC; in-flight requests are aborted on stop; the plugin reports
+  health through `setPluginStatus`, and documents its HTTP API with
+  `getOpenApi`.

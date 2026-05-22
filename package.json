@@ -6,7 +6,8 @@
   "types": "dist/index.d.ts",
   "files": [
     "dist",
-    "public"
+    "public",
+    "assets"
   ],
   "scripts": {
     "build": "npm run build:plugin && npm run build:panel",
