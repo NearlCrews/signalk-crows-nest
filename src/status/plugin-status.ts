@@ -66,20 +66,29 @@ export function createPluginStatus (sources: ReadonlyArray<StatusSource>): Plugi
     states.set(source, { name, apiReachable: null, lastListFetch: null })
   }
 
+  /**
+   * Mark `source` reachable in its state row, if it has one. Shared by
+   * `recordListFetch` and `recordDetailSuccess` so the lookup-and-guard
+   * pattern lives in one place.
+   */
+  function markReachable (source: string): SourceState | undefined {
+    const state = states.get(source)
+    if (state !== undefined) {
+      state.apiReachable = true
+    }
+    return state
+  }
+
   return {
     recordListFetch: (source: string, poiCount: number): void => {
-      const state = states.get(source)
+      const state = markReachable(source)
       if (state !== undefined) {
-        state.apiReachable = true
         state.lastListFetch = { at: new Date().toISOString(), poiCount }
       }
     },
 
     recordDetailSuccess: (source: string): void => {
-      const state = states.get(source)
-      if (state !== undefined) {
-        state.apiReachable = true
-      }
+      markReachable(source)
     },
 
     recordError: (source: string, message: string): void => {
