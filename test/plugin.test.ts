@@ -104,6 +104,7 @@ function createStubOutput (options: {
   id: string
   positionDriven?: boolean
   stopThrows?: boolean
+  startThrows?: boolean
 }): StubOutput {
   const handles: Array<{ stopCount: number }> = []
   const positionScan: PositionScanContributor | undefined =
@@ -116,6 +117,9 @@ function createStubOutput (options: {
     configSchema: { [`enable_${options.id}`]: { type: 'boolean' } },
     isEnabled: () => true,
     start: (): OutputHandle => {
+      if (options.startThrows === true) {
+        throw new Error(`${options.id} start failed`)
+      }
       const record = { stopCount: 0 }
       handles.push(record)
       const handle: OutputHandle = {
@@ -216,6 +220,28 @@ test('the position monitor is built only when a position-driven output is enable
   pluginDriven.start(CONFIG, noopRestart)
   assert.equal(stubDriven.getSelfBusCalls(), 1, 'the monitor subscribes for a position-driven output')
   pluginDriven.stop()
+})
+
+test('an output start failure is surfaced as a plugin error, not as "Ready"', () => {
+  // An enabled output whose start() throws is isolated by the registry and
+  // excluded from startedIds. The plugin must surface that via setPluginError
+  // and must not report the bland "Ready" status that would mask a dead output.
+  const input = createStubInput()
+  const failing = createStubOutput({ id: 'failing', startThrows: true })
+  const healthy = createStubOutput({ id: 'healthy' })
+  const stub = createStubApp()
+  const plugin = createPlugin(
+    stub.app,
+    createInputRegistry([input.module]),
+    createOutputRegistry([failing.module, healthy.module])
+  )
+  plugin.start(CONFIG, noopRestart)
+  assert.equal(failing.handles.length, 0, 'the failing output never produced a handle')
+  assert.equal(healthy.handles.length, 1, 'the healthy output still started')
+  assert.equal(stub.pluginErrors.length, 1, 'a plugin error is surfaced')
+  assert.match(stub.pluginErrors[0], /failing/, 'the error names the failed output')
+  assert.deepEqual(stub.statusMessages, [], '"Ready" must not mask the failure')
+  plugin.stop()
 })
 
 test('a position monitor construction failure is isolated and surfaced', () => {

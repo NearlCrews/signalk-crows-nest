@@ -151,13 +151,22 @@ export function createPlugin (
       // reported as started.
       app.debug(`Crow's Nest started outputs: ${startedIds.join(', ') || '(none)'}`)
 
+      // Detect outputs whose start() threw and was isolated by the registry,
+      // so the admin UI surfaces a plugin error rather than the bland "Ready"
+      // status that would mask a dead output.
+      const enabledOutputIds = outputs.modules
+        .filter((module) => module.isEnabled(config))
+        .map((module) => module.id)
+      const startedSet = new Set(startedIds)
+      const failedOutputIds = enabledOutputIds.filter((id) => !startedSet.has(id))
+
       // Build the shared position monitor from the outputs' scan contributors.
       const contributors: PositionScanContributor[] = handles
         .map((handle) => handle.positionScan)
         .filter((scan): scan is PositionScanContributor => scan !== undefined)
       let monitorFailed = false
       if (contributors.length > 0) {
-        const requiredTypes = [...new Set(contributors.flatMap((c) => [...c.poiTypes]))]
+        const requiredTypes = contributors.flatMap((c) => c.poiTypes)
         try {
           runtime.monitor = createPositionMonitor({
             app,
@@ -181,9 +190,16 @@ export function createPlugin (
         }
       }
 
-      // Only report a healthy status when nothing failed. On a monitor failure
-      // the plugin error set above must stand.
-      if (!monitorFailed) {
+      // Treat a failed output start the same way as a monitor failure: surface
+      // it via setPluginError so the admin UI does not show "Ready" while an
+      // enabled output is dead. A monitor failure takes precedence; its error
+      // message is the more specific one.
+      if (!monitorFailed && failedOutputIds.length > 0) {
+        app.setPluginError(
+          `Outputs failed to start: ${failedOutputIds.join(', ')} (see server log for details)`
+        )
+      } else if (!monitorFailed) {
+        // Only report a healthy status when nothing failed.
         app.setPluginStatus('Ready, waiting for resource requests')
       }
     },

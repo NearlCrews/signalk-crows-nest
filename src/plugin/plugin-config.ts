@@ -40,6 +40,17 @@ export function assemblePluginSchema (
       properties[key] = value
     }
   }
+  // Every required key must be backed by a merged property; otherwise the
+  // admin UI would render a required slot with no schema. A missing backing
+  // property is a wiring bug (the module that owned it was renamed or dropped)
+  // and is treated the same as a duplicate key: throw at assembly time.
+  for (const key of REQUIRED_PROPERTIES) {
+    if (!(key in properties)) {
+      throw new Error(
+        `Required config property "${key}" is not declared by any module`
+      )
+    }
+  }
   return {
     title,
     description,
