@@ -24,3 +24,11 @@ test('readProperty reads a dot path and returns undefined for a miss', () => {
   assert.equal(readProperty(note, 'properties.skIcon'), 'marina')
   assert.equal(readProperty(note, 'properties.nope'), undefined)
 })
+
+test('readProperty returns undefined when an intermediate segment is not an object', () => {
+  const note = buildNoteResource('7', 'Dock', { latitude: 1, longitude: 2 }, 'marina')
+  // `name` is the string 'Dock', so descending into `name.foo` cannot resolve;
+  // readProperty must return undefined rather than throw on the string.
+  assert.doesNotThrow(() => readProperty(note, 'name.foo'))
+  assert.equal(readProperty(note, 'name.foo'), undefined)
+})

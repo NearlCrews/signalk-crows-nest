@@ -149,6 +149,12 @@ test('buildFetchBox returns a corridor box for the active route', async () => {
   assert.ok(handle.positionScan)
   const box = handle.positionScan.buildFetchBox({ latitude: 0, longitude: 0 })
   assert.ok(box !== null && box.north > box.south && box.east > box.west)
+  // The route runs due north from latitude 0 to the far waypoint at latitude
+  // 1, so the box must actually enclose the route ahead: its north edge has
+  // to reach past the far waypoint (latitude 1, plus the corridor half-width)
+  // and its south edge has to sit below the near waypoint at latitude 0.
+  assert.ok(box !== null && box.north > 1, 'the box reaches past the far waypoint')
+  assert.ok(box !== null && box.south < 0, 'the box reaches below the near waypoint')
   handle.stop()
 })
 
@@ -177,6 +183,26 @@ test('a tick with a route raises an alarm, a tick without a route clears it', as
   handle.positionScan.buildFetchBox({ latitude: 0, longitude: 0 })
   handle.positionScan.evaluate({ latitude: 0, longitude: 0 }, [])
   assert.equal(messages.length, 2)
+  handle.stop()
+})
+
+test('a POI well outside the corridor is not alarmed', async () => {
+  const { context, messages } = createContext({
+    course: courseWithRoute('/resources/routes/route-1'),
+    resource: routeResource(NORTHBOUND_ROUTE)
+  })
+  const handle = routeHazardOutput.start(context)
+  await flush()
+  assert.ok(handle.positionScan)
+
+  // A hazard 0.1 deg of longitude east of the route (about 11 km) is far
+  // outside the 500 m corridor half-width, so evaluate must not alarm it.
+  const hazard: PoiSummary = {
+    id: 'h1', name: 'Distant rock', type: 'Hazard', position: { latitude: 0.5, longitude: 0.1 }
+  }
+  handle.positionScan.buildFetchBox({ latitude: 0, longitude: 0 })
+  handle.positionScan.evaluate({ latitude: 0, longitude: 0 }, [hazard])
+  assert.equal(messages.length, 0)
   handle.stop()
 })
 

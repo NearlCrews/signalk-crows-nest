@@ -170,6 +170,22 @@ test('getResource rejects an unknown property', async () => {
   await assert.rejects(getResource('1', 'properties.nope'), /no property/)
 })
 
+test('getResource rejects cleanly when getDetails fails', async () => {
+  const methods = startMethods({
+    pois: {
+      id: 'activecaptain',
+      listPointsOfInterest: async () => [],
+      getDetails: async (): Promise<PoiDetails> => { throw new Error('detail boom') },
+      cacheSize: () => 0,
+      close: () => {}
+    } as never
+  })
+  const getResource = methods.getResource as (id: string, p?: string) => Promise<Record<string, unknown>>
+  // The getDetails rejection must surface as a clean getResource rejection,
+  // not an unhandled rejection or a swallowed error.
+  await assert.rejects(getResource('1'), /detail boom/)
+})
+
 test('setResource rejects', async () => {
   const methods = startMethods({})
   const setResource = methods.setResource as () => Promise<void>
