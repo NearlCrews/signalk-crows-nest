@@ -17,6 +17,9 @@ anchorages, hazards, and more as a layer on the chart. It also keeps a
 lookout: it raises a proximity alarm when the vessel nears a hazard, and
 scans the active route ahead for hazards, bridges, and locks.
 
+> Built on the foundation of [`signalk-activecaptain-resources`](https://github.com/KvotheBloodless/signalk-activecaptain-resources)
+> by Paul Willems and the Signal K community.
+
 ## What's New in v0.4.2
 
 v0.4.2 is the first release published to npm. It bundles every feature the
@@ -27,7 +30,8 @@ React configuration panel, the per-source earliest-year filter, and the
 per-bbox refresh-debounce cache for the two at-runtime sources.
 
 See the [v0.4.2 changelog entry](CHANGELOG.md#v042) and the
-[full release history](CHANGELOG.md) for development-milestone detail.
+[v0.4.2 release](https://github.com/NearlCrews/signalk-crows-nest/releases/tag/v0.4.2).
+[Full release history](CHANGELOG.md).
 
 ## Features
 
