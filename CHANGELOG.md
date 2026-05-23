@@ -4,8 +4,39 @@
 
 ### Unreleased
 
-**Two new authoritative US data sources, a per-source date-cutoff filter, and a
-broad cleanup pass driven by a multi-agent code review.**
+**Two new authoritative US data sources, a per-source date-cutoff filter, a
+per-bbox refresh-debounce cache, and a broad cleanup pass driven by a
+multi-agent code review.**
+
+#### Per-card layout consistency
+
+Every data-source card now reads in the same vertical order: **layers,
+refresh period, update year, merge option**. ActiveCaptain (POI types,
+cache duration), USCG Light List (no layers, refresh hours, update year,
+dedupe), OpenSeaMap (Overpass endpoint above the buckets, seamark groups,
+refresh seconds, update year, dedupe + radius), and NOAA ENC (scale band
+with the layer toggles, refresh seconds, survey year, dedupe) all match.
+The expanded card body picks up a left-side accent rule (a 3 px border in
+`var(--ac-border)` plus a left padding bump) so the body fields read as
+obvious children of the source-name header above.
+
+#### Per-bbox refresh-debounce cache (NOAA ENC and OpenSeaMap)
+
+The two at-runtime sources gained a small in-memory cache keyed on the
+bounding-box. A Freeboard refresh burst on a stationary viewport reuses
+the previous result for the configured window (`noaaEncRefreshSeconds`,
+`openseamapRefreshSeconds`, default 30 s, range 0 to 600). When the user
+pans to a fresh view, the new bbox misses the cache and re-queries
+upstream immediately. The cache key rounds the bbox to four decimal places
+(about 11 m) so sub-pixel jitter from Freeboard's bbox math does not
+fragment the cache. 0 disables the cache; a failed upstream fetch is not
+cached (the next call retries).
+
+This also brings the per-source panels into shape with the user's
+expectation that every card has a refresh-period control. The USCG Light
+List card's refresh period stays a background-download cadence in hours;
+the NOAA ENC and OpenSeaMap fields are sub-minute upstream debounces.
+Each card's hint paragraph spells out the difference.
 
 #### Earliest-year filter, per source
 

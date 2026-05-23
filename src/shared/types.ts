@@ -262,4 +262,16 @@ export interface PluginConfig {
    * are always included. Clamped to the shared range.
    */
   noaaEncMinimumSurveyYear?: number
+  /**
+   * Minimum upstream-query interval per bbox for OpenSeaMap, in seconds. A
+   * Freeboard refresh burst on the same viewport reuses the cached result
+   * for this long before re-querying Overpass. `0` disables the cache.
+   */
+  openSeaMapRefreshSeconds?: number
+  /**
+   * Minimum upstream-query interval per bbox for NOAA ENC Direct, in
+   * seconds. Same semantic as `openSeaMapRefreshSeconds`. `0` disables the
+   * cache.
+   */
+  noaaEncRefreshSeconds?: number
 }

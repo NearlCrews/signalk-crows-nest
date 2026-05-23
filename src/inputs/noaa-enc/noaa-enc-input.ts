@@ -29,6 +29,18 @@ const SCALE_BANDS: readonly ScaleBand[] = [
 /** Default scale band when the configuration omits one. */
 const DEFAULT_SCALE_BAND: ScaleBand = 'coastal'
 
+/**
+ * Default and bounds for the per-bbox debounce period. The default of 30 s
+ * matches a reasonable Freeboard refresh cadence: a stationary user can pan
+ * around the same viewport without re-firing ENC requests every keystroke,
+ * but a user who has moved to a new view sees fresh data within seconds.
+ * The bounds prevent a hand-edited config from disabling all queries (high
+ * bound) or asking for an impractical sub-second debounce (low bound).
+ */
+const DEFAULT_REFRESH_SECONDS = 30
+const MIN_REFRESH_SECONDS = 0
+const MAX_REFRESH_SECONDS = 600
+
 /** The enable, dedupe, scale-band, and per-layer config fragment. */
 const CONFIG_SCHEMA: Record<string, unknown> = {
   noaaEncEnabled: {
@@ -68,7 +80,22 @@ const CONFIG_SCHEMA: Record<string, unknown> = {
     default: DEFAULT_MINIMUM_YEAR,
     minimum: MIN_YEAR,
     maximum: MAX_YEAR
+  },
+  noaaEncRefreshSeconds: {
+    type: 'number',
+    title: 'NOAA ENC bbox-debounce window, in seconds (0 to query upstream on every list call)',
+    default: DEFAULT_REFRESH_SECONDS,
+    minimum: MIN_REFRESH_SECONDS,
+    maximum: MAX_REFRESH_SECONDS
   }
+}
+
+/** Clamp a raw refresh-seconds value, falling back to the default on garbage. */
+function resolveRefreshSeconds (raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return DEFAULT_REFRESH_SECONDS
+  if (raw < MIN_REFRESH_SECONDS) return MIN_REFRESH_SECONDS
+  if (raw > MAX_REFRESH_SECONDS) return MAX_REFRESH_SECONDS
+  return Math.trunc(raw)
 }
 
 /** Resolve the scale band from raw config, falling back to the default. */
@@ -103,6 +130,7 @@ export const noaaEncInput: InputModule = {
       includeObstructions: config.noaaEncIncludeObstructions !== false,
       includeRocks: config.noaaEncIncludeRocks === true,
       minimumYear: clampMinimumYear(config.noaaEncMinimumSurveyYear),
+      refreshSeconds: resolveRefreshSeconds(config.noaaEncRefreshSeconds),
       status,
       getCurrentPosition
     })

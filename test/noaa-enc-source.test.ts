@@ -106,6 +106,7 @@ test('listPointsOfInterest fans out across enabled layers and tags summaries', a
     includeObstructions: true,
     includeRocks: false,
     minimumYear: 0,
+    refreshSeconds: 0,
     status: status as never,
     getCurrentPosition: () => undefined
   })
@@ -144,6 +145,7 @@ test('listPointsOfInterest only queries layers that are enabled', async () => {
     includeObstructions: false,
     includeRocks: false,
     minimumYear: 0,
+    refreshSeconds: 0,
     status: status as never,
     getCurrentPosition: () => undefined
   })
@@ -168,6 +170,7 @@ test('listPointsOfInterest skips outbound work when the vessel is outside US wat
     includeObstructions: true,
     includeRocks: false,
     minimumYear: 0,
+    refreshSeconds: 0,
     status: status as never,
     // Mediterranean off Barcelona, decidedly not US waters.
     getCurrentPosition: () => ({ latitude: 41.38, longitude: 2.18 })
@@ -195,6 +198,7 @@ test('listPointsOfInterest records a per-layer error when one layer query fails'
     includeObstructions: true,
     includeRocks: false,
     minimumYear: 0,
+    refreshSeconds: 0,
     status: status as never,
     getCurrentPosition: () => undefined
   })
@@ -221,6 +225,7 @@ test('listPointsOfInterest rejects when every enabled layer query fails', async 
     includeObstructions: true,
     includeRocks: false,
     minimumYear: 0,
+    refreshSeconds: 0,
     status: status as never,
     getCurrentPosition: () => undefined
   })
@@ -250,6 +255,7 @@ test('getDetails does NOT record detail success on a cache hit (apiReachable sta
     includeObstructions: false,
     includeRocks: false,
     minimumYear: 0,
+    refreshSeconds: 0,
     status: status as never,
     getCurrentPosition: () => undefined
   })
@@ -276,6 +282,7 @@ test('getDetails records detail success only on a cache miss that hits the upstr
     includeObstructions: false,
     includeRocks: false,
     minimumYear: 0,
+    refreshSeconds: 0,
     status: status as never,
     getCurrentPosition: () => undefined
   })
@@ -300,6 +307,7 @@ test('getDetails serves from the cache on hit and never re-queries the upstream'
     includeObstructions: false,
     includeRocks: false,
     minimumYear: 0,
+    refreshSeconds: 0,
     status: status as never,
     getCurrentPosition: () => undefined
   })
@@ -335,6 +343,7 @@ test('getDetails fetches by objectId on a cache miss and caches the result', asy
     includeObstructions: false,
     includeRocks: false,
     minimumYear: 0,
+    refreshSeconds: 0,
     status: status as never,
     getCurrentPosition: () => undefined
   })
@@ -358,6 +367,7 @@ test('getDetails rejects when the upstream has no feature for the id', async () 
     includeObstructions: false,
     includeRocks: false,
     minimumYear: 0,
+    refreshSeconds: 0,
     status: status as never,
     getCurrentPosition: () => undefined
   })
@@ -381,6 +391,7 @@ test('cacheSize reports the LRU entry count', async () => {
     includeObstructions: true,
     includeRocks: false,
     minimumYear: 0,
+    refreshSeconds: 0,
     status: status as never,
     getCurrentPosition: () => undefined
   })
@@ -413,6 +424,7 @@ test('toSummary populates timestamp from SORDAT (YYYYMM)', async () => {
     includeObstructions: false,
     includeRocks: false,
     minimumYear: 0,
+    refreshSeconds: 0,
     status: status as never,
     getCurrentPosition: () => undefined
   })
@@ -440,6 +452,7 @@ test('toSummary populates timestamp from SORDAT (YYYYMMDD) and getDetails carrie
     includeObstructions: false,
     includeRocks: false,
     minimumYear: 0,
+    refreshSeconds: 0,
     status: status as never,
     getCurrentPosition: () => undefined
   })
@@ -463,6 +476,7 @@ test('a feature with no SORDAT carries no timestamp and survives the year filter
     includeObstructions: false,
     includeRocks: false,
     minimumYear: 2050,
+    refreshSeconds: 0,
     status: status as never,
     getCurrentPosition: () => undefined
   })
@@ -495,6 +509,7 @@ test('minimumYear drops features whose SORDAT year is below the threshold', asyn
     includeObstructions: false,
     includeRocks: false,
     minimumYear: 2000,
+    refreshSeconds: 0,
     status: status as never,
     getCurrentPosition: () => undefined
   })
@@ -502,4 +517,52 @@ test('minimumYear drops features whose SORDAT year is below the threshold', asyn
     { south: 41, west: -72, north: 43, east: -70 }, '')
   assert.equal(summaries.length, 1, 'only the post-2000 wreck survives')
   assert.equal(summaries[0].id, 'wreck_2')
+})
+
+test('listPointsOfInterest reuses the bbox-cached result within refreshSeconds', async () => {
+  let calls = 0
+  const client: FakeClient = {
+    queryLayer: async () => { calls++; return { features: [namedWreck] } },
+    queryById: async () => undefined
+  }
+  const { status } = fakeStatus()
+  const source = createNoaaEncSource({
+    client: client as never,
+    band: 'coastal',
+    includeWrecks: true,
+    includeObstructions: false,
+    includeRocks: false,
+    minimumYear: 0,
+    refreshSeconds: 60,
+    status: status as never,
+    getCurrentPosition: () => undefined
+  })
+  const bbox = { south: 41, west: -72, north: 43, east: -70 }
+  await source.listPointsOfInterest(bbox, '')
+  await source.listPointsOfInterest(bbox, '')
+  assert.equal(calls, 1, 'the second call within the TTL hits the bbox cache')
+})
+
+test('listPointsOfInterest queries upstream every call when refreshSeconds is 0 (off)', async () => {
+  let calls = 0
+  const client: FakeClient = {
+    queryLayer: async () => { calls++; return { features: [namedWreck] } },
+    queryById: async () => undefined
+  }
+  const { status } = fakeStatus()
+  const source = createNoaaEncSource({
+    client: client as never,
+    band: 'coastal',
+    includeWrecks: true,
+    includeObstructions: false,
+    includeRocks: false,
+    minimumYear: 0,
+    refreshSeconds: 0,
+    status: status as never,
+    getCurrentPosition: () => undefined
+  })
+  const bbox = { south: 41, west: -72, north: 43, east: -70 }
+  await source.listPointsOfInterest(bbox, '')
+  await source.listPointsOfInterest(bbox, '')
+  assert.equal(calls, 2)
 })

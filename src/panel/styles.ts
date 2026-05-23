@@ -256,9 +256,16 @@ export const S = {
     whiteSpace: 'nowrap'
   },
   sourceCardChevron: { fontSize: 11, color: 'var(--ac-text-faint)', flexShrink: 0 },
+  // The body of an expanded source card. The left border + left padding +
+  // left margin form a visible left-side accent rule that makes it obvious
+  // the body fields are children of the source-name header above. Padding
+  // and margin alone read as a generic indent; the border closes the gap
+  // between the parent's chevron and the child fields.
   sourceCardBody: {
-    padding: '14px 14px 4px',
-    borderTop: '1px solid var(--ac-border)'
+    padding: '14px 14px 4px 22px',
+    borderTop: '1px solid var(--ac-border)',
+    borderLeft: '3px solid var(--ac-border)',
+    marginLeft: 10
   },
 
   // Panel section heading (Data sources, Alerts).

@@ -1,8 +1,9 @@
 /**
- * The USCG Light List data-source card body: the dedupe toggle and the
- * background-refresh-period field. It is the `children` of the USCG Light List
- * `DataSourceCard` in the accordion; the enable toggle lives on the card
- * header itself.
+ * The USCG Light List data-source card body. Field order follows the same
+ * convention every per-source card uses: import layers (USCG has none;
+ * every NAVCEN record is imported), then the refresh-period field
+ * (NAVCEN bulk re-download cadence), then the update-year filter, then
+ * the merge option. The enable toggle lives on the card header.
  */
 
 import type * as React from 'react'
@@ -31,21 +32,6 @@ export default function UscgLightListSource ({ state, dispatch }: Props): React.
 
   return (
     <>
-      <label style={S.checkboxRow}>
-        <input
-          type='checkbox'
-          style={S.checkbox}
-          checked={dedupeEnabled}
-          onChange={(e) => dispatch({ type: 'setUscgLightListDedupe', enabled: e.target.checked })}
-        />
-        Merge USCG Light List markers that duplicate an ActiveCaptain marker
-      </label>
-      <p style={S.hint}>
-        When enabled, a USCG Light List point of interest close to an
-        ActiveCaptain point of the same type is merged into it, so one
-        physical feature is shown once. The surviving marker records every
-        source that reported it.
-      </p>
       <NumberField
         id='ac-uscg-light-list-refresh-hours'
         label='Refresh period (hours)'
@@ -66,6 +52,21 @@ export default function UscgLightListSource ({ state, dispatch }: Props): React.
         value={state.uscgLightListMinimumUpdateYear ?? DEFAULT_MINIMUM_YEAR}
         onChange={(year) => dispatch({ type: 'setUscgLightListMinimumUpdateYear', year })}
       />
+      <label style={S.checkboxRow}>
+        <input
+          type='checkbox'
+          style={S.checkbox}
+          checked={dedupeEnabled}
+          onChange={(e) => dispatch({ type: 'setUscgLightListDedupe', enabled: e.target.checked })}
+        />
+        Merge USCG Light List markers that duplicate an ActiveCaptain marker
+      </label>
+      <p style={S.hint}>
+        When enabled, a USCG Light List point of interest close to an
+        ActiveCaptain point of the same type is merged into it, so one
+        physical feature is shown once. The surviving marker records every
+        source that reported it.
+      </p>
     </>
   )
 }

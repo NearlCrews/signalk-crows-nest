@@ -92,6 +92,15 @@ export { DEFAULT_MINIMUM_YEAR, MAX_YEAR, MIN_YEAR } from '../shared/year-filter.
 import { clampMinimumYear } from '../shared/year-filter.js'
 
 /**
+ * Bounds and default for the per-bbox debounce window on the two
+ * at-runtime sources (NOAA ENC, OpenSeaMap). Mirrors the schema declared in
+ * `noaa-enc-input.ts` and `openseamap-input.ts`.
+ */
+export const MIN_REFRESH_SECONDS = 0
+export const MAX_REFRESH_SECONDS = 600
+export const DEFAULT_REFRESH_SECONDS = 30
+
+/**
  * Coerce the admin UI's untyped `configuration` prop into a fully populated
  * PluginConfig. A POI-type flag absent from the stored config defaults to
  * true, matching the plugin schema, so a never-configured plugin shows every
@@ -214,5 +223,17 @@ export function normalizeConfig (configuration: unknown): PluginConfig {
   config.uscgLightListMinimumUpdateYear = clampMinimumYear(raw.uscgLightListMinimumUpdateYear)
   config.noaaEncMinimumSurveyYear = clampMinimumYear(raw.noaaEncMinimumSurveyYear)
 
+  // Per-bbox debounce windows for the two at-runtime sources. Default 30 s.
+  config.openSeaMapRefreshSeconds = clampRefreshSeconds(raw.openSeaMapRefreshSeconds)
+  config.noaaEncRefreshSeconds = clampRefreshSeconds(raw.noaaEncRefreshSeconds)
+
   return config
+}
+
+/** Clamp a raw refresh-seconds value, falling back to the default on garbage. */
+function clampRefreshSeconds (raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return DEFAULT_REFRESH_SECONDS
+  if (raw < MIN_REFRESH_SECONDS) return MIN_REFRESH_SECONDS
+  if (raw > MAX_REFRESH_SECONDS) return MAX_REFRESH_SECONDS
+  return Math.trunc(raw)
 }

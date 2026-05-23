@@ -34,6 +34,8 @@ export type ConfigAction =
   | { type: 'setOpenSeaMapMinimumYear', year: number }
   | { type: 'setUscgLightListMinimumUpdateYear', year: number }
   | { type: 'setNoaaEncMinimumSurveyYear', year: number }
+  | { type: 'setOpenSeaMapRefreshSeconds', seconds: number }
+  | { type: 'setNoaaEncRefreshSeconds', seconds: number }
   | { type: 'discard', config: PluginConfig }
 
 /**
@@ -134,5 +136,11 @@ export function configReducer (state: PluginConfig, action: ConfigAction): Plugi
     case 'setNoaaEncMinimumSurveyYear':
       if (state.noaaEncMinimumSurveyYear === action.year) return state
       return { ...state, noaaEncMinimumSurveyYear: action.year }
+    case 'setOpenSeaMapRefreshSeconds':
+      if (state.openSeaMapRefreshSeconds === action.seconds) return state
+      return { ...state, openSeaMapRefreshSeconds: action.seconds }
+    case 'setNoaaEncRefreshSeconds':
+      if (state.noaaEncRefreshSeconds === action.seconds) return state
+      return { ...state, noaaEncRefreshSeconds: action.seconds }
   }
 }

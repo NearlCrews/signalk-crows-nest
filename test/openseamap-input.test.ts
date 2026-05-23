@@ -10,7 +10,7 @@ test('isEnabled tracks the openSeaMapEnabled toggle', () => {
   assert.equal(openSeaMapInput.isEnabled({ openSeaMapEnabled: true } as PluginConfig), true)
 })
 
-test('the config fragment carries the enable, endpoint, seamark-group, dedupe, radius, and minimum-year keys', () => {
+test('the config fragment carries the enable, endpoint, seamark-group, dedupe, radius, minimum-year, and refresh-seconds keys', () => {
   const keys = Object.keys(openSeaMapInput.configSchema)
   assert.deepEqual(keys, [
     'openSeaMapEnabled',
@@ -18,7 +18,8 @@ test('the config fragment carries the enable, endpoint, seamark-group, dedupe, r
     'openSeaMapSeamarkGroups',
     'openSeaMapDedupe',
     'openSeaMapDedupeRadiusMeters',
-    'openSeaMapMinimumYear'
+    'openSeaMapMinimumYear',
+    'openSeaMapRefreshSeconds'
   ])
 })
 

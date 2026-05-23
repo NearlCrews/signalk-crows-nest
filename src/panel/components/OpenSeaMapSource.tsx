@@ -1,8 +1,9 @@
 /**
- * The OpenSeaMap data-source card body: the Overpass API endpoint field, the
- * seamark feature-group checklist, the dedupe toggle, and the dedupe merge
- * radius. It is the `children` of the OpenSeaMap `DataSourceCard` in the
- * accordion.
+ * The OpenSeaMap data-source card body. Field order follows the same
+ * convention every per-source card uses: the connection override (the
+ * Overpass endpoint) sits above the four buckets; then layers (seamark
+ * groups); then refresh period (per-bbox debounce in seconds); then update
+ * year; then merge option (dedupe toggle plus merge radius).
  */
 
 import type * as React from 'react'
@@ -11,7 +12,8 @@ import type { ConfigAction } from '../config-reducer.js'
 import {
   DEFAULT_MINIMUM_YEAR,
   DEFAULT_OPENSEAMAP_DEDUPE_RADIUS_METERS,
-  DEFAULT_OPENSEAMAP_ENDPOINT
+  DEFAULT_OPENSEAMAP_ENDPOINT,
+  DEFAULT_REFRESH_SECONDS
 } from '../normalize-config.js'
 import { SEAMARK_GROUP_IDS } from '../../shared/seamark-groups.js'
 import { S } from '../styles.js'
@@ -19,6 +21,7 @@ import type { PluginConfig } from '../../shared/types.js'
 import EndpointUrlField from './EndpointUrlField.js'
 import MinimumYearField from './MinimumYearField.js'
 import NumberField from './NumberField.js'
+import RefreshSecondsField from './RefreshSecondsField.js'
 import SeamarkGroups from './SeamarkGroups.js'
 
 /**
@@ -55,6 +58,28 @@ export default function OpenSeaMapSource ({ state, dispatch }: Props): React.Rea
             (groupId) => groupId === id ? enabled : selected.includes(groupId))
         })}
       />
+      <RefreshSecondsField
+        id='ac-openseamap-refresh-seconds'
+        label='Refresh period (seconds)'
+        hint={'How long to reuse the most recent Overpass result for the ' +
+          'same chart viewport before re-querying. A Freeboard refresh ' +
+          'burst on a stationary view stays inside the cache; a user who ' +
+          'pans to a fresh view re-queries immediately. Leave at 0 to ' +
+          'query Overpass on every list call.'}
+        value={state.openSeaMapRefreshSeconds ?? DEFAULT_REFRESH_SECONDS}
+        onChange={(seconds) => dispatch({ type: 'setOpenSeaMapRefreshSeconds', seconds })}
+      />
+      <MinimumYearField
+        id='ac-openseamap-minimum-year'
+        label='Earliest update year'
+        hint={'Hide OSM elements whose last-edit timestamp is older than ' +
+          'this year. Leave at 0 to import every element. The timestamp is ' +
+          'an OSM contributor freshness signal: an unedited element from ' +
+          '2012 may still be correct, so old does not always mean stale. ' +
+          'Elements with no recorded timestamp are always included.'}
+        value={state.openSeaMapMinimumYear ?? DEFAULT_MINIMUM_YEAR}
+        onChange={(year) => dispatch({ type: 'setOpenSeaMapMinimumYear', year })}
+      />
       <label style={S.checkboxRow}>
         <input
           type='checkbox'
@@ -80,17 +105,6 @@ export default function OpenSeaMapSource ({ state, dispatch }: Props): React.Rea
         integer
         disabled={!dedupeEnabled}
         dense
-      />
-      <MinimumYearField
-        id='ac-openseamap-minimum-year'
-        label='Earliest update year'
-        hint={'Hide OSM elements whose last-edit timestamp is older than ' +
-          'this year. Leave at 0 to import every element. The timestamp is ' +
-          'an OSM contributor freshness signal: an unedited element from ' +
-          '2012 may still be correct, so old does not always mean stale. ' +
-          'Elements with no recorded timestamp are always included.'}
-        value={state.openSeaMapMinimumYear ?? DEFAULT_MINIMUM_YEAR}
-        onChange={(year) => dispatch({ type: 'setOpenSeaMapMinimumYear', year })}
       />
     </>
   )

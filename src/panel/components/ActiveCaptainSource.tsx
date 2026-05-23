@@ -1,7 +1,11 @@
 /**
- * The ActiveCaptain data-source card body: the cache-duration field, the
- * minimum-rating filter, and the ActiveCaptain POI-type selector. It is the
- * `children` of the ActiveCaptain `DataSourceCard` in the accordion.
+ * The ActiveCaptain data-source card body. Field order follows the same
+ * convention every per-source card uses: import layers first, then the
+ * refresh-period field, then any per-source filters (here: the minimum
+ * rating, which only applies to ActiveCaptain). ActiveCaptain has no
+ * update-year filter and no merge option (it is the base every other
+ * source merges into), so the rest of the convention is empty for this
+ * card.
  */
 
 import type * as React from 'react'
@@ -22,6 +26,11 @@ interface Props {
 export default function ActiveCaptainSource ({ state, dispatch }: Props): React.ReactElement {
   return (
     <>
+      <ActiveCaptainPoiTypes
+        config={state}
+        onToggle={(flag, enabled) => dispatch({ type: 'setPoiType', flag, enabled })}
+        onSetAll={(enabled) => dispatch({ type: 'setAllPoiTypes', enabled })}
+      />
       <CacheDurationField
         value={state.cachingDurationMinutes}
         onChange={(minutes) => dispatch({ type: 'setCacheDuration', minutes })}
@@ -29,11 +38,6 @@ export default function ActiveCaptainSource ({ state, dispatch }: Props): React.
       <RatingFilterField
         value={state.minimumRating ?? DEFAULT_MINIMUM_RATING}
         onChange={(rating) => dispatch({ type: 'setMinimumRating', rating })}
-      />
-      <ActiveCaptainPoiTypes
-        config={state}
-        onToggle={(flag, enabled) => dispatch({ type: 'setPoiType', flag, enabled })}
-        onSetAll={(enabled) => dispatch({ type: 'setAllPoiTypes', enabled })}
       />
     </>
   )

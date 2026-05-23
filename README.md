@@ -112,6 +112,7 @@ The following options are available:
 | OpenSeaMap feature groups to import | array | all four | Which seamark groups to import: hazards, navigational aids, harbours, and infrastructure. |
 | Merge OpenSeaMap points of interest that duplicate an ActiveCaptain marker | boolean | true | Merge an OpenSeaMap point into a co-located ActiveCaptain point of the same type, recording both sources on the surviving note. |
 | Merge radius for OpenSeaMap points of interest, in meters | number | 150 | Two POIs of the same type within this distance count as the same physical feature. Widen it if duplicate markers still appear on your chart, tighten it if neighbors are merging. |
+| OpenSeaMap bbox-debounce window, in seconds | number | 30 | How long to reuse the most recent Overpass result for the same chart viewport before re-querying. 0 disables the cache. |
 | Earliest OpenSeaMap update year | number | 0 | Hide OSM elements whose last-edit timestamp is older than this year. 0 disables the filter; elements with no recorded timestamp are always included. |
 | Import points of interest from the USCG Light List | boolean | false | Enable the USCG Light List source (US Aids to Navigation; US waters only). |
 | Merge USCG Light List points of interest that duplicate an ActiveCaptain marker | boolean | true | Merge a Light List point into a co-located ActiveCaptain point of the same type, recording both sources on the surviving note. |
@@ -123,6 +124,7 @@ The following options are available:
 | Include NOAA ENC wrecks | boolean | true | Import the wrecks layer in NOAA ENC list queries. |
 | Include NOAA ENC obstructions | boolean | true | Import the obstructions layer in NOAA ENC list queries. |
 | Include NOAA ENC underwater rocks | boolean | false | Import the underwater rocks layer. Off by default: a coastal-band query can return tens of thousands of rocks. |
+| NOAA ENC bbox-debounce window, in seconds | number | 30 | How long to reuse the most recent ENC Direct result for the same chart viewport before re-querying. 0 disables the cache. NOAA refreshes ENC data weekly, so a sub-minute cadence here protects the ArcGIS service from a Freeboard refresh burst on a stationary view. |
 | Earliest NOAA ENC survey year | number | 0 | Hide features whose `SORDAT` hydrographic survey date is older than this year. 0 disables the filter; features with no recorded survey date are always included. The survey date is often decades old for stable features (a wreck found in a 1950s lead-line survey vs a 2020s multibeam survey), so this is a data-confidence filter. |
 
 Deselecting every POI type makes the plugin import nothing. A configuration

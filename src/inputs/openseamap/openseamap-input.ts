@@ -24,6 +24,14 @@ import {
 /** Default Overpass interpreter URL when configuration omits one. */
 const DEFAULT_ENDPOINT = 'https://overpass-api.de/api/interpreter'
 
+/**
+ * Default and bounds for the per-bbox debounce window. Matches the NOAA ENC
+ * defaults so the two at-runtime sources behave the same way out of the box.
+ */
+const DEFAULT_REFRESH_SECONDS = 30
+const MIN_REFRESH_SECONDS = 0
+const MAX_REFRESH_SECONDS = 600
+
 /** The enable, endpoint, seamark-group, dedupe, and radius config fragment. */
 const CONFIG_SCHEMA: Record<string, unknown> = {
   openSeaMapEnabled: {
@@ -59,7 +67,22 @@ const CONFIG_SCHEMA: Record<string, unknown> = {
     default: DEFAULT_MINIMUM_YEAR,
     minimum: MIN_YEAR,
     maximum: MAX_YEAR
+  },
+  openSeaMapRefreshSeconds: {
+    type: 'number',
+    title: 'OpenSeaMap bbox-debounce window, in seconds (0 to query Overpass on every list call)',
+    default: DEFAULT_REFRESH_SECONDS,
+    minimum: MIN_REFRESH_SECONDS,
+    maximum: MAX_REFRESH_SECONDS
   }
+}
+
+/** Clamp a raw refresh-seconds value, falling back to the default on garbage. */
+function resolveRefreshSeconds (raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return DEFAULT_REFRESH_SECONDS
+  if (raw < MIN_REFRESH_SECONDS) return MIN_REFRESH_SECONDS
+  if (raw > MAX_REFRESH_SECONDS) return MAX_REFRESH_SECONDS
+  return Math.trunc(raw)
 }
 
 /** Resolve the Overpass endpoint from raw config, applying the default. */
@@ -94,6 +117,7 @@ export const openSeaMapInput: InputModule = {
       client: createOverpassClient(resolveEndpoint(config.openSeaMapEndpoint), app),
       seamarkGroups: resolveSeamarkGroups(config.openSeaMapSeamarkGroups),
       minimumYear: clampMinimumYear(config.openSeaMapMinimumYear),
+      refreshSeconds: resolveRefreshSeconds(config.openSeaMapRefreshSeconds),
       status
     })
   }

@@ -24,7 +24,8 @@ import { layerPoiType, layerSkIcon, sordatToIsoTimestamp } from './s57-mapping.j
 import { renderEncDirectDetail } from './enc-direct-detail.js'
 import type { PoiSource } from '../poi-source.js'
 import { appendAttribution } from '../../shared/attribution.js'
-import { MAX_POI_CACHE_ENTRIES } from '../../shared/cache.js'
+import { createBboxDebounceCache } from '../../shared/bbox-debounce.js'
+import { MAX_BBOX_CACHE_ENTRIES, MAX_POI_CACHE_ENTRIES } from '../../shared/cache.js'
 import type { Bbox, PoiDetailView, PoiSummary, Position } from '../../shared/types.js'
 import { isInUsWaters } from '../../shared/us-waters.js'
 import { filterByMinimumYear } from '../../shared/year-filter.js'
@@ -67,6 +68,13 @@ export interface NoaaEncSourceConfig {
    * are always included.
    */
   minimumYear: number
+  /**
+   * Minimum upstream-query interval per bbox, in seconds. A Freeboard
+   * refresh burst on the same viewport reuses the cached summaries for
+   * this long before re-querying ENC Direct. `0` (the off sentinel)
+   * disables the cache and queries upstream on every list call.
+   */
+  refreshSeconds: number
   /** Status recorder for per-source outcomes. */
   status: PluginStatus
   /** Returns the most recent vessel position, or undefined when unknown. */
@@ -170,8 +178,13 @@ function toDetailView (cached: CachedFeature): PoiDetailView {
 
 /** Create the NOAA ENC Direct POI source. */
 export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
-  const { client, band, minimumYear, status, getCurrentPosition } = config
+  const { client, band, minimumYear, refreshSeconds, status, getCurrentPosition } = config
   const cache = new LRUCache<string, CachedFeature>({ max: MAX_POI_CACHE_ENTRIES })
+  // Per-bbox debounce: a Freeboard refresh burst on the same view reuses the
+  // last summaries for `refreshSeconds` before re-querying upstream. The
+  // detail cache above (LRU by feature id) is unrelated; this one keys on
+  // the bounding-box string.
+  const bboxCache = createBboxDebounceCache<PoiSummary[]>(refreshSeconds, MAX_BBOX_CACHE_ENTRIES)
 
   return {
     id: NOAA_ENC_SOURCE_ID,
@@ -192,44 +205,50 @@ export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
       if (layers.length === 0) {
         return []
       }
-      const results = await Promise.allSettled(
-        layers.map(async (layerKey) => {
-          const response = await client.queryLayer({ band, layerKey, bbox })
-          return { layerKey, features: response.features }
-        })
-      )
-      const summaries: PoiSummary[] = []
-      let anyLayerOk = false
-      let firstRejection: unknown
-      for (const result of results) {
-        if (result.status === 'rejected') {
-          status.recordError(
-            NOAA_ENC_SOURCE_ID,
-            `Layer query failed: ${String(result.reason)}`
-          )
-          if (firstRejection === undefined) firstRejection = result.reason
-          continue
-        }
-        anyLayerOk = true
-        const { layerKey, features } = result.value
-        for (const feature of features) {
-          const id = summaryId(layerKey, feature)
-          cache.set(id, { layerKey, feature })
-          summaries.push(toSummary(layerKey, feature))
-        }
-      }
-      // If every enabled layer rejected, the source itself failed: reject
-      // rather than returning a fulfilled empty result, so the aggregate
-      // registry's "any source succeeded" check trips correctly and
-      // apiReachable is not flipped to true via recordListFetch(0).
-      if (!anyLayerOk) {
-        throw new Error(
-          `Every enabled NOAA ENC layer query failed: ${String(firstRejection)}`
+      // Wrap the upstream fan-out in the bbox debounce cache so a refresh
+      // burst on the same viewport reuses the previous summaries.
+      return await bboxCache.get(bbox, async () => {
+        const results = await Promise.allSettled(
+          layers.map(async (layerKey) => {
+            const response = await client.queryLayer({ band, layerKey, bbox })
+            return { layerKey, features: response.features }
+          })
         )
-      }
-      // Year filter is applied source-side so the rest of the pipeline
-      // (dedupe, notes output, alarms) never sees filtered features.
-      return filterByMinimumYear(summaries, minimumYear)
+        const summaries: PoiSummary[] = []
+        let anyLayerOk = false
+        let firstRejection: unknown
+        for (const result of results) {
+          if (result.status === 'rejected') {
+            status.recordError(
+              NOAA_ENC_SOURCE_ID,
+              `Layer query failed: ${String(result.reason)}`
+            )
+            if (firstRejection === undefined) firstRejection = result.reason
+            continue
+          }
+          anyLayerOk = true
+          const { layerKey, features } = result.value
+          for (const feature of features) {
+            const id = summaryId(layerKey, feature)
+            cache.set(id, { layerKey, feature })
+            summaries.push(toSummary(layerKey, feature))
+          }
+        }
+        // If every enabled layer rejected, the source itself failed: reject
+        // rather than returning a fulfilled empty result, so the aggregate
+        // registry's "any source succeeded" check trips correctly and
+        // apiReachable is not flipped to true via recordListFetch(0). A
+        // rejection from the wrapped fetcher is not cached, so the next
+        // tick retries the upstream.
+        if (!anyLayerOk) {
+          throw new Error(
+            `Every enabled NOAA ENC layer query failed: ${String(firstRejection)}`
+          )
+        }
+        // Year filter is applied source-side so the rest of the pipeline
+        // (dedupe, notes output, alarms) never sees filtered features.
+        return filterByMinimumYear(summaries, minimumYear)
+      })
     },
     getDetails: async (id: string): Promise<PoiDetailView> => {
       const hit = cache.get(id)
@@ -263,7 +282,13 @@ export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
         throw error
       }
     },
+    // The detail cache is the user-visible "POIs the plugin has loaded"
+    // number on the status panel. The bbox-debounce cache is small and
+    // ephemeral, so it is intentionally not added here.
     cacheSize: () => cache.size,
-    close: () => { cache.clear() }
+    close: () => {
+      cache.clear()
+      bboxCache.clear()
+    }
   }
 }

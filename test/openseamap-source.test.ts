@@ -52,7 +52,7 @@ function fakeClient (overrides: Partial<OverpassClient> = {}): {
 }
 
 test('listPointsOfInterest maps elements to source-tagged summaries', async () => {
-  const source = createOpenSeaMapSource({ client: fakeClient().client, seamarkGroups: ['hazards'], minimumYear: 0, status: silentStatus() })
+  const source = createOpenSeaMapSource({ client: fakeClient().client, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 0, status: silentStatus() })
   const list = await source.listPointsOfInterest(sampleBbox, '')
   assert.equal(source.id, 'openseamap')
   assert.deepEqual(list, [
@@ -91,7 +91,7 @@ test('a navaid element rides the navigation-structure skIcon', async () => {
     listPointsOfInterest: async () => [lightNode],
     getById: async () => lightNode
   })
-  const source = createOpenSeaMapSource({ client, seamarkGroups: ['navaids'], minimumYear: 0, status: silentStatus() })
+  const source = createOpenSeaMapSource({ client, seamarkGroups: ['navaids'], minimumYear: 0, refreshSeconds: 0, status: silentStatus() })
   const list = await source.listPointsOfInterest(sampleBbox, '')
   assert.equal(list[0].type, 'Navigational')
   assert.equal(list[0].skIcon, 'navigation-structure', 'a navaid summary carries the navigation-structure icon')
@@ -111,7 +111,7 @@ test('an isolated-danger buoy rides the hazard glyph, not the navigation-structu
     listPointsOfInterest: async () => [isolatedDanger],
     getById: async () => isolatedDanger
   })
-  const source = createOpenSeaMapSource({ client, seamarkGroups: ['navaids'], minimumYear: 0, status: silentStatus() })
+  const source = createOpenSeaMapSource({ client, seamarkGroups: ['navaids'], minimumYear: 0, refreshSeconds: 0, status: silentStatus() })
   const list = await source.listPointsOfInterest(sampleBbox, '')
   assert.equal(list[0].type, 'Navigational',
     'the PoiType stays Navigational so the buoy does not falsely trigger the proximity alarms')
@@ -121,7 +121,7 @@ test('an isolated-danger buoy rides the hazard glyph, not the navigation-structu
 })
 
 test('every element carries an explicit skIcon mapped to a Freeboard-registered icon', async () => {
-  const source = createOpenSeaMapSource({ client: fakeClient().client, seamarkGroups: ['hazards'], minimumYear: 0, status: silentStatus() })
+  const source = createOpenSeaMapSource({ client: fakeClient().client, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 0, status: silentStatus() })
   const list = await source.listPointsOfInterest(sampleBbox, '')
   // The rock element maps directly to the hazard glyph.
   assert.equal(list[0].skIcon, 'hazard', 'a rock carries the hazard icon')
@@ -132,7 +132,7 @@ test('every element carries an explicit skIcon mapped to a Freeboard-registered 
 
 test('getDetails serves a listed element from cache without a by-id query', async () => {
   const { client, getByIdCalls } = fakeClient()
-  const source = createOpenSeaMapSource({ client, seamarkGroups: ['hazards'], minimumYear: 0, status: silentStatus() })
+  const source = createOpenSeaMapSource({ client, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 0, status: silentStatus() })
   await source.listPointsOfInterest(sampleBbox, '')
   const view = await source.getDetails('node_123')
   assert.equal(view.name, 'Big Rock')
@@ -160,7 +160,7 @@ test('getDetails queries the client by id on a cache miss with the slash form', 
       }
     }
   })
-  const source = createOpenSeaMapSource({ client, seamarkGroups: ['hazards'], minimumYear: 0, status: silentStatus() })
+  const source = createOpenSeaMapSource({ client, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 0, status: silentStatus() })
   const view = await source.getDetails('node_123')
   assert.equal(view.name, 'Big Rock')
   assert.deepEqual(seenIds, ['node/123'], 'the underscore id is translated back to the slash form for Overpass')
@@ -171,13 +171,13 @@ test('getDetails rejects when the element no longer exists', async () => {
   const { client } = fakeClient({
     getById: async (): Promise<OverpassElement | undefined> => undefined
   })
-  const source = createOpenSeaMapSource({ client, seamarkGroups: ['hazards'], minimumYear: 0, status: silentStatus() })
+  const source = createOpenSeaMapSource({ client, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 0, status: silentStatus() })
   await assert.rejects(() => source.getDetails('node_999'), /No OpenSeaMap element found/)
   source.close()
 })
 
 test('cacheSize reflects the elements stashed from a list query', async () => {
-  const source = createOpenSeaMapSource({ client: fakeClient().client, seamarkGroups: ['hazards'], minimumYear: 0, status: silentStatus() })
+  const source = createOpenSeaMapSource({ client: fakeClient().client, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 0, status: silentStatus() })
   assert.equal(source.cacheSize(), 0)
   await source.listPointsOfInterest(sampleBbox, '')
   assert.equal(source.cacheSize(), 2)
@@ -190,7 +190,7 @@ test('getDetails records a per-source detail success on the status recorder', as
     ...silentStatus(),
     recordDetailSuccess: (source) => successes.push(source)
   }
-  const source = createOpenSeaMapSource({ client: fakeClient().client, seamarkGroups: ['hazards'], minimumYear: 0, status })
+  const source = createOpenSeaMapSource({ client: fakeClient().client, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 0, status })
   await source.listPointsOfInterest(sampleBbox, '')
   // The aggregate registry hands the source the underscore form, so the
   // detail tests use it too: passing the slash form would silently miss
@@ -211,7 +211,7 @@ test('getDetails records a per-source detail error when the client rejects', asy
       throw new Error('overpass down')
     }
   })
-  const source = createOpenSeaMapSource({ client, seamarkGroups: ['hazards'], minimumYear: 0, status })
+  const source = createOpenSeaMapSource({ client, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 0, status })
   await assert.rejects(() => source.getDetails('node_999'))
   assert.equal(errors.length, 1)
   assert.equal(errors[0].source, 'openseamap')
@@ -230,7 +230,7 @@ test('summary carries timestamp when the wire element has one', async () => {
   const { client } = fakeClient({
     listPointsOfInterest: async (): Promise<OverpassElement[]> => [dated]
   })
-  const source = createOpenSeaMapSource({ client, seamarkGroups: ['hazards'], minimumYear: 0, status: silentStatus() })
+  const source = createOpenSeaMapSource({ client, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 0, status: silentStatus() })
   const list = await source.listPointsOfInterest(sampleBbox, '')
   assert.equal(list[0].timestamp, '2024-03-12T14:23:01Z')
   source.close()
@@ -238,7 +238,7 @@ test('summary carries timestamp when the wire element has one', async () => {
 
 test('summary has no timestamp when the wire element omits one', async () => {
   // rockNode has no timestamp (the existing fixture).
-  const source = createOpenSeaMapSource({ client: fakeClient().client, seamarkGroups: ['hazards'], minimumYear: 0, status: silentStatus() })
+  const source = createOpenSeaMapSource({ client: fakeClient().client, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 0, status: silentStatus() })
   const list = await source.listPointsOfInterest(sampleBbox, '')
   for (const summary of list) {
     assert.equal(summary.timestamp, undefined)
@@ -264,7 +264,7 @@ test('minimumYear drops elements whose OSM timestamp is older than the threshold
   const { client } = fakeClient({
     listPointsOfInterest: async (): Promise<OverpassElement[]> => [oldElement, newElement]
   })
-  const source = createOpenSeaMapSource({ client, seamarkGroups: ['hazards'], minimumYear: 2000, status: silentStatus() })
+  const source = createOpenSeaMapSource({ client, seamarkGroups: ['hazards'], minimumYear: 2000, refreshSeconds: 0, status: silentStatus() })
   const list = await source.listPointsOfInterest(sampleBbox, '')
   assert.equal(list.length, 1)
   assert.equal(list[0].id, 'node_2')
@@ -274,8 +274,38 @@ test('minimumYear drops elements whose OSM timestamp is older than the threshold
 test('an undated OSM element always survives the year filter', async () => {
   // rockNode has no timestamp; minimumYear in the far future would otherwise
   // drop every dated element.
-  const source = createOpenSeaMapSource({ client: fakeClient().client, seamarkGroups: ['hazards'], minimumYear: 2099, status: silentStatus() })
+  const source = createOpenSeaMapSource({ client: fakeClient().client, seamarkGroups: ['hazards'], minimumYear: 2099, refreshSeconds: 0, status: silentStatus() })
   const list = await source.listPointsOfInterest(sampleBbox, '')
   assert.ok(list.length > 0, 'an undated element is always kept')
+  source.close()
+})
+
+test('listPointsOfInterest reuses the bbox-cached result within refreshSeconds', async () => {
+  let calls = 0
+  const { client } = fakeClient({
+    listPointsOfInterest: async (): Promise<OverpassElement[]> => {
+      calls++
+      return [rockNode]
+    }
+  })
+  const source = createOpenSeaMapSource({ client, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 60, status: silentStatus() })
+  await source.listPointsOfInterest(sampleBbox, '')
+  await source.listPointsOfInterest(sampleBbox, '')
+  assert.equal(calls, 1, 'the second call within the TTL hits the bbox cache')
+  source.close()
+})
+
+test('listPointsOfInterest queries upstream every call when refreshSeconds is 0 (off)', async () => {
+  let calls = 0
+  const { client } = fakeClient({
+    listPointsOfInterest: async (): Promise<OverpassElement[]> => {
+      calls++
+      return [rockNode]
+    }
+  })
+  const source = createOpenSeaMapSource({ client, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 0, status: silentStatus() })
+  await source.listPointsOfInterest(sampleBbox, '')
+  await source.listPointsOfInterest(sampleBbox, '')
+  assert.equal(calls, 2)
   source.close()
 })

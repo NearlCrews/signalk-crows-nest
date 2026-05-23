@@ -1,9 +1,9 @@
 /**
- * The NOAA ENC Direct data-source card body: the dedupe toggle, the
- * chart-scale-band selector, and three per-layer toggles (wrecks,
- * obstructions, and rocks). It is the `children` of the NOAA ENC
- * `DataSourceCard` in the accordion; the enable toggle lives on the card
- * header itself.
+ * The NOAA ENC Direct data-source card body. Field order follows the same
+ * convention every per-source card uses: layers (the scale-band selector
+ * picks WHAT layer set the layer toggles operate on, so it groups with
+ * them), then refresh period (per-bbox debounce in seconds), then the
+ * minimum-survey-year filter, then the merge option (dedupe toggle).
  */
 
 import type * as React from 'react'
@@ -12,11 +12,13 @@ import type { ConfigAction } from '../config-reducer.js'
 import {
   DEFAULT_MINIMUM_YEAR,
   DEFAULT_NOAA_ENC_SCALE_BAND,
+  DEFAULT_REFRESH_SECONDS,
   NOAA_ENC_SCALE_BANDS
 } from '../normalize-config.js'
 import { S } from '../styles.js'
 import type { PluginConfig } from '../../shared/types.js'
 import MinimumYearField from './MinimumYearField.js'
+import RefreshSecondsField from './RefreshSecondsField.js'
 
 /** Stable id linking the band selector's visible label to its `<select>`. */
 const BAND_FIELD_ID = 'ac-noaa-enc-scale-band'
@@ -53,20 +55,6 @@ export default function NoaaEncSource ({ state, dispatch }: Props): React.ReactE
 
   return (
     <>
-      <label style={S.checkboxRow}>
-        <input
-          type='checkbox'
-          style={S.checkbox}
-          checked={dedupeEnabled}
-          onChange={(e) => dispatch({ type: 'setNoaaEncDedupe', enabled: e.target.checked })}
-        />
-        Merge NOAA ENC markers that duplicate an ActiveCaptain marker
-      </label>
-      <p style={S.hint}>
-        When enabled, a NOAA ENC point of interest close to an ActiveCaptain
-        point of the same type is merged into it, so one physical feature is
-        shown once. The surviving marker records every source that reported it.
-      </p>
       <div style={S.fieldRow}>
         <label htmlFor={BAND_FIELD_ID} style={S.label}>Chart scale band</label>
         <select
@@ -128,6 +116,19 @@ export default function NoaaEncSource ({ state, dispatch }: Props): React.ReactE
           </p>
         </fieldset>
       </section>
+      <RefreshSecondsField
+        id='ac-noaa-enc-refresh-seconds'
+        label='Refresh period (seconds)'
+        hint={'How long to reuse the most recent ENC Direct result for the ' +
+          'same chart viewport before re-querying. A Freeboard refresh ' +
+          'burst on a stationary view stays inside the cache; a user who ' +
+          'pans to a fresh view re-queries immediately. NOAA refreshes ENC ' +
+          'data weekly, so a sub-minute cadence here mostly protects the ' +
+          'ArcGIS service from your own chart plotter. Leave at 0 to query ' +
+          'ENC Direct on every list call.'}
+        value={state.noaaEncRefreshSeconds ?? DEFAULT_REFRESH_SECONDS}
+        onChange={(seconds) => dispatch({ type: 'setNoaaEncRefreshSeconds', seconds })}
+      />
       <MinimumYearField
         id='ac-noaa-enc-minimum-survey-year'
         label='Earliest survey year'
@@ -139,6 +140,20 @@ export default function NoaaEncSource ({ state, dispatch }: Props): React.ReactE
         value={minimumSurveyYear}
         onChange={(year) => dispatch({ type: 'setNoaaEncMinimumSurveyYear', year })}
       />
+      <label style={S.checkboxRow}>
+        <input
+          type='checkbox'
+          style={S.checkbox}
+          checked={dedupeEnabled}
+          onChange={(e) => dispatch({ type: 'setNoaaEncDedupe', enabled: e.target.checked })}
+        />
+        Merge NOAA ENC markers that duplicate an ActiveCaptain marker
+      </label>
+      <p style={S.hint}>
+        When enabled, a NOAA ENC point of interest close to an ActiveCaptain
+        point of the same type is merged into it, so one physical feature is
+        shown once. The surviving marker records every source that reported it.
+      </p>
     </>
   )
 }

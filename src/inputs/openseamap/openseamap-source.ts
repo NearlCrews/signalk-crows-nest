@@ -18,7 +18,8 @@ import { renderOpenSeaMapDetail } from './openseamap-detail.js'
 import { elementPoiType, elementSkIcon, seamarkRegex } from './seamark-mapping.js'
 import type { PoiSource } from '../poi-source.js'
 import { appendAttribution } from '../../shared/attribution.js'
-import { MAX_POI_CACHE_ENTRIES } from '../../shared/cache.js'
+import { createBboxDebounceCache } from '../../shared/bbox-debounce.js'
+import { MAX_BBOX_CACHE_ENTRIES, MAX_POI_CACHE_ENTRIES } from '../../shared/cache.js'
 import type { Bbox, PoiDetailView, PoiSummary, PoiType } from '../../shared/types.js'
 import { filterByMinimumYear } from '../../shared/year-filter.js'
 import type { PluginStatus } from '../../status/plugin-status.js'
@@ -48,6 +49,13 @@ export interface OpenSeaMapSourceConfig {
    * included.
    */
   minimumYear: number
+  /**
+   * Minimum upstream-query interval per bbox, in seconds. A Freeboard
+   * refresh burst on the same viewport reuses the cached summaries for
+   * this long before re-querying Overpass. `0` (the off sentinel) disables
+   * the cache and queries upstream on every list call.
+   */
+  refreshSeconds: number
   /**
    * Status recorder for per-source detail outcomes. Mirrors the ActiveCaptain
    * source's status wiring so the snapshot reflects OpenSeaMap detail fetches
@@ -125,7 +133,7 @@ function toSummary (element: OverpassElement): PoiSummary {
 
 /** Create the OpenSeaMap POI source. */
 export function createOpenSeaMapSource (config: OpenSeaMapSourceConfig): PoiSource {
-  const { client, seamarkGroups, minimumYear, status } = config
+  const { client, seamarkGroups, minimumYear, refreshSeconds, status } = config
 
   // The seamark filter is fixed for the life of the source: the configured
   // groups do not change without a plugin restart.
@@ -134,6 +142,9 @@ export function createOpenSeaMapSource (config: OpenSeaMapSourceConfig): PoiSour
   // Detail cache, populated from every list query. `getDetails` queries
   // Overpass by id only on a miss.
   const cache = new LRUCache<string, OverpassElement>({ max: MAX_POI_CACHE_ENTRIES })
+  // Per-bbox debounce: a Freeboard refresh burst on the same view reuses the
+  // last summaries for `refreshSeconds` before re-querying Overpass.
+  const bboxCache = createBboxDebounceCache<PoiSummary[]>(refreshSeconds, MAX_BBOX_CACHE_ENTRIES)
 
   return {
     id: OPENSEAMAP_SOURCE_ID,
@@ -143,14 +154,18 @@ export function createOpenSeaMapSource (config: OpenSeaMapSourceConfig): PoiSour
     // closes over. The `poiTypes` argument is therefore intentionally ignored
     // for this source.
     listPointsOfInterest: async (bbox: Bbox): Promise<PoiSummary[]> => {
-      const elements = await client.listPointsOfInterest(bbox, regex)
-      const summaries = elements.map((element) => {
-        cache.set(elementId(element), element)
-        return toSummary(element)
+      // Wrap the upstream fetch in the bbox debounce cache so a refresh
+      // burst on the same viewport reuses the previous summaries.
+      return await bboxCache.get(bbox, async () => {
+        const elements = await client.listPointsOfInterest(bbox, regex)
+        const summaries = elements.map((element) => {
+          cache.set(elementId(element), element)
+          return toSummary(element)
+        })
+        // Year filter is applied source-side so the rest of the pipeline
+        // (dedupe, notes output, alarms) never sees filtered elements.
+        return filterByMinimumYear(summaries, minimumYear)
       })
-      // Year filter is applied source-side so the rest of the pipeline
-      // (dedupe, notes output, alarms) never sees filtered elements.
-      return filterByMinimumYear(summaries, minimumYear)
     },
     getDetails: async (id: string): Promise<PoiDetailView> => {
       try {
@@ -171,6 +186,9 @@ export function createOpenSeaMapSource (config: OpenSeaMapSourceConfig): PoiSour
       }
     },
     cacheSize: () => cache.size,
-    close: () => { client.close() }
+    close: () => {
+      bboxCache.clear()
+      client.close()
+    }
   }
 }
