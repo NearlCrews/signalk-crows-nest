@@ -112,8 +112,8 @@ self-contained module registered on one line in `src/index.ts`.
       `enc-direct-types.ts` (the ENC Direct wire types, including JSDoc on
       the wire-shape quirks: CATWRK as a decoded string, WATLEV as a
       number, OBJNAM frequently null), and `s57-mapping.ts` (the S-57 enum
-      tables — WATLEV, QUASOU, TECSOU — plus per-layer `PoiType` and
-      `:sk-` icon mappings and a `humanizeCategory` helper; CATWRK and
+      tables (WATLEV, QUASOU, TECSOU) plus per-layer `PoiType` and
+      `:sk-` icon mappings and a `humanizeCategory` helper. CATWRK and
       CATOBS are intentionally absent because the wire serves them as
       decoded strings).
   - `outputs/` - SignalK consumers of POI data.
