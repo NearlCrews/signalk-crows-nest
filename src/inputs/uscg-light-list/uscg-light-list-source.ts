@@ -8,7 +8,7 @@
  * keeps its already-loaded index but issues no refresh against NAVCEN until
  * it returns.
  *
- * The 61 (district, page) pairs are pinned here from the NAVCEN MSI index, so
+ * The 37 (district, page) pairs are pinned here from the NAVCEN MSI index, so
  * a refresh iterates the exact set the upstream publishes rather than
  * probing for valid pages.
  */
@@ -33,7 +33,7 @@ const ATTRIBUTION = '© USCG (US Government public domain)'
 const URL_PREFIX = 'https://www.navcen.uscg.gov/light-list-search-results'
 
 /**
- * The 61 (district, page) pairs the NAVCEN MSI feed publishes. A district can
+ * The 37 (district, page) pairs the NAVCEN MSI feed publishes. A district can
  * publish up to fifteen pages of light-list records; the set is fixed for
  * the life of the upstream catalog, so the pairs are pinned here rather than
  * discovered at runtime.

@@ -4,7 +4,7 @@
  * Issues GET requests against the NAVCEN MSI GeoJSON files and parses each
  * feature into a LightListRecord. Supports conditional GET via
  * If-Modified-Since and If-None-Match so a daily refresh tick that finds no
- * upstream change does no work. The 61 file URLs follow the pattern
+ * upstream change does no work. The 37 file URLs follow the pattern
  * `<baseUrl>/sites/default/files/msi/lightList{district}_{page}.geojson`.
  */
 
@@ -68,7 +68,7 @@ interface RawResponse {
  * response. Uses Node's `http`/`https` modules directly (rather than the
  * shared `http-client.ts`) because the Light List feed is a daily, low-volume,
  * polite request stream that does not need queueing, throttling, or retry: a
- * one-shot conditional GET against 61 static files served from a CDN.
+ * one-shot conditional GET against 37 static files served from a CDN.
  */
 function fetchUrl (
   url: string,
