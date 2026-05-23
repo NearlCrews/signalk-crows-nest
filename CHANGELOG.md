@@ -1,5 +1,121 @@
 ## Change Log
 
+<a id="unreleased"></a>
+
+### Unreleased
+
+**Two new authoritative US data sources, plus a broad cleanup pass driven by a
+multi-agent code review.**
+
+#### USCG Light List input
+
+- A new opt-in source imports the USCG Light List (US Aids to Navigation):
+  ~57,000 lights, daymarks, buoys, racons, and sound signals across all 10
+  Coast Guard districts. Downloads 37 GeoJSON files from the NAVCEN Maritime
+  Safety Information feed with conditional GET (If-Modified-Since /
+  If-None-Match), persists a stripped JSON index under
+  `<dataDir>/uscg-light-list/`, and refreshes every 6 hours (configurable).
+  Source is off by default; US-only, gated on `isInUsWaters(position)` so a
+  vessel outside US waters issues no refresh against NAVCEN.
+- Plain-English popup HTML renders the IALA light character, color, nominal
+  range, focal-plane height, structure, daymark, fog signal, and racon
+  Morse character. Isolated-danger AtoNs get the hazard icon while their
+  `PoiType` stays `Navigational` so they do not falsely trigger the
+  proximity alarm.
+
+#### NOAA ENC Direct input (AWOIS successor)
+
+- A new opt-in source imports US authoritative wrecks, obstructions, and
+  underwater rocks from NOAA's ENC Direct ArcGIS REST FeatureServer. AWOIS
+  was retired by NOAA; ENC Direct is the official successor and is updated
+  weekly. The source is bbox-native (no bulk download required), gated on
+  `isInUsWaters(position)`, and off by default. Includes a panel selector
+  for the chart scale band (overview / general / coastal / approach /
+  harbour / berthing), individual toggles for wrecks / obstructions /
+  rocks, and the standard per-source dedupe.
+- Popup HTML translates the S-57 attribute codes (CATWRK, WATLEV, QUASOU,
+  TECSOU) to plain-English labels. CATWRK and CATOBS are passed through
+  as decoded strings because the ArcGIS service pre-decodes them on the
+  wire. The popup always carries NOAA's mandatory navigation disclaimer
+  (`NOAA ENC data is not intended for primary navigation.`) and the CC0
+  attribution footer per NOAA's data-licensing terms.
+- The popup's source-date suffix is labelled "surveyed YYYY-MM" rather
+  than "last updated YYYY-MM", because S-57 SORDAT is the hydrographic
+  survey date (often decades old for stable features), not the chart
+  refresh date.
+
+#### Multi-agent code review cleanup
+
+A 5-agent code review of the entire codebase surfaced and fixed:
+
+- **HIGH (safety):** position monitor wrapped each contributor's
+  `buildFetchBox` and `evaluate` in its own try/catch. A throwing
+  contributor (e.g. a route-hazard fetch box crashing on a bad Course API
+  response) no longer short-circuits the proximity alarm for the same
+  tick.
+- **HIGH (correctness):** the NOAA ENC client's pagination loop now
+  caps at 200 pages so a server pinning `exceededTransferLimit: true`
+  forever cannot exhaust memory. The light-list store now validates the
+  on-disk JSON shape before use so a hand-edited or partial-write file
+  cannot crash `Object.values(undefined)` on the next list query. The
+  NOAA ENC source now rejects when every enabled layer query fails so
+  the aggregate registry's "any source succeeded" check trips correctly
+  instead of recording a bogus `recordListFetch(0)` and flipping
+  `apiReachable` to true.
+- **MED (reliability):** raw `node:http` clients in the USCG and NOAA
+  ENC paths now enforce a 60-second per-request timeout so a silently
+  dropped TCP connection cannot block the refresh loop. The USCG Light
+  List refresh scheduler has an in-flight guard so a slow refresh pass
+  cannot race a concurrent one. The status router is now idempotent
+  across plugin enable / disable / enable cycles (no stacked admin
+  middleware, no duplicate route handlers).
+- **MED (status correctness):** `PluginStatus.recordSkipped` now sets a
+  per-source `justSkipped` flag and the aggregate input registry checks
+  it before recording an empty list result. A US-only source that
+  skipped because the vessel is outside US waters no longer overwrites
+  its previous `lastListFetch` with a bogus `recordListFetch(0)`, and
+  `apiReachable` is no longer flipped to `true` on a request that was
+  never sent. NOAA ENC `getDetails` no longer records detail success
+  on a cache hit, so a stale `apiReachable: false` cannot flip to
+  `true` from a user clicking a previously loaded marker.
+- **MED (data correctness):** the route-hazard fetch bbox now uses the
+  monitor's fresh `tickPosition` rather than the courseReader's
+  independent `readPosition`, closing a fetch-vs-scan gap where a
+  hazard sitting between the vessel and the first waypoint could be
+  scanned without being fetched.
+- **LOW (cleanup):** `resolveRadius` and `resolveCorridorWidth` reject
+  Infinity (a hand-edited config file would otherwise propagate NaN
+  through `positionToBbox` into the outbound URL). The notes-resource
+  output's skIcon fallback is now `notice-to-mariners` (a registered
+  Freeboard icon) rather than `type.toLowerCase()` (which produces
+  unregistered names like `boatramp`). `sanitizePoiId('')` falls back
+  to `_` so two empty-id POIs cannot collide on the same notification
+  path. The intra-source dedupe pass now respects each source's dedupe
+  toggle, so a user who turned dedupe off for OpenSeaMap sees their
+  raw OSM feed un-collapsed.
+- **LOW (UX):** the NOAA ENC collapsed accordion summary now uses the
+  same friendly band labels ("Harbor") as the expanded selector, not
+  the raw wire value ("harbour"). The "ActiveCaptain resources are
+  read-only" message in the notes resource output is relabelled to
+  "Crow's nest notes resources are read-only" because the output now
+  serves four sources. An "Always on" badge replaces the disabled
+  checkbox on the always-on ActiveCaptain card so it does not visually
+  read as an unavailable toggle. The NoaaEncSource card surfaces a
+  "choose at least one layer" hint when every hazard toggle is off.
+- **LOW (hooks):** the panel's `markSaved` callback is now identity-stable
+  across renders, so typing in any field no longer re-renders the
+  FooterBar on every keystroke. The `useNumberDraft` hook now clears
+  its draft when the parent commits an external value (e.g. a Discard
+  restoring the saved snapshot), so the input no longer shows stale
+  typed text until the user blurs.
+
+#### Documentation
+
+- CLAUDE.md, README.md, docs/roadmap.md, and docs/development.md gain
+  the two new source sections. The earlier `61 (district, page) pairs`
+  count is corrected to `37` across docs and code comments after live
+  verification on the boat Pi found the true pinned count.
+
 <a id="v050"></a>
 
 ### v0.5.0 (2026/05/22) - multi-source points of interest
