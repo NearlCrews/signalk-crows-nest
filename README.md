@@ -2,13 +2,15 @@
 
 A [Signal K server](https://github.com/SignalK/signalk-server) plugin that
 imports points of interest from multiple marine data sources, the
-[Garmin ActiveCaptain](https://activecaptain.garmin.com) community database and
-[OpenSeaMap](https://www.openseamap.org) (OpenStreetMap marine data), and
-exposes them as Signal K `notes` resources, so chart plotters such as
-Freeboard-SK can show marinas, anchorages, hazards, and more as a layer on the
-chart. It also keeps a lookout: it raises a proximity alarm when the vessel
-nears a hazard, and scans the active route ahead for hazards, bridges, and
-locks.
+[Garmin ActiveCaptain](https://activecaptain.garmin.com) community database,
+[OpenSeaMap](https://www.openseamap.org) (OpenStreetMap marine data), the
+[USCG Light List](https://www.navcen.uscg.gov/light-lists) of US Aids to
+Navigation, and the [NOAA ENC Direct](https://encdirect.noaa.gov) database of
+US wrecks, obstructions, and underwater rocks, and exposes them as Signal K
+`notes` resources, so chart plotters such as Freeboard-SK can show marinas,
+anchorages, hazards, and more as a layer on the chart. It also keeps a
+lookout: it raises a proximity alarm when the vessel nears a hazard, and
+scans the active route ahead for hazards, bridges, and locks.
 
 ## What's New in v0.5.0
 
@@ -30,12 +32,15 @@ See the [CHANGELOG](CHANGELOG.md) for the full history.
 - **Point-of-interest overlay.** Imports ActiveCaptain marinas, anchorages,
   hazards, businesses, boat ramps, bridges, dams, ferries, inlets, locks, local
   knowledge, navigational aids, and airports as Signal K `notes` resources.
-- **Multiple data sources.** Imports from Garmin ActiveCaptain and OpenSeaMap
-  (OpenStreetMap marine data, via the OSM Overpass API), merged into one chart
-  layer. A duplicate of a feature reported by more than one source is merged
-  within a configurable radius (default 150 meters), and a second pass
-  collapses same-source duplicates of the same feature; the surviving note
-  records every contributing source as a corroboration signal.
+- **Multiple data sources.** Imports from Garmin ActiveCaptain, OpenSeaMap
+  (OpenStreetMap marine data, via the OSM Overpass API), the USCG Light List
+  of US Aids to Navigation (US-only, off by default), and NOAA ENC Direct's
+  authoritative US wrecks, obstructions, and underwater rocks (US-only, off
+  by default), merged into one chart layer. A duplicate of a feature reported
+  by more than one source is merged within a configurable radius (default
+  150 meters), and a second pass collapses same-source duplicates of the
+  same feature; the surviving note records every contributing source as a
+  corroboration signal.
 - **Rich point detail.** Each point's description renders its services, retail,
   mooring, navigation, dockage, fuel, and contact sections, and a featured user
   review.
@@ -107,6 +112,15 @@ The following options are available:
 | OpenSeaMap feature groups to import | array | all four | Which seamark groups to import: hazards, navigational aids, harbours, and infrastructure. |
 | Merge OpenSeaMap points of interest that duplicate an ActiveCaptain marker | boolean | true | Merge an OpenSeaMap point into a co-located ActiveCaptain point of the same type, recording both sources on the surviving note. |
 | Merge radius for OpenSeaMap points of interest, in meters | number | 150 | Two POIs of the same type within this distance count as the same physical feature. Widen it if duplicate markers still appear on your chart, tighten it if neighbors are merging. |
+| Import points of interest from the USCG Light List | boolean | false | Enable the USCG Light List source (US Aids to Navigation; US waters only). |
+| Merge USCG Light List points of interest that duplicate an ActiveCaptain marker | boolean | true | Merge a Light List point into a co-located ActiveCaptain point of the same type, recording both sources on the surviving note. |
+| USCG Light List background refresh period, in hours | number | 6 | How often the plugin re-downloads the NAVCEN district files. Range: 1 to 168 hours. |
+| Import wrecks, obstructions, and rocks from NOAA ENC Direct | boolean | false | Enable the NOAA ENC Direct source (US authoritative chart hazards; US waters only). |
+| Merge NOAA ENC points of interest that duplicate an ActiveCaptain marker | boolean | true | Merge a NOAA ENC point into a co-located ActiveCaptain point of the same type, recording both sources on the surviving note. |
+| NOAA ENC chart scale band | string | `coastal` | Which ENC chart scale to query: `overview`, `general`, `coastal`, `approach`, `harbour`, or `berthing`. |
+| Include NOAA ENC wrecks | boolean | true | Import the wrecks layer in NOAA ENC list queries. |
+| Include NOAA ENC obstructions | boolean | true | Import the obstructions layer in NOAA ENC list queries. |
+| Include NOAA ENC underwater rocks | boolean | false | Import the underwater rocks layer. Off by default: a coastal-band query can return tens of thousands of rocks. |
 
 Deselecting every POI type makes the plugin import nothing. A configuration
 created before these toggles existed, which carries none of the toggle
@@ -185,6 +199,52 @@ which requires visible attribution wherever the data is shown. Every OpenSeaMap
 point's rendered detail carries an `© OpenStreetMap contributors (ODbL)`
 footer.
 
+### USCG Light List source
+
+With "Import points of interest from the USCG Light List" enabled, the plugin
+also imports the US Aids to Navigation that the US Coast Guard publishes in
+its [NAVCEN Light List](https://www.navcen.uscg.gov/light-lists): lighted and
+unlighted aids, ranges, and isolated-danger marks. The source is US-only and
+off by default. A background scheduler periodically re-downloads the NAVCEN
+district files (default every six hours) into a persistent on-disk index, so
+list queries are served entirely from memory and remain readable when the
+vessel has no connectivity. Outbound HTTP is gated on the vessel position:
+a vessel outside US waters keeps its already-loaded index but issues no
+refresh against NAVCEN until it returns.
+
+Each Light List record's rendered detail describes the aid's characteristic
+(color, period, range), structure (height, material), visibility sectors,
+and any free-form remarks the upstream publishes. Records are mapped to
+Freeboard-registered icons: most aids use `navigation-structure`, while
+isolated-danger marks use the hazard glyph because their purpose is to flag
+a danger. USCG Light List data is US Government public domain; every Light
+List point's rendered detail carries a `© USCG (US Government public domain)`
+footer.
+
+### NOAA ENC Direct source
+
+With "Import wrecks, obstructions, and rocks from NOAA ENC Direct" enabled,
+the plugin queries the [NOAA Office of Coast Survey's ENC Direct REST
+service](https://encdirect.noaa.gov) for the authoritative US chart hazard
+layers (wrecks, obstructions, and underwater rocks). The source is US-only
+and off by default. NOAA ENC Direct is the official successor to the
+retired AWOIS dataset, so chart hazards are sourced from the same
+authoritative survey data that ships in the official ENC chart cells.
+
+The scale-band selector picks which ENC chart scale to query: `overview`
+through `berthing`. `coastal` is the recommended default. Per-layer toggles
+select wrecks, obstructions, and underwater rocks independently; rocks
+default off because a coastal-band query can return tens of thousands of
+rocks and obscure other hazards. Outbound HTTP is gated on the vessel
+position: a vessel outside US waters issues no list query against NOAA
+until it returns.
+
+Each ENC feature's rendered detail decodes the S-57 attributes the wire
+carries (water level, quality of sounding, technique of sounding, depth)
+into plain English. Features map to Freeboard's hazard glyph. NOAA ENC
+Direct data is published under CC0; every NOAA ENC point's rendered detail
+carries a `© NOAA Office of Coast Survey (CC0)` footer.
+
 ## Documentation
 
 - [docs/development.md](docs/development.md): the build, test, and release workflow.
@@ -226,6 +286,12 @@ resources.
   [OpenSeaMap](https://www.openseamap.org) for the open marine data, served
   through the [Overpass API](https://overpass-api.de) and used under the
   [Open Database License](https://opendatacommons.org/licenses/odbl/).
+- The [US Coast Guard Navigation Center](https://www.navcen.uscg.gov) for
+  the Light List of US Aids to Navigation, US Government public domain.
+- The [NOAA Office of Coast Survey](https://nauticalcharts.noaa.gov) for
+  the [ENC Direct](https://encdirect.noaa.gov) authoritative US chart
+  hazard data, published under CC0. ENC Direct is the official successor
+  to the retired AWOIS dataset.
 
 ## Support
 

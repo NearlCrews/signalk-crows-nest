@@ -52,6 +52,11 @@ terms-of-service exposure.
   plus per-user Garmin sign-in).
 - Multi-source marine POI aggregation. OpenSeaMap (OpenStreetMap marine data
   via the OSM Overpass API) shipped in v0.5.0, with per-source dedupe against
-  the ActiveCaptain base layer; USACE lock status and Waterway Guide remain
-  candidates for follow-up sources.
+  the ActiveCaptain base layer. The USCG Light List of US Aids to Navigation
+  and NOAA ENC Direct's authoritative US wrecks, obstructions, and underwater
+  rocks both shipped as US-only, opt-in inputs that gate outbound HTTP on the
+  vessel position. NOAA ENC Direct is the official successor to the retired
+  AWOIS dataset, so chart hazards now come from the same authoritative survey
+  data that ships in the official ENC chart cells. USACE lock status and
+  Waterway Guide remain candidates for follow-up sources.
 - React panel component tests.

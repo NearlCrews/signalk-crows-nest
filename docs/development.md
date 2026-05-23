@@ -33,9 +33,11 @@ npm run clean         # Remove dist/ and the panel build artifacts
 ## Architecture
 
 The plugin imports points of interest (POIs) from multiple marine data sources
-(Garmin ActiveCaptain and OpenSeaMap, via the OpenStreetMap Overpass API) and
-exposes them as Signal K `notes` resources, so chart plotters such as
-Freeboard-SK can render them as an extra chart layer.
+(Garmin ActiveCaptain, OpenSeaMap via the OpenStreetMap Overpass API, the USCG
+Light List of US Aids to Navigation, and NOAA ENC Direct's authoritative US
+wrecks, obstructions, and underwater rocks) and exposes them as Signal K
+`notes` resources, so chart plotters such as Freeboard-SK can render them as
+an extra chart layer.
 
 When the Signal K resources API receives a `notes` query, the plugin resolves
 the query into a bounding box and asks the aggregate POI source for POIs in
@@ -71,8 +73,16 @@ src/                      # TypeScript source
 │   ├── active-captain/    # The ActiveCaptain input: module, source adapter, client,
 │   │                      #   wire types, cache, store, detail renderer, templates,
 │   │                      #   rating filter
-│   └── openseamap/        # The OpenSeaMap input: module, source adapter, Overpass
-│                          #   client, seamark-type mapping
+│   ├── openseamap/        # The OpenSeaMap input: module, source adapter, Overpass
+│   │                      #   client, seamark-type mapping
+│   ├── uscg-light-list/   # The USCG Light List input (US-only, periodic-download
+│   │                      #   with conditional GET): module, source adapter,
+│   │                      #   NAVCEN client, on-disk index store, types, mapping,
+│   │                      #   detail renderer
+│   └── noaa-enc/          # The NOAA ENC Direct input (US-only, at-runtime bbox
+│                          #   query): module, source adapter, ArcGIS REST client,
+│                          #   wire types, S-57 enum and per-layer mapping,
+│                          #   plain-English detail renderer
 ├── outputs/              # SignalK consumers of POI data
 │   ├── output.ts          # The OutputModule and PositionScanContributor contracts
 │   ├── output-registry.ts # Holds the outputs, starts the enabled ones
@@ -84,8 +94,9 @@ src/                      # TypeScript source
 ├── status/               # plugin-status.ts (per-source recorder), status-router.ts, status-types.ts
 ├── shared/               # Source-agnostic helpers: types.ts (cross-module contracts),
 │                         #   plugin-id.ts, poi-type-selection.ts, seamark-groups.ts,
-│                         #   attribution.ts, notification-path.ts, notification-tracker.ts,
-│                         #   numbers.ts, cache.ts, time.ts
+│                         #   us-waters.ts (the isInUsWaters gate the US-only inputs
+│                         #   read), attribution.ts, notification-path.ts,
+│                         #   notification-tracker.ts, numbers.ts, cache.ts, time.ts
 └── panel/                # Federated React configuration panel (bundled to public/)
     ├── index.tsx          # Federation entry; re-exports PluginConfigurationPanel
     ├── PluginConfigurationPanel.tsx  # Root panel component
@@ -97,10 +108,11 @@ src/                      # TypeScript source
     ├── hooks/             # use-config, use-status, use-number-draft
     └── components/        # StatusBar, FooterBar, DataSourcesSection (per-source
                            #   accordion shell), DataSourceCard (one collapsible card),
-                           #   ActiveCaptainSource, OpenSeaMapSource (card bodies),
-                           #   AlertsSection (the proximity and route-hazard controls);
-                           #   and the per-field input components, including the shared
-                           #   NumberField and AlarmFieldset layouts
+                           #   ActiveCaptainSource, OpenSeaMapSource, UscgLightListSource,
+                           #   NoaaEncSource (card bodies), AlertsSection (the proximity
+                           #   and route-hazard controls); and the per-field input
+                           #   components, including the shared NumberField and
+                           #   AlarmFieldset layouts
 test/                     # node:test suites, run through tsx
 dist/                     # Compiled plugin output (generated, not committed)
 public/                   # Webpack Module Federation output for the panel (generated, not committed)
@@ -135,6 +147,38 @@ a new consumer of POI data is a new `OutputModule` under `src/outputs/`, each
 registered in `src/index.ts`. Keep modules small and put shared types in
 `src/shared/types.ts`. See [CLAUDE.md](../CLAUDE.md) for the full architecture
 rule and conventions.
+
+### Worked example: USCG Light List and NOAA ENC inputs
+
+The two newest inputs are the cleanest reference implementations of the two
+acquisition patterns a POI source can use:
+
+- **Periodic download with conditional GET.** `src/inputs/uscg-light-list/`
+  fetches the full NAVCEN district file set on a background scheduler
+  (default every six hours), records HTTP `Last-Modified` and `ETag`
+  responses, and replays them as `If-Modified-Since` and `If-None-Match`
+  headers on the next refresh. The parsed records land in an on-disk index
+  under the plugin data directory, so list queries are served entirely from
+  memory and survive a restart. This pattern fits datasets that are large
+  but rarely change.
+- **At-runtime bounding-box query.** `src/inputs/noaa-enc/` fans the list
+  request out across the configured ArcGIS REST hazard layers in parallel,
+  stashes raw features in an LRU detail cache, and re-queries by
+  `OBJECTID` on a detail-cache miss. This pattern fits datasets where the
+  upstream API is bbox-aware and the per-query result set is bounded.
+
+Both inputs are US-only and gated on the vessel position: they read
+`InputContext.getCurrentPosition` and call `isInUsWaters` (in
+`src/shared/us-waters.ts`) to skip outbound HTTP when the vessel has left
+US waters. A new US-only source follows the same pattern.
+
+Each input is registered on one line in `src/index.ts`. The
+`InputModule.configSchema` fragment is merged automatically into the
+plugin schema by the input registry; the matching panel card is added to
+`src/panel/components/DataSourcesSection.tsx` with `DataSourceCard` as the
+collapsible shell. Per-source dedupe against the ActiveCaptain base layer
+is opt-in via `InputModule.isDedupeEnabled` and a `<source>Dedupe` config
+key.
 
 For details of the ActiveCaptain API the client talks to, see
 [docs/garmin-api.md](garmin-api.md).

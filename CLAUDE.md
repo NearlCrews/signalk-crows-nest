@@ -6,9 +6,10 @@ Guidance for Claude Code (and contributors) working in this repository.
 
 `signalk-crows-nest` is a single [Signal K server](https://github.com/SignalK/signalk-server)
 plugin. It imports points of interest from multiple marine data sources
-(Garmin ActiveCaptain, and OpenSeaMap via the OpenStreetMap Overpass API) and
-exposes them as Signal K `notes` resources so chart plotters such as
-Freeboard-SK can display them.
+(Garmin ActiveCaptain, OpenSeaMap via the OpenStreetMap Overpass API, the USCG
+Light List of US Aids to Navigation, and the NOAA ENC Direct database of
+wrecks, obstructions, and underwater rocks) and exposes them as Signal K
+`notes` resources so chart plotters such as Freeboard-SK can display them.
 
 ## Architecture rule: ONE plugin, modular files
 
@@ -83,6 +84,38 @@ self-contained module registered on one line in `src/index.ts`.
       plugin's `PoiType` union AND onto a Freeboard-registered `:sk-` icon,
       with isolated-danger marks rendered as hazards; defines the seamark
       feature groups).
+    - `uscg-light-list/` - the USCG Light List input (US Aids to Navigation,
+      US-only, defaults off): `uscg-light-list-input.ts` (the `InputModule`
+      with the periodic refresh scheduler), `uscg-light-list-source.ts` (the
+      `PoiSource` adapter over the client and store, with a position-gated
+      `refreshAll` that iterates the pinned 61 (district, page) pairs and
+      skips outbound HTTP when the vessel is outside US waters),
+      `light-list-client.ts` (the NAVCEN HTTP client built on
+      `http-client.ts`, with conditional-GET via `If-Modified-Since` and
+      `If-None-Match`), `light-list-store.ts` (the persistent on-disk index
+      under the plugin data directory), `light-list-types.ts` (the parsed and
+      wire record types, private to this input), `light-list-mapping.ts`
+      (maps each AID_TYPE to the plugin's `PoiType` union and the matching
+      Freeboard-registered `:sk-` icon, with isolated-danger marks rendered
+      as hazards), and `light-list-detail.ts` (renders the record's
+      characteristic, structure, sectors, and remarks as plain-English HTML).
+    - `noaa-enc/` - the NOAA ENC Direct input (US authoritative wrecks,
+      obstructions, and underwater rocks, US-only, defaults off):
+      `noaa-enc-input.ts` (the `InputModule`), `noaa-enc-source.ts` (the
+      `PoiSource` adapter over the ArcGIS REST client; fans the bbox query
+      out across the enabled hazard layers in parallel, stashes raw features
+      in an LRU detail cache, gates outbound HTTP on `isInUsWaters`, and
+      uses an underscore-separated id form like `wreck_12345` so the slash
+      in `wreck/12345` does not split the resource URL),
+      `enc-direct-client.ts` (the ArcGIS REST client built on
+      `http-client.ts`, with band-and-layer-id query and paging),
+      `enc-direct-types.ts` (the ENC Direct wire types, including JSDoc on
+      the wire-shape quirks: CATWRK as a decoded string, WATLEV as a
+      number, OBJNAM frequently null), and `s57-mapping.ts` (the S-57 enum
+      tables — WATLEV, QUASOU, TECSOU — plus per-layer `PoiType` and
+      `:sk-` icon mappings and a `humanizeCategory` helper; CATWRK and
+      CATOBS are intentionally absent because the wire serves them as
+      decoded strings).
   - `outputs/` - SignalK consumers of POI data.
     - `output.ts` - the `OutputModule`, `OutputHandle`, `OutputContext`, and
       `PositionScanContributor` contracts an output implements.
@@ -100,9 +133,10 @@ self-contained module registered on one line in `src/index.ts`.
       notifications, raised once and cleared once), `route-corridor.ts` (pure
       corridor geometry), and `course-reader.ts` (reads the active route from
       the SignalK Course API).
-  - `monitoring/` - `position-monitor.ts` subscribes to `navigation.position`
-    and drives the per-tick scan from the position-driven outputs' scan
-    contributors.
+  - `monitoring/` - `position-monitor.ts` subscribes to `navigation.position`,
+    exposes the latest fix through `getCurrentPosition` (read by the US-only
+    inputs to gate outbound HTTP), and drives the per-tick scan from the
+    position-driven outputs' scan contributors.
   - `geo/` - `position-utilities.ts`: geo helpers (`toPosition` parsing,
     position to bounding box, great-circle `distanceMeters`, `unionBbox`, and
     `projectPointOntoLeg` for corridor geometry).
@@ -118,12 +152,14 @@ self-contained module registered on one line in `src/index.ts`.
     `poiTypes` string the aggregate source uses), `seamark-groups.ts` (the
     OpenSeaMap seamark group ids and labels, the single source of truth
     consumed by the OpenSeaMap input, its config-schema fragment, and the
-    panel), `attribution.ts` (the source-agnostic attribution footer rendered
-    into every detail HTML, using the `crows-nest-attribution` CSS class),
-    `notification-path.ts` (builds path-safe SignalK notification deltas,
-    shared by the alarm outputs), `notification-tracker.ts` (raise/clear
-    bookkeeping shared by the proximity and route-hazard outputs),
-    `numbers.ts` (the `toFiniteNumber` narrowing helper), `cache.ts` (the
+    panel), `us-waters.ts` (the `isInUsWaters` gate the US-only inputs read
+    to skip outbound HTTP outside US waters), `attribution.ts` (the
+    source-agnostic attribution footer rendered into every detail HTML,
+    using the `crows-nest-attribution` CSS class), `notification-path.ts`
+    (builds path-safe SignalK notification deltas, shared by the alarm
+    outputs), `notification-tracker.ts` (raise/clear bookkeeping shared by
+    the proximity and route-hazard outputs), `numbers.ts` (the
+    `toFiniteNumber` narrowing helper), `cache.ts` (the
     `MAX_POI_CACHE_ENTRIES` ceiling shared by the per-source detail caches),
     and `time.ts` (the minute-to-millisecond constant).
   - `panel/` - federated React configuration panel. Root and reducer:
@@ -134,11 +170,12 @@ self-contained module registered on one line in `src/index.ts`.
     raw-text draft state for clearable numeric inputs). `components/` holds
     the layout pieces: `StatusBar`, `FooterBar`, `DataSourcesSection`
     (the per-source accordion shell), `DataSourceCard` (one collapsible
-    card), `ActiveCaptainSource` and `OpenSeaMapSource` (the per-source card
-    bodies), `AlertsSection` (the proximity and route-hazard controls);
-    plus the per-field input components `CacheDurationField`, `EndpointUrlField`,
-    `NumberField` (the shared label-plus-input-plus-hint row), `AlarmFieldset`
-    (the toggle-plus-numeric layout shared by both alarm controls),
+    card), `ActiveCaptainSource`, `OpenSeaMapSource`, `UscgLightListSource`,
+    and `NoaaEncSource` (the per-source card bodies), `AlertsSection` (the
+    proximity and route-hazard controls); plus the per-field input
+    components `CacheDurationField`, `EndpointUrlField`, `NumberField` (the
+    shared label-plus-input-plus-hint row), `AlarmFieldset` (the
+    toggle-plus-numeric layout shared by both alarm controls),
     `RatingFilterField`, `ProximityAlarmFields`, `RouteHazardScanFields`,
     `ActiveCaptainPoiTypes`, and `SeamarkGroups`. The panel is a per-source
     accordion: a collapsible card per data source, then an Alerts section.
