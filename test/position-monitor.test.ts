@@ -311,6 +311,68 @@ test('unions every contributor fetch box into one list request', async () => {
   monitor.stop()
 })
 
+test('a throwing contributor.buildFetchBox does not short-circuit its siblings', async () => {
+  // Safety: a crash in the route-hazard fetch-box code must never silently
+  // disable the proximity alarm for the same tick. Each contributor's
+  // buildFetchBox runs in its own try/catch.
+  const mockApp = createMockApp()
+  const mockClient = createMockClient()
+  const throwing: PositionScanContributor = {
+    poiTypes: ['Bridge'],
+    buildFetchBox: () => { throw new Error('route reader exploded') },
+    evaluate: () => {}
+  }
+  const scan = createMockContributor(['Hazard'], SCAN_BOX)
+  mockClient.setPois([HAZARD])
+
+  const monitor = createPositionMonitor({
+    app: mockApp.app,
+    client: mockClient.client,
+    contributors: [throwing, scan.contributor],
+    poiTypes: 'Hazard,Bridge',
+    now: createClock().now
+  })
+
+  mockApp.emit({ latitude: 10, longitude: 20 })
+  await flush()
+
+  assert.equal(mockClient.calls.length, 1,
+    'the surviving contributor still contributes a box, so the list request runs')
+  assert.equal(scan.evaluations().length, 1,
+    'the surviving contributor still evaluates')
+  monitor.stop()
+})
+
+test('a throwing contributor.evaluate does not short-circuit its siblings', async () => {
+  // Safety: a crash in one output\'s evaluate must never silently disable
+  // sibling outputs (the proximity alarm and the route-hazard alarm share
+  // the loop and must not be coupled).
+  const mockApp = createMockApp()
+  const mockClient = createMockClient()
+  const throwing: PositionScanContributor = {
+    poiTypes: ['Bridge'],
+    buildFetchBox: () => SCAN_BOX,
+    evaluate: () => { throw new Error('output handler exploded') }
+  }
+  const scan = createMockContributor(['Hazard'], SCAN_BOX)
+  mockClient.setPois([HAZARD])
+
+  const monitor = createPositionMonitor({
+    app: mockApp.app,
+    client: mockClient.client,
+    contributors: [throwing, scan.contributor],
+    poiTypes: 'Hazard,Bridge',
+    now: createClock().now
+  })
+
+  mockApp.emit({ latitude: 10, longitude: 20 })
+  await flush()
+
+  assert.equal(scan.evaluations().length, 1,
+    'the surviving contributor.evaluate still runs after a sibling throws')
+  monitor.stop()
+})
+
 test('skips the list request and evaluates an empty result when every fetch box is null', async () => {
   const mockApp = createMockApp()
   const mockClient = createMockClient()

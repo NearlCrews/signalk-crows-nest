@@ -143,10 +143,18 @@ export function createPositionMonitor (config: PositionMonitorConfig): PositionM
     lastTickTime = now()
     try {
       // Ask every contributor for its fetch box, then union the non-null boxes
-      // into one list request.
+      // into one list request. A throwing contributor only loses its own box
+      // this tick: its siblings still contribute and still evaluate, so a
+      // crash in the route-hazard fetch box never silently disables the
+      // proximity alarm.
       let bbox: Bbox | undefined
       for (const contributor of contributors) {
-        const box = contributor.buildFetchBox(tickPosition)
+        let box: Bbox | null = null
+        try {
+          box = contributor.buildFetchBox(tickPosition)
+        } catch (error) {
+          app.debug(`Position monitor: contributor buildFetchBox failed: ${String(error)}`)
+        }
         if (box !== null) {
           bbox = bbox === undefined ? box : unionBbox(bbox, box)
         }
@@ -154,11 +162,16 @@ export function createPositionMonitor (config: PositionMonitorConfig): PositionM
 
       // No box means nothing to fetch this tick. Contributors are still
       // evaluated with an empty result so an output can clear stale alarms
-      // (for example a route that has just been finished or canceled).
+      // (for example a route that has just been finished or canceled). Each
+      // evaluate runs in its own try/catch for the same reason as above.
       if (bbox === undefined) {
         const vesselPosition = latestPosition ?? tickPosition
         for (const contributor of contributors) {
-          contributor.evaluate(vesselPosition, [])
+          try {
+            contributor.evaluate(vesselPosition, [])
+          } catch (error) {
+            app.debug(`Position monitor: contributor evaluate failed: ${String(error)}`)
+          }
         }
         return
       }
@@ -170,10 +183,15 @@ export function createPositionMonitor (config: PositionMonitorConfig): PositionM
       }
       // Evaluate against the newest fix, not the one the scan started from:
       // on a moving vessel the two differ by the distance traveled during the
-      // multi-second list request.
+      // multi-second list request. Each evaluate runs in its own try/catch so
+      // a throwing contributor never short-circuits its siblings.
       const vesselPosition = latestPosition ?? tickPosition
       for (const contributor of contributors) {
-        contributor.evaluate(vesselPosition, pois)
+        try {
+          contributor.evaluate(vesselPosition, pois)
+        } catch (error) {
+          app.debug(`Position monitor: contributor evaluate failed: ${String(error)}`)
+        }
       }
     } catch (error) {
       // A failed scan is non-fatal and expected while offline: this tick simply
