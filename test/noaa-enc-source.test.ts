@@ -24,19 +24,31 @@ interface FakeStatus {
     recordDetailSuccess: (source: string) => void
     recordError: (source: string, message: string) => void
     recordSkipped: (source: string, reason: string) => void
+    wasJustSkipped: (source: string) => boolean
     snapshot: () => unknown
   }
 }
 
 function fakeStatus (): FakeStatus {
   const events: string[] = []
+  const skipped = new Set<string>()
   return {
     events,
     status: {
-      recordListFetch: (source, count) => events.push(`list-ok:${source}:${count}`),
+      recordListFetch: (source, count) => {
+        events.push(`list-ok:${source}:${count}`)
+        skipped.delete(source)
+      },
       recordDetailSuccess: (source) => events.push(`detail-ok:${source}`),
-      recordError: (source, message) => events.push(`error:${source}:${message}`),
-      recordSkipped: (source, reason) => events.push(`skipped:${source}:${reason}`),
+      recordError: (source, message) => {
+        events.push(`error:${source}:${message}`)
+        skipped.delete(source)
+      },
+      recordSkipped: (source, reason) => {
+        events.push(`skipped:${source}:${reason}`)
+        skipped.add(source)
+      },
+      wasJustSkipped: (source) => skipped.has(source),
       snapshot: () => ({})
     }
   }

@@ -73,7 +73,9 @@ function dedupingModule (id: string, source: PoiSource): InputModule {
 const silentStatus = {
   recordListFetch: () => {},
   recordDetailSuccess: () => {},
-  recordError: () => {}
+  recordError: () => {},
+  recordSkipped: () => {},
+  wasJustSkipped: () => false
 }
 
 const context = {
@@ -154,7 +156,9 @@ test('listPointsOfInterest keeps a successful source when another fails', async 
     status: {
       recordListFetch: () => {},
       recordDetailSuccess: () => {},
-      recordError: (_source: string, message: string) => errors.push(message)
+      recordError: (_source: string, message: string) => errors.push(message),
+      recordSkipped: () => {},
+      wasJustSkipped: () => false
     }
   } as never
   const source = createInputRegistry([failing, ok]).createSource(failContext)
@@ -191,7 +195,9 @@ test('listPointsOfInterest records each source list outcome onto the per-source 
     status: {
       recordListFetch: (source: string, count: number) => fetches.push({ source, count }),
       recordDetailSuccess: () => {},
-      recordError: (_source: string, message: string) => errors.push(message)
+      recordError: (_source: string, message: string) => errors.push(message),
+      recordSkipped: () => {},
+      wasJustSkipped: () => false
     }
   } as never
   const source = createInputRegistry([ok, failing]).createSource(recordingContext)
@@ -252,4 +258,40 @@ test('close closes every source', () => {
   const b = stubModule('sourceB', true, makeSource('sourceB'))
   createInputRegistry([a, b]).createSource(context).close()
   assert.deepEqual(closed.sort(), ['sourceA', 'sourceB'])
+})
+
+test('listPointsOfInterest does NOT record a list fetch when a source returned empty due to skip', async () => {
+  // The aggregate must distinguish "fetched zero POIs" (a real, recordable
+  // outcome) from "did not bother, skipped" (the source returned empty after
+  // calling recordSkipped). Recording a fetch in the second case would
+  // overwrite the previous lastListFetch and flip apiReachable to true even
+  // though no request was sent.
+  const fetches: Array<{ source: string, count: number }> = []
+  const skipFlag = { current: false }
+  const fetchEmpty = stubModule('skipper', true, stubSource('skipper', {
+    list: async () => {
+      skipFlag.current = true
+      return []
+    }
+  }))
+  const fetchTwo = stubModule('worker', true, stubSource('worker', {
+    list: async () => [summary('1', 'worker'), summary('2', 'worker')]
+  }))
+  const skipAwareContext = {
+    app: {},
+    config: {},
+    dataDir: '/tmp',
+    status: {
+      recordListFetch: (source: string, count: number) => fetches.push({ source, count }),
+      recordDetailSuccess: () => {},
+      recordError: () => {},
+      recordSkipped: () => { skipFlag.current = true },
+      wasJustSkipped: (source: string) => source === 'skipper' && skipFlag.current
+    }
+  } as never
+  const source = createInputRegistry([fetchEmpty, fetchTwo]).createSource(skipAwareContext)
+  await source.listPointsOfInterest(SAMPLE_BBOX, '')
+  // Only the working source records a list fetch; the skipped source does
+  // not, even though it returned a fulfilled empty array.
+  assert.deepEqual(fetches, [{ source: 'worker', count: 2 }])
 })

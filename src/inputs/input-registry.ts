@@ -69,7 +69,14 @@ export function createInputRegistry (modules: readonly InputModule[]): InputRegi
             const sourceId = sourceIds[index]
             if (result.status === 'fulfilled') {
               anyOk = true
-              context.status.recordListFetch(sourceId, result.value.length)
+              // A source that gated itself out (recordSkipped) returns []
+              // immediately; treating that as a "fetched zero POIs" success
+              // would overwrite the previous fetch's lastListFetch and flip
+              // apiReachable to true even though no request was sent. The
+              // wasJustSkipped flag distinguishes the two cases.
+              if (!context.status.wasJustSkipped(sourceId)) {
+                context.status.recordListFetch(sourceId, result.value.length)
+              }
               for (const poi of result.value) {
                 merged.push({ ...poi, id: `${sourceId}-${poi.id}` })
               }

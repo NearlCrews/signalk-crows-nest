@@ -136,3 +136,52 @@ test('a recorder with no sources still records global errors', () => {
   assert.deepEqual(snapshot.sources, [])
   assert.equal(snapshot.recentErrors.length, 1)
 })
+
+test('wasJustSkipped returns false on a fresh recorder for every source', () => {
+  const status = createPluginStatus(SOURCES)
+  for (const { source } of SOURCES) {
+    assert.equal(status.wasJustSkipped(source), false)
+  }
+})
+
+test('recordSkipped sets wasJustSkipped to true for that source only', () => {
+  const status = createPluginStatus(SOURCES)
+  status.recordSkipped('activecaptain', 'outside US waters')
+  assert.equal(status.wasJustSkipped('activecaptain'), true)
+  assert.equal(status.wasJustSkipped('openseamap'), false)
+})
+
+test('recordListFetch clears the wasJustSkipped flag', () => {
+  // A normal list fetch after a skip transitions the row back to a real
+  // outcome and clears the skip flag so a later empty fetch is recorded
+  // as a real "fetched zero POIs" success.
+  const status = createPluginStatus(SOURCES)
+  status.recordSkipped('activecaptain', 'outside US waters')
+  status.recordListFetch('activecaptain', 5)
+  assert.equal(status.wasJustSkipped('activecaptain'), false)
+})
+
+test('recordError clears the wasJustSkipped flag', () => {
+  // An error after a skip is a real failure: the skip flag must not mask
+  // the next aggregate-level decision.
+  const status = createPluginStatus(SOURCES)
+  status.recordSkipped('activecaptain', 'outside US waters')
+  status.recordError('activecaptain', 'upstream 500')
+  assert.equal(status.wasJustSkipped('activecaptain'), false)
+})
+
+test('recordSkipped does not flip apiReachable', () => {
+  // A skip is observational, not evidence of upstream health.
+  const status = createPluginStatus(SOURCES)
+  status.recordListFetch('activecaptain', 10) // previously reachable
+  status.recordSkipped('activecaptain', 'outside US waters')
+  const snapshot = status.snapshot(0)
+  const row = snapshot.sources.find(s => s.source === 'activecaptain')
+  assert.equal(row?.apiReachable, true, 'apiReachable carries forward from the previous fetch')
+  assert.equal(row?.lastListFetch?.poiCount, 10, 'lastListFetch carries forward unchanged')
+})
+
+test('wasJustSkipped returns false for an unknown source', () => {
+  const status = createPluginStatus(SOURCES)
+  assert.equal(status.wasJustSkipped('not-a-source'), false)
+})

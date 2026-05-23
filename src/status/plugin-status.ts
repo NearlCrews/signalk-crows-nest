@@ -39,12 +39,21 @@ export interface PluginStatus {
   /**
    * Record that a source chose not to issue a request, e.g. because the vessel
    * is outside US waters and the source covers US data only. A skip is not a
-   * failure: it leaves `apiReachable` untouched and is not added to the
-   * recent-errors list. The base implementation is a no-op; the method is
-   * declared on the interface so the US-only sources can call it without
-   * duck-typing the recorder.
+   * failure: it leaves `apiReachable` and `lastListFetch` untouched and is not
+   * added to the recent-errors list. It does set a per-source `justSkipped`
+   * flag that the aggregate input registry reads through
+   * {@link wasJustSkipped} so a follow-on `recordListFetch(0)` does not
+   * overwrite the previous fetch with a bogus "fetched zero POIs" success.
    */
   recordSkipped: (source: string, reason: string) => void
+  /**
+   * True when `recordSkipped` was the most recent recording call for the
+   * source: the source declined to issue a request and any follow-on empty
+   * list result should be treated as a skip, not a "fetched zero POIs"
+   * success. The flag clears the next time `recordListFetch` or
+   * `recordError` records a real outcome for that source.
+   */
+  wasJustSkipped: (source: string) => boolean
   /**
    * Produce a point-in-time snapshot. The caller supplies `cachedPoiCount`
    * because the cached entry count is owned by the cache, not the recorder.
@@ -57,6 +66,14 @@ interface SourceState {
   name: string
   apiReachable: boolean | null
   lastListFetch: LastListFetch | null
+  /**
+   * Set by {@link PluginStatus.recordSkipped} and cleared by the next
+   * `recordListFetch`/`recordError` for the same source. The aggregate
+   * input registry reads this flag through {@link PluginStatus.wasJustSkipped}
+   * to decide whether an empty list result is a "fetched zero POIs" success
+   * or a "did not bother" skip that should leave the row untouched.
+   */
+  justSkipped: boolean
 }
 
 /**
@@ -72,7 +89,7 @@ export function createPluginStatus (sources: ReadonlyArray<StatusSource>): Plugi
   // registration order.
   const states = new Map<string, SourceState>()
   for (const { source, name } of sources) {
-    states.set(source, { name, apiReachable: null, lastListFetch: null })
+    states.set(source, { name, apiReachable: null, lastListFetch: null, justSkipped: false })
   }
 
   /**
@@ -93,6 +110,7 @@ export function createPluginStatus (sources: ReadonlyArray<StatusSource>): Plugi
       const state = markReachable(source)
       if (state !== undefined) {
         state.lastListFetch = { at: new Date().toISOString(), poiCount }
+        state.justSkipped = false
       }
     },
 
@@ -104,6 +122,7 @@ export function createPluginStatus (sources: ReadonlyArray<StatusSource>): Plugi
       const state = states.get(source)
       if (state !== undefined) {
         state.apiReachable = false
+        state.justSkipped = false
       }
       recentErrors.unshift({ at: new Date().toISOString(), message })
       if (recentErrors.length > MAX_RECENT_ERRORS) {
@@ -113,10 +132,20 @@ export function createPluginStatus (sources: ReadonlyArray<StatusSource>): Plugi
 
     // A skip is observational: the source declined to issue a request, which
     // is not an outcome to record against `apiReachable` and not an error to
-    // surface in the recent-errors list. The hook is here so the US-only
-    // sources can call into a typed surface; a future snapshot could expose
-    // skip counts if they prove diagnostically useful.
-    recordSkipped: (_source: string, _reason: string): void => {},
+    // surface in the recent-errors list. Setting `justSkipped` lets the
+    // aggregate input registry distinguish a "fetched zero POIs" success
+    // from a "did not bother" skip when it sees the empty result that
+    // follows.
+    recordSkipped: (source: string, _reason: string): void => {
+      const state = states.get(source)
+      if (state !== undefined) {
+        state.justSkipped = true
+      }
+    },
+
+    wasJustSkipped: (source: string): boolean => {
+      return states.get(source)?.justSkipped === true
+    },
 
     snapshot: (cachedPoiCount: number): StatusSnapshot => ({
       sources: [...states.entries()].map(([source, state]): SourceStatus => ({

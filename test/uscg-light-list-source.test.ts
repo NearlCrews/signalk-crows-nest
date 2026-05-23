@@ -37,11 +37,22 @@ interface FakeStatus extends PluginStatus {
  */
 function fakeStatus (): { events: string[], status: FakeStatus } {
   const events: string[] = []
+  const skipped = new Set<string>()
   const status: FakeStatus = {
-    recordListFetch: (source, count) => { events.push(`list:${source}:${count}`) },
+    recordListFetch: (source, count) => {
+      events.push(`list:${source}:${count}`)
+      skipped.delete(source)
+    },
     recordDetailSuccess: (source) => { events.push(`detail-ok:${source}`) },
-    recordError: (source, message) => { events.push(`error:${source}:${message}`) },
-    recordSkipped: (source, reason) => { events.push(`skipped:${source}:${reason}`) },
+    recordError: (source, message) => {
+      events.push(`error:${source}:${message}`)
+      skipped.delete(source)
+    },
+    recordSkipped: (source, reason) => {
+      events.push(`skipped:${source}:${reason}`)
+      skipped.add(source)
+    },
+    wasJustSkipped: (source) => skipped.has(source),
     snapshot: () => ({ sources: [], cachedPoiCount: 0, recentErrors: [], startedAt: '' })
   }
   return { events, status }
