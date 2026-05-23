@@ -36,8 +36,15 @@ async function startServer (
 test('queryLayer issues a bbox query and parses the GeoJSON response', async () => {
   const fixture = JSON.parse(
     await readFile('test/fixtures/enc-coastal-wreck.geojson', 'utf8')
-  )
-  const server = await startServer(() => fixture)
+  ) as { features: unknown[], exceededTransferLimit?: boolean }
+  // The captured fixture's exceededTransferLimit is true (the upstream had
+  // more data than the resultRecordCount=3 cap). The mock returns the fixture
+  // on page 1 and an empty terminating page on page 2 so the client's
+  // pagination loop exits.
+  const server = await startServer((_req, page) => {
+    if (page === 1) return fixture
+    return { type: 'FeatureCollection', features: [] }
+  })
   try {
     const client = createEncDirectClient({ baseUrl: server.url })
     const result = await client.queryLayer({
@@ -46,7 +53,7 @@ test('queryLayer issues a bbox query and parses the GeoJSON response', async () 
       bbox: { south: 40.0, west: -74.5, north: 41.5, east: -73.0 }
     })
     assert.ok(Array.isArray(result.features))
-    assert.ok(result.features.length >= 1)
+    assert.equal(result.features.length, fixture.features.length)
     assert.equal(result.features[0].geometry.type, 'Point')
     assert.equal(result.features[0].geometry.coordinates.length, 2)
   } finally {

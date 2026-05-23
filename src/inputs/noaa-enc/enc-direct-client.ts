@@ -135,7 +135,6 @@ export function createEncDirectClient (
       const layerId = LAYER_IDS_BY_BAND[band][layerKey]
       const all: EncFeature[] = []
       let offset = 0
-      // eslint-disable-next-line no-constant-condition
       while (true) {
         const url = buildBboxUrl(baseUrl, band, layerId, bbox, offset)
         const json = await fetchJson(url, headers) as ArcGisFeatureCollection
