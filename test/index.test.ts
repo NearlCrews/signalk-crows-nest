@@ -4,6 +4,8 @@ import type { ServerAPI } from '@signalk/server-api'
 import createPluginFactory from '../src/index.js'
 import { activeCaptainInput } from '../src/inputs/active-captain/active-captain-input.js'
 import { openSeaMapInput } from '../src/inputs/openseamap/openseamap-input.js'
+import { uscgLightListInput } from '../src/inputs/uscg-light-list/uscg-light-list-input.js'
+import { noaaEncInput } from '../src/inputs/noaa-enc/noaa-enc-input.js'
 import { notesResourceOutput } from '../src/outputs/notes-resource/notes-resource-output.js'
 import { proximityAlarmOutput } from '../src/outputs/proximity-alarm/proximity-alarm-output.js'
 import { routeHazardOutput } from '../src/outputs/route-hazard/route-hazard-output.js'
@@ -21,7 +23,13 @@ test('the entrypoint wires the real input and output modules', () => {
   // The assembled schema is the merge of every registered module's fragment,
   // so every key each real module contributes must be present.
   const modules = [
-    activeCaptainInput, openSeaMapInput, notesResourceOutput, proximityAlarmOutput, routeHazardOutput
+    activeCaptainInput,
+    openSeaMapInput,
+    uscgLightListInput,
+    noaaEncInput,
+    notesResourceOutput,
+    proximityAlarmOutput,
+    routeHazardOutput
   ]
   for (const module of modules) {
     for (const key of Object.keys(module.configSchema)) {
