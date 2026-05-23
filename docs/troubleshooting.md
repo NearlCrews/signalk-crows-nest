@@ -108,3 +108,21 @@ merges them into one note (see the OpenSeaMap dedupe in `README.md`).
 The default merge radius is 150 meters; widen the "Merge radius" field in
 the OpenSeaMap card if duplicates still appear close together, or tighten
 it if genuinely separate neighbors are being merged.
+
+## Too many old or low-confidence features on the chart
+
+Each opting-in source (OpenSeaMap, USCG Light List, NOAA ENC Direct)
+carries an optional "Earliest ... year" field on its card. Set it to a
+year and the source hides every feature whose source-specific date is
+older. The fields default to 0 (no filter) and features without a recorded
+date always pass through. The date means a different thing per source:
+
+- **NOAA ENC Direct**: SORDAT is the hydrographic survey date. A wreck
+  found in a 1950s lead-line survey is lower depth-confidence than one
+  from a 2020s multibeam survey, so a cutoff like 1990 hides the oldest
+  surveys and keeps the modern ones.
+- **USCG Light List**: MODIFIED_DATE is when the USCG last edited the
+  record. A cutoff hides aids the USCG has not touched recently.
+- **OpenSeaMap**: the OSM `timestamp` is when any contributor last edited
+  the element. A cutoff hides elements no contributor has touched for a
+  while; this is a contributor-attention signal, not a correctness signal.

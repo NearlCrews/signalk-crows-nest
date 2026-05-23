@@ -158,10 +158,13 @@ self-contained module registered on one line in `src/index.ts`.
     using the `crows-nest-attribution` CSS class), `notification-path.ts`
     (builds path-safe SignalK notification deltas, shared by the alarm
     outputs), `notification-tracker.ts` (raise/clear bookkeeping shared by
-    the proximity and route-hazard outputs), `numbers.ts` (the
+    the proximity and route-hazard outputs), `year-filter.ts` (the
+    `filterByMinimumYear` helper plus the shared `MIN_YEAR` / `MAX_YEAR` /
+    `DEFAULT_MINIMUM_YEAR` bounds and the `clampMinimumYear` helper every
+    opting-in source uses for its earliest-year filter), `numbers.ts` (the
     `toFiniteNumber` narrowing helper), `cache.ts` (the
     `MAX_POI_CACHE_ENTRIES` ceiling shared by the per-source detail caches),
-    and `time.ts` (the minute-to-millisecond constant).
+    and `time.ts` (the `MS_PER_MINUTE` and `MS_PER_HOUR` constants).
   - `panel/` - federated React configuration panel. Root and reducer:
     `index.tsx` (Module Federation entry), `PluginConfigurationPanel.tsx`,
     `config-reducer.ts`, `normalize-config.ts`, plus the UI-metadata modules
@@ -176,9 +179,11 @@ self-contained module registered on one line in `src/index.ts`.
     components `CacheDurationField`, `EndpointUrlField`, `NumberField` (the
     shared label-plus-input-plus-hint row), `AlarmFieldset` (the
     toggle-plus-numeric layout shared by both alarm controls),
-    `RatingFilterField`, `ProximityAlarmFields`, `RouteHazardScanFields`,
-    `ActiveCaptainPoiTypes`, and `SeamarkGroups`. The panel is a per-source
-    accordion: a collapsible card per data source, then an Alerts section.
+    `RatingFilterField`, `MinimumYearField` (the shared earliest-year
+    NumberField wrapper used by each opting-in source card),
+    `ProximityAlarmFields`, `RouteHazardScanFields`, `ActiveCaptainPoiTypes`,
+    and `SeamarkGroups`. The panel is a per-source accordion: a collapsible
+    card per data source, then an Alerts section.
 - `test/` - `node:test` test suite, run through `tsx`.
 - `docs/` - project documentation: the development guide, troubleshooting, the
   Garmin API research notes, decision records, and maintainer notes.

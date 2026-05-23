@@ -95,7 +95,9 @@ src/                      # TypeScript source
 ├── shared/               # Source-agnostic helpers: types.ts (cross-module contracts),
 │                         #   plugin-id.ts, poi-type-selection.ts, seamark-groups.ts,
 │                         #   us-waters.ts (the isInUsWaters gate the US-only inputs
-│                         #   read), attribution.ts, notification-path.ts,
+│                         #   read), year-filter.ts (the filterByMinimumYear helper
+│                         #   plus the shared year bounds and clamp every opting-in
+│                         #   source uses), attribution.ts, notification-path.ts,
 │                         #   notification-tracker.ts, numbers.ts, cache.ts, time.ts
 └── panel/                # Federated React configuration panel (bundled to public/)
     ├── index.tsx          # Federation entry; re-exports PluginConfigurationPanel
@@ -111,8 +113,9 @@ src/                      # TypeScript source
                            #   ActiveCaptainSource, OpenSeaMapSource, UscgLightListSource,
                            #   NoaaEncSource (card bodies), AlertsSection (the proximity
                            #   and route-hazard controls); and the per-field input
-                           #   components, including the shared NumberField and
-                           #   AlarmFieldset layouts
+                           #   components, including the shared NumberField,
+                           #   MinimumYearField (the per-source earliest-year
+                           #   filter), and AlarmFieldset layouts
 test/                     # node:test suites, run through tsx
 dist/                     # Compiled plugin output (generated, not committed)
 public/                   # Webpack Module Federation output for the panel (generated, not committed)
@@ -179,6 +182,16 @@ plugin schema by the input registry; the matching panel card is added to
 collapsible shell. Per-source dedupe against the ActiveCaptain base layer
 is opt-in via `InputModule.isDedupeEnabled` and a `<source>Dedupe` config
 key.
+
+A source whose wire data carries a date per record can opt into the
+earliest-year filter by populating `PoiSummary.timestamp` (ISO-8601 UTC)
+and calling `filterByMinimumYear` from `src/shared/year-filter.ts` at the
+end of `listPointsOfInterest`. The matching panel card mounts the shared
+`MinimumYearField` component with a source-specific label and hint, and
+the input module's config-schema fragment adds the source's
+`<source>MinimumXxxYear` key clamped to the shared `[MIN_YEAR, MAX_YEAR]`
+range. Three sources today follow this pattern: NOAA ENC Direct,
+USCG Light List, and OpenSeaMap.
 
 For details of the ActiveCaptain API the client talks to, see
 [docs/garmin-api.md](garmin-api.md).

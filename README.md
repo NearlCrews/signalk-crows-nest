@@ -112,15 +112,18 @@ The following options are available:
 | OpenSeaMap feature groups to import | array | all four | Which seamark groups to import: hazards, navigational aids, harbours, and infrastructure. |
 | Merge OpenSeaMap points of interest that duplicate an ActiveCaptain marker | boolean | true | Merge an OpenSeaMap point into a co-located ActiveCaptain point of the same type, recording both sources on the surviving note. |
 | Merge radius for OpenSeaMap points of interest, in meters | number | 150 | Two POIs of the same type within this distance count as the same physical feature. Widen it if duplicate markers still appear on your chart, tighten it if neighbors are merging. |
+| Earliest OpenSeaMap update year | number | 0 | Hide OSM elements whose last-edit timestamp is older than this year. 0 disables the filter; elements with no recorded timestamp are always included. |
 | Import points of interest from the USCG Light List | boolean | false | Enable the USCG Light List source (US Aids to Navigation; US waters only). |
 | Merge USCG Light List points of interest that duplicate an ActiveCaptain marker | boolean | true | Merge a Light List point into a co-located ActiveCaptain point of the same type, recording both sources on the surviving note. |
 | USCG Light List background refresh period, in hours | number | 6 | How often the plugin re-downloads the NAVCEN district files. Range: 1 to 168 hours. |
+| Earliest USCG Light List update year | number | 0 | Hide records whose last USCG modification date is older than this year. 0 disables the filter; records with no recorded modification date are always included. |
 | Import wrecks, obstructions, and rocks from NOAA ENC Direct | boolean | false | Enable the NOAA ENC Direct source (US authoritative chart hazards; US waters only). |
 | Merge NOAA ENC points of interest that duplicate an ActiveCaptain marker | boolean | true | Merge a NOAA ENC point into a co-located ActiveCaptain point of the same type, recording both sources on the surviving note. |
 | NOAA ENC chart scale band | string | `coastal` | Which ENC chart scale to query: `overview`, `general`, `coastal`, `approach`, `harbour`, or `berthing`. |
 | Include NOAA ENC wrecks | boolean | true | Import the wrecks layer in NOAA ENC list queries. |
 | Include NOAA ENC obstructions | boolean | true | Import the obstructions layer in NOAA ENC list queries. |
 | Include NOAA ENC underwater rocks | boolean | false | Import the underwater rocks layer. Off by default: a coastal-band query can return tens of thousands of rocks. |
+| Earliest NOAA ENC survey year | number | 0 | Hide features whose `SORDAT` hydrographic survey date is older than this year. 0 disables the filter; features with no recorded survey date are always included. The survey date is often decades old for stable features (a wreck found in a 1950s lead-line survey vs a 2020s multibeam survey), so this is a data-confidence filter. |
 
 Deselecting every POI type makes the plugin import nothing. A configuration
 created before these toggles existed, which carries none of the toggle
@@ -199,6 +202,13 @@ which requires visible attribution wherever the data is shown. Every OpenSeaMap
 point's rendered detail carries an `© OpenStreetMap contributors (ODbL)`
 footer.
 
+An optional **Earliest OpenSeaMap update year** filter on the card hides
+elements whose OSM last-edit timestamp is older than the chosen year. The
+filter defaults to 0 (off); elements with no recorded timestamp pass
+through. The OSM `timestamp` is a contributor-freshness signal, not a
+data-correctness signal, so an unedited element from 2012 may still be
+correct.
+
 ### USCG Light List source
 
 With "Import points of interest from the USCG Light List" enabled, the plugin
@@ -220,6 +230,11 @@ isolated-danger marks use the hazard glyph because their purpose is to flag
 a danger. USCG Light List data is US Government public domain; every Light
 List point's rendered detail carries a `© USCG (US Government public domain)`
 footer.
+
+An optional **Earliest USCG Light List update year** filter on the card
+hides records whose last USCG modification date is older than the chosen
+year. The filter defaults to 0 (off); records with no recorded
+modification date pass through.
 
 ### NOAA ENC Direct source
 
@@ -244,6 +259,13 @@ carries (water level, quality of sounding, technique of sounding, depth)
 into plain English. Features map to Freeboard's hazard glyph. NOAA ENC
 Direct data is published under CC0; every NOAA ENC point's rendered detail
 carries a `© NOAA Office of Coast Survey (CC0)` footer.
+
+An optional **Earliest NOAA ENC survey year** filter on the card hides
+features whose `SORDAT` hydrographic survey date is older than the chosen
+year. The filter defaults to 0 (off); features with no recorded survey
+date pass through. `SORDAT` is the survey vintage (often decades old for a
+stable feature, since NOAA does not re-survey unchanged hazards), so this
+is a data-confidence filter rather than a chart-freshness filter.
 
 ## Documentation
 
