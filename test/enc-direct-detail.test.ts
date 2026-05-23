@@ -79,6 +79,22 @@ test('formats a six-digit SORDAT (YYYYMM) without inventing a day', () => {
   assert.ok(!html.includes('2012-06-'))
 })
 
+test('labels the SORDAT date as "surveyed", not "last updated"', () => {
+  // SORDAT is the hydrographic survey date (often decades old for a stable
+  // feature), not the chart-refresh date. "Surveyed YYYY-MM" reads correctly
+  // for old surveys; "last updated YYYY-MM" misleads operators into thinking
+  // NOAA stopped maintaining the chart.
+  const html = renderEncDirectDetail('wreck', {
+    OBJNAM: 'Test Wreck',
+    SORDAT: '200403',
+    DSNM: 'US3NY1AE.000'
+  })
+  assert.ok(html.includes('surveyed 2004-03'),
+    'the source line uses the "surveyed" label')
+  assert.ok(!html.includes('last updated'),
+    'the misleading "last updated" label does not slip back in')
+})
+
 test('treats null property values as absent and never writes the word null', () => {
   const html = renderEncDirectDetail('wreck', {
     CATWRK: 'dangerous wreck',

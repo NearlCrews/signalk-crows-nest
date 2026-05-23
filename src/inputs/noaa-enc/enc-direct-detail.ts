@@ -41,11 +41,14 @@ function escapeHtml (value: string): string {
 }
 
 /**
- * Format the S-57 `SORDAT` "source date" field. The wire publishes both
- * six-character `YYYYMM` and eight-character `YYYYMMDD` forms; the renderer
- * preserves whichever precision the upstream sent rather than silently
- * dropping the day. Anything else (null, non-string, wrong length) returns
- * undefined so the renderer can omit the suffix.
+ * Format the S-57 `SORDAT` "source date" field: the date the underlying
+ * hydrographic survey was issued or compiled, NOT the date NOAA last refreshed
+ * the chart. For most wrecks and obstructions this is the original survey
+ * date, often decades old, and stays fixed until a re-survey. The wire
+ * publishes both six-character `YYYYMM` and eight-character `YYYYMMDD` forms;
+ * the renderer preserves whichever precision the upstream sent rather than
+ * silently dropping the day. Anything else (null, non-string, wrong length)
+ * returns undefined so the renderer can omit the suffix.
  */
 function formatSordat (raw: unknown): string | undefined {
   if (typeof raw !== 'string') {
@@ -137,9 +140,9 @@ export function renderEncDirectDetail (
   }
 
   const dsnm = readText(properties.DSNM)
-  const updated = formatSordat(properties.SORDAT)
+  const surveyed = formatSordat(properties.SORDAT)
   if (dsnm !== undefined) {
-    const suffix = updated !== undefined ? ` (last updated ${updated})` : ''
+    const suffix = surveyed !== undefined ? ` (surveyed ${surveyed})` : ''
     blocks.push(`<p><strong>Source:</strong> NOAA ENC ${escapeHtml(dsnm)}${suffix}.</p>`)
   }
 
