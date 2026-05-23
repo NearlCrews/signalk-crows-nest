@@ -89,6 +89,14 @@ export interface DistrictHeaders {
 export interface DistrictMeta extends DistrictHeaders {
   recordCount: number
   fetchedAt: string
+  /**
+   * LLNRs that came from this district file. Persisted so a re-upsert can
+   * remove the previous record set before adding the new one, even across a
+   * cold start. Tracked per (district, page) because one district has up to
+   * fifteen pages and the LightListRecord shape carries only the district,
+   * not the page.
+   */
+  llnrs: number[]
 }
 
 /** The on-disk index: per-district metadata plus the merged record map. */
