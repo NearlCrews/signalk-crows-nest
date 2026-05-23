@@ -148,12 +148,9 @@ export function createOpenSeaMapSource (config: OpenSeaMapSourceConfig): PoiSour
         cache.set(elementId(element), element)
         return toSummary(element)
       })
-      // The year filter runs on this source's own summaries, so OSM elements
-      // older than the configured minimum year never reach the aggregate
-      // registry, dedupe, notes output, or alarms. Elements with no OSM
-      // timestamp (the query did not return `meta` for them) are always
-      // included.
-      return [...filterByMinimumYear(summaries, minimumYear)]
+      // Year filter is applied source-side so the rest of the pipeline
+      // (dedupe, notes output, alarms) never sees filtered elements.
+      return filterByMinimumYear(summaries, minimumYear)
     },
     getDetails: async (id: string): Promise<PoiDetailView> => {
       try {

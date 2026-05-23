@@ -84,24 +84,12 @@ export const NOAA_ENC_SCALE_BANDS = [
   'overview', 'general', 'coastal', 'approach', 'harbour', 'berthing'
 ] as const
 
-/**
- * Off value (and lower bound) for every per-source minimum-year filter.
- * Matches the existing MIN_RATING convention so a user who has internalized
- * the rating filter does not need to learn a second off-value idiom.
- */
-export const MIN_YEAR = 0
-
-/**
- * Upper bound on every minimum-year filter. Generous so a user who wants to
- * cap by a future-year threshold is not blocked by clamp logic.
- */
-export const MAX_YEAR = 9999
-
-/**
- * Default minimum survey/update year on the three per-source filters. `0`
- * disables the filter, matching the schema defaults declared by each input.
- */
-export const DEFAULT_MINIMUM_YEAR = MIN_YEAR
+// The minimum-year filter bounds, default, and clamp helper are owned by
+// src/shared/year-filter.ts so the panel and the three input modules consume
+// the same source of truth. Re-exported here so panel components that
+// already import from normalize-config do not need a second import line.
+export { DEFAULT_MINIMUM_YEAR, MAX_YEAR, MIN_YEAR } from '../shared/year-filter.js'
+import { clampMinimumYear } from '../shared/year-filter.js'
 
 /**
  * Coerce the admin UI's untyped `configuration` prop into a fully populated
@@ -219,23 +207,12 @@ export function normalizeConfig (configuration: unknown): PluginConfig {
   config.noaaEncIncludeObstructions = raw.noaaEncIncludeObstructions !== false
   config.noaaEncIncludeRocks = raw.noaaEncIncludeRocks === true
 
-  // Per-source minimum-year filters. Each defaults to 0 (off); a non-numeric,
-  // non-finite, or out-of-range value falls back to the default rather than
-  // letting the panel drive the source with garbage.
-  config.openSeaMapMinimumYear = normalizeYear(raw.openSeaMapMinimumYear)
-  config.uscgLightListMinimumUpdateYear = normalizeYear(raw.uscgLightListMinimumUpdateYear)
-  config.noaaEncMinimumSurveyYear = normalizeYear(raw.noaaEncMinimumSurveyYear)
+  // Per-source minimum-year filters. Each defaults to 0 (off); the shared
+  // clampMinimumYear helper handles non-numeric, non-finite, and
+  // out-of-range values.
+  config.openSeaMapMinimumYear = clampMinimumYear(raw.openSeaMapMinimumYear)
+  config.uscgLightListMinimumUpdateYear = clampMinimumYear(raw.uscgLightListMinimumUpdateYear)
+  config.noaaEncMinimumSurveyYear = clampMinimumYear(raw.noaaEncMinimumSurveyYear)
 
   return config
-}
-
-/**
- * Clamp a raw minimum-year value to `[MIN_YEAR, MAX_YEAR]` and truncate to an
- * integer. A non-numeric or non-finite value falls back to the off default.
- */
-function normalizeYear (raw: unknown): number {
-  if (typeof raw !== 'number' || !Number.isFinite(raw)) return DEFAULT_MINIMUM_YEAR
-  if (raw < MIN_YEAR) return MIN_YEAR
-  if (raw > MAX_YEAR) return MAX_YEAR
-  return Math.trunc(raw)
 }

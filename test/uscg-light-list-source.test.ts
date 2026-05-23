@@ -93,7 +93,7 @@ test('listPointsOfInterest filters by bbox and tags every summary with the sourc
     const source = createUscgLightListSource({
       client: fakeClient(),
       store,
-      minimumUpdateYear: 0,
+      minimumYear: 0,
       status,
       getCurrentPosition: () => undefined
     })
@@ -124,7 +124,7 @@ test('getDetails returns a fully rendered detail view with attribution', async (
     const source = createUscgLightListSource({
       client: fakeClient(),
       store,
-      minimumUpdateYear: 0,
+      minimumYear: 0,
       status,
       getCurrentPosition: () => undefined
     })
@@ -149,7 +149,7 @@ test('getDetails rejects for an unknown id', async () => {
     const source = createUscgLightListSource({
       client: fakeClient(),
       store,
-      minimumUpdateYear: 0,
+      minimumYear: 0,
       status,
       getCurrentPosition: () => undefined
     })
@@ -175,7 +175,7 @@ test('refreshAll skips outbound HTTP when the vessel is outside US waters', asyn
     const source = createUscgLightListSource({
       client,
       store,
-      minimumUpdateYear: 0,
+      minimumYear: 0,
       status,
       // Sydney Harbour, decidedly not US.
       getCurrentPosition: () => ({ latitude: -33.85, longitude: 151.22 })
@@ -204,7 +204,7 @@ test('refreshAll iterates every district page when the vessel is in US waters', 
     const source = createUscgLightListSource({
       client,
       store,
-      minimumUpdateYear: 0,
+      minimumYear: 0,
       status,
       // Boston Harbor.
       getCurrentPosition: () => ({ latitude: 42.36, longitude: -71.05 })
@@ -234,7 +234,7 @@ test('refreshAll records an error status when a district download fails', async 
     const source = createUscgLightListSource({
       client,
       store,
-      minimumUpdateYear: 0,
+      minimumYear: 0,
       status,
       // Boston Harbor.
       getCurrentPosition: () => ({ latitude: 42.36, longitude: -71.05 })
@@ -256,7 +256,7 @@ test('summary carries timestamp when the record has modifiedDate', async () => {
     const source = createUscgLightListSource({
       client: fakeClient(),
       store,
-      minimumUpdateYear: 0,
+      minimumYear: 0,
       status,
       getCurrentPosition: () => undefined
     })
@@ -279,7 +279,7 @@ test('summary has no timestamp when the record has no modifiedDate', async () =>
     const source = createUscgLightListSource({
       client: fakeClient(),
       store,
-      minimumUpdateYear: 0,
+      minimumYear: 0,
       status,
       getCurrentPosition: () => undefined
     })
@@ -291,7 +291,7 @@ test('summary has no timestamp when the record has no modifiedDate', async () =>
   }
 })
 
-test('minimumUpdateYear drops records whose modifiedDate is older than the threshold', async () => {
+test('minimumYear drops records whose modifiedDate is older than the threshold', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'll-src-'))
   try {
     const store = createLightListStore(dir)
@@ -311,7 +311,7 @@ test('minimumUpdateYear drops records whose modifiedDate is older than the thres
     const source = createUscgLightListSource({
       client: fakeClient(),
       store,
-      minimumUpdateYear: 2000,
+      minimumYear: 2000,
       status,
       getCurrentPosition: () => undefined
     })
@@ -334,7 +334,7 @@ test('an undated record always survives the year filter', async () => {
     const source = createUscgLightListSource({
       client: fakeClient(),
       store,
-      minimumUpdateYear: 2050,
+      minimumYear: 2050,
       status,
       getCurrentPosition: () => undefined
     })

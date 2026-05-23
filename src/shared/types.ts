@@ -62,7 +62,7 @@ export interface VesselState {
 export interface CorridorPoi {
   /**
    * Source-namespaced point-of-interest id (e.g. `activecaptain-12345` or
-   * `openseamap-node/987654`), the same id the aggregate POI source exposes.
+   * `openseamap-node_987654`), the same id the aggregate POI source exposes.
    */
   id: string
   /** The point-of-interest type. Hazards, bridges, and locks are the route-scan-relevant types. */
@@ -245,20 +245,21 @@ export interface PluginConfig {
   noaaEncIncludeRocks?: boolean
   /**
    * Hide OpenSeaMap features whose OSM element timestamp is older than this
-   * year (1900 to the current year). `0` disables the filter; features
-   * without a timestamp are always included.
+   * year. `0` disables the filter; features without a timestamp are always
+   * included. Clamped to the shared `[MIN_YEAR, MAX_YEAR]` range from
+   * `src/shared/year-filter.ts`.
    */
   openSeaMapMinimumYear?: number
   /**
    * Hide USCG Light List records whose `MODIFIED_DATE` is older than this
    * year. `0` disables the filter; records with no modification date are
-   * always included.
+   * always included. Clamped to the shared range.
    */
   uscgLightListMinimumUpdateYear?: number
   /**
    * Hide NOAA ENC features whose `SORDAT` hydrographic survey date is older
    * than this year. `0` disables the filter; features with no survey date
-   * are always included.
+   * are always included. Clamped to the shared range.
    */
   noaaEncMinimumSurveyYear?: number
 }

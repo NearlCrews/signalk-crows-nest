@@ -66,7 +66,7 @@ export interface NoaaEncSourceConfig {
    * off sentinel) disables the filter; features with no parseable SORDAT
    * are always included.
    */
-  minimumSurveyYear: number
+  minimumYear: number
   /** Status recorder for per-source outcomes. */
   status: PluginStatus
   /** Returns the most recent vessel position, or undefined when unknown. */
@@ -170,7 +170,7 @@ function toDetailView (cached: CachedFeature): PoiDetailView {
 
 /** Create the NOAA ENC Direct POI source. */
 export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
-  const { client, band, minimumSurveyYear, status, getCurrentPosition } = config
+  const { client, band, minimumYear, status, getCurrentPosition } = config
   const cache = new LRUCache<string, CachedFeature>({ max: MAX_POI_CACHE_ENTRIES })
 
   return {
@@ -227,12 +227,9 @@ export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
           `Every enabled NOAA ENC layer query failed: ${String(firstRejection)}`
         )
       }
-      // The year filter runs LAST on this source's own summaries (after the
-      // per-layer fan-out), so features filtered out by the configured
-      // minimum survey year never reach the aggregate registry, dedupe,
-      // notes output, or alarms. Features whose SORDAT did not parse are
-      // always included.
-      return [...filterByMinimumYear(summaries, minimumSurveyYear)]
+      // Year filter is applied source-side so the rest of the pipeline
+      // (dedupe, notes output, alarms) never sees filtered features.
+      return filterByMinimumYear(summaries, minimumYear)
     },
     getDetails: async (id: string): Promise<PoiDetailView> => {
       const hit = cache.get(id)

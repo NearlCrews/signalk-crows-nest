@@ -65,7 +65,7 @@ export interface UscgLightListSourceConfig {
    * sentinel) disables the filter; records with no modification date are
    * always included.
    */
-  minimumUpdateYear: number
+  minimumYear: number
   /** Status recorder for per-source outcomes. */
   status: PluginStatus
   /** Returns the most recent vessel position, or undefined when unknown. */
@@ -92,7 +92,7 @@ function recordUrl (volume: number, llnr: number): string {
 export function createUscgLightListSource (
   config: UscgLightListSourceConfig
 ): UscgLightListSource {
-  const { client, store, minimumUpdateYear, status, getCurrentPosition } = config
+  const { client, store, minimumYear, status, getCurrentPosition } = config
 
   async function refreshAll (): Promise<void> {
     const position = getCurrentPosition()
@@ -150,11 +150,9 @@ export function createUscgLightListSource (
           result.push(summary)
         }
       }
-      // The year filter runs LAST on the bbox-filtered set so records below
-      // the configured minimum-update-year never reach the aggregate
-      // registry, dedupe, notes output, or alarms. Records with no
-      // modificationdate are always included.
-      return [...filterByMinimumYear(result, minimumUpdateYear)]
+      // Year filter is applied source-side so the rest of the pipeline
+      // (dedupe, notes output, alarms) never sees filtered records.
+      return filterByMinimumYear(result, minimumYear)
     },
     getDetails: async (id: string): Promise<PoiDetailView> => {
       const record = store.snapshot().records[id]

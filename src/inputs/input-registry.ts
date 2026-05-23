@@ -49,16 +49,19 @@ export function createInputRegistry (modules: readonly InputModule[]): InputRegi
           }
         }
       }
-      // Source ids in registration order, aligned with `sources.values()` for
-      // index-based zipping with Promise.allSettled results.
+      // Materialize the source list and the id list once at registry-build
+      // time. Both arrays are fixed for the life of the aggregate, so the
+      // per-tick `listPointsOfInterest` does not need to rebuild them on
+      // every call.
       const sourceIds = [...sources.keys()]
+      const sourceList = [...sources.values()]
       const dedupeRadiusMeters =
         context.config.openSeaMapDedupeRadiusMeters ?? DEFAULT_DEDUPE_RADIUS_METERS
       return {
         id: 'aggregate',
         listPointsOfInterest: async (bbox, poiTypes) => {
           const results = await Promise.allSettled(
-            [...sources.values()].map((s) => s.listPointsOfInterest(bbox, poiTypes)))
+            sourceList.map((s) => s.listPointsOfInterest(bbox, poiTypes)))
           const merged: PoiSummary[] = []
           let anyOk = false
           // The aggregate is the only component that knows each source's
@@ -96,7 +99,7 @@ export function createInputRegistry (modules: readonly InputModule[]): InputRegi
         },
         getDetails: async (id) => {
           // Split on the FIRST hyphen only: a raw id (an OSM id such as
-          // `node/987654`) can itself contain hyphens or slashes.
+          // `node_987654`) can itself contain hyphens or underscores.
           const hyphen = id.indexOf('-')
           const sourceId = hyphen > 0 ? id.slice(0, hyphen) : ''
           const rawId = hyphen > 0 ? id.slice(hyphen + 1) : id

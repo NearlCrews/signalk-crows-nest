@@ -105,7 +105,7 @@ test('listPointsOfInterest fans out across enabled layers and tags summaries', a
     includeWrecks: true,
     includeObstructions: true,
     includeRocks: false,
-    minimumSurveyYear: 0,
+    minimumYear: 0,
     status: status as never,
     getCurrentPosition: () => undefined
   })
@@ -143,7 +143,7 @@ test('listPointsOfInterest only queries layers that are enabled', async () => {
     includeWrecks: true,
     includeObstructions: false,
     includeRocks: false,
-    minimumSurveyYear: 0,
+    minimumYear: 0,
     status: status as never,
     getCurrentPosition: () => undefined
   })
@@ -167,7 +167,7 @@ test('listPointsOfInterest skips outbound work when the vessel is outside US wat
     includeWrecks: true,
     includeObstructions: true,
     includeRocks: false,
-    minimumSurveyYear: 0,
+    minimumYear: 0,
     status: status as never,
     // Mediterranean off Barcelona, decidedly not US waters.
     getCurrentPosition: () => ({ latitude: 41.38, longitude: 2.18 })
@@ -194,7 +194,7 @@ test('listPointsOfInterest records a per-layer error when one layer query fails'
     includeWrecks: true,
     includeObstructions: true,
     includeRocks: false,
-    minimumSurveyYear: 0,
+    minimumYear: 0,
     status: status as never,
     getCurrentPosition: () => undefined
   })
@@ -220,7 +220,7 @@ test('listPointsOfInterest rejects when every enabled layer query fails', async 
     includeWrecks: true,
     includeObstructions: true,
     includeRocks: false,
-    minimumSurveyYear: 0,
+    minimumYear: 0,
     status: status as never,
     getCurrentPosition: () => undefined
   })
@@ -249,7 +249,7 @@ test('getDetails does NOT record detail success on a cache hit (apiReachable sta
     includeWrecks: true,
     includeObstructions: false,
     includeRocks: false,
-    minimumSurveyYear: 0,
+    minimumYear: 0,
     status: status as never,
     getCurrentPosition: () => undefined
   })
@@ -275,7 +275,7 @@ test('getDetails records detail success only on a cache miss that hits the upstr
     includeWrecks: true,
     includeObstructions: false,
     includeRocks: false,
-    minimumSurveyYear: 0,
+    minimumYear: 0,
     status: status as never,
     getCurrentPosition: () => undefined
   })
@@ -299,7 +299,7 @@ test('getDetails serves from the cache on hit and never re-queries the upstream'
     includeWrecks: true,
     includeObstructions: false,
     includeRocks: false,
-    minimumSurveyYear: 0,
+    minimumYear: 0,
     status: status as never,
     getCurrentPosition: () => undefined
   })
@@ -334,7 +334,7 @@ test('getDetails fetches by objectId on a cache miss and caches the result', asy
     includeWrecks: true,
     includeObstructions: false,
     includeRocks: false,
-    minimumSurveyYear: 0,
+    minimumYear: 0,
     status: status as never,
     getCurrentPosition: () => undefined
   })
@@ -357,7 +357,7 @@ test('getDetails rejects when the upstream has no feature for the id', async () 
     includeWrecks: true,
     includeObstructions: false,
     includeRocks: false,
-    minimumSurveyYear: 0,
+    minimumYear: 0,
     status: status as never,
     getCurrentPosition: () => undefined
   })
@@ -380,7 +380,7 @@ test('cacheSize reports the LRU entry count', async () => {
     includeWrecks: true,
     includeObstructions: true,
     includeRocks: false,
-    minimumSurveyYear: 0,
+    minimumYear: 0,
     status: status as never,
     getCurrentPosition: () => undefined
   })
@@ -412,7 +412,7 @@ test('toSummary populates timestamp from SORDAT (YYYYMM)', async () => {
     includeWrecks: true,
     includeObstructions: false,
     includeRocks: false,
-    minimumSurveyYear: 0,
+    minimumYear: 0,
     status: status as never,
     getCurrentPosition: () => undefined
   })
@@ -439,7 +439,7 @@ test('toSummary populates timestamp from SORDAT (YYYYMMDD) and getDetails carrie
     includeWrecks: true,
     includeObstructions: false,
     includeRocks: false,
-    minimumSurveyYear: 0,
+    minimumYear: 0,
     status: status as never,
     getCurrentPosition: () => undefined
   })
@@ -462,7 +462,7 @@ test('a feature with no SORDAT carries no timestamp and survives the year filter
     includeWrecks: true,
     includeObstructions: false,
     includeRocks: false,
-    minimumSurveyYear: 2050,
+    minimumYear: 2050,
     status: status as never,
     getCurrentPosition: () => undefined
   })
@@ -472,7 +472,7 @@ test('a feature with no SORDAT carries no timestamp and survives the year filter
   assert.equal(summaries[0].timestamp, undefined)
 })
 
-test('minimumSurveyYear drops features whose SORDAT year is below the threshold', async () => {
+test('minimumYear drops features whose SORDAT year is below the threshold', async () => {
   const oldWreck: EncFeature = {
     ...namedWreck,
     id: 1,
@@ -494,7 +494,7 @@ test('minimumSurveyYear drops features whose SORDAT year is below the threshold'
     includeWrecks: true,
     includeObstructions: false,
     includeRocks: false,
-    minimumSurveyYear: 2000,
+    minimumYear: 2000,
     status: status as never,
     getCurrentPosition: () => undefined
   })

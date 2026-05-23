@@ -14,6 +14,12 @@ import { createEncDirectClient } from './enc-direct-client.js'
 import type { ScaleBand } from './enc-direct-types.js'
 import type { InputContext, InputModule } from '../poi-source.js'
 import type { PluginConfig } from '../../shared/types.js'
+import {
+  clampMinimumYear,
+  DEFAULT_MINIMUM_YEAR,
+  MAX_YEAR,
+  MIN_YEAR
+} from '../../shared/year-filter.js'
 
 /** The six ENC Direct scale bands, ordered overview to berthing. */
 const SCALE_BANDS: readonly ScaleBand[] = [
@@ -22,18 +28,6 @@ const SCALE_BANDS: readonly ScaleBand[] = [
 
 /** Default scale band when the configuration omits one. */
 const DEFAULT_SCALE_BAND: ScaleBand = 'coastal'
-
-/**
- * Lower bound on the `noaaEncMinimumSurveyYear` config field, with `0` as
- * the off sentinel matching the existing rating-filter convention.
- */
-const MIN_SURVEY_YEAR = 0
-
-/** Upper bound on the `noaaEncMinimumSurveyYear` config field. */
-const MAX_SURVEY_YEAR = 9999
-
-/** Default minimum survey year (the off sentinel). */
-const DEFAULT_MINIMUM_SURVEY_YEAR = 0
 
 /** The enable, dedupe, scale-band, and per-layer config fragment. */
 const CONFIG_SCHEMA: Record<string, unknown> = {
@@ -71,20 +65,10 @@ const CONFIG_SCHEMA: Record<string, unknown> = {
   noaaEncMinimumSurveyYear: {
     type: 'number',
     title: 'Earliest NOAA ENC survey year (0 to import every survey)',
-    default: DEFAULT_MINIMUM_SURVEY_YEAR,
-    minimum: MIN_SURVEY_YEAR,
-    maximum: MAX_SURVEY_YEAR
+    default: DEFAULT_MINIMUM_YEAR,
+    minimum: MIN_YEAR,
+    maximum: MAX_YEAR
   }
-}
-
-/** Resolve the minimum survey year from raw config, clamping to the allowed range. */
-function resolveMinimumSurveyYear (raw: unknown): number {
-  if (typeof raw !== 'number' || !Number.isFinite(raw)) {
-    return DEFAULT_MINIMUM_SURVEY_YEAR
-  }
-  if (raw < MIN_SURVEY_YEAR) return MIN_SURVEY_YEAR
-  if (raw > MAX_SURVEY_YEAR) return MAX_SURVEY_YEAR
-  return Math.trunc(raw)
 }
 
 /** Resolve the scale band from raw config, falling back to the default. */
@@ -118,7 +102,7 @@ export const noaaEncInput: InputModule = {
       includeWrecks: config.noaaEncIncludeWrecks !== false,
       includeObstructions: config.noaaEncIncludeObstructions !== false,
       includeRocks: config.noaaEncIncludeRocks === true,
-      minimumSurveyYear: resolveMinimumSurveyYear(config.noaaEncMinimumSurveyYear),
+      minimumYear: clampMinimumYear(config.noaaEncMinimumSurveyYear),
       status,
       getCurrentPosition
     })

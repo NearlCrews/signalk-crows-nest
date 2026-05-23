@@ -14,19 +14,15 @@ import { DEFAULT_DEDUPE_RADIUS_METERS } from '../dedupe-pois.js'
 import type { InputContext, InputModule } from '../poi-source.js'
 import { SEAMARK_GROUP_IDS } from '../../shared/seamark-groups.js'
 import type { PluginConfig } from '../../shared/types.js'
+import {
+  clampMinimumYear,
+  DEFAULT_MINIMUM_YEAR,
+  MAX_YEAR,
+  MIN_YEAR
+} from '../../shared/year-filter.js'
 
 /** Default Overpass interpreter URL when configuration omits one. */
 const DEFAULT_ENDPOINT = 'https://overpass-api.de/api/interpreter'
-
-/**
- * Bounds and default for the optional minimum-year filter. `0` is the off
- * sentinel matching the existing rating-filter convention; the upper bound
- * is a four-digit cap that lets a user pick a future year without any
- * clamp logic getting in the way.
- */
-const MIN_YEAR = 0
-const MAX_YEAR = 9999
-const DEFAULT_MINIMUM_YEAR = 0
 
 /** The enable, endpoint, seamark-group, dedupe, and radius config fragment. */
 const CONFIG_SCHEMA: Record<string, unknown> = {
@@ -66,16 +62,6 @@ const CONFIG_SCHEMA: Record<string, unknown> = {
   }
 }
 
-/** Resolve the minimum-year filter from raw config, clamping to the allowed range. */
-function resolveMinimumYear (raw: unknown): number {
-  if (typeof raw !== 'number' || !Number.isFinite(raw)) {
-    return DEFAULT_MINIMUM_YEAR
-  }
-  if (raw < MIN_YEAR) return MIN_YEAR
-  if (raw > MAX_YEAR) return MAX_YEAR
-  return Math.trunc(raw)
-}
-
 /** Resolve the Overpass endpoint from raw config, applying the default. */
 function resolveEndpoint (raw: unknown): string {
   if (typeof raw !== 'string') {
@@ -107,7 +93,7 @@ export const openSeaMapInput: InputModule = {
     return createOpenSeaMapSource({
       client: createOverpassClient(resolveEndpoint(config.openSeaMapEndpoint), app),
       seamarkGroups: resolveSeamarkGroups(config.openSeaMapSeamarkGroups),
-      minimumYear: resolveMinimumYear(config.openSeaMapMinimumYear),
+      minimumYear: clampMinimumYear(config.openSeaMapMinimumYear),
       status
     })
   }
