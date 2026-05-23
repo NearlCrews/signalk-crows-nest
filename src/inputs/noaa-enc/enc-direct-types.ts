@@ -27,7 +27,30 @@ export interface LayerIds {
   readonly rock: number
 }
 
-/** One ENC Direct GeoJSON feature as returned by the FeatureServer. */
+/**
+ * One ENC Direct GeoJSON feature as returned by the FeatureServer.
+ *
+ * The `properties` bag carries raw S-57 attributes. Observed wire shapes from
+ * a live coastal-band wreck query (3 features) that the S-57 mapping in
+ * Phase 4 needs to handle:
+ *
+ *  - `CATWRK` is a DECODED STRING already, e.g. `"dangerous wreck"`, not a
+ *    numeric S-57 enum code. A `Record<number, string>` lookup table on this
+ *    field would be unused; the mapper should pass the string through with a
+ *    capitalize or humanize step.
+ *  - `QUASOU` is a stringified single digit, e.g. `"6"`. Numeric parse before
+ *    table lookup.
+ *  - `WATLEV` is a NUMBER (the S-57 enum code, e.g. `3`). Direct lookup.
+ *  - `SORDAT` length varies: both `"YYYYMM"` (6 chars) and `"YYYYMMDD"` (8
+ *    chars) appear. A date formatter must branch on length so the day is not
+ *    silently dropped when present.
+ *  - `OBJNAM` is frequently `null`. The detail-view title needs the
+ *    layer-label fallback.
+ *  - Many fields ship as `null` on most features: `CONRAD`, `CONVIS`,
+ *    `EXPSOU`, `HEIGHT`, `SOUACC`, `TECSOU`, `VERACC`, `VERDAT`, `VERLEN`,
+ *    `INFORM`, `SCAMIN`. The renderer must skip null fields, not write the
+ *    word "null".
+ */
 export interface EncFeature {
   type: 'Feature'
   id?: number
