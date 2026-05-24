@@ -22,8 +22,22 @@
   },
   "keywords": [
     "signalk-node-server-plugin",
-    "signalk-category-utility",
-    "signalk-plugin-configurator"
+    "signalk-plugin-configurator",
+    "signalk-category-chart-plotters",
+    "signalk-category-notifications",
+    "points-of-interest",
+    "notes",
+    "chart-overlay",
+    "activecaptain",
+    "openseamap",
+    "uscg",
+    "noaa",
+    "freeboard",
+    "proximity-alarm",
+    "route-corridor",
+    "marina",
+    "anchorage",
+    "hazard"
   ],
   "signalk-plugin-enabled-by-default": false,
   "signalk": {

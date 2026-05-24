@@ -18,6 +18,20 @@ release.
   the v0.4.2 publish run; v6 runs on Node.js 24 and clears the warning
   ahead of the June 2026 hard cutover.
 
+#### SignalK Appstore classification
+
+- Replace the catch-all `signalk-category-utility` keyword with the
+  two categories the plugin actually belongs to:
+  `signalk-category-chart-plotters` (the notes resources feed
+  Freeboard-SK and other chart plotters) and
+  `signalk-category-notifications` (the proximity and route-corridor
+  hazard alarms). The plugin will appear under both Appstore
+  category filters starting with the next published release.
+- Add discoverability keywords for npm search (`activecaptain`,
+  `openseamap`, `uscg`, `noaa`, `freeboard`, `points-of-interest`,
+  `notes`, `chart-overlay`, `proximity-alarm`, `route-corridor`,
+  `marina`, `anchorage`, `hazard`).
+
 <a id="v042"></a>
 
 ### v0.4.2 (2026/05/23) - first published release
