@@ -10,87 +10,13 @@
 In-development changes since `v0.4.2`. Will roll into the next published
 release.
 
-#### USCG Light List storage rewrite
+#### CI
 
-- The on-disk index is now sharded into one JSON file per (district, page)
-  under `<dataDir>/uscg-light-list/pages/`, with the conditional-GET
-  headers and per-page metadata still in the small `index.json`. A daily
-  refresh writes only the changed pages, shrinking writes from ~50 MB to
-  ~1.4 MB per page. Cold-start parse is parallelized across the pages.
-- Writes are atomic (per-instance temp filename, rename over the target)
-  so a power-loss mid-write cannot corrupt the store.
-- A new in-memory spatial tile index (0.1 degree cells, ~11 km) replaces
-  the per-tick O(57.7 k) `Object.values` scan: bbox queries iterate only
-  the tiles that overlap the box. Antimeridian-crossing boxes (Aleutian
-  D17 transits) are handled by splitting the longitude range in two.
-- A new "dark zone" recovery on load detects a district whose metadata
-  records records but whose page file produced none, and clears the
-  stale conditional-GET headers so the next refresh forces a 200 OK
-  rather than getting a permanent 304 from NAVCEN.
-- The 37-page refresh now runs four NAVCEN GETs in parallel (~7 s → < 2 s).
-
-#### Per-bbox debounce on ActiveCaptain
-
-- ActiveCaptain joins NOAA ENC and OpenSeaMap with a 30-second default
-  bbox-debounce cache. The cache key includes the requested `poiTypes`
-  string so a chart-display request (typically without Hazard) never
-  starves a proximity-alarm scan that needs Hazard. Configurable via the
-  new `activeCaptainRefreshSeconds` panel field.
-
-#### Per-source merge radius
-
-- USCG Light List and NOAA ENC gain their own `*DedupeRadiusMeters`
-  panel field (matching the existing OpenSeaMap one), so each non-base
-  source can be tuned independently against the ActiveCaptain base. The
-  dedupe pass takes a per-source map and uses each source's own radius
-  for the distance check while sizing the grid to the largest.
-
-#### `$source` differentiation per alarm
-
-- Notification deltas now carry `$source = signalk-crows-nest.proximity`
-  and `signalk-crows-nest.route` instead of the bare plugin id, so a
-  SignalK consumer filtering by source can tell proximity alarms from
-  route-corridor advisories even though both come from this plugin.
-
-#### Resource provider failure surfaces correctly
-
-- A `registerResourceProvider` failure now propagates instead of being
-  swallowed, so the output registry's per-output isolation correctly
-  marks the notes-resource output as failed and the plugin admin UI
-  surfaces the error instead of reporting "Ready" with a dead data path.
-- `setResource` and `deleteResource` reject with a 405-bearing error so
-  HTTP consumers (Freeboard-SK) see "Method Not Allowed" instead of
-  500 for the intentionally read-only methods.
-
-#### Panel layout overhaul
-
-- Card body lives on the same surface as the header (no nested-card
-  look); disclosure state lifted to the panel root; per-card live-status
-  pill (`✓ N POI` / `! error` / `… idle`, with a "last fetch N minutes
-  ago" tooltip); `Disabled.` prefix on the collapsed summary when the
-  enable toggle is off so an off source never reads as live; every
-  clustered set of controls (import layers, refresh and freshness,
-  filters, merge with ActiveCaptain) now lives in its own bordered
-  fieldset with a normalized legend layout (no border notch).
-- Dark-mode tokens added opportunistically for a future SignalK admin
-  theme switcher.
-- Drop the dead `assets/search.png` (~91 KB) from the published tarball.
-- New `watch:panel` npm script for sub-second incremental rebuilds during
-  panel development.
-
-#### Cleanup
-
-- Source slugs centralized in `src/shared/source-ids.ts` (panel and
-  inputs both import from there).
-- Bbox-debounce bounds, default, and clamp helper centralized in
-  `src/shared/bbox-debounce.ts`, used by every input module and the
-  panel's normalize-config.
-- Dead exports removed (`EncFeatureCollection`, the public attribution
-  constants, `BboxDebounceCache.size()`, `BASE_SOURCE_ID` aliased onto
-  `ACTIVE_CAPTAIN_SOURCE_ID`, `TrackProjection` demoted to
-  non-exported).
-- The `unwrapValue` defensive fallback in `course-reader.ts` is gone:
-  modern signalk-server returns leaf values directly.
+- Bump `actions/checkout` and `actions/setup-node` from v4 to v6 across
+  every workflow (`ci.yml`, `eslint.yml`, `npm-publish.yml`). The v4
+  releases run on Node.js 20, which GitHub flagged for deprecation in
+  the v0.4.2 publish run; v6 runs on Node.js 24 and clears the warning
+  ahead of the June 2026 hard cutover.
 
 <a id="v042"></a>
 
