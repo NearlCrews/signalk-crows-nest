@@ -5,6 +5,69 @@
 > development milestones that preceded this publication. Their content is
 > incorporated into the `v0.4.2` release.
 
+<a id="v047"></a>
+
+### v0.4.7 (2026/05/29) - codebase cleanup, registry screenshots, publish-workflow hardening
+
+An internal-quality, packaging, and release-pipeline release. There are no
+runtime behavior changes for the chart user: the POI sources, the notes, and
+the alarms all work exactly as before, and all 587 tests pass. The published
+package now carries screenshots for the Signal K plugin registry, and the npm
+publish workflow is hardened.
+
+#### Plugin-registry compliance
+
+- Add three screenshots under `assets/screenshots/` (an ActiveCaptain hazard
+  popup, a USCG Light List aid popup, and the configuration panel) and declare
+  them in `package.json` under `signalk.screenshots`, clearing the registry's
+  screenshots penalty. The `files` allowlist already ships `assets/`, so the
+  images travel in the published tarball.
+- Add a Screenshots section to the README so the images render on GitHub and
+  on npm.
+
+#### Publish-workflow hardening
+
+- `npm-publish.yml` now verifies that the release tag matches the
+  `package.json` version before building, runs `typecheck` and `lint`
+  alongside `build` and `test` in the gating job, and publishes with
+  `--provenance` (granting the `id-token: write` and `contents: read`
+  permissions provenance requires).
+- Resync `package-lock.json`, whose version field had drifted to `0.4.4`
+  while `package.json` advanced. The dependency graph was already consistent,
+  so `npm ci` was unaffected, but the metadata is now correct.
+
+#### Code cleanup (/simplify pass)
+
+A four-lens review (reuse, simplification, efficiency, and altitude) of the
+whole `src/` tree. Behavior is preserved throughout.
+
+- Make `PoiSummary.skIcon` and `PoiDetailView.skIcon` required, so every
+  source must pick a Freeboard-registered icon at construction. Remove the
+  dead `?? 'notice-to-mariners'` fallback in the notes output.
+- Extract shared helpers: `src/shared/rating.ts` (rating bounds and clamp,
+  shared by the ActiveCaptain input and the panel), `relative-time-format.ts`
+  (the relative-time unit-stepping shared by the panel status bar and the
+  ActiveCaptain detail renderer), `namespaced-id.ts` (`splitOnFirstUnderscore`,
+  shared by the OpenSeaMap and NOAA id parsing), and
+  `src/inputs/http-one-shot.ts` (the one-shot HTTP GET shared by the USCG and
+  NOAA raw clients).
+- Add a shared `labeledParagraph` HTML helper used by the three structured
+  detail renderers, a `shouldSkipOutsideUsWaters` gate shared by the two
+  US-only inputs, and config-fragment schema builders (`minimumYearSchema`,
+  `refreshSecondsSchema`, `dedupeToggleSchema`, and `dedupeRadiusSchema`)
+  shared across the input modules.
+- Efficiency: hoist per-call regexes to module constants in the detail
+  renderers, and collapse a concurrent same-bbox burst into one upstream
+  request by caching the in-flight promise in the bbox-debounce cache.
+- Remove dead state (`lastSkipReason`) and a redundant escape-helper alias,
+  and reuse `toFiniteNumber` at three open-coded wire-parse sites.
+
+#### Docs
+
+- Refresh `CLAUDE.md`, the README, and the development and maintainer docs to
+  reflect the new shared modules, the required `skIcon`, the screenshots, and
+  the hardened publish workflow.
+
 <a id="v046"></a>
 
 ### v0.4.6 (2026/05/27) - data-formatting audit, attribution on structured properties

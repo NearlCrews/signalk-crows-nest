@@ -24,3 +24,15 @@ const ESCAPE_REGEX = /[&<>"']/g
 export function escapeHtml (value: string): string {
   return value.replace(ESCAPE_REGEX, (char) => ESCAPE_TABLE.get(char) ?? char)
 }
+
+/**
+ * Render a labelled paragraph: `<p><strong>Label:</strong> value.</p>` with
+ * both the label and the value HTML-escaped. The structured detail renderers
+ * (NOAA ENC, OpenSeaMap, USCG Light List) each build a run of these lines, so
+ * the one period-terminated shape lives here. A line that omits the trailing
+ * period or interpolates non-string content (a formatted depth, a composite
+ * source line) stays bespoke at its call site.
+ */
+export function labeledParagraph (label: string, value: string): string {
+  return `<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}.</p>`
+}

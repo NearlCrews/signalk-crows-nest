@@ -18,14 +18,13 @@
  * sent on every request.
  */
 
-import { request as httpsRequest } from 'node:https'
-import { request as httpRequest } from 'node:http'
 import {
   LAYER_IDS_BY_BAND,
   type EncFeature,
   type EncLayerKey,
   type ScaleBand
 } from './enc-direct-types.js'
+import { requestText } from '../http-one-shot.js'
 import type { Bbox } from '../../shared/types.js'
 import { PLUGIN_USER_AGENT } from '../../shared/plugin-id.js'
 import { MS_PER_MINUTE } from '../../shared/time.js'
@@ -81,34 +80,16 @@ interface ArcGisFeatureCollection {
   exceededTransferLimit?: boolean
 }
 
-function fetchJson (url: string, headers: Record<string, string>): Promise<unknown> {
-  return new Promise((resolve, reject) => {
-    const transport = url.startsWith('https:') ? httpsRequest : httpRequest
-    const req = transport(url, { method: 'GET', headers }, res => {
-      const chunks: Buffer[] = []
-      res.on('data', (chunk: Buffer) => chunks.push(chunk))
-      res.on('end', () => {
-        const body = Buffer.concat(chunks).toString('utf8')
-        const status = res.statusCode ?? 0
-        if (status < 200 || status >= 300) {
-          reject(new Error(`ENC Direct HTTP ${status} for ${url}`))
-          return
-        }
-        try {
-          resolve(JSON.parse(body))
-        } catch (error) {
-          reject(error instanceof Error ? error : new Error(String(error)))
-        }
-      })
-    })
-    // A silently dropped connection (no FIN, no RST) would otherwise hang
-    // forever; the explicit timeout aborts and rejects the request.
-    req.setTimeout(REQUEST_TIMEOUT_MS, () => {
-      req.destroy(new Error(`ENC Direct request timed out after ${REQUEST_TIMEOUT_MS} ms: ${url}`))
-    })
-    req.on('error', reject)
-    req.end()
-  })
+async function fetchJson (url: string, headers: Record<string, string>): Promise<unknown> {
+  const response = await requestText(url, headers, REQUEST_TIMEOUT_MS, 'ENC Direct')
+  if (response.status < 200 || response.status >= 300) {
+    throw new Error(`ENC Direct HTTP ${response.status} for ${url}`)
+  }
+  try {
+    return JSON.parse(response.body)
+  } catch (error) {
+    throw error instanceof Error ? error : new Error(String(error))
+  }
 }
 
 function buildBboxUrl (

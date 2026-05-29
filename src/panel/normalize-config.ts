@@ -15,18 +15,12 @@ import type { PluginConfig } from '../shared/types.js'
  */
 export const DEFAULT_CACHE_DURATION_MINUTES = 60
 
-/** Lowest minimum rating: 0 disables the rating filter and shows every point. */
-export const MIN_RATING = 0
-
-/** Highest minimum rating ActiveCaptain awards. */
-export const MAX_RATING = 5
-
-/**
- * Fallback minimum rating. Mirrors the `minimumRating` schema default in
- * src/outputs/notes-resource/notes-resource-output.ts; keep the two in step so
- * the panel and the plugin agree.
- */
-export const DEFAULT_MINIMUM_RATING = MIN_RATING
+// The rating bounds, default, and clamp helper are owned by
+// src/shared/rating.ts so the panel and the ActiveCaptain input module consume
+// the same source of truth. Re-exported here so panel components that already
+// import from normalize-config do not need a second import line.
+export { MIN_RATING, MAX_RATING, DEFAULT_MINIMUM_RATING } from '../shared/rating.js'
+import { clampMinimumRating } from '../shared/rating.js'
 
 /**
  * Fallback proximity-alarm radius, in meters. Mirrors the
@@ -127,10 +121,7 @@ export function normalizeConfig (configuration: unknown): PluginConfig {
     config[flag] = raw[flag] !== false
   }
 
-  const rating = raw.minimumRating
-  config.minimumRating = typeof rating === 'number' && Number.isFinite(rating)
-    ? Math.min(MAX_RATING, Math.max(MIN_RATING, rating))
-    : DEFAULT_MINIMUM_RATING
+  config.minimumRating = clampMinimumRating(raw.minimumRating)
 
   config.enableProximityAlarms = raw.enableProximityAlarms === true
 

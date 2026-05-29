@@ -54,15 +54,23 @@ self-contained module registered on one line in `src/index.ts`.
       to every enabled input, namespaces resource ids with the producing
       source's slug, unions the results, records per-source status, and runs
       the dedupe pass.
-    - `http-client.ts` - shared HTTP client plumbing used by every source's
-      client: a concurrency-limited and throttled request queue, retry with
-      exponential backoff that honors HTTP 429/503 `Retry-After`, and a
-      `close()` that aborts in-flight work.
+    - `http-client.ts` - shared HTTP client plumbing for the queued clients
+      (ActiveCaptain and Overpass): a concurrency-limited and throttled
+      request queue, retry with exponential backoff that honors HTTP 429/503
+      `Retry-After`, and a `close()` that aborts in-flight work.
+    - `http-one-shot.ts` - the `requestText` one-shot GET shared by the two
+      raw-client sources (USCG Light List and NOAA ENC Direct): it selects the
+      `http`/`https` transport, buffers the body, and aborts on a per-request
+      timeout, leaving each caller its own status and JSON handling. Those two
+      feeds are low-volume and deliberately skip the queue and retry of
+      `http-client.ts`.
     - `dedupe-pois.ts` - merges non-base POIs that duplicate an ActiveCaptain
       base POI, then runs a same-source pass that collapses internal
       duplicates within a configurable radius (default 150 meters), so a
       feature reported by several sources becomes one corroborated note rather
-      than overlapping markers.
+      than overlapping markers. It also owns `DEFAULT_DEDUPE_RADIUS_METERS` and
+      the `dedupeToggleSchema` / `dedupeRadiusSchema` config-fragment builders
+      every non-base input's schema reuses.
     - `active-captain/` - the ActiveCaptain input: `active-captain-input.ts`
       (the `InputModule`), `active-captain-source.ts` (the `PoiSource` adapter
       over the client, cache, and store), `active-captain-client.ts` (the
@@ -91,7 +99,7 @@ self-contained module registered on one line in `src/index.ts`.
       `refreshAll` that iterates the pinned 37 (district, page) pairs and
       skips outbound HTTP when the vessel is outside US waters),
       `light-list-client.ts` (the NAVCEN HTTP client built on
-      `http-client.ts`, with conditional-GET via `If-Modified-Since` and
+      `http-one-shot.ts`, with conditional-GET via `If-Modified-Since` and
       `If-None-Match`), `light-list-store.ts` (the persistent on-disk index
       under the plugin data directory), `light-list-types.ts` (the parsed and
       wire record types, private to this input), `light-list-mapping.ts`
@@ -108,7 +116,7 @@ self-contained module registered on one line in `src/index.ts`.
       uses an underscore-separated id form like `wreck_12345` so the slash
       in `wreck/12345` does not split the resource URL),
       `enc-direct-client.ts` (the ArcGIS REST client built on
-      `http-client.ts`, with band-and-layer-id query and paging),
+      `http-one-shot.ts`, with band-and-layer-id query and paging),
       `enc-direct-types.ts` (the ENC Direct wire types, including JSDoc on
       the wire-shape quirks: CATWRK as a decoded string, WATLEV as a
       number, OBJNAM frequently null), and `s57-mapping.ts` (the S-57 enum
@@ -158,18 +166,25 @@ self-contained module registered on one line in `src/index.ts`.
     `poiTypes` string the aggregate source uses), `seamark-groups.ts` (the
     OpenSeaMap seamark group ids and labels, the single source of truth
     consumed by the OpenSeaMap input, its config-schema fragment, and the
-    panel), `us-waters.ts` (the `isInUsWaters` gate the US-only inputs read
-    to skip outbound HTTP outside US waters), `bbox-debounce.ts`
-    (the per-bbox LRU debounce cache, plus the canonical
+    panel), `us-waters.ts` (the `isInUsWaters` gate plus the
+    `shouldSkipOutsideUsWaters` helper the US-only inputs call to skip
+    outbound HTTP, and record the skip, when the vessel is outside US
+    waters), `bbox-debounce.ts`
+    (the per-bbox LRU debounce cache, which caches the in-flight fetch
+    promise so a concurrent same-bbox burst collapses into one upstream
+    request, plus the canonical
     `DEFAULT_BBOX_DEBOUNCE_SECONDS` / `MIN_BBOX_DEBOUNCE_SECONDS` /
-    `MAX_BBOX_DEBOUNCE_SECONDS` bounds and the `clampBboxDebounceSeconds`
+    `MAX_BBOX_DEBOUNCE_SECONDS` bounds, the `clampBboxDebounceSeconds`
     helper that every input module and the panel's normalize-config
-    consume), `map-link.ts` (the OpenSeaMap-marker fallback deep link
+    consume, and the `refreshSecondsSchema` config-fragment builder the
+    at-runtime inputs share), `map-link.ts` (the OpenSeaMap-marker fallback deep link
     USCG Light List and NOAA ENC popups use, since neither upstream
     viewer supports per-feature deep links), `html-escape.ts` (the
     shared `escapeHtml` helper every source's detail renderer consumes,
     so the four metacharacters plus the apostrophe are escaped from one
-    place), `notification-path.ts` (builds path-safe SignalK notification
+    place, plus `labeledParagraph`, the `<p><strong>Label:</strong>
+    value.</p>` builder the structured detail renderers share),
+    `notification-path.ts` (builds path-safe SignalK notification
     deltas, shared by the alarm outputs, with a `sourceSuffix` arg so
     proximity and route alarms get distinct `$source` brands),
     `notification-tracker.ts` (raise/clear bookkeeping shared by the
@@ -178,12 +193,22 @@ self-contained module registered on one line in `src/index.ts`.
     `year-filter.ts` (the `filterByMinimumYear` helper plus the shared
     `OFF_SENTINEL_YEAR` / `MIN_YEAR` / `MAX_YEAR` / `DEFAULT_MINIMUM_YEAR`
     bounds and the `clampMinimumYear` helper every opting-in source uses
-    for its earliest-year filter), `numbers.ts` (the `toFiniteNumber`
+    for its earliest-year filter, plus the `minimumYearSchema`
+    config-fragment builder the opting-in inputs share), `rating.ts` (the
+    `MIN_RATING` / `MAX_RATING` / `DEFAULT_MINIMUM_RATING` bounds and the
+    `clampMinimumRating` helper the ActiveCaptain input and the panel's
+    normalize-config share, mirroring the year-filter and bbox-debounce
+    shared-bounds pattern), `numbers.ts` (the `toFiniteNumber`
     and `positiveFiniteNumber` narrowing helpers, both returning `null`
     on a non-usable value, plus `isValidLatitude`, `isValidLongitude`,
     and `isWireTruthy` for the wire-boundary parse sites), `cache.ts`
     (the `MAX_POI_CACHE_ENTRIES` and `MAX_BBOX_CACHE_ENTRIES` ceilings
-    shared by the per-source detail and bbox caches), and `time.ts`
+    shared by the per-source detail and bbox caches),
+    `relative-time-format.ts` (the `formatRelativeDelta` unit-stepping the
+    panel's status bar and the ActiveCaptain detail renderer share, each
+    passing its own unit table and locale), `namespaced-id.ts` (the
+    `splitOnFirstUnderscore` helper the OpenSeaMap and NOAA ENC sources
+    share to decode their `node_123` / `wreck_12345` id form), and `time.ts`
     (the `MS_PER_SECOND` / `MS_PER_MINUTE` / `MS_PER_HOUR` /
     `MS_PER_DAY` constants).
   - `panel/` - federated React configuration panel. Root and reducer:
@@ -221,8 +246,12 @@ self-contained module registered on one line in `src/index.ts`.
 - `test/` - `node:test` test suite, run through `tsx`.
 - `docs/` - project documentation: the development guide, troubleshooting, the
   Garmin API research notes, decision records, and maintainer notes.
+- `assets/` - committed, published static files: `icons/` (the plugin icon in
+  SVG and PNG sizes, wired through the `signalk.appIcon` field) and
+  `screenshots/` (the admin-panel and Freeboard-SK images declared under
+  `signalk.screenshots` for the plugin-registry listing).
 - `dist/` and `public/` - compiled plugin and bundled panel. Generated, not
-  committed. They are the directories published to npm (see the `files`
+  committed. They are published to npm alongside `assets/` (see the `files`
   field in `package.json`).
 
 ## Toolchain

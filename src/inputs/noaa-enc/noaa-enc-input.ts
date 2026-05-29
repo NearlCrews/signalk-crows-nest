@@ -12,23 +12,13 @@
 import { createNoaaEncSource } from './noaa-enc-source.js'
 import { createEncDirectClient } from './enc-direct-client.js'
 import type { ScaleBand } from './enc-direct-types.js'
-import { DEFAULT_DEDUPE_RADIUS_METERS } from '../dedupe-pois.js'
+import { dedupeRadiusSchema, dedupeToggleSchema } from '../dedupe-pois.js'
 import type { InputContext, InputModule } from '../poi-source.js'
-import {
-  clampBboxDebounceSeconds,
-  DEFAULT_BBOX_DEBOUNCE_SECONDS,
-  MAX_BBOX_DEBOUNCE_SECONDS,
-  MIN_BBOX_DEBOUNCE_SECONDS
-} from '../../shared/bbox-debounce.js'
+import { clampBboxDebounceSeconds, refreshSecondsSchema } from '../../shared/bbox-debounce.js'
 import { positiveFiniteNumber } from '../../shared/numbers.js'
 import { NOAA_ENC_SOURCE_ID } from '../../shared/source-ids.js'
 import type { PluginConfig } from '../../shared/types.js'
-import {
-  clampMinimumYear,
-  DEFAULT_MINIMUM_YEAR,
-  MAX_YEAR,
-  MIN_YEAR
-} from '../../shared/year-filter.js'
+import { clampMinimumYear, minimumYearSchema } from '../../shared/year-filter.js'
 
 /** The six ENC Direct scale bands, ordered overview to berthing. */
 const SCALE_BANDS: readonly ScaleBand[] = [
@@ -45,17 +35,12 @@ const CONFIG_SCHEMA: Record<string, unknown> = {
     title: 'Import wrecks, obstructions, and rocks from NOAA ENC Direct (US authoritative)',
     default: false
   },
-  noaaEncDedupe: {
-    type: 'boolean',
-    title: 'Merge NOAA ENC points of interest that duplicate an ActiveCaptain marker',
-    default: true
-  },
-  noaaEncDedupeRadiusMeters: {
-    type: 'number',
-    title: 'Merge radius for NOAA ENC points of interest, in meters',
-    default: DEFAULT_DEDUPE_RADIUS_METERS,
-    minimum: 1
-  },
+  noaaEncDedupe: dedupeToggleSchema(
+    'Merge NOAA ENC points of interest that duplicate an ActiveCaptain marker'
+  ),
+  noaaEncDedupeRadiusMeters: dedupeRadiusSchema(
+    'Merge radius for NOAA ENC points of interest, in meters'
+  ),
   noaaEncScaleBand: {
     type: 'string',
     title: 'NOAA ENC chart scale band',
@@ -77,20 +62,12 @@ const CONFIG_SCHEMA: Record<string, unknown> = {
     title: 'Include NOAA ENC underwater rocks (heavy: a coastal-band query can return tens of thousands)',
     default: false
   },
-  noaaEncMinimumSurveyYear: {
-    type: 'number',
-    title: 'Earliest NOAA ENC survey year (0 to import every survey)',
-    default: DEFAULT_MINIMUM_YEAR,
-    minimum: MIN_YEAR,
-    maximum: MAX_YEAR
-  },
-  noaaEncRefreshSeconds: {
-    type: 'number',
-    title: 'NOAA ENC bbox-debounce window, in seconds (0 to query upstream on every list call)',
-    default: DEFAULT_BBOX_DEBOUNCE_SECONDS,
-    minimum: MIN_BBOX_DEBOUNCE_SECONDS,
-    maximum: MAX_BBOX_DEBOUNCE_SECONDS
-  }
+  noaaEncMinimumSurveyYear: minimumYearSchema(
+    'Earliest NOAA ENC survey year (0 to import every survey)'
+  ),
+  noaaEncRefreshSeconds: refreshSecondsSchema(
+    'NOAA ENC bbox-debounce window, in seconds (0 to query upstream on every list call)'
+  )
 }
 
 /** Resolve the scale band from raw config, falling back to the default. */

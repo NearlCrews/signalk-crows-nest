@@ -15,22 +15,30 @@ hazard alarms. Pairs well with sibling plugins such as
 > Built on the foundation of [`signalk-activecaptain-resources`](https://github.com/KvotheBloodless/signalk-activecaptain-resources)
 > by Paul Willems and the Signal K community.
 
-## What's New in v0.4.4
+## Screenshots
 
-A performance and polish release. Chart-load latency on a cold viewport
-drops from 15-30 s to about 5 s by capping each POI source's list
-request at a per-source timeout: a slow Overpass or NOAA ENC query no
-longer holds up the chart while the other sources answer; the slow
-source's POIs appear on the next chart-plotter refresh once its
-bbox-debounce cache is populated. The canonical plugin icon (a crimson
-lookout-in-a-barrel badge over the shared deep-ocean family motif)
-ships in the same release, alongside a three-agent code-review pass
-that landed SignalK conformance, correctness, and UI/docs/test cleanup
-all the way through the nit tier.
+Points of interest from every source land on the chart as Signal K notes, each
+with a plain-English popup, and the whole plugin is configured from one panel.
 
-See the [v0.4.4 changelog entry](CHANGELOG.md#v044) and the
-[v0.4.4 release](https://github.com/NearlCrews/signalk-crows-nest/releases/tag/v0.4.4).
-[Full release history](CHANGELOG.md).
+| ActiveCaptain hazard | USCG Light List aid | Configuration panel |
+| --- | --- | --- |
+| [![An ActiveCaptain hazard note open in Freeboard-SK, showing the rating, the review text, and a staleness warning](assets/screenshots/freeboard-activecaptain-hazard.png)](assets/screenshots/freeboard-activecaptain-hazard.png) | [![A USCG Light List buoy note open in Freeboard-SK, showing the light characteristic and the source citation](assets/screenshots/freeboard-uscg-light-list.png)](assets/screenshots/freeboard-uscg-light-list.png) | [![The Crow's Nest configuration panel, showing per-source live status and the data-source cards](assets/screenshots/admin-panel.png)](assets/screenshots/admin-panel.png) |
+
+## What's New in v0.4.7
+
+An internal-quality, packaging, and release-pipeline release: there are no
+runtime behavior changes for the chart user, so every POI source, note, and
+alarm works exactly as before. The published package now ships three
+screenshots for the Signal K plugin registry (declared under
+`signalk.screenshots`), and the npm publish workflow is hardened with a
+tag-versus-version guard, `typecheck` and `lint` in the release gate, and npm
+provenance. A whole-tree cleanup pass extracted several shared helpers, made
+the Freeboard `skIcon` a required field on every point, and collapsed
+concurrent same-bbox fetches into a single upstream request, all with the full
+587-test suite still green.
+
+See the [v0.4.7 changelog entry](CHANGELOG.md#v047) and the
+[full release history](CHANGELOG.md).
 
 ## Features
 

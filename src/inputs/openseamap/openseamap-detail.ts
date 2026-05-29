@@ -11,7 +11,7 @@
  */
 
 import type { OverpassElement } from './overpass-client.js'
-import { escapeHtml } from '../../shared/html-escape.js'
+import { escapeHtml, labeledParagraph } from '../../shared/html-escape.js'
 
 /** Plain-English label for every `seamark:type` the plugin fetches. */
 const TYPE_LABEL: Readonly<Record<string, string>> = {
@@ -67,6 +67,9 @@ const LIGHT_CHARACTER: Readonly<Record<string, string>> = {
 /** Pattern that splits a light character into its base and optional group. */
 const LIGHT_CHARACTER_PATTERN = /^([A-Za-z]+)(\(.+\))?$/
 
+/** Underscore separator in raw OSM enum values, replaced with a space for display. */
+const UNDERSCORE_PATTERN = /_/g
+
 /**
  * Read an OSM tag and trim whitespace. Returns undefined when the value is
  * absent or trims to the empty string. Older OSM edits occasionally surface
@@ -107,7 +110,7 @@ function buildLightLine (tags: Readonly<Record<string, string>>): string | null 
   }
   const colour = tagValue(tags, 'seamark:light:colour')
   if (colour !== undefined) {
-    parts.push(colour.replace(/_/g, ' '))
+    parts.push(colour.replace(UNDERSCORE_PATTERN, ' '))
   }
   const period = tagValue(tags, 'seamark:light:period')
   if (period !== undefined) {
@@ -123,7 +126,7 @@ function buildLightLine (tags: Readonly<Record<string, string>>): string | null 
   }
   const exhibition = tagValue(tags, 'seamark:light:exhibition')
   if (exhibition !== undefined) {
-    parts.push(`shown at ${exhibition.replace(/_/g, ' ')}`)
+    parts.push(`shown at ${exhibition.replace(UNDERSCORE_PATTERN, ' ')}`)
   }
   return parts.length > 0 ? parts.join(', ') : null
 }
@@ -156,15 +159,15 @@ function buildFamilyLine (tags: Readonly<Record<string, string>>): string | null
   const parts: string[] = []
   const category = tagValue(tags, `${prefix}category`)
   if (category !== undefined) {
-    parts.push(category.replace(/_/g, ' '))
+    parts.push(category.replace(UNDERSCORE_PATTERN, ' '))
   }
   const colour = tagValue(tags, `${prefix}colour`)
   if (colour !== undefined) {
-    parts.push(colour.replace(/_/g, ' '))
+    parts.push(colour.replace(UNDERSCORE_PATTERN, ' '))
   }
   const shape = tagValue(tags, `${prefix}shape`)
   if (shape !== undefined) {
-    parts.push(`${shape.replace(/_/g, ' ')} shape`)
+    parts.push(`${shape.replace(UNDERSCORE_PATTERN, ' ')} shape`)
   }
   if (parts.length === 0) {
     return null
@@ -191,16 +194,16 @@ export function renderOpenSeaMapDetail (element: OverpassElement): string {
 
   const lightLine = buildLightLine(tags)
   if (lightLine !== null) {
-    blocks.push(`<p><strong>Light:</strong> ${escapeHtml(lightLine)}.</p>`)
+    blocks.push(labeledParagraph('Light', lightLine))
   }
 
   const information = tagValue(tags, 'seamark:information')
   if (information !== undefined) {
-    blocks.push(`<p><strong>Information:</strong> ${escapeHtml(information)}.</p>`)
+    blocks.push(labeledParagraph('Information', information))
   }
   const notice = tagValue(tags, 'seamark:notice')
   if (notice !== undefined) {
-    blocks.push(`<p><strong>Notice:</strong> ${escapeHtml(notice)}.</p>`)
+    blocks.push(labeledParagraph('Notice', notice))
   }
 
   // If none of the curated tags supplied any content, surface a brief note

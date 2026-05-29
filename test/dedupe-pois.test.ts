@@ -15,7 +15,8 @@ function poi (
     name: `${source} ${id}`,
     source,
     url: `https://example.test/${source}/${id}`,
-    attribution: `Data from ${source}`
+    attribution: `Data from ${source}`,
+    skIcon: 'notice-to-mariners'
   }
 }
 

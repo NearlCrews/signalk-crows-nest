@@ -21,7 +21,8 @@ import {
   lookupCode
 } from './s57-mapping.js'
 import type { EncLayerKey } from './enc-direct-types.js'
-import { escapeHtml } from '../../shared/html-escape.js'
+import { escapeHtml, labeledParagraph } from '../../shared/html-escape.js'
+import { toFiniteNumber } from '../../shared/numbers.js'
 
 /** Layer-derived fallback header label when OBJNAM is null or absent. */
 const LAYER_LABEL: Readonly<Record<EncLayerKey, string>> = {
@@ -53,7 +54,7 @@ function categoryLabel (
 
 /** Read a finite numeric property, treating null and non-numbers as absent. */
 function readNumber (raw: unknown): number | undefined {
-  return typeof raw === 'number' && Number.isFinite(raw) ? raw : undefined
+  return toFiniteNumber(raw) ?? undefined
 }
 
 /** Read a non-empty free-text property, treating null and blanks as absent. */
@@ -97,17 +98,17 @@ export function renderEncDirectDetail (
 
   const quality = lookupCode(QUASOU, properties.QUASOU)
   if (quality !== undefined) {
-    blocks.push(`<p><strong>Position quality:</strong> ${escapeHtml(quality)}.</p>`)
+    blocks.push(labeledParagraph('Position quality', quality))
   }
 
   const technique = lookupCode(TECSOU, properties.TECSOU)
   if (technique !== undefined) {
-    blocks.push(`<p><strong>Survey technique:</strong> ${escapeHtml(technique)}.</p>`)
+    blocks.push(labeledParagraph('Survey technique', technique))
   }
 
   const inform = readText(properties.INFORM)
   if (inform !== undefined) {
-    blocks.push(`<p><strong>Information:</strong> ${escapeHtml(inform)}.</p>`)
+    blocks.push(labeledParagraph('Information', inform))
   }
 
   const dsnm = readText(properties.DSNM)

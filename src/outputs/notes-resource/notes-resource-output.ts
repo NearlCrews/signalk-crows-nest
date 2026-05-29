@@ -36,14 +36,16 @@ function buildMethods (context: OutputContext): ResourceProviderMethods {
   return {
     listResources: async (query: Record<string, unknown>): Promise<Record<string, unknown>> => {
       app.debug(`Incoming request to list note resources - query: ${JSON.stringify(query)}`)
-      const poiTypes = buildPoiTypesString(config)
-      if (poiTypes === null) {
-        app.debug('No POI types are selected in the configuration; returning no resources')
-        return {}
-      }
+      // Resolve the bbox first: a Freeboard probe without a viewport is the
+      // common no-op, and bailing here skips building the POI-types string.
       const bbox = resolveBbox(query)
       if (bbox === null) {
         app.debug(`Could not derive a bounding box from query ${JSON.stringify(query)}`)
+        return {}
+      }
+      const poiTypes = buildPoiTypesString(config)
+      if (poiTypes === null) {
+        app.debug('No POI types are selected in the configuration; returning no resources')
         return {}
       }
 
@@ -70,12 +72,10 @@ function buildMethods (context: OutputContext): ResourceProviderMethods {
           // is strictly read-only, so the shared reference is safe.
           position: entity.position,
           // Every source sets `skIcon` explicitly to one of Freeboard's
-          // registered icons. A future source that forgets to set it falls
-          // back to a known-safe Freeboard glyph rather than to
-          // type.toLowerCase(), which would produce unregistered names
-          // like `boatramp` or `localknowledge` and render as the default
+          // registered icons; the field is required on PoiSummary, so a source
+          // that omitted it would be a compile error rather than a silent
           // yellow square.
-          skIcon: entity.skIcon ?? 'notice-to-mariners',
+          skIcon: entity.skIcon,
           url: entity.url,
           source: entity.source,
           attribution: entity.attribution,
@@ -114,8 +114,8 @@ function buildMethods (context: OutputContext): ResourceProviderMethods {
         // Sources return a fresh position per call, so the reference is
         // safe to pass through unchanged.
         position: view.position,
-        // Same Freeboard-safe fallback as the list path above.
-        skIcon: view.skIcon ?? 'notice-to-mariners',
+        // Required on PoiDetailView, set explicitly by every source.
+        skIcon: view.skIcon,
         url: view.url,
         source: view.source,
         attribution: view.attribution,

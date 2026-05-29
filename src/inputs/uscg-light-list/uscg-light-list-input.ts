@@ -18,13 +18,8 @@ import { positiveFiniteNumber } from '../../shared/numbers.js'
 import { USCG_LIGHT_LIST_SOURCE_ID } from '../../shared/source-ids.js'
 import { MS_PER_HOUR, MS_PER_SECOND } from '../../shared/time.js'
 import type { PluginConfig } from '../../shared/types.js'
-import { DEFAULT_DEDUPE_RADIUS_METERS } from '../dedupe-pois.js'
-import {
-  clampMinimumYear,
-  DEFAULT_MINIMUM_YEAR,
-  MAX_YEAR,
-  MIN_YEAR
-} from '../../shared/year-filter.js'
+import { dedupeRadiusSchema, dedupeToggleSchema } from '../dedupe-pois.js'
+import { clampMinimumYear, minimumYearSchema } from '../../shared/year-filter.js'
 
 /** Default background refresh period, in hours. */
 const DEFAULT_REFRESH_HOURS = 6
@@ -43,17 +38,12 @@ const CONFIG_SCHEMA: Record<string, unknown> = {
     title: 'Import points of interest from the USCG Light List (US Aids to Navigation)',
     default: false
   },
-  uscgLightListDedupe: {
-    type: 'boolean',
-    title: 'Merge USCG Light List points of interest that duplicate an ActiveCaptain marker',
-    default: true
-  },
-  uscgLightListDedupeRadiusMeters: {
-    type: 'number',
-    title: 'Merge radius for USCG Light List points of interest, in meters',
-    default: DEFAULT_DEDUPE_RADIUS_METERS,
-    minimum: 1
-  },
+  uscgLightListDedupe: dedupeToggleSchema(
+    'Merge USCG Light List points of interest that duplicate an ActiveCaptain marker'
+  ),
+  uscgLightListDedupeRadiusMeters: dedupeRadiusSchema(
+    'Merge radius for USCG Light List points of interest, in meters'
+  ),
   uscgLightListRefreshHours: {
     type: 'number',
     title: 'USCG Light List background refresh period, in hours',
@@ -61,13 +51,9 @@ const CONFIG_SCHEMA: Record<string, unknown> = {
     minimum: MIN_REFRESH_HOURS,
     maximum: MAX_REFRESH_HOURS
   },
-  uscgLightListMinimumUpdateYear: {
-    type: 'number',
-    title: 'Earliest USCG Light List update year (0 to import every record)',
-    default: DEFAULT_MINIMUM_YEAR,
-    minimum: MIN_YEAR,
-    maximum: MAX_YEAR
-  }
+  uscgLightListMinimumUpdateYear: minimumYearSchema(
+    'Earliest USCG Light List update year (0 to import every record)'
+  )
 }
 
 /** Resolve the refresh period from raw config, clamping to the allowed range. */

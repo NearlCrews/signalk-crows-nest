@@ -11,7 +11,7 @@
 
 import type { LightListRecord } from './light-list-types.js'
 import { humanizeLightCharacter } from '../openseamap/openseamap-detail.js'
-import { escapeHtml } from '../../shared/html-escape.js'
+import { escapeHtml, labeledParagraph } from '../../shared/html-escape.js'
 
 /** Plain-English label for the single-letter USCG color codes. */
 const COLOR: Readonly<Record<string, string>> = {
@@ -22,12 +22,8 @@ const COLOR: Readonly<Record<string, string>> = {
   B: 'blue'
 }
 
-/**
- * Local alias for the shared HTML escape helper. Kept under the short
- * `escape` name so the dense interpolation sites below stay readable; the
- * implementation lives in `src/shared/html-escape.ts`.
- */
-const escape = escapeHtml
+/** Strips a trailing seconds unit ("4s" to "4") from a light-character period token. */
+const TRAILING_SECONDS_PATTERN = /s$/i
 
 /** Normalize a USCG nominal-range unit code to a short, friendly label. */
 function rangeUnit (unit: string): string {
@@ -63,7 +59,7 @@ function humanizeLightChar (raw: string): string {
     parts.push(humanizeColor(tokens[1]))
   }
   if (tokens.length > 2) {
-    const period = tokens[2].replace(/s$/i, '')
+    const period = tokens[2].replace(TRAILING_SECONDS_PATTERN, '')
     if (period.length > 0) {
       parts.push(`${period} s period`)
     }
@@ -130,36 +126,38 @@ function daymarkLine (record: LightListRecord): string | null {
 /** Render the provenance line: Volume, District, last-updated date. */
 function sourceLine (record: LightListRecord): string {
   const updated = record.modifiedDate !== undefined
-    ? ` (last updated ${escape(record.modifiedDate.slice(0, 10))})`
+    ? ` (last updated ${escapeHtml(record.modifiedDate.slice(0, 10))})`
     : ''
-  return `USCG Light List, Volume ${escape(String(record.volume))}, District ${escape(record.district)}${updated}`
+  return `USCG Light List, Volume ${escapeHtml(String(record.volume))}, District ${escapeHtml(record.district)}${updated}`
 }
 
 /** Render a USCG Light List record as a Freeboard-ready HTML description. */
 export function renderLightListDetail (record: LightListRecord): string {
   const blocks: string[] = []
   const inactiveSuffix = record.inactive ? ' (inactive)' : ''
-  blocks.push(`<h4>${escape(record.name)} (LLNR ${escape(String(record.llnr))})${inactiveSuffix}</h4>`)
+  blocks.push(`<h4>${escapeHtml(record.name)} (LLNR ${escapeHtml(String(record.llnr))})${inactiveSuffix}</h4>`)
   const light = lightLine(record)
   if (light !== null) {
-    blocks.push(`<p><strong>Light:</strong> ${escape(light)}.</p>`)
+    blocks.push(labeledParagraph('Light', light))
   }
   const structure = structureLine(record)
   if (structure !== null) {
-    blocks.push(`<p><strong>Structure:</strong> ${escape(structure)}.</p>`)
+    blocks.push(labeledParagraph('Structure', structure))
   }
   const daymark = daymarkLine(record)
   if (daymark !== null) {
-    blocks.push(`<p><strong>Daymark:</strong> ${escape(daymark)}.</p>`)
+    blocks.push(labeledParagraph('Daymark', daymark))
   }
   if (record.soundEmitterType !== undefined) {
-    blocks.push(`<p><strong>Sound signal:</strong> ${escape(record.soundEmitterType)}.</p>`)
+    blocks.push(labeledParagraph('Sound signal', record.soundEmitterType))
   }
   if (record.racon !== undefined) {
-    blocks.push(`<p><strong>RACON:</strong> ${escape(record.racon)}.</p>`)
+    blocks.push(labeledParagraph('RACON', record.racon))
   }
+  // Remarks deliberately omit the trailing period: the wire text often
+  // already ends with its own punctuation, so this line stays bespoke.
   if (record.remark !== undefined && record.remark.length > 0) {
-    blocks.push(`<p><strong>Remarks:</strong> ${escape(record.remark)}</p>`)
+    blocks.push(`<p><strong>Remarks:</strong> ${escapeHtml(record.remark)}</p>`)
   }
   blocks.push(`<p><strong>Source:</strong> ${sourceLine(record)}.</p>`)
   return blocks.join('')

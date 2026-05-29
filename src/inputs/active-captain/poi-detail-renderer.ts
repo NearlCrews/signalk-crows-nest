@@ -29,6 +29,7 @@ import {
 } from './templates.js'
 
 import type { PoiDetails, PoiNote } from './active-captain-types.js'
+import { formatRelativeDelta } from '../../shared/relative-time-format.js'
 
 /** The root context handed to the point-of-interest template. */
 interface TemplateRoot {
@@ -119,6 +120,12 @@ const RELATIVE_UNITS: ReadonlyArray<readonly [Intl.RelativeTimeFormatUnit, numbe
 
 const relativeTimeFormat = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
 
+/** Splits a PascalCase boundary so "CellReception" humanizes to "Cell Reception". */
+const HUMANIZE_PATTERN = /([a-z0-9])([A-Z])/g
+
+/** Matches CR, LF, or CRLF so a multi-line note renders with `<br/>` breaks. */
+const LINE_BREAK_PATTERN = /\r\n|\r|\n/g
+
 /**
  * Format a date relative to `now`, e.g. "3 days ago" or "in 2 hours". An
  * invalid date yields a fallback string rather than throwing.
@@ -129,28 +136,7 @@ export function fromNow (date: Date, now: Date = new Date()): string {
   }
 
   const deltaSeconds = Math.round((date.getTime() - now.getTime()) / 1000)
-  const absSeconds = Math.abs(deltaSeconds)
-
-  // Pick the coarsest unit the delta reaches; 'second' (the last entry) is the
-  // floor for a sub-second delta.
-  let index = RELATIVE_UNITS.length - 1
-  for (let i = 0; i < RELATIVE_UNITS.length; i++) {
-    if (absSeconds >= RELATIVE_UNITS[i][1]) {
-      index = i
-      break
-    }
-  }
-
-  // Rounding within the chosen unit can spill into the next unit up: 3599 s is
-  // under an hour but rounds to 60 minutes. When the rounded count reaches the
-  // larger unit, step up so it reads "1 hour" rather than "60 minutes".
-  while (index > 0 &&
-    Math.round(absSeconds / RELATIVE_UNITS[index][1]) * RELATIVE_UNITS[index][1] >= RELATIVE_UNITS[index - 1][1]) {
-    index -= 1
-  }
-
-  const [unit, secondsPerUnit] = RELATIVE_UNITS[index]
-  return relativeTimeFormat.format(Math.round(deltaSeconds / secondsPerUnit), unit)
+  return formatRelativeDelta(deltaSeconds, RELATIVE_UNITS, relativeTimeFormat)
 }
 
 /** True when the fuel section is present and carries at least one definite value. */
@@ -322,7 +308,7 @@ function buildEnvironment (): typeof Handlebars {
   // Turns a PascalCase API field id (such as "CellReception") into spaced
   // words ("Cell Reception") for display.
   env.registerHelper('humanize', (value: unknown): string =>
-    String(value).replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    String(value).replace(HUMANIZE_PATTERN, '$1 $2')
   )
 
   // Escapes text and converts its line breaks to <br/>, so a multi-line note
@@ -330,7 +316,7 @@ function buildEnvironment (): typeof Handlebars {
   // renders as empty rather than the literal string "undefined".
   env.registerHelper('multiline', (value: unknown): Handlebars.SafeString => {
     if (value === undefined || value === null) return new env.SafeString('')
-    return new env.SafeString(env.escapeExpression(String(value)).replace(/\r\n|\r|\n/g, '<br/>'))
+    return new env.SafeString(env.escapeExpression(String(value)).replace(LINE_BREAK_PATTERN, '<br/>'))
   })
 
   // Returns the website URL if it parses as `http:`, `https:`, or `mailto:`,

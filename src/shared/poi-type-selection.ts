@@ -37,9 +37,15 @@ export const POI_TYPE_FLAGS: ReadonlyArray<readonly [PoiTypeFlag, PoiType]> = [
  * "every type" so an upgraded install keeps working until it is reconfigured.
  */
 export function buildPoiTypesString (config: Partial<PluginConfig>): string | null {
-  const selected = POI_TYPE_FLAGS
-    .filter(([flag]) => config[flag] === true)
-    .map(([, poiType]) => poiType)
+  // Single pass over the flag table: collect the selected types and note
+  // whether any flag key is present at all, so the "select none" and
+  // "pre-toggles config" cases are told apart without a second scan.
+  const selected: PoiType[] = []
+  let anyFlagPresent = false
+  for (const [flag, poiType] of POI_TYPE_FLAGS) {
+    if (flag in config) anyFlagPresent = true
+    if (config[flag] === true) selected.push(poiType)
+  }
 
   if (selected.length > 0) {
     return selected.join(',')
@@ -47,7 +53,6 @@ export function buildPoiTypesString (config: Partial<PluginConfig>): string | nu
 
   // Nothing is selected. Tell a deliberate "select none" (the flag keys are
   // present and all false) from a pre-toggles config (no flag keys at all).
-  const anyFlagPresent = POI_TYPE_FLAGS.some(([flag]) => flag in config)
   if (anyFlagPresent) {
     return null
   }
@@ -70,9 +75,11 @@ export function buildPoiTypesString (config: Partial<PluginConfig>): string | nu
  */
 export function ensurePoiTypes (poiTypes: string | null, required: readonly string[]): string {
   const present = (poiTypes === null || poiTypes === '') ? [] : poiTypes.split(',')
+  const seen = new Set(present)
   const merged = [...present]
   for (const type of required) {
-    if (!merged.includes(type)) {
+    if (!seen.has(type)) {
+      seen.add(type)
       merged.push(type)
     }
   }

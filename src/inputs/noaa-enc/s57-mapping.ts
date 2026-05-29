@@ -29,6 +29,7 @@
 
 import type { EncLayerKey } from './enc-direct-types.js'
 import type { PoiType } from '../../shared/types.js'
+import { toFiniteNumber } from '../../shared/numbers.js'
 
 /**
  * IHO S-57 water-level (WATLEV) codes the wire publishes as JSON numbers.
@@ -90,8 +91,9 @@ export function lookupCode (
   table: Readonly<Record<number, string>>,
   raw: unknown
 ): string | undefined {
-  if (typeof raw === 'number' && Number.isFinite(raw)) {
-    return table[raw]
+  const numeric = toFiniteNumber(raw)
+  if (numeric !== null) {
+    return table[numeric]
   }
   if (typeof raw === 'string') {
     const trimmed = raw.trim()

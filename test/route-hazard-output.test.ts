@@ -181,7 +181,8 @@ test('a tick with a route raises an alarm, a tick without a route clears it', as
     position: { latitude: 0.1, longitude: 0 },
     source: 'activecaptain',
     url: 'https://activecaptain.garmin.com/en-US/pois/h1',
-    attribution: 'Data from Garmin ActiveCaptain'
+    attribution: 'Data from Garmin ActiveCaptain',
+    skIcon: 'hazard'
   }
   handle.positionScan.buildFetchBox({ latitude: 0, longitude: 0 })
   handle.positionScan.evaluate({ latitude: 0, longitude: 0 }, [hazard])
@@ -218,7 +219,8 @@ test('evaluate scans the corridor from the fresh fix, not the frozen one', async
     position: { latitude: -0.05, longitude: 0 },
     source: 'activecaptain',
     url: 'https://activecaptain.garmin.com/en-US/pois/h1',
-    attribution: 'Data from Garmin ActiveCaptain'
+    attribution: 'Data from Garmin ActiveCaptain',
+    skIcon: 'hazard'
   }
   handle.positionScan.buildFetchBox({ latitude: 0, longitude: 0 })
   handle.positionScan.evaluate({ latitude: -0.1, longitude: 0 }, [hazard])
@@ -244,7 +246,8 @@ test('a POI well outside the corridor is not alarmed', async () => {
     position: { latitude: 0.5, longitude: 0.1 },
     source: 'activecaptain',
     url: 'https://activecaptain.garmin.com/en-US/pois/h1',
-    attribution: 'Data from Garmin ActiveCaptain'
+    attribution: 'Data from Garmin ActiveCaptain',
+    skIcon: 'hazard'
   }
   handle.positionScan.buildFetchBox({ latitude: 0, longitude: 0 })
   handle.positionScan.evaluate({ latitude: 0, longitude: 0 }, [hazard])
@@ -268,7 +271,8 @@ test('stop stops the course reader and clears active alarms', async () => {
     position: { latitude: 0.1, longitude: 0 },
     source: 'activecaptain',
     url: 'https://activecaptain.garmin.com/en-US/pois/h1',
-    attribution: 'Data from Garmin ActiveCaptain'
+    attribution: 'Data from Garmin ActiveCaptain',
+    skIcon: 'hazard'
   }
   handle.positionScan.buildFetchBox({ latitude: 0, longitude: 0 })
   handle.positionScan.evaluate({ latitude: 0, longitude: 0 }, [hazard])

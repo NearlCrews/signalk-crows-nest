@@ -130,15 +130,14 @@ export interface PoiSummary {
   /**
    * Chart-plotter icon hint, mapped to a Freeboard `:sk-${icon}` glyph.
    * Freeboard only renders a fixed list of registered icons; an unknown name
-   * silently falls back to a default yellow square. Both built-in sources
-   * therefore set this explicitly per element: ActiveCaptain maps every
-   * `PoiType` to a Freeboard-registered icon, and OpenSeaMap maps every
-   * seamark feature (with isolated-danger marks rendered as hazards even
-   * though the `PoiType` stays `Navigational`). The lowercased-type fallback
-   * in the notes output is kept only for a future source that omits the
-   * hint.
+   * silently falls back to a default yellow square. Required so every source
+   * must pick a registered icon at construction time: ActiveCaptain maps every
+   * `PoiType` to a Freeboard-registered icon, and the other sources map every
+   * feature (with isolated-danger marks rendered as hazards even though the
+   * `PoiType` stays `Navigational`). A new source that omits it is a compile
+   * error rather than a silent yellow square.
    */
-  skIcon?: string
+  skIcon: string
   /**
    * ISO-8601 UTC timestamp tagging this entry with its source-specific
    * "age" (NOAA ENC `SORDAT` survey date, USCG `MODIFIED_DATE`, OSM element
@@ -179,7 +178,7 @@ export interface PoiDetailView {
    * Chart-plotter icon hint, mapped to a Freeboard `:sk-${icon}` glyph. See
    * the matching {@link PoiSummary.skIcon} field for the contract.
    */
-  skIcon?: string
+  skIcon: string
 }
 
 /**

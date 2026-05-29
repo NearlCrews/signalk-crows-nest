@@ -41,6 +41,24 @@ const BASE_SOURCE_ID = ACTIVE_CAPTAIN_SOURCE_ID
  */
 export const DEFAULT_DEDUPE_RADIUS_METERS = 150
 
+/**
+ * Config-schema fragment for a non-base source's "merge duplicates of an
+ * ActiveCaptain marker" toggle. Every non-base input declares an identical
+ * boolean-defaulting-true toggle differing only in its title, so the shape
+ * lives here next to the dedupe it controls.
+ */
+export function dedupeToggleSchema (title: string): Record<string, unknown> {
+  return { type: 'boolean', title, default: true }
+}
+
+/**
+ * Config-schema fragment for a non-base source's dedupe merge-radius field, in
+ * meters. Defaults to {@link DEFAULT_DEDUPE_RADIUS_METERS}.
+ */
+export function dedupeRadiusSchema (title: string): Record<string, unknown> {
+  return { type: 'number', title, default: DEFAULT_DEDUPE_RADIUS_METERS, minimum: 1 }
+}
+
 /** Meters per degree of latitude, used to project positions for the grid. */
 const METERS_PER_DEGREE = 111320
 

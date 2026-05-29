@@ -45,10 +45,11 @@ the query into a bounding box and asks the aggregate POI source for POIs in
 that box. The aggregate fans the query out to every enabled input, namespaces
 each resource id with its source slug, unions the results, and merges
 duplicates that more than one source reports. POI detail summaries are fetched
-lazily and rendered into HTML descriptions. Each source's HTTP client
-rate-limits requests, retries `429` and `5xx` responses with exponential
-backoff, and honors `Retry-After`; a cache holds detail responses so repeated
-queries do not refetch.
+lazily and rendered into HTML descriptions. The queued sources' HTTP clients
+(ActiveCaptain and Overpass) rate-limit requests, retry `429` and `5xx`
+responses with exponential backoff, and honor `Retry-After`; the two
+low-volume US sources (USCG Light List and NOAA ENC) use a simpler one-shot
+client. A cache holds detail responses so repeated queries do not refetch.
 
 The plugin ships its own configuration panel: a federated React app, loaded by
 the Signal K admin UI through Module Federation, that replaces the generated
@@ -68,7 +69,9 @@ src/                      # TypeScript source
 ├── inputs/               # POI data sources
 │   ├── poi-source.ts      # The PoiSource and InputModule contracts
 │   ├── input-registry.ts  # Holds the inputs, builds the aggregate PoiSource
-│   ├── http-client.ts     # Shared HTTP plumbing: queue, throttle, retry, Retry-After
+│   ├── http-client.ts     # Shared queued HTTP plumbing (ActiveCaptain, Overpass):
+│   │                      #   queue, throttle, retry, Retry-After
+│   ├── http-one-shot.ts   # One-shot GET shared by the USCG and NOAA raw clients
 │   ├── dedupe-pois.ts     # Merges duplicates against the ActiveCaptain base layer,
 │   │                      #   then a same-source pass; radius configurable, default 150 m
 │   ├── active-captain/    # The ActiveCaptain input: module, source adapter, client,
@@ -93,15 +96,18 @@ src/                      # TypeScript source
 ├── monitoring/           # position-monitor.ts: drives the per-tick scan
 ├── geo/                  # position-utilities.ts: bounding-box and great-circle helpers
 ├── status/               # plugin-status.ts (per-source recorder), status-router.ts, status-types.ts
-├── shared/               # Source-agnostic helpers: types.ts (cross-module contracts),
+├── shared/               # Source-agnostic helpers: types.ts (cross-module contracts;
+│                         #   skIcon is required on PoiSummary and PoiDetailView),
 │                         #   plugin-id.ts (id, repo URL, and shared User-Agent),
 │                         #   poi-type-selection.ts, seamark-groups.ts,
-│                         #   us-waters.ts (the isInUsWaters gate the US-only inputs
-│                         #   read), year-filter.ts (the filterByMinimumYear helper
-│                         #   plus the shared year bounds and clamp every opting-in
-│                         #   source uses), html-escape.ts (the shared escapeHtml
-│                         #   helper every source's detail renderer consumes),
-│                         #   notification-path.ts, notification-tracker.ts,
+│                         #   us-waters.ts (isInUsWaters plus the shouldSkipOutsideUsWaters
+│                         #   gate the US-only inputs call), year-filter.ts and rating.ts
+│                         #   (the filter/clamp plus shared bounds and config-schema
+│                         #   builders every opting-in source uses), html-escape.ts
+│                         #   (escapeHtml and labeledParagraph for the detail renderers),
+│                         #   relative-time-format.ts (shared relative-time stepping),
+│                         #   namespaced-id.ts (splitOnFirstUnderscore for the underscore
+│                         #   id form), notification-path.ts, notification-tracker.ts,
 │                         #   numbers.ts (toFiniteNumber, positiveFiniteNumber,
 │                         #   isValidLatitude/Longitude, isWireTruthy), cache.ts,
 │                         #   time.ts (MS_PER_SECOND, MS_PER_MINUTE, MS_PER_HOUR,
@@ -158,8 +164,10 @@ functionality is a new focused module under `src/`, never a new package or a
 monorepo. A new POI data source is a new `InputModule` under `src/inputs/`, and
 a new consumer of POI data is a new `OutputModule` under `src/outputs/`, each
 registered in `src/index.ts`. Keep modules small and put shared types in
-`src/shared/types.ts`. See [CLAUDE.md](../CLAUDE.md) for the full architecture
-rule and conventions.
+`src/shared/types.ts`. Every `PoiSummary` and `PoiDetailView` a source produces
+must set `skIcon` to a Freeboard-registered icon name; the field is required, so
+an omission is a compile error. See [CLAUDE.md](../CLAUDE.md) for the full
+architecture rule and conventions.
 
 ### Worked example: USCG Light List and NOAA ENC inputs
 
@@ -180,10 +188,11 @@ acquisition patterns a POI source can use:
   `OBJECTID` on a detail-cache miss. This pattern fits datasets where the
   upstream API is bbox-aware and the per-query result set is bounded.
 
-Both inputs are US-only and gated on the vessel position: they read
-`InputContext.getCurrentPosition` and call `isInUsWaters` (in
-`src/shared/us-waters.ts`) to skip outbound HTTP when the vessel has left
-US waters. A new US-only source follows the same pattern.
+Both inputs are US-only and gated on the vessel position: they call
+`shouldSkipOutsideUsWaters` (in `src/shared/us-waters.ts`), which reads
+`InputContext.getCurrentPosition`, checks `isInUsWaters`, and records the skip,
+so the source issues no outbound HTTP when the vessel has left US waters. A new
+US-only source follows the same pattern.
 
 Each input is registered on one line in `src/index.ts`. The
 `InputModule.configSchema` fragment is merged automatically into the

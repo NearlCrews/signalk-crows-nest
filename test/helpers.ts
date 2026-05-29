@@ -65,6 +65,10 @@ export function poiSummary (id: string, type: PoiType, name: string, position: P
     name,
     source: 'activecaptain',
     url: `https://activecaptain.garmin.com/en-US/pois/${id}`,
-    attribution: 'Data from Garmin ActiveCaptain'
+    attribution: 'Data from Garmin ActiveCaptain',
+    // A neutral registered Freeboard icon: the fixtures that build through this
+    // helper exercise alarm and dedupe behavior, not icon mapping, so they do
+    // not assert on it.
+    skIcon: 'notice-to-mariners'
   }
 }

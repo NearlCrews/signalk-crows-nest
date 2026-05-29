@@ -216,40 +216,44 @@ test('deleteResource rejects with a multi-source read-only message', async () =>
   await assert.rejects(deleteResource(), /Crow's nest notes resources are read-only/)
 })
 
-test('absent skIcon falls back to notice-to-mariners (a Freeboard-registered icon), not type.toLowerCase()', async () => {
-  // The type.toLowerCase() fallback would produce unregistered names like
-  // "boatramp" for BoatRamp and "localknowledge" for LocalKnowledge, which
-  // Freeboard renders as the default yellow square. notice-to-mariners is
-  // always registered.
-  const noIconContext = contextWith({
+test('the note publishes the source-provided skIcon verbatim, not a type-derived value', async () => {
+  // skIcon is required on PoiSummary, so every source picks a Freeboard-
+  // registered icon at construction. The notes output publishes that choice
+  // unchanged: it does not derive the icon from the POI type (a
+  // type.toLowerCase() would produce unregistered names like "boatramp" or
+  // "localknowledge" that Freeboard renders as the default yellow square).
+  // A BoatRamp tagged with an unrelated icon proves the value flows through
+  // rather than being recomputed from the type.
+  const iconContext = contextWith({
     pois: {
       id: 'activecaptain',
       listPointsOfInterest: async () => [
         {
           id: '7',
-          name: 'No-icon POI',
+          name: 'Tagged POI',
           type: 'BoatRamp',
           position: { latitude: 0, longitude: 0 },
           source: 'activecaptain',
           url: 'https://activecaptain.garmin.com/en-US/pois/7',
-          attribution: 'Data from Garmin ActiveCaptain'
-          // skIcon deliberately omitted
+          attribution: 'Data from Garmin ActiveCaptain',
+          skIcon: 'notice-to-mariners'
         }
       ],
       getDetails: async () => ({
-        name: 'No-icon POI',
+        name: 'Tagged POI',
         type: 'BoatRamp',
         position: { latitude: 0, longitude: 0 },
         url: 'https://activecaptain.garmin.com/en-US/pois/7',
         source: 'activecaptain',
-        attribution: 'Data from Garmin ActiveCaptain'
+        attribution: 'Data from Garmin ActiveCaptain',
+        skIcon: 'notice-to-mariners'
       }),
       cacheSize: () => 0,
       close: () => {}
     } as never
   })
   const { app, provider } = recordingApp()
-  notesResourceOutput.start({ ...noIconContext, app: app as never })
+  notesResourceOutput.start({ ...iconContext, app: app as never })
   const methods = provider.methods as Record<string, unknown>
   const listResources = methods.listResources as (q: object) => Promise<Record<string, { properties: { skIcon: string } }>>
   const result = await listResources({ bbox: '0,0,1,1' })

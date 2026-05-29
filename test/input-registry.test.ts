@@ -15,7 +15,8 @@ function summary (id: string, source: string): PoiSummary {
     name: `POI ${id}`,
     source,
     url: `https://example.test/${id}`,
-    attribution: `Data from ${source}`
+    attribution: `Data from ${source}`,
+    skIcon: 'marina'
   }
 }
 
@@ -27,7 +28,8 @@ function detailView (source: string): PoiDetailView {
     position: { latitude: 0, longitude: 0 },
     url: 'https://example.test/detail',
     source,
-    attribution: `Data from ${source}`
+    attribution: `Data from ${source}`,
+    skIcon: 'marina'
   }
 }
 

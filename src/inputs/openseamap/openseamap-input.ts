@@ -10,24 +10,14 @@
 
 import { createOverpassClient } from './overpass-client.js'
 import { createOpenSeaMapSource } from './openseamap-source.js'
-import { DEFAULT_DEDUPE_RADIUS_METERS } from '../dedupe-pois.js'
+import { dedupeRadiusSchema, dedupeToggleSchema } from '../dedupe-pois.js'
 import type { InputContext, InputModule } from '../poi-source.js'
-import {
-  clampBboxDebounceSeconds,
-  DEFAULT_BBOX_DEBOUNCE_SECONDS,
-  MAX_BBOX_DEBOUNCE_SECONDS,
-  MIN_BBOX_DEBOUNCE_SECONDS
-} from '../../shared/bbox-debounce.js'
+import { clampBboxDebounceSeconds, refreshSecondsSchema } from '../../shared/bbox-debounce.js'
 import { positiveFiniteNumber } from '../../shared/numbers.js'
 import { SEAMARK_GROUP_IDS } from '../../shared/seamark-groups.js'
 import { OPENSEAMAP_SOURCE_ID } from '../../shared/source-ids.js'
 import type { PluginConfig } from '../../shared/types.js'
-import {
-  clampMinimumYear,
-  DEFAULT_MINIMUM_YEAR,
-  MAX_YEAR,
-  MIN_YEAR
-} from '../../shared/year-filter.js'
+import { clampMinimumYear, minimumYearSchema } from '../../shared/year-filter.js'
 
 /** Default Overpass interpreter URL when configuration omits one. */
 const DEFAULT_ENDPOINT = 'https://overpass-api.de/api/interpreter'
@@ -50,31 +40,18 @@ const CONFIG_SCHEMA: Record<string, unknown> = {
     items: { type: 'string', enum: [...SEAMARK_GROUP_IDS] },
     default: [...SEAMARK_GROUP_IDS]
   },
-  openSeaMapDedupe: {
-    type: 'boolean',
-    title: 'Merge OpenSeaMap points of interest that duplicate an ActiveCaptain marker',
-    default: true
-  },
-  openSeaMapDedupeRadiusMeters: {
-    type: 'number',
-    title: 'Merge radius for OpenSeaMap points of interest, in meters',
-    default: DEFAULT_DEDUPE_RADIUS_METERS,
-    minimum: 1
-  },
-  openSeaMapMinimumYear: {
-    type: 'number',
-    title: 'Earliest OpenSeaMap update year (0 to import every element)',
-    default: DEFAULT_MINIMUM_YEAR,
-    minimum: MIN_YEAR,
-    maximum: MAX_YEAR
-  },
-  openSeaMapRefreshSeconds: {
-    type: 'number',
-    title: 'OpenSeaMap bbox-debounce window, in seconds (0 to query Overpass on every list call)',
-    default: DEFAULT_BBOX_DEBOUNCE_SECONDS,
-    minimum: MIN_BBOX_DEBOUNCE_SECONDS,
-    maximum: MAX_BBOX_DEBOUNCE_SECONDS
-  }
+  openSeaMapDedupe: dedupeToggleSchema(
+    'Merge OpenSeaMap points of interest that duplicate an ActiveCaptain marker'
+  ),
+  openSeaMapDedupeRadiusMeters: dedupeRadiusSchema(
+    'Merge radius for OpenSeaMap points of interest, in meters'
+  ),
+  openSeaMapMinimumYear: minimumYearSchema(
+    'Earliest OpenSeaMap update year (0 to import every element)'
+  ),
+  openSeaMapRefreshSeconds: refreshSecondsSchema(
+    'OpenSeaMap bbox-debounce window, in seconds (0 to query Overpass on every list call)'
+  )
 }
 
 /** Resolve the Overpass endpoint from raw config, applying the default. */

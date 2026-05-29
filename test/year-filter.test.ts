@@ -11,7 +11,8 @@ function poi (id: string, timestamp?: string): PoiSummary {
     name: `POI ${id}`,
     source: 'test',
     url: `https://example.test/${id}`,
-    attribution: 'test data'
+    attribution: 'test data',
+    skIcon: 'notice-to-mariners'
   }
   if (timestamp !== undefined) summary.timestamp = timestamp
   return summary

@@ -12,7 +12,8 @@ function poi (id: string, rating?: number): PoiSummary {
     name: `Marina ${id}`,
     source: 'activecaptain',
     url: `https://activecaptain.garmin.com/en-US/pois/${id}`,
-    attribution: 'Data from Garmin ActiveCaptain'
+    attribution: 'Data from Garmin ActiveCaptain',
+    skIcon: 'marina'
   }
   if (rating !== undefined) {
     summary.rating = rating
@@ -60,7 +61,8 @@ test('filterByRating keeps non-ratable types regardless of their missing rating'
     name: 'Submerged rock',
     source: 'activecaptain',
     url: 'https://activecaptain.garmin.com/en-US/pois/h1',
-    attribution: 'Data from Garmin ActiveCaptain'
+    attribution: 'Data from Garmin ActiveCaptain',
+    skIcon: 'hazard'
   }
   const bridge: PoiSummary = {
     id: 'b1',
@@ -69,7 +71,8 @@ test('filterByRating keeps non-ratable types regardless of their missing rating'
     name: 'Swing bridge',
     source: 'activecaptain',
     url: 'https://activecaptain.garmin.com/en-US/pois/b1',
-    attribution: 'Data from Garmin ActiveCaptain'
+    attribution: 'Data from Garmin ActiveCaptain',
+    skIcon: 'bridge'
   }
   const lowMarina = poi('m1', 1.0)
 

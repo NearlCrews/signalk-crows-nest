@@ -8,6 +8,7 @@
  */
 
 import type { Position } from './types.js'
+import type { PluginStatus } from '../status/plugin-status.js'
 
 interface Bbox {
   readonly minLat: number
@@ -44,6 +45,27 @@ export function isInUsWaters (position: Position): boolean {
     ) {
       return true
     }
+  }
+  return false
+}
+
+/**
+ * The outbound-HTTP gate the US-only inputs share. Returns true (and records a
+ * skip on `status`) when there is a fix and it lies outside US waters, so the
+ * caller can bail out of its upstream request. A position that is unknown, or
+ * inside US waters, returns false and the caller proceeds. The two US-only
+ * sources call this so the "gate on the latest fix, record the skip" rule lives
+ * in one place rather than in each source body.
+ */
+export function shouldSkipOutsideUsWaters (
+  getCurrentPosition: () => Position | undefined,
+  status: PluginStatus,
+  sourceId: string
+): boolean {
+  const position = getCurrentPosition()
+  if (position !== undefined && !isInUsWaters(position)) {
+    status.recordSkipped(sourceId, 'outside US waters')
+    return true
   }
   return false
 }

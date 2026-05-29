@@ -60,6 +60,22 @@ export function clampBboxDebounceSeconds (raw: unknown): number {
 }
 
 /**
+ * Config-schema fragment for a source's bbox-debounce window field, in seconds.
+ * The at-runtime sources (ActiveCaptain, OpenSeaMap, NOAA ENC) each declare an
+ * identical number field over the debounce bounds differing only in its title,
+ * so the shape lives here next to the bounds it carries.
+ */
+export function refreshSecondsSchema (title: string): Record<string, unknown> {
+  return {
+    type: 'number',
+    title,
+    default: DEFAULT_BBOX_DEBOUNCE_SECONDS,
+    minimum: MIN_BBOX_DEBOUNCE_SECONDS,
+    maximum: MAX_BBOX_DEBOUNCE_SECONDS
+  }
+}
+
+/**
  * A bbox debounce cache. `get` returns the cached value when the bbox
  * has been seen within the TTL; otherwise it calls `fetch` and caches the
  * result. The value type is generic so each source caches its own shape.
@@ -113,8 +129,11 @@ export function createBboxDebounceCache<T extends NonNullable<unknown>> (
   // opposite of what `ttlSeconds <= 0` means in this module's contract.
   // So when ttlSeconds is the off sentinel, build a 1-entry cache that we
   // never read from and short-circuit `get` to always call the fetcher.
+  // The cache holds the in-flight fetch promise, not just its resolved value,
+  // so a refresh burst that requests the same bbox before the first fetch
+  // settles collapses into one upstream round-trip rather than N.
   const cache = ttlMs > 0
-    ? new LRUCache<string, T>({ max: maxEntries, ttl: ttlMs })
+    ? new LRUCache<string, Promise<T>>({ max: maxEntries, ttl: ttlMs })
     : null
   return {
     get: async (bbox, fetch, extraKey) => {
@@ -124,11 +143,18 @@ export function createBboxDebounceCache<T extends NonNullable<unknown>> (
       const key = bboxKey(bbox, extraKey)
       const hit = cache.get(key)
       if (hit !== undefined) {
-        return hit
+        return await hit
       }
-      const value = await fetch()
-      cache.set(key, value)
-      return value
+      const pending = fetch()
+      cache.set(key, pending)
+      try {
+        return await pending
+      } catch (error) {
+        // Evict the rejected promise so the next call retries upstream rather
+        // than replaying the failure for the rest of the TTL.
+        if (cache.get(key) === pending) cache.delete(key)
+        throw error
+      }
     },
     clear: () => { cache?.clear() }
   }

@@ -19,7 +19,7 @@ import { recordPoiType, recordSkIcon } from './light-list-mapping.js'
 import { renderLightListDetail } from './light-list-detail.js'
 import type { PoiSource } from '../poi-source.js'
 import type { Bbox, PoiDetailView, PoiSummary, Position } from '../../shared/types.js'
-import { isInUsWaters } from '../../shared/us-waters.js'
+import { shouldSkipOutsideUsWaters } from '../../shared/us-waters.js'
 import { openSeaMapMarkerUrl } from '../../shared/map-link.js'
 import { filterByMinimumYear } from '../../shared/year-filter.js'
 import type { PluginStatus } from '../../status/plugin-status.js'
@@ -80,21 +80,6 @@ export interface UscgLightListSource extends PoiSource {
 }
 
 /**
- * "View this record in a browser" deep link. NAVCEN dropped its
- * per-record search route during the 2020 Drupal migration and the MSI
- * app has no LLNR URL routing (see `src/shared/map-link.ts` for the
- * verified-with-citation reasoning), so the fallback is an OpenSeaMap
- * marker. OpenSeaMap renders the seamark overlay; for most US navaids
- * the matching aid is tagged in OSM via the `seamark:light:*` family,
- * so the marker often lands on the same physical feature. The popup
- * body still names the LLNR, the USCG volume, and the district for
- * manual cross-reference against NAVCEN.
- */
-function recordUrl (latitude: number, longitude: number): string {
-  return openSeaMapMarkerUrl(latitude, longitude)
-}
-
-/**
  * Concurrency cap for the parallel NAVCEN refresh: four in-flight conditional
  * GETs at once is well-mannered against a CDN-fronted static-file feed and
  * collapses the 37-page refresh from ~7 s sequential to under 2 s.
@@ -125,9 +110,7 @@ export function createUscgLightListSource (
   }
 
   async function refreshAll (): Promise<void> {
-    const position = getCurrentPosition()
-    if (position !== undefined && !isInUsWaters(position)) {
-      status.recordSkipped(USCG_LIGHT_LIST_SOURCE_ID, 'outside US waters')
+    if (shouldSkipOutsideUsWaters(getCurrentPosition, status, USCG_LIGHT_LIST_SOURCE_ID)) {
       return
     }
     // Concurrency-capped fan-out: a small worker pool pulls (district, page)
@@ -172,7 +155,9 @@ export function createUscgLightListSource (
           position: { ...record.position },
           name: record.name,
           source: USCG_LIGHT_LIST_SOURCE_ID,
-          url: recordUrl(record.position.latitude, record.position.longitude),
+          // NAVCEN has no per-LLNR deep link, so the "view in a browser" link
+          // falls back to an OpenSeaMap marker (see map-link.ts).
+          url: openSeaMapMarkerUrl(record.position.latitude, record.position.longitude),
           attribution: ATTRIBUTION,
           skIcon: recordSkIcon(record)
         }
@@ -199,7 +184,7 @@ export function createUscgLightListSource (
         name: record.name,
         position: { ...record.position },
         type: recordPoiType(record),
-        url: recordUrl(record.position.latitude, record.position.longitude),
+        url: openSeaMapMarkerUrl(record.position.latitude, record.position.longitude),
         source: USCG_LIGHT_LIST_SOURCE_ID,
         attribution: ATTRIBUTION,
         description,

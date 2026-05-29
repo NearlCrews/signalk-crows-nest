@@ -24,10 +24,11 @@ export type { RateLimitOptions, Sleep } from '../http-client.js'
 
 /**
  * A list entry as produced by the client. It carries every `PoiSummary` field
- * except the source-identity fields (`source`, `url`, and `attribution`): the
- * client has no notion of the source slug, so the source adapter tags those on.
+ * except the source-identity fields (`source`, `url`, `attribution`, and the
+ * Freeboard `skIcon`): the client has no notion of the source slug or its icon
+ * mapping, so the source adapter tags those on.
  */
-export type ClientPoiSummary = Omit<PoiSummary, 'source' | 'url' | 'attribution'>
+export type ClientPoiSummary = Omit<PoiSummary, 'source' | 'url' | 'attribution' | 'skIcon'>
 
 const BASE_URL = 'https://activecaptain.garmin.com'
 

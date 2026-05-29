@@ -58,6 +58,16 @@ export function clampMinimumYear (raw: unknown): number {
 }
 
 /**
+ * Config-schema fragment for a source's earliest-year filter field. Each
+ * opting-in input declares an identical number field over `[MIN_YEAR,
+ * MAX_YEAR]` defaulting to the off sentinel, differing only in its title, so
+ * the shape lives here next to the bounds it carries.
+ */
+export function minimumYearSchema (title: string): Record<string, unknown> {
+  return { type: 'number', title, default: DEFAULT_MINIMUM_YEAR, minimum: MIN_YEAR, maximum: MAX_YEAR }
+}
+
+/**
  * Drop every POI whose `timestamp` year is strictly less than
  * `minimumYear`. Pure function. The input itself is returned by reference
  * when the filter is off (`minimumYear` is 0 or non-positive), so the common

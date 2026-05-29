@@ -25,9 +25,10 @@ import { renderEncDirectDetail } from './enc-direct-detail.js'
 import type { PoiSource } from '../poi-source.js'
 import { createBboxDebounceCache } from '../../shared/bbox-debounce.js'
 import { MAX_BBOX_CACHE_ENTRIES, MAX_POI_CACHE_ENTRIES } from '../../shared/cache.js'
+import { splitOnFirstUnderscore } from '../../shared/namespaced-id.js'
 import { isValidLatitude, isValidLongitude } from '../../shared/numbers.js'
 import type { Bbox, PoiDetailView, PoiSummary, Position } from '../../shared/types.js'
-import { isInUsWaters } from '../../shared/us-waters.js'
+import { shouldSkipOutsideUsWaters } from '../../shared/us-waters.js'
 import { openSeaMapMarkerUrl } from '../../shared/map-link.js'
 import { filterByMinimumYear } from '../../shared/year-filter.js'
 import type { PluginStatus } from '../../status/plugin-status.js'
@@ -103,13 +104,13 @@ function featureObjectId (feature: EncFeature): number | undefined {
 
 /** Parse a summary id back into `(layerKey, objectId)` for a getById call. */
 function parseSummaryId (id: string): { layerKey: EncLayerKey, objectId: number } | undefined {
-  const underscore = id.indexOf('_')
-  if (underscore <= 0) return undefined
-  const layerKey = id.slice(0, underscore) as EncLayerKey
+  const split = splitOnFirstUnderscore(id)
+  if (split === null) return undefined
+  const layerKey = split.prefix as EncLayerKey
   if (layerKey !== 'wreck' && layerKey !== 'obstruction' && layerKey !== 'rock') {
     return undefined
   }
-  const objectId = Number.parseInt(id.slice(underscore + 1), 10)
+  const objectId = Number.parseInt(split.remainder, 10)
   return Number.isFinite(objectId) ? { layerKey, objectId } : undefined
 }
 
@@ -121,17 +122,6 @@ function featureName (layerKey: EncLayerKey, feature: EncFeature): string {
     if (trimmed.length > 0) return trimmed
   }
   return LAYER_NAME[layerKey]
-}
-
-/**
- * "View this feature in a browser" deep link. NOAA's ENC Direct viewer
- * does not support per-feature deep links (see `src/shared/map-link.ts`
- * for the verified-with-citation reasoning), so the fallback is an
- * OpenSeaMap marker. The popup body still names the NOAA chart cell
- * (`DSNM`) and the survey date for cross-reference.
- */
-function viewerUrl (lat: number, lon: number): string {
-  return openSeaMapMarkerUrl(lat, lon)
 }
 
 /**
@@ -167,7 +157,9 @@ function toSummary (layerKey: EncLayerKey, feature: EncFeature): PoiSummary | nu
     position: { latitude: latLon.lat, longitude: latLon.lon },
     name: featureName(layerKey, feature),
     source: NOAA_ENC_SOURCE_ID,
-    url: viewerUrl(latLon.lat, latLon.lon),
+    // NOAA's ENC Direct viewer has no per-feature deep link, so the "view in a
+    // browser" link falls back to an OpenSeaMap marker (see map-link.ts).
+    url: openSeaMapMarkerUrl(latLon.lat, latLon.lon),
     attribution: NOAA_ENC_ATTRIBUTION,
     skIcon: layerSkIcon(layerKey)
   }
@@ -190,7 +182,7 @@ function toDetailView (cached: CachedFeature): PoiDetailView | null {
     name: featureName(layerKey, feature),
     position: { latitude: latLon.lat, longitude: latLon.lon },
     type: layerPoiType(layerKey),
-    url: viewerUrl(latLon.lat, latLon.lon),
+    url: openSeaMapMarkerUrl(latLon.lat, latLon.lon),
     source: NOAA_ENC_SOURCE_ID,
     attribution: NOAA_ENC_ATTRIBUTION,
     description,
@@ -224,9 +216,7 @@ export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
     // instead: the per-layer flags are baked in at construction. The
     // `poiTypes` argument is therefore intentionally ignored for this source.
     listPointsOfInterest: async (bbox: Bbox): Promise<PoiSummary[]> => {
-      const position = getCurrentPosition()
-      if (position !== undefined && !isInUsWaters(position)) {
-        status.recordSkipped(NOAA_ENC_SOURCE_ID, 'outside US waters')
+      if (shouldSkipOutsideUsWaters(getCurrentPosition, status, NOAA_ENC_SOURCE_ID)) {
         return []
       }
       // No enabled layers is a configured-empty list, not a failure: return

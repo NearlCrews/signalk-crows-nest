@@ -74,12 +74,6 @@ interface SourceState {
    * or a "did not bother" skip that should leave the row untouched.
    */
   justSkipped: boolean
-  /**
-   * Human-readable reason passed to the most recent `recordSkipped` call
-   * (e.g. "outside US waters"). Retained for future diagnostics, including
-   * a planned status-snapshot field. Cleared together with `justSkipped`.
-   */
-  lastSkipReason: string | null
 }
 
 /**
@@ -96,7 +90,7 @@ export function createPluginStatus (sources: ReadonlyArray<StatusSource>): Plugi
   const states = new Map<string, SourceState>()
   for (const { source, name } of sources) {
     states.set(source, {
-      name, apiReachable: null, lastListFetch: null, justSkipped: false, lastSkipReason: null
+      name, apiReachable: null, lastListFetch: null, justSkipped: false
     })
   }
 
@@ -119,7 +113,6 @@ export function createPluginStatus (sources: ReadonlyArray<StatusSource>): Plugi
       if (state !== undefined) {
         state.lastListFetch = { at: new Date().toISOString(), poiCount }
         state.justSkipped = false
-        state.lastSkipReason = null
       }
     },
 
@@ -132,7 +125,6 @@ export function createPluginStatus (sources: ReadonlyArray<StatusSource>): Plugi
       if (state !== undefined) {
         state.apiReachable = false
         state.justSkipped = false
-        state.lastSkipReason = null
       }
       recentErrors.unshift({ at: new Date().toISOString(), message })
       if (recentErrors.length > MAX_RECENT_ERRORS) {
@@ -145,12 +137,12 @@ export function createPluginStatus (sources: ReadonlyArray<StatusSource>): Plugi
     // surface in the recent-errors list. Setting `justSkipped` lets the
     // aggregate input registry distinguish a "fetched zero POIs" success
     // from a "did not bother" skip when it sees the empty result that
-    // follows.
-    recordSkipped: (source: string, reason: string): void => {
+    // follows. `reason` (the caller's skip explanation, e.g. "outside US
+    // waters") is accepted for call-site documentation but not stored.
+    recordSkipped: (source: string, _reason: string): void => {
       const state = states.get(source)
       if (state !== undefined) {
         state.justSkipped = true
-        state.lastSkipReason = reason
       }
     },
 

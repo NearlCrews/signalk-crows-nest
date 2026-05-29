@@ -125,7 +125,8 @@ const HAZARD: PoiSummary = {
   name: 'Rock',
   source: 'activecaptain',
   url: 'https://activecaptain.garmin.com/en-US/pois/h1',
-  attribution: 'Data from Garmin ActiveCaptain'
+  attribution: 'Data from Garmin ActiveCaptain',
+  skIcon: 'hazard'
 }
 
 /** A bounding box around the test's home position. */

@@ -8,17 +8,15 @@
  * `<baseUrl>/sites/default/files/msi/lightList{district}_{page}.geojson`.
  */
 
-import { request as httpsRequest } from 'node:https'
-import { request as httpRequest } from 'node:http'
-import type { IncomingHttpHeaders } from 'node:http'
 import type {
   DistrictHeaders,
   LightListFeature,
   LightListProperties,
   LightListRecord
 } from './light-list-types.js'
+import { requestText } from '../http-one-shot.js'
 import { PLUGIN_USER_AGENT } from '../../shared/plugin-id.js'
-import { isValidLatitude, isValidLongitude, isWireTruthy } from '../../shared/numbers.js'
+import { isValidLatitude, isValidLongitude, isWireTruthy, toFiniteNumber } from '../../shared/numbers.js'
 import { MS_PER_MINUTE } from '../../shared/time.js'
 
 /** Default upstream host for the NAVCEN Maritime Safety Information files. */
@@ -65,48 +63,6 @@ export interface LightListClientConfig {
   baseUrl?: string
 }
 
-/** Plain HTTP response captured by {@link fetchUrl}. */
-interface RawResponse {
-  status: number
-  body: string
-  headers: IncomingHttpHeaders
-}
-
-/**
- * Issue a single GET to `url` with the given headers and resolve with the raw
- * response. Uses Node's `http`/`https` modules directly (rather than the
- * shared `http-client.ts`) because the Light List feed is a daily, low-volume,
- * polite request stream that does not need queueing, throttling, or retry: a
- * one-shot conditional GET against 37 static files served from a CDN.
- */
-function fetchUrl (
-  url: string,
-  headers: Record<string, string>
-): Promise<RawResponse> {
-  return new Promise((resolve, reject) => {
-    const transport = url.startsWith('https:') ? httpsRequest : httpRequest
-    const req = transport(url, { headers, method: 'GET' }, res => {
-      const chunks: Buffer[] = []
-      res.on('data', (chunk: Buffer) => chunks.push(chunk))
-      res.on('end', () => resolve({
-        status: res.statusCode ?? 0,
-        body: Buffer.concat(chunks).toString('utf8'),
-        headers: res.headers
-      }))
-      res.on('error', reject)
-    })
-    // A silently dropped TCP connection would otherwise hang the
-    // sequential refresh loop forever; the explicit timeout aborts and
-    // rejects, the source records the per-district error, and the next
-    // refresh tick retries.
-    req.setTimeout(REQUEST_TIMEOUT_MS, () => {
-      req.destroy(new Error(`USCG Light List request timed out after ${REQUEST_TIMEOUT_MS} ms: ${url}`))
-    })
-    req.on('error', reject)
-    req.end()
-  })
-}
-
 /**
  * Return `value` when it is a non-empty string, otherwise undefined. The MSI
  * wire ships absent values as an explicit `null` rather than a missing key, so
@@ -125,7 +81,7 @@ function presentString (value: string | null | undefined): string | undefined {
  * may arrive as `null` (absent) and the renderer requires a finite value.
  */
 function presentNumber (value: number | null | undefined): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+  return toFiniteNumber(value) ?? undefined
 }
 
 /** Parse a single GeoJSON feature into the in-memory record shape. */
@@ -241,7 +197,7 @@ export function createLightListClient (
         headers['If-None-Match'] = previousHeaders.etag
       }
       try {
-        const response = await fetchUrl(url, headers)
+        const response = await requestText(url, headers, REQUEST_TIMEOUT_MS, 'USCG Light List')
         if (response.status === HTTP_NOT_MODIFIED) {
           return { status: 'not-modified' }
         }

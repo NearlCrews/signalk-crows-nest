@@ -19,6 +19,7 @@ import { elementPoiType, elementSkIcon, seamarkRegex } from './seamark-mapping.j
 import type { PoiSource } from '../poi-source.js'
 import { createBboxDebounceCache } from '../../shared/bbox-debounce.js'
 import { MAX_BBOX_CACHE_ENTRIES, MAX_POI_CACHE_ENTRIES } from '../../shared/cache.js'
+import { splitOnFirstUnderscore } from '../../shared/namespaced-id.js'
 import type { Bbox, PoiDetailView, PoiSummary, PoiType } from '../../shared/types.js'
 import { filterByMinimumYear } from '../../shared/year-filter.js'
 import type { PluginStatus } from '../../status/plugin-status.js'
@@ -84,11 +85,8 @@ function elementOsmUrl (element: OverpassElement): string {
  * never contains an underscore, so splitting on the FIRST underscore is exact.
  */
 function toOverpassTypedId (id: string): string {
-  const underscore = id.indexOf('_')
-  if (underscore <= 0) {
-    return id
-  }
-  return `${id.slice(0, underscore)}/${id.slice(underscore + 1)}`
+  const split = splitOnFirstUnderscore(id)
+  return split === null ? id : `${split.prefix}/${split.remainder}`
 }
 
 /** A display name for an element: its `name` tag, or a type-derived fallback. */

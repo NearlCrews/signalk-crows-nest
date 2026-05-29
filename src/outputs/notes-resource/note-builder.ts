@@ -40,7 +40,7 @@ export interface NoteResourceInput {
   name: string
   /** Map position. */
   position: Position
-  /** SignalK icon hint; the lowercased POI type. */
+  /** Freeboard `:sk-${icon}` hint, set explicitly by the producing source. */
   skIcon: string
   /** Public web page for this POI (source-specific). */
   url: string

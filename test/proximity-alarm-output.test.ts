@@ -57,7 +57,8 @@ test('start contributes a Hazard scan and raises an alarm on evaluate', () => {
       position: { latitude: 0, longitude: 0 },
       source: 'activecaptain',
       url: 'https://activecaptain.garmin.com/en-US/pois/h1',
-      attribution: 'Data from Garmin ActiveCaptain'
+      attribution: 'Data from Garmin ActiveCaptain',
+      skIcon: 'hazard'
     }
   ])
   assert.equal(messages.length, 1)
@@ -79,7 +80,8 @@ test('a non-Hazard POI inside the radius is ignored', () => {
       position: { latitude: 0, longitude: 0 },
       source: 'activecaptain',
       url: 'https://activecaptain.garmin.com/en-US/pois/m1',
-      attribution: 'Data from Garmin ActiveCaptain'
+      attribution: 'Data from Garmin ActiveCaptain',
+      skIcon: 'marina'
     }
   ])
   assert.equal(messages.length, 0)
@@ -95,7 +97,8 @@ test('multiple hazards raise and clear independently', () => {
   const tag = {
     source: 'activecaptain',
     url: 'https://activecaptain.garmin.com/en-US/pois/x',
-    attribution: 'Data from Garmin ActiveCaptain'
+    attribution: 'Data from Garmin ActiveCaptain',
+    skIcon: 'hazard'
   }
   const near = { id: 'near', name: 'Near rock', type: 'Hazard' as const, position: northOfOrigin(100), ...tag }
   const far = { id: 'far', name: 'Far rock', type: 'Hazard' as const, position: northOfOrigin(3000), ...tag }
