@@ -26,10 +26,12 @@ function apiState (reachable: boolean | null): { dot: React.CSSProperties, label
 /**
  * One row in the status grid: dot, source name, state, last-fetch
  * time. Wrapped in a `display: contents` div so the four spans flow
- * directly into the parent grid's four columns AND the ARIA role
- * exposes one row per source. The contents wrapper also pins the
- * 4-cells-per-source contract: a future fifth cell would land outside
- * this wrapper, making any drift visible.
+ * directly into the parent grid's four columns. The wrapper also pins
+ * the 4-cells-per-source contract: a future fifth cell would land
+ * outside this wrapper, making any drift visible. No ARIA table roles
+ * are applied: this is a read-only health readout, not an interactive
+ * data grid, so the spans read in DOM order (name, state, last fetch)
+ * rather than as a headerless and therefore malformed table.
  */
 function SourceRow ({ source }: { source: SourceStatus }): React.ReactElement {
   const api = apiState(source.apiReachable)
@@ -37,7 +39,7 @@ function SourceRow ({ source }: { source: SourceStatus }): React.ReactElement {
     ? 'no fetch yet'
     : `updated ${relativeTime(source.lastListFetch.at)}`
   return (
-    <div style={S.statusGridRow} role='row'>
+    <div style={S.statusGridRow}>
       <span style={{ ...S.dot, ...api.dot }} aria-hidden='true' />
       <span style={S.statusGridName}>{source.name}</span>
       <span style={S.statusGridState}>{api.label}</span>
@@ -56,9 +58,14 @@ export default function StatusBar ({ status }: Props): React.ReactElement {
   // plus a fixed-height body region. The body reserves a min-height so
   // the bar does not visibly grow when the first poll resolves and
   // swaps the loading line for the source-health grid.
+  // The bar is a passive health readout, not a live region: it carries no
+  // role='status'. The relative "N minutes ago" text re-renders on every 5 s
+  // poll, so announcing the whole bar on each change would be pure noise. The
+  // transient "Saved" confirmation in FooterBar remains the one polite live
+  // region, which is the right number for the panel.
   if (status === null) {
     return (
-      <div style={S.statusBar} role='status'>
+      <div style={S.statusBar}>
         <span style={S.statusBarTitle}>Plugin status</span>
         <div style={S.statusBarBody}>
           <span style={S.statusBarLoading}>
@@ -73,13 +80,13 @@ export default function StatusBar ({ status }: Props): React.ReactElement {
   const { sources, recentErrors } = status
 
   return (
-    <div style={S.statusBar} role='status'>
+    <div style={S.statusBar}>
       <span style={S.statusBarTitle}>Plugin status</span>
       <div style={S.statusBarBody}>
         {sources.length === 0
           ? <span style={S.statusBarEmpty}>No data source enabled yet. Open a card below and toggle one on.</span>
           : (
-            <div style={S.statusGrid} role='table' aria-label='Per-source health'>
+            <div style={S.statusGrid}>
               {sources.map((source) => <SourceRow key={source.source} source={source} />)}
             </div>
             )}
@@ -87,8 +94,8 @@ export default function StatusBar ({ status }: Props): React.ReactElement {
       {recentErrors.length > 0
         ? (
           <ul style={S.statusErrors} aria-label='Recent errors'>
-            {recentErrors.map((err, index) => (
-              <li key={`${err.at}-${index}`} style={S.statusErrorItem}>
+            {recentErrors.map((err) => (
+              <li key={`${err.at}-${err.message}`} style={S.statusErrorItem}>
                 <span style={S.statusErrorTime}>{relativeTime(err.at)}</span>
                 <span>{err.message}</span>
               </li>

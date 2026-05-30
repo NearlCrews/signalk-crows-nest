@@ -28,6 +28,7 @@
  */
 
 import type * as React from 'react'
+import { useCollapseFocusRestore } from '../hooks/use-collapse-focus-restore.js'
 import { S } from '../styles.js'
 import { pillContent, pillVariant } from '../source-status-pill.js'
 import type { SourceStatus } from '../../status/status-types.js'
@@ -51,7 +52,8 @@ interface Props {
   onToggleExpanded: (cardId: string) => void
   /**
    * Called when the enable checkbox is toggled. Omitted for an always-on
-   * source, whose checkbox is then shown checked and disabled.
+   * source; the header then shows an "Always on" badge in place of the
+   * checkbox rather than a disabled checkbox.
    */
   onToggleEnabled?: (enabled: boolean) => void
   /**
@@ -78,6 +80,7 @@ export default function DataSourceCard ({
   status,
   children
 }: Props): React.ReactElement {
+  const { bodyRef, buttonRef, restoreFocusBeforeCollapse } = useCollapseFocusRestore()
   // Prefix the summary with "Disabled" when the enable toggle is off, so
   // a collapsed disabled card never reads as if it were live (the small
   // unchecked checkbox alone is too subtle a signal).
@@ -105,11 +108,18 @@ export default function DataSourceCard ({
             </span>
             )}
         <button
+          ref={buttonRef}
           type='button'
           style={S.sourceCardToggle}
           aria-expanded={expanded}
           aria-controls={bodyId(cardId)}
-          onClick={() => onToggleExpanded(cardId)}
+          onClick={() => {
+            // Restore focus to this button before collapsing, so the
+            // `display: none` flip does not strand a keyboard user whose
+            // focus is inside the card body on document.body.
+            if (expanded) restoreFocusBeforeCollapse()
+            onToggleExpanded(cardId)
+          }}
         >
           <span style={S.sourceCardName}>{name}</span>
           <span style={S.sourceCardSummary}>{summaryText}</span>
@@ -118,11 +128,16 @@ export default function DataSourceCard ({
         {status !== undefined ? <SourceStatusPill status={status} /> : null}
       </div>
       {/* Body always mounts; visibility flips via display so the per-field
-          draft state survives a collapse-and-expand round trip. */}
+          draft state survives a collapse-and-expand round trip. `inert`
+          plus aria-hidden keep the hidden subtree out of the tab order and
+          the accessibility tree even if the hide mechanism ever changes
+          from display:none to visibility-based. */}
       <div
+        ref={bodyRef}
         id={bodyId(cardId)}
         style={expanded ? S.sourceCardBody : S.collapsedBody}
         aria-hidden={!expanded}
+        inert={!expanded}
       >
         {children}
       </div>
@@ -141,11 +156,14 @@ function bodyId (cardId: string): string {
  * attempt failed). Distinct glyphs and tooltip wording prevent the
  * "idle" and "ok" states from collapsing into the same green check.
  *
- * The pill carries a `title` attribute for sighted hover. It does NOT
- * carry an aria-label: the pill lives outside the disclosure button so
- * the visible glyph plus count is exposed to assistive tech as its own
- * accessible name, with the title delivering the longer "last fetch N
- * minutes ago" context.
+ * The pill is NOT a live region: it carries no `role='status'`. The
+ * StatusBar at the top of the panel already surfaces per-source health,
+ * so making each of the up-to-four pills its own polite live region only
+ * produced redundant re-announcements as the relative "N minutes ago"
+ * title ticked on every 5 s poll. The concise visible label (ok / idle /
+ * error) is exposed to assistive tech; only the decorative glyph is
+ * hidden. The `title` attribute delivers the longer "N POIs in last
+ * fetch, M minutes ago" context to a sighted user on hover.
  */
 function SourceStatusPill ({ status }: { status: SourceStatus }): React.ReactElement {
   const variant = pillVariant(status)
@@ -155,15 +173,9 @@ function SourceStatusPill ({ status }: { status: SourceStatus }): React.ReactEle
       ? PILL_IDLE
       : S.sourceStatusPill
   const { glyph, label, title } = pillContent(status, variant)
-  // role="status" makes the pill a polite live region so screen readers
-  // announce state changes when they arrive (e.g. the first fetch
-  // completing). aria-label carries the longer "last fetch N min ago"
-  // context that a sighted user reads from the title tooltip; the visible
-  // glyph + label is decorative once the longer label is set, so the
-  // span text is hidden from the AT.
   return (
-    <span style={pillStyle} role='status' aria-label={title} title={title}>
-      <span aria-hidden='true'>{glyph} {label}</span>
+    <span style={pillStyle} title={title}>
+      <span aria-hidden='true'>{glyph}</span> {label}
     </span>
   )
 }

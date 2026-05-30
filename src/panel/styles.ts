@@ -394,7 +394,7 @@ export const S = {
     letterSpacing: 0.3,
     textTransform: 'uppercase' as const,
     color: 'var(--ac-text-muted)',
-    background: 'var(--ac-surface-muted, rgba(255,255,255,0.05))',
+    background: 'var(--ac-surface-muted)',
     border: '1px solid var(--ac-border)',
     borderRadius: 3,
     padding: '2px 6px',
@@ -439,8 +439,9 @@ export const S = {
    * being hidden from layout and paint. Reused by both DataSourceCard
    * and SectionBox so the two collapsible patterns share one
    * hide-behavior primitive: a future change (e.g. switching to
-   * `visibility: hidden` to preserve focus across collapse) lands in
-   * one place.
+   * `visibility: hidden`) lands in one place. The behavioral half,
+   * restoring focus to the disclosure button before collapse, is shared
+   * too, via the `useCollapseFocusRestore` hook both components consume.
    */
   collapsedBody: {
     display: 'none'
@@ -504,8 +505,10 @@ export const S = {
   },
 
   // A compact pill rendered inside a source-card header to surface live
-  // per-source status (request count, error flag) so a collapsed card
-  // still tells the operator what is happening.
+  // per-source health (idle / ok / error) so a collapsed card still tells
+  // the operator what is happening. It never shows a per-fetch POI count:
+  // a rolling count reads as broken when the chart simply has not panned
+  // to anywhere with markers. The count lives in the hover title only.
   sourceStatusPill: {
     display: 'inline-flex',
     alignItems: 'center',

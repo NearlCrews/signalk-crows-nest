@@ -21,7 +21,8 @@
  */
 
 import type * as React from 'react'
-import { useRef, useState } from 'react'
+import { useState } from 'react'
+import { useCollapseFocusRestore } from '../hooks/use-collapse-focus-restore.js'
 import { S } from '../styles.js'
 
 interface Props {
@@ -47,27 +48,15 @@ export default function SectionBox ({
   children
 }: Props): React.ReactElement {
   const [expanded, setExpanded] = useState(defaultExpanded)
-  const bodyRef = useRef<HTMLDivElement | null>(null)
-  const buttonRef = useRef<HTMLButtonElement | null>(null)
+  const { bodyRef, buttonRef, restoreFocusBeforeCollapse } = useCollapseFocusRestore()
   const bodyId = `ac-section-body-${cardId}`
   const titleId = `ac-section-title-${cardId}`
 
   function handleToggle (): void {
-    setExpanded((open) => {
-      // If we are about to collapse and focus is inside the body
-      // region, move focus back to the disclosure button. Without this
-      // the `display: none` flip yanks the focused descendant out of
-      // the layout and the browser drops focus to document.body, so a
-      // keyboard user loses their place and has to re-tab from the
-      // top of the panel.
-      if (open && bodyRef.current !== null) {
-        const focused = document.activeElement
-        if (focused instanceof HTMLElement && bodyRef.current.contains(focused)) {
-          buttonRef.current?.focus()
-        }
-      }
-      return !open
-    })
+    // Restore focus to the disclosure button before collapsing, so the
+    // `display: none` flip does not strand a keyboard user on document.body.
+    if (expanded) restoreFocusBeforeCollapse()
+    setExpanded((open) => !open)
   }
 
   return (
@@ -90,6 +79,7 @@ export default function SectionBox ({
         id={bodyId}
         style={expanded ? S.sectionBoxBody : S.collapsedBody}
         aria-hidden={!expanded}
+        inert={!expanded}
       >
         {children}
       </div>
