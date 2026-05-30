@@ -4,6 +4,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/signalk-crows-nest.svg)](https://www.npmjs.com/package/signalk-crows-nest)
 [![License](https://img.shields.io/github/license/NearlCrews/signalk-crows-nest.svg)](https://github.com/NearlCrews/signalk-crows-nest/blob/main/LICENSE)
 [![CI](https://github.com/NearlCrews/signalk-crows-nest/actions/workflows/ci.yml/badge.svg)](https://github.com/NearlCrews/signalk-crows-nest/actions/workflows/ci.yml)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/nearlcrews)
 
 A Signal K plugin that imports points of interest from four marine data
 sources (Garmin ActiveCaptain, OpenSeaMap, the USCG Light List, and NOAA
@@ -196,6 +197,9 @@ interest and exposes them as Signal K resources.
   hazard data, published under CC0
 
 ## Support
+
+Find this plugin useful? You can support its continued development by
+[buying me a coffee](https://www.buymeacoffee.com/nearlcrews).
 
 - [Report a bug](https://github.com/NearlCrews/signalk-crows-nest/issues/new?template=bug_report.yml)
 - [Request a feature](https://github.com/NearlCrews/signalk-crows-nest/issues/new?template=feature_request.yml)

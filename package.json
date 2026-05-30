@@ -74,6 +74,10 @@
   "bugs": {
     "url": "https://github.com/NearlCrews/signalk-crows-nest/issues"
   },
+  "funding": {
+    "type": "buymeacoffee",
+    "url": "https://www.buymeacoffee.com/nearlcrews"
+  },
   "dependencies": {
     "handlebars": "^4.7.9",
     "lru-cache": "^11.5.0"
