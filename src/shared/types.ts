@@ -147,6 +147,15 @@ export interface PoiSummary {
    * the year filter passes the POI through unchanged.
    */
   timestamp?: string
+  /**
+   * Vertical clearance under a Bridge, in meters (SI), when the source knows
+   * it. The bridge air-draft check compares this against the vessel air draft.
+   * OpenSeaMap fills it at list time from the OSM clearance tags; the dedupe
+   * pass carries the more conservative value onto a surviving base POI.
+   * Absent when the source carries no clearance (the air-draft check then
+   * resolves it from detail for ActiveCaptain bridges, or stays silent).
+   */
+  verticalClearanceMeters?: number
 }
 
 /**
@@ -179,6 +188,14 @@ export interface PoiDetailView {
    * the matching {@link PoiSummary.skIcon} field for the contract.
    */
   skIcon: string
+  /**
+   * Vertical clearance under a Bridge, in meters (SI), when the source's
+   * detail carries it. ActiveCaptain fills it from `NavigationSection`'s
+   * `bridgeHeight`, converted from its `distanceUnit`. Parallel to
+   * {@link PoiSummary.verticalClearanceMeters} so the air-draft check can
+   * resolve a clearance from a detail fetch when the list summary had none.
+   */
+  verticalClearanceMeters?: number
 }
 
 /**
@@ -214,6 +231,25 @@ export interface PluginConfig {
   enableRouteHazardScan?: boolean
   /** Half-width, in meters, of the route corridor a POI must fall within. */
   routeCorridorWidthMeters?: number
+  /**
+   * Warn when an approaching bridge, or a bridge on the active route ahead,
+   * has a vertical clearance at or below the vessel air draft. Drives a new
+   * proximity alarm and upgrades the route-hazard scan's bridge messages.
+   */
+  enableBridgeAirDraftCheck?: boolean
+  /**
+   * Fallback vessel air draft, in meters, used only when the SignalK data
+   * model has no `design.airHeight`. `0` or unset means rely on
+   * `design.airHeight` alone; with neither set, the air-draft check is inert.
+   */
+  vesselAirDraftMeters?: number
+  /**
+   * Safety margin, in meters, added to the vessel air draft before the
+   * clearance comparison, covering tide, datum, and loading. A bridge warns
+   * when its clearance is at or below `airDraft + margin`. Clamped to the
+   * shared bounds in `src/shared/bridge-clearance.ts`.
+   */
+  bridgeClearanceMarginMeters?: number
   /** Hide points of interest whose average rating is below this value (0 to 5). */
   minimumRating?: number
   /** Import points of interest from OpenSeaMap (OpenStreetMap marine data). */
