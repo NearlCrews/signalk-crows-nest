@@ -5,6 +5,50 @@
 > development milestones that preceded this publication. Their content is
 > incorporated into the `v0.4.2` release.
 
+<a id="v070"></a>
+
+### v0.7.0 (2026/05/30) - bridge air-draft check
+
+A feature release. The new bridge air-draft check warns when a bridge would not
+clear the vessel: it compares each bridge's vertical clearance against the
+vessel air draft plus a configurable safety margin, raising a proximity alarm
+as the vessel nears a too-low bridge and a route-ahead warning when one lies on
+the active Course API route. All 663 tests pass.
+
+#### Bridge air-draft check
+
+- New `bridge-air-draft` output raises a Signal K alarm on
+  `notifications.navigation.crowsNest.bridgeClearance.<id>` when the vessel
+  comes within the proximity radius of a bridge whose vertical clearance is at
+  or below the vessel air draft plus the margin, with the same raise-once,
+  clear-once hysteresis as the proximity hazard alarm.
+- The route-corridor scan upgrades a too-low bridge on the active route to a
+  clearance-specific `warn`, carrying the clearance, the air draft, and the
+  margin in the message.
+- Vessel air draft is read from `design.airHeight` first, then a configurable
+  fallback in the plugin config. With neither set, the check stays inert and
+  logs the transition once.
+- Bridge clearance is sourced from OpenSeaMap (the OSM
+  `seamark:bridge:clearance_height`, `maxheight`, and `clearance` tags, parsed
+  at list time) and from ActiveCaptain (the detail `bridgeHeight`, converted
+  from its `distanceUnit`; an unrecognized unit is treated as unknown, never
+  guessed). The dedupe pass carries the more conservative clearance onto a
+  merged ActiveCaptain base POI.
+- New Alerts-section controls: the check toggle, the fallback air draft (in
+  meters, `0` means use `design.airHeight` only), and the clearance margin
+  (default 1 m).
+
+#### Code quality
+
+- Two `/cleanup` passes (a diff audit, then an eight-lane whole-codebase audit)
+  applied roughly forty reuse and quality findings with no behavior change
+  beyond the new feature: a shared `proximity-radius` module for the
+  vessel-proximity geometry, a shared `clampNumber`, a shared `light-character`
+  humanizer hoisted out of the OpenSeaMap module, a panel `ToggleFieldset`
+  shell composed by three cards, gating bridge clearance to bridge POIs, a
+  range check in `toPosition`, and assorted dead-code, comment-accuracy, and
+  reuse fixes.
+
 <a id="v061"></a>
 
 ### v0.6.1 (2026/05/30) - whole-codebase cleanup, accessibility, and registry compliance

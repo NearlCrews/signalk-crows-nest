@@ -137,10 +137,22 @@ self-contained module registered on one line in `src/index.ts`.
       (the `OutputModule`) and `proximity-alarms.ts` (emits SignalK hazard
       notifications, with hysteresis, near a Hazard).
     - `route-hazard/` - the route-corridor hazard output: `route-hazard-output.ts`
-      (the `OutputModule`), `route-hazard-alarms.ts` (emits SignalK route
-      notifications, raised once and cleared once), `route-corridor.ts` (pure
+      (the `OutputModule`, which also resolves a too-low-bridge verdict when the
+      bridge air-draft check is on), `route-hazard-alarms.ts` (emits SignalK
+      route notifications, raised once and cleared once, with a
+      clearance-specific message for a too-low bridge), `route-corridor.ts` (pure
       corridor geometry), and `course-reader.ts` (reads the active route from
       the SignalK Course API).
+    - `bridge-air-draft/` - the bridge air-draft check (US and worldwide,
+      defaults off): warns when a bridge's vertical clearance is at or below the
+      vessel air draft plus a configurable margin. `bridge-air-draft-output.ts`
+      (the `OutputModule`, a proximity scan over Bridge POIs),
+      `bridge-clearance-alarms.ts` (emits SignalK alarm notifications with the
+      same raise-once, clear-once hysteresis as the proximity hazard alarm), and
+      `bridge-clearance-resolver.ts` (resolves a bridge's clearance: a
+      synchronous OpenSeaMap summary hit, or a deduped, cached ActiveCaptain
+      detail fetch). The route-hazard output consumes this resolver too, for its
+      route-ahead clearance warning.
   - `monitoring/` - `position-monitor.ts` subscribes to `navigation.position`,
     exposes the latest fix through `getCurrentPosition` (read by the US-only
     inputs to gate outbound HTTP), and drives the per-tick scan from the
@@ -191,7 +203,7 @@ self-contained module registered on one line in `src/index.ts`.
     proximity and route-hazard outputs, keyed by the sanitized POI id
     so the in-memory and on-wire identities cannot drift),
     `year-filter.ts` (the `filterByMinimumYear` helper plus the shared
-    `OFF_SENTINEL_YEAR` / `MIN_YEAR` / `MAX_YEAR` / `DEFAULT_MINIMUM_YEAR`
+    `MIN_YEAR` / `MAX_YEAR` / `DEFAULT_MINIMUM_YEAR`
     bounds and the `clampMinimumYear` helper every opting-in source uses
     for its earliest-year filter, plus the `minimumYearSchema`
     config-fragment builder the opting-in inputs share), `rating.ts` (the
@@ -201,7 +213,8 @@ self-contained module registered on one line in `src/index.ts`.
     shared-bounds pattern), `numbers.ts` (the `toFiniteNumber`
     and `positiveFiniteNumber` narrowing helpers, both returning `null`
     on a non-usable value, plus `isValidLatitude`, `isValidLongitude`,
-    and `isWireTruthy` for the wire-boundary parse sites), `cache.ts`
+    `isWireTruthy`, and the `clampNumber` bound-and-fallback helper the four
+    config-bounds modules delegate to), `cache.ts`
     (the `MAX_POI_CACHE_ENTRIES` and `MAX_BBOX_CACHE_ENTRIES` ceilings
     shared by the per-source detail and bbox caches),
     `relative-time-format.ts` (the `formatRelativeDelta` unit-stepping the
@@ -213,7 +226,19 @@ self-contained module registered on one line in `src/index.ts`.
     `activecaptain-12345` hyphen form), and `time.ts`
     (the `MS_PER_SECOND` / `MS_PER_MINUTE` / `MS_PER_HOUR` millisecond
     constants plus the `SECONDS_PER_MINUTE` / `SECONDS_PER_HOUR` /
-    `SECONDS_PER_DAY` constants the relative-time formatters share).
+    `SECONDS_PER_DAY` constants the relative-time formatters share),
+    `length.ts` (the `METERS_PER_FOOT` constant and the `metersFromFeet` /
+    `metersFromFeetInches` conversions the two bridge-clearance parsers share),
+    `bridge-clearance.ts` (the bridge air-draft comparison: `readVesselAirDraft`
+    reads `design.airHeight` then a config fallback, `bridgeBlocksVessel` plus
+    the margin bounds and `clampClearanceMargin`, the `formatMeters` message
+    helper, and the config-fragment builders; pure and panel-bundle-safe),
+    `proximity-radius.ts` (the vessel-proximity alarm geometry shared by the two
+    proximity outputs, the two alarm modules, and the panel: the default radius,
+    the scan floor and factor, the exit-radius factor, and
+    `vesselScanRadiusMeters`), and `light-character.ts` (the IALA
+    light-character humanizer the OpenSeaMap and USCG Light List detail
+    renderers share).
   - `panel/` - federated React configuration panel. Root and reducer:
     `index.tsx` (Module Federation entry), `PluginConfigurationPanel.tsx`,
     `config-reducer.ts`, `normalize-config.ts`, plus the UI-metadata
@@ -236,18 +261,21 @@ self-contained module registered on one line in `src/index.ts`.
     in-progress NumberField draft survives a
     collapse-and-expand round trip), `ActiveCaptainSource`,
     `OpenSeaMapSource`, `UscgLightListSource`, and `NoaaEncSource` (the
-    per-source card bodies), `AlertsSection` (the proximity and
-    route-hazard controls); plus the per-field input components
+    per-source card bodies), `AlertsSection` (the proximity, route-hazard, and
+    bridge air-draft controls); plus the per-field input components
     `CacheDurationField`, `EndpointUrlField`, `NumberField` (the shared
-    label-plus-input-plus-hint row), `AlarmFieldset` (the
-    toggle-plus-numeric layout shared by both alarm controls),
+    label-plus-input-plus-hint row), `ToggleFieldset` (the shared opt-in
+    toggle-plus-legend fieldset shell), `AlarmFieldset` (the toggle-plus-numeric
+    layout, composing `ToggleFieldset`, shared by both alarm controls),
     `RatingFilterField`, `MinimumYearField` (the shared earliest-year
     NumberField wrapper used by each opting-in source card),
     `RefreshSecondsField` (the shared NumberField wrapper for the
     bbox-debounce period on at-runtime sources),
     `MergeWithActiveCaptain` (the shared dedupe-toggle + merge-radius
-    fieldset used by every non-base card), `ProximityAlarmFields`,
-    `RouteHazardScanFields`, `ActiveCaptainPoiTypes`, and `SeamarkGroups`.
+    fieldset, also composing `ToggleFieldset`, used by every non-base card),
+    `ProximityAlarmFields`, `RouteHazardScanFields`, `BridgeAirDraftFields` (the
+    bridge air-draft check controls), `ActiveCaptainPoiTypes`, and
+    `SeamarkGroups`.
     The panel is a per-source accordion: a collapsible card per data
     source, then an Alerts section. Disclosure state lives at the panel
     root so the four card bodies share one stable map.

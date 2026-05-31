@@ -25,22 +25,20 @@ with a plain-English popup, and the whole plugin is configured from one panel.
 | --- | --- | --- |
 | [![An ActiveCaptain hazard note open in Freeboard-SK, showing the rating, the review text, and a staleness warning](assets/screenshots/freeboard-activecaptain-hazard.png)](assets/screenshots/freeboard-activecaptain-hazard.png) | [![A USCG Light List buoy note open in Freeboard-SK, showing the light characteristic and the source citation](assets/screenshots/freeboard-uscg-light-list.png)](assets/screenshots/freeboard-uscg-light-list.png) | [![The Crow's Nest configuration panel, showing per-source live status and the data-source cards](assets/screenshots/admin-panel.png)](assets/screenshots/admin-panel.png) |
 
-## What's New in v0.6.1
+## What's New in v0.7.0
 
-A quality, accessibility, and compliance release driven by a four-lens review
-of the whole codebase: there are no runtime behavior changes for the chart
-user, so every POI source, note, and alarm works exactly as before, and all
-587 tests pass. The admin panel now restores keyboard focus when a card
-collapses, marks hidden card bodies `inert`, and drops the redundant
-screen-reader live regions and a malformed ARIA table so its status readout is
-quieter and correct. The plugin declares `signalk.recommends` (Freeboard-SK and
-the NMEA 2000 emitter) for the registry's "Works well with" list, bounds the
-ActiveCaptain cache-duration field, and shares a few more helpers
-(`SECONDS_PER_*`, `splitOnFirstSeparator`, a single-pass OpenSeaMap marking)
-while dropping dead code. Cut from a commit that carries the Signal K plugin-ci
-workflow, this release closes the registry's plugin-ci gap.
+A feature release: the new **bridge air-draft check** warns when a bridge would
+not clear the vessel. It compares each bridge's vertical clearance against the
+vessel air draft (`design.airHeight`, or a configured fallback) plus a
+configurable safety margin, then raises a proximity alarm as the vessel nears a
+too-low bridge and upgrades a too-low bridge on the active route to a
+clearance-specific route warning. Clearance is read from OpenSeaMap's OSM tags
+and ActiveCaptain's detail, and the dedupe pass keeps the more conservative
+figure. This release also folds in two whole-codebase `/cleanup` passes (about
+forty reuse and quality fixes with no behavior change beyond the feature), and
+all 663 tests pass.
 
-See the [v0.6.1 changelog entry](CHANGELOG.md#v061) and the
+See the [v0.7.0 changelog entry](CHANGELOG.md#v070) and the
 [full release history](CHANGELOG.md).
 
 ## Features
@@ -63,6 +61,10 @@ See the [v0.6.1 changelog entry](CHANGELOG.md#v061) and the
 - **Route-corridor hazard scan**: warns about hazards, bridges, and
   locks on the active Course API route ahead, with along-track distance
   and ETA
+- **Bridge air-draft check**: warns when a bridge's vertical clearance is
+  at or below the vessel air draft (`design.airHeight` or a configured
+  fallback) plus a safety margin, both as a proximity alarm as the vessel
+  nears a too-low bridge and as a clearance-specific route warning ahead
 - **Rich point detail** rendered to HTML, with the source-specific
   attribution credit (ODbL for OSM, CC0 for NOAA, US Government public
   domain for USCG, Garmin ActiveCaptain for the base) published as a
@@ -133,9 +135,9 @@ webpack 5 Module Federation. The panel has these areas:
    layers, refresh and freshness, filters (when present), and merge
    with ActiveCaptain
 3. **Alerts section** (collapsed by default, opens automatically when an
-   alarm is enabled): the proximity-alarm and route-corridor scan
-   controls, each in its own fieldset with an opt-in toggle and a
-   numeric setting
+   alarm is enabled): the proximity-alarm, route-corridor scan, and
+   bridge air-draft check controls, each in its own fieldset with an
+   opt-in toggle and its numeric settings
 
 Per-source enable toggles live on each card's header, alongside the
 disclosure chevron. Each card carries a small live-status pill on the

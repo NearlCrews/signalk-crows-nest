@@ -31,6 +31,9 @@ terms-of-service exposure.
 
 - Route-corridor hazard scan: flag hazards, bridges, and locks along an active
   Course API route, with distance and ETA. Shipped in v0.4.0.
+- Bridge air-draft check: warn when a bridge's vertical clearance is at or below
+  the vessel air draft plus a margin, as a proximity alarm and a route-ahead
+  warning. Shipped in v0.7.0.
 - Route-ahead prefetch: warm the cache for points of interest ahead of the
   vessel while connectivity still exists.
 - "Navigate to this POI": one-tap set the Course API destination.
@@ -60,3 +63,24 @@ terms-of-service exposure.
   data that ships in the official ENC chart cells. USACE lock status and
   Waterway Guide remain candidates for follow-up sources.
 - React panel component tests.
+
+## Candidate data sources (researched 2026-05-30)
+
+A session review surfaced these as the strongest next sources, beyond the four
+that ship today:
+
+- **NOAA CO-OPS tide and current stations** as a first-class input, not just the
+  Tier 2 nearest-station cross-reference: the free
+  `api.tidesandcurrents.noaa.gov` station-metadata endpoint lists every station
+  with a position, rendered as a POI note with the next high/low or flood/ebb
+  and a deep link. High daily value, fits the pull-and-cache pattern, US plus
+  some Pacific and Caribbean coverage.
+- **AIS Aids to Navigation read from SignalK itself**: a new input that surfaces
+  the AIS AtoN already on the SignalK bus (message 21, especially virtual AtoN)
+  as POI notes. Global, no external API, and no terms-of-service exposure; it
+  introduces a read-from-SignalK input flavor alongside the HTTP pulls.
+- **World Port Index (NGA Pub 150)**: a free global ports and harbours dataset
+  that fills the plugin's US bias for international cruisers.
+
+USACE lock status and Waterway Guide remain the other candidates noted in
+Tier 3.

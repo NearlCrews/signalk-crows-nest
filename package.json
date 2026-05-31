@@ -1,7 +1,7 @@
 {
   "name": "signalk-crows-nest",
-  "version": "0.6.1",
-  "description": "Imports Garmin ActiveCaptain, OpenSeaMap, USCG Light List, and NOAA ENC Direct points of interest as Signal K notes resources, with proximity and route-corridor hazard alarms.",
+  "version": "0.7.0",
+  "description": "Imports Garmin ActiveCaptain, OpenSeaMap, USCG Light List, and NOAA ENC Direct points of interest as Signal K notes resources, with proximity, route-corridor, and bridge air-draft alarms.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -80,13 +80,13 @@
   },
   "dependencies": {
     "handlebars": "^4.7.9",
-    "lru-cache": "^11.5.0"
+    "lru-cache": "^11.5.1"
   },
   "devDependencies": {
-    "@babel/core": "^7.29.0",
-    "@babel/preset-react": "^7.28.5",
-    "@babel/preset-typescript": "^7.28.5",
-    "@signalk/server-api": "^2.24.0",
+    "@babel/core": "^7.29.7",
+    "@babel/preset-react": "^7.29.7",
+    "@babel/preset-typescript": "^7.29.7",
+    "@signalk/server-api": "^2.25.0",
     "@types/express": "^5.0.6",
     "@types/node": "^25.9.1",
     "@types/react": "^19.2.15",
@@ -99,7 +99,7 @@
     "react-dom": "^19.2.6",
     "tsx": "^4.22.3",
     "typescript": "^6.0.3",
-    "webpack": "^5.107.1",
-    "webpack-cli": "^7.0.2"
+    "webpack": "^5.107.2",
+    "webpack-cli": "^7.0.3"
   }
 }
