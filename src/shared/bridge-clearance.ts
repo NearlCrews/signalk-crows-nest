@@ -17,7 +17,7 @@
  * tagged clearance is a static figure.
  */
 
-import { toFiniteNumber } from './numbers.js'
+import { positiveFiniteNumber, toFiniteNumber } from './numbers.js'
 
 /** SignalK self path carrying the vessel air draft (height above waterline), in meters. */
 export const SELF_AIR_HEIGHT_PATH = 'design.airHeight'
@@ -79,19 +79,17 @@ export function readVesselAirDraft (app: AirDraftApp, fallbackMeters?: number): 
     app.debug(`Bridge air-draft check could not read ${SELF_AIR_HEIGHT_PATH}: ${String(error)}`)
     raw = undefined
   }
-  const direct = toFiniteNumber(raw)
-  const wrapped = direct === null && typeof raw === 'object' && raw !== null
-    ? toFiniteNumber((raw as { value?: unknown }).value)
-    : null
-  const fromModel = direct ?? wrapped
-  if (fromModel !== null && fromModel > 0) {
+  // Air draft is only meaningful as a positive value, so narrow with
+  // positiveFiniteNumber: a zero, negative, or non-finite reading is treated as
+  // "no usable air draft" and falls through to the configured fallback.
+  const fromModel = positiveFiniteNumber(raw) ??
+    (typeof raw === 'object' && raw !== null
+      ? positiveFiniteNumber((raw as { value?: unknown }).value)
+      : null)
+  if (fromModel !== null) {
     return fromModel
   }
-  const fallback = toFiniteNumber(fallbackMeters)
-  if (fallback !== null && fallback > 0) {
-    return fallback
-  }
-  return null
+  return positiveFiniteNumber(fallbackMeters)
 }
 
 /**
@@ -107,11 +105,22 @@ export function bridgeBlocksVessel (
 ): boolean {
   const clearance = toFiniteNumber(clearanceMeters)
   const airDraft = toFiniteNumber(airDraftMeters)
-  const margin = Number.isFinite(marginMeters) ? marginMeters : DEFAULT_CLEARANCE_MARGIN_METERS
+  const margin = toFiniteNumber(marginMeters) ?? DEFAULT_CLEARANCE_MARGIN_METERS
   if (clearance === null || airDraft === null) {
     return false
   }
   return clearance <= airDraft + margin
+}
+
+/**
+ * Format a meters value for a human-readable alarm message: rounded to one
+ * decimal place, with a trailing `.0` dropped so a whole number reads `5 m`
+ * rather than `5.0 m`, and a converted value (15 ft to 4.572 m) reads `4.6 m`.
+ * Shared by the bridge clearance alarm and the route-hazard clearance clause so
+ * the two messages format clearances identically.
+ */
+export function formatMeters (meters: number): string {
+  return (Math.round(meters * 10) / 10).toString()
 }
 
 /** Config-schema fragment for the bridge air-draft check toggle. */

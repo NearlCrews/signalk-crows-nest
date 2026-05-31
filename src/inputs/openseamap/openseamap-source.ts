@@ -95,6 +95,19 @@ function elementName (element: OverpassElement, type: PoiType): string {
   return element.tags.name ?? element.tags['seamark:name'] ?? `Unnamed ${type.toLowerCase()}`
 }
 
+/**
+ * Attach the OSM vertical clearance to a built POI when a clearance tag parses.
+ * Runs for every element: it is harmless on non-bridges, since the air-draft
+ * check only reads `verticalClearanceMeters` on Bridge POIs.
+ */
+function attachClearance (
+  target: { verticalClearanceMeters?: number },
+  tags: Record<string, string>
+): void {
+  const clearance = parseOsmClearanceMeters(tags)
+  if (clearance !== undefined) target.verticalClearanceMeters = clearance
+}
+
 /** Build the source-agnostic detail view for an element. */
 function toDetailView (element: OverpassElement): PoiDetailView {
   const { type, skIcon } = elementMarking(element.tags)
@@ -109,10 +122,7 @@ function toDetailView (element: OverpassElement): PoiDetailView {
     skIcon
   }
   if (element.timestamp !== undefined) view.timestamp = element.timestamp
-  // Attach whenever a clearance tag parses; harmless on non-bridges, since the
-  // air-draft check only reads it on Bridge POIs.
-  const clearance = parseOsmClearanceMeters(element.tags)
-  if (clearance !== undefined) view.verticalClearanceMeters = clearance
+  attachClearance(view, element.tags)
   return view
 }
 
@@ -130,10 +140,7 @@ function toSummary (element: OverpassElement): PoiSummary {
     skIcon
   }
   if (element.timestamp !== undefined) summary.timestamp = element.timestamp
-  // Attach whenever a clearance tag parses; harmless on non-bridges, since the
-  // air-draft check only reads it on Bridge POIs.
-  const clearance = parseOsmClearanceMeters(element.tags)
-  if (clearance !== undefined) summary.verticalClearanceMeters = clearance
+  attachClearance(summary, element.tags)
   return summary
 }
 

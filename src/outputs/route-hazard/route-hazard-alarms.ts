@@ -24,6 +24,7 @@
 
 import { emitNotification, type NotificationValue } from '../../shared/notification-path.js'
 import { createNotificationTracker, type NotificationTrackerApp } from '../../shared/notification-tracker.js'
+import { formatMeters } from '../../shared/bridge-clearance.js'
 import { toFiniteNumber } from '../../shared/numbers.js'
 import { SECONDS_PER_MINUTE } from '../../shared/time.js'
 import type { CorridorPoi } from '../../shared/types.js'
@@ -90,15 +91,6 @@ function formatEta (seconds: number): string {
   const hours = Math.floor(totalMinutes / MINUTES_PER_HOUR)
   const minutes = totalMinutes % MINUTES_PER_HOUR
   return `${hours} h ${minutes} min`
-}
-
-/**
- * Format a meter value for the clearance clause: rounded to one decimal place,
- * with a trailing `.0` dropped so a whole number reads `5 m`, not `5.0 m`. A
- * feet-to-meters conversion (for example 15 ft to 4.572 m) then reads `4.6 m`.
- */
-function formatMeters (meters: number): string {
-  return (Math.round(meters * 10) / 10).toString()
 }
 
 /**

@@ -148,6 +148,21 @@ export function resolveTooLowBridges (input: TooLowBridgeInput): Map<string, Bri
   return tooLow
 }
 
+/**
+ * The bridge air-draft check's per-start state, built only when the check is
+ * enabled (otherwise `null`). Bundling the resolver, margin, and air-draft
+ * reader keeps all three out of scope when the check is off, so a disabled
+ * check computes nothing.
+ */
+interface BridgeCheck {
+  /** Resolves a corridor bridge's clearance (summary hit, or ActiveCaptain detail). */
+  resolver: BridgeClearanceResolver
+  /** The clamped safety margin, in meters, added to the air draft for the comparison. */
+  marginMeters: number
+  /** Read the current vessel air draft, in meters, or `null` when unknown. */
+  getAirDraft: () => number | null
+}
+
 /** The route-hazard output module. */
 export const routeHazardOutput: OutputModule = {
   id: 'route-hazard',
@@ -166,17 +181,20 @@ export const routeHazardOutput: OutputModule = {
 
     // The bridge air-draft check rides this existing route scan: when it is on,
     // a too-low bridge in the corridor gets a clearance-specific warn message.
-    // The resolver is built only when the check is enabled, so a disabled check
-    // costs nothing and the route scan behaves exactly as before. The air draft
-    // is re-read each tick, so the check activates if `design.airHeight` appears
-    // later in the voyage.
-    const bridgeCheckEnabled = config.enableBridgeAirDraftCheck === true
-    const clearanceResolver = bridgeCheckEnabled
-      ? createBridgeClearanceResolver({ getDetails: (id) => context.pois.getDetails(id), debug: app.debug })
+    // The whole bundle is built only when the check is enabled, so a disabled
+    // check computes nothing and the route scan behaves exactly as before. The
+    // air draft is re-read each tick, so the check activates if `design.airHeight`
+    // appears later in the voyage.
+    const bridgeCheck: BridgeCheck | null = config.enableBridgeAirDraftCheck === true
+      ? {
+          resolver: createBridgeClearanceResolver({
+            getDetails: (id) => context.pois.getDetails(id),
+            debug: (message) => { app.debug(message) }
+          }),
+          marginMeters: clampClearanceMargin(config.bridgeClearanceMarginMeters),
+          getAirDraft: () => readVesselAirDraft(app, config.vesselAirDraftMeters)
+        }
       : null
-    const clearanceMarginMeters = clampClearanceMargin(config.bridgeClearanceMarginMeters)
-    const airDraftFallbackMeters = config.vesselAirDraftMeters
-    const getAirDraftMeters = (): number | null => readVesselAirDraft(app, airDraftFallbackMeters)
 
     // The route read in buildFetchBox, reused in evaluate within the same tick.
     let tickRoute: RoutePolyline | null = null
@@ -215,16 +233,16 @@ export const routeHazardOutput: OutputModule = {
             speedOverGround: vesselState.speedOverGround
           }).filter((poi) => poi.alongTrackDistanceMeters <= ROUTE_LOOK_AHEAD_METERS)
         }
-        if (clearanceResolver === null) {
+        if (bridgeCheck === null) {
           alarms.evaluate(corridorPois)
           return
         }
         const tooLow = resolveTooLowBridges({
           corridorPois,
           pois,
-          resolver: clearanceResolver,
-          airDraftMeters: getAirDraftMeters(),
-          marginMeters: clearanceMarginMeters
+          resolver: bridgeCheck.resolver,
+          airDraftMeters: bridgeCheck.getAirDraft(),
+          marginMeters: bridgeCheck.marginMeters
         })
         alarms.evaluate(corridorPois, tooLow)
       }

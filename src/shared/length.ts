@@ -12,9 +12,6 @@
 /** Meters in one international foot. Exact by definition. */
 export const METERS_PER_FOOT = 0.3048
 
-/** Feet in one fathom, used where a source tags clearance in fathoms. */
-export const FEET_PER_FATHOM = 6
-
 /** Convert a length in feet to meters. */
 export function metersFromFeet (feet: number): number {
   return feet * METERS_PER_FOOT

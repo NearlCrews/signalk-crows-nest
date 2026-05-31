@@ -13,6 +13,7 @@
  */
 
 import { metersFromFeet, metersFromFeetInches } from '../../shared/length.js'
+import { positiveFiniteNumber } from '../../shared/numbers.js'
 
 /**
  * Clearance tag keys in priority order. The first key that parses to a usable
@@ -45,9 +46,13 @@ const METERS_RE = /^(\d+(?:\.\d+)?)\s*(?:m|meter|metre|meters|metres)$/
 /** A bare number with no unit, treated as meters. */
 const BARE_NUMBER_RE = /^\d+(?:\.\d+)?$/
 
-/** Return the value only when it is a positive finite number, else `undefined`. */
+/**
+ * Narrow a computed height to a positive finite value, else `undefined`. Wraps
+ * the shared `positiveFiniteNumber` to adapt its `null` to this module's
+ * `undefined` convention rather than re-implement the positive-finite predicate.
+ */
 function positiveMeters (meters: number): number | undefined {
-  return Number.isFinite(meters) && meters > 0 ? meters : undefined
+  return positiveFiniteNumber(meters) ?? undefined
 }
 
 /**

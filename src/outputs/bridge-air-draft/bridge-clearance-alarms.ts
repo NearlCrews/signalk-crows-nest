@@ -27,7 +27,7 @@
 
 import { emitNotification, type NotificationValue } from '../../shared/notification-path.js'
 import { createNotificationTracker, type NotificationTrackerApp } from '../../shared/notification-tracker.js'
-import { bridgeBlocksVessel } from '../../shared/bridge-clearance.js'
+import { bridgeBlocksVessel, formatMeters } from '../../shared/bridge-clearance.js'
 import { distanceMeters } from '../../geo/position-utilities.js'
 import type { BridgeClearanceResolver } from './bridge-clearance-resolver.js'
 import type { PoiSummary, PoiType, Position } from '../../shared/types.js'
@@ -97,11 +97,6 @@ interface InAlarmEntry {
   clearanceMeters: number
   airDraftMeters: number
   distanceMeters: number
-}
-
-/** Round a meter value to a single decimal place for a human-readable message. */
-function formatMeters (value: number): string {
-  return String(Math.round(value * 10) / 10)
 }
 
 /**
