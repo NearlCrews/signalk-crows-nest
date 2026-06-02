@@ -17,6 +17,7 @@ import type { LightListClient } from './light-list-client.js'
 import type { LightListStore } from './light-list-store.js'
 import { recordPoiType, recordSkIcon } from './light-list-mapping.js'
 import { renderLightListDetail } from './light-list-detail.js'
+import { buildLightListSections } from './light-list-sections.js'
 import type { PoiSource } from '../poi-source.js'
 import type { Bbox, PoiDetailView, PoiSummary, Position } from '../../shared/types.js'
 import { shouldSkipOutsideUsWaters } from '../../shared/us-waters.js'
@@ -190,6 +191,9 @@ export function createUscgLightListSource (
         source: USCG_LIGHT_LIST_SOURCE_ID,
         attribution: ATTRIBUTION,
         description,
+        // Normalized detail alongside the HTML: a structured client renders
+        // these sections natively, a generic client renders `description`.
+        sections: buildLightListSections(record),
         skIcon: recordSkIcon(record)
       }
       if (record.modifiedDate !== undefined) {

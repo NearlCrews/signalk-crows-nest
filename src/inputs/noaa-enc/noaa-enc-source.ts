@@ -22,6 +22,7 @@ import type { EncDirectClient } from './enc-direct-client.js'
 import type { EncFeature, EncLayerKey, ScaleBand } from './enc-direct-types.js'
 import { LAYER_LABEL, LAYER_POI_TYPE, LAYER_SK_ICON, sordatToIsoTimestamp } from './s57-mapping.js'
 import { renderEncDirectDetail } from './enc-direct-detail.js'
+import { buildNoaaEncSections } from './noaa-enc-sections.js'
 import type { PoiSource } from '../poi-source.js'
 import { createBboxDebounceCache } from '../../shared/bbox-debounce.js'
 import { MAX_BBOX_CACHE_ENTRIES, MAX_POI_CACHE_ENTRIES } from '../../shared/cache.js'
@@ -179,6 +180,9 @@ function toDetailView (cached: CachedFeature): PoiDetailView | null {
     source: NOAA_ENC_SOURCE_ID,
     attribution: NOAA_ENC_ATTRIBUTION,
     description,
+    // Normalized detail alongside the HTML: a structured client renders these
+    // sections natively, a generic client renders `description`.
+    sections: buildNoaaEncSections(layerKey, feature),
     skIcon: LAYER_SK_ICON
   }
   if (timestamp !== undefined) view.timestamp = timestamp

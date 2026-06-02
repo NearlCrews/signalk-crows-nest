@@ -25,15 +25,21 @@ const COLOR: Readonly<Record<string, string>> = {
 /** Strips a trailing seconds unit ("4s" to "4") from a light-character period token. */
 const TRAILING_SECONDS_PATTERN = /s$/i
 
-/** Normalize a USCG nominal-range unit code to a short, friendly label. */
-function rangeUnit (unit: string): string {
+/**
+ * Normalize a USCG nominal-range unit code to a short, friendly label.
+ * Exported so the normalized-section builder humanizes ranges identically.
+ */
+export function rangeUnit (unit: string): string {
   if (unit === 'NAUT MI') return 'NM'
   if (unit === 'STAT MI') return 'mi'
   return unit
 }
 
-/** Lowercase a USCG height unit ("FT") for inline use ("ft"). */
-function heightUnit (unit: string): string {
+/**
+ * Lowercase a USCG height unit ("FT") for inline use ("ft"). Exported so the
+ * normalized-section builder humanizes heights identically.
+ */
+export function heightUnit (unit: string): string {
   return unit.toLowerCase()
 }
 
@@ -47,9 +53,10 @@ function humanizeColor (token: string): string {
  * comma-separated, lowercase, English phrase such as "flashing, white, 4 s
  * period". Tokens are space-separated on the wire: the first carries the
  * IALA character abbreviation, the second the color, the third the period.
- * A shorter input simply produces a shorter phrase.
+ * A shorter input simply produces a shorter phrase. Exported so the
+ * normalized-section builder humanizes the light character identically.
  */
-function humanizeLightChar (raw: string): string {
+export function humanizeLightChar (raw: string): string {
   const tokens = raw.trim().split(/\s+/)
   const parts: string[] = []
   if (tokens.length > 0 && tokens[0] !== '') {

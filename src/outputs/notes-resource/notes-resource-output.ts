@@ -70,6 +70,10 @@ function buildMethods (context: OutputContext): ResourceProviderMethods {
       for (const entity of entities) {
         resources[entity.id] = buildNoteResource({
           name: entity.name,
+          // POI type rides on `properties.crowsNest.type` so a structured
+          // client can style a marker by type without a detail fetch. The list
+          // carries no `sections` (the heavy per-POI detail is detail-only).
+          type: entity.type,
           // Position passes through unchanged. With the per-bbox debounce
           // caches the same position reference is shared across calls and
           // into the published note; the pipeline downstream of the cache
@@ -124,7 +128,13 @@ function buildMethods (context: OutputContext): ResourceProviderMethods {
         source: view.source,
         attribution: view.attribution,
         timestamp: view.timestamp,
-        description: view.description
+        description: view.description,
+        // Carry the normalized detail through to `properties.crowsNest` so a
+        // structured client can render it; present only for sources that
+        // produce sections. The HTML `description` rides alongside for
+        // generic clients.
+        type: view.type,
+        sections: view.sections
       })
 
       if (property === undefined || property === '') {

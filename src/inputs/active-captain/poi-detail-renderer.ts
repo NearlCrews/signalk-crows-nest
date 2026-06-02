@@ -122,6 +122,16 @@ const relativeTimeFormat = new Intl.RelativeTimeFormat('en', { numeric: 'auto' }
 /** Splits a PascalCase boundary so "CellReception" humanizes to "Cell Reception". */
 const HUMANIZE_PATTERN = /([a-z0-9])([A-Z])/g
 
+/**
+ * Turn a PascalCase API field id (such as "CellReception") into spaced words
+ * ("Cell Reception") for display. Shared by the `humanize` Handlebars helper
+ * and the normalized-section builder so a note's field label reads the same in
+ * the HTML description and in the structured `sections` payload.
+ */
+export function humanizeField (value: string): string {
+  return value.replace(HUMANIZE_PATTERN, '$1 $2')
+}
+
 /** Matches CR, LF, or CRLF so a multi-line note renders with `<br/>` breaks. */
 const LINE_BREAK_PATTERN = /\r\n|\r|\n/g
 
@@ -306,9 +316,7 @@ function buildEnvironment (): typeof Handlebars {
 
   // Turns a PascalCase API field id (such as "CellReception") into spaced
   // words ("Cell Reception") for display.
-  env.registerHelper('humanize', (value: unknown): string =>
-    String(value).replace(HUMANIZE_PATTERN, '$1 $2')
-  )
+  env.registerHelper('humanize', (value: unknown): string => humanizeField(String(value)))
 
   // Escapes text and converts its line breaks to <br/>, so a multi-line note
   // is not collapsed onto one line in the rendered HTML. An absent value

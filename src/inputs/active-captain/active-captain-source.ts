@@ -22,6 +22,7 @@ import { createPoiCache } from './poi-cache.js'
 import { createPoiStore } from './poi-store.js'
 import type { PoiStore } from './poi-store.js'
 import { parseApiDate, renderDescription } from './poi-detail-renderer.js'
+import { buildActiveCaptainSections } from './active-captain-sections.js'
 import { bridgeHeightToMeters } from './bridge-clearance.js'
 import { filterByRating } from './rating-filter.js'
 import type { PoiSource } from '../poi-source.js'
@@ -236,6 +237,9 @@ export function createActiveCaptainSource (config: ActiveCaptainSourceConfig): P
         attribution: ACTIVE_CAPTAIN_ATTRIBUTION,
         skIcon: activeCaptainSkIcon(poi.poiType),
         ...(description !== undefined && { description }),
+        // Normalized detail alongside the HTML: a structured client renders
+        // these sections natively, a generic client renders `description`.
+        sections: buildActiveCaptainSections(entity),
         ...(Number.isFinite(modified.getTime()) && { timestamp: modified.toISOString() }),
         ...(verticalClearanceMeters !== undefined && { verticalClearanceMeters })
       }

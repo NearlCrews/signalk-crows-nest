@@ -47,6 +47,16 @@ const TYPE_LABEL: Readonly<Record<string, string>> = {
 const UNDERSCORE_PATTERN = /_/g
 
 /**
+ * Display form of a raw OSM enum value: underscores become spaces, so
+ * `port_hand` reads `port hand`. Exported so the normalized-section builder
+ * humanizes a category, colour, shape, or exhibition value exactly as this
+ * HTML renderer does and the two cannot drift.
+ */
+export function humanizeEnum (value: string): string {
+  return value.replace(UNDERSCORE_PATTERN, ' ')
+}
+
+/**
  * Read an OSM tag and trim whitespace. Returns undefined when the value is
  * absent or trims to the empty string. Older OSM edits occasionally surface
  * with leading or trailing whitespace; the lookup tables in this file and in
@@ -73,7 +83,7 @@ function buildLightLine (tags: Readonly<Record<string, string>>): string | null 
   }
   const colour = tagValue(tags, 'seamark:light:colour')
   if (colour !== undefined) {
-    parts.push(colour.replace(UNDERSCORE_PATTERN, ' '))
+    parts.push(humanizeEnum(colour))
   }
   const period = tagValue(tags, 'seamark:light:period')
   if (period !== undefined) {
@@ -89,7 +99,7 @@ function buildLightLine (tags: Readonly<Record<string, string>>): string | null 
   }
   const exhibition = tagValue(tags, 'seamark:light:exhibition')
   if (exhibition !== undefined) {
-    parts.push(`shown at ${exhibition.replace(UNDERSCORE_PATTERN, ' ')}`)
+    parts.push(`shown at ${humanizeEnum(exhibition)}`)
   }
   return parts.length > 0 ? parts.join(', ') : null
 }
@@ -122,15 +132,15 @@ function buildFamilyLine (tags: Readonly<Record<string, string>>): string | null
   const parts: string[] = []
   const category = tagValue(tags, `${prefix}category`)
   if (category !== undefined) {
-    parts.push(category.replace(UNDERSCORE_PATTERN, ' '))
+    parts.push(humanizeEnum(category))
   }
   const colour = tagValue(tags, `${prefix}colour`)
   if (colour !== undefined) {
-    parts.push(colour.replace(UNDERSCORE_PATTERN, ' '))
+    parts.push(humanizeEnum(colour))
   }
   const shape = tagValue(tags, `${prefix}shape`)
   if (shape !== undefined) {
-    parts.push(`${shape.replace(UNDERSCORE_PATTERN, ' ')} shape`)
+    parts.push(`${humanizeEnum(shape)} shape`)
   }
   if (parts.length === 0) {
     return null

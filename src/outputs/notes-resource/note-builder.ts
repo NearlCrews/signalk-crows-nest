@@ -29,10 +29,16 @@
  * - `properties.plugin` and `properties.pluginRepo` ride on every note so a
  *   chart-plotter UI can render a "plugin home" link from structured fields
  *   rather than depend on an inline footer in the description.
+ * - `properties.crowsNest` (`{ schemaVersion, type, sections }`) carries the
+ *   normalized detail a structured client renders natively, alongside the HTML
+ *   `description` a generic client renders. Present only when the source
+ *   produced sections. See `src/shared/normalized-detail.ts`.
  */
 
 import { PLUGIN_ID, PLUGIN_REPO_URL } from '../../shared/plugin-id.js'
-import type { Position } from '../../shared/types.js'
+import { NORMALIZED_DETAIL_SCHEMA_VERSION } from '../../shared/normalized-detail.js'
+import type { NormalizedSection } from '../../shared/normalized-detail.js'
+import type { PoiType, Position } from '../../shared/types.js'
 
 /** Inputs for {@link buildNoteResource}. */
 export interface NoteResourceInput {
@@ -62,6 +68,18 @@ export interface NoteResourceInput {
   timestamp?: string
   /** Rendered HTML description (text/html). Omitted when none or empty. */
   description?: string
+  /**
+   * POI type, published inside `properties.crowsNest` so a structured client
+   * can style by type. Omitted on responses that carry no normalized detail.
+   */
+  type?: PoiType
+  /**
+   * Normalized, presentation-neutral detail. When present it is published under
+   * `properties.crowsNest.sections` alongside the HTML `description`, so a
+   * structured client renders it natively while a generic client renders the
+   * HTML. Omitted by a source that does not yet produce it.
+   */
+  sections?: NormalizedSection[]
 }
 
 /**
@@ -69,7 +87,7 @@ export interface NoteResourceInput {
  * single-resource responses.
  */
 export function buildNoteResource (input: NoteResourceInput): Record<string, unknown> {
-  const { name, position, skIcon, url, source, attribution, sources, timestamp, description } = input
+  const { name, position, skIcon, url, source, attribution, sources, timestamp, description, type, sections } = input
   // `readOnly` is intentionally NOT set in properties: it is not a standard
   // SignalK notes property and a strict server-side validator could strip
   // it. The read-only contract is enforced by the resource provider's
@@ -87,6 +105,21 @@ export function buildNoteResource (input: NoteResourceInput): Record<string, unk
   // and publishing a derivable field invites the two to disagree silently.
   if (sources !== undefined && sources.length > 1) {
     properties.sources = sources
+  }
+  // Normalized detail rides alongside the HTML `description` under a single
+  // namespaced blob: a structured client (signalk-binnacle) reads
+  // `properties.crowsNest` and renders natively; a generic client (Freeboard-SK)
+  // ignores it and renders the HTML. `schemaVersion` lets a consumer detect the
+  // shape and fall back to the HTML on a version it does not recognize. The
+  // blob carries `type` on both list and detail responses (so a marker can be
+  // styled by POI type without a detail fetch) and `sections` only on detail
+  // responses (the list omits the heavy per-POI detail). See
+  // `src/shared/normalized-detail.ts`.
+  if (type !== undefined || sections !== undefined) {
+    const crowsNest: Record<string, unknown> = { schemaVersion: NORMALIZED_DETAIL_SCHEMA_VERSION }
+    if (type !== undefined) crowsNest.type = type
+    if (sections !== undefined) crowsNest.sections = sections
+    properties.crowsNest = crowsNest
   }
   // Construct the position field-by-field rather than passing the source's
   // position object through unchanged. Two of the four sources hand us a

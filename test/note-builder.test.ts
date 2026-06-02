@@ -5,6 +5,7 @@ import {
   readProperty,
   type NoteResourceInput
 } from '../src/outputs/notes-resource/note-builder.js'
+import { NORMALIZED_DETAIL_SCHEMA_VERSION } from '../src/shared/normalized-detail.js'
 
 const SAMPLE_URL = 'https://activecaptain.garmin.com/en-US/pois/7'
 const SAMPLE_SOURCE = 'activecaptain'
@@ -24,6 +25,43 @@ function input (overrides: Partial<NoteResourceInput> = {}): NoteResourceInput {
     ...overrides
   }
 }
+
+test('publishes normalized detail under properties.crowsNest when sections are supplied', () => {
+  const note = buildNoteResource(input({
+    type: 'Navigational',
+    sections: [
+      { id: 'light', title: 'Light', items: [{ label: 'Character', value: 'flashing', kind: 'text' }] }
+    ]
+  }))
+  const properties = note.properties as Record<string, unknown>
+  const crowsNest = properties.crowsNest as Record<string, unknown>
+  assert.equal(crowsNest.schemaVersion, NORMALIZED_DETAIL_SCHEMA_VERSION)
+  assert.equal(crowsNest.type, 'Navigational')
+  assert.deepEqual(crowsNest.sections, [
+    { id: 'light', title: 'Light', items: [{ label: 'Character', value: 'flashing', kind: 'text' }] }
+  ])
+  // The standard fields and HTML path are untouched: a generic consumer still
+  // sees a normal note.
+  assert.equal(note.name, 'Dock')
+  assert.equal(properties.skIcon, 'marina')
+})
+
+test('publishes crowsNest with type but no sections for a list-style note', () => {
+  // A list entry carries the POI type (so a marker can be styled without a
+  // detail fetch) but omits the heavy per-POI sections.
+  const note = buildNoteResource(input({ type: 'Marina' }))
+  const properties = note.properties as Record<string, unknown>
+  const crowsNest = properties.crowsNest as Record<string, unknown>
+  assert.equal(crowsNest.schemaVersion, NORMALIZED_DETAIL_SCHEMA_VERSION)
+  assert.equal(crowsNest.type, 'Marina')
+  assert.equal(crowsNest.sections, undefined, 'a list entry carries no sections')
+})
+
+test('omits properties.crowsNest entirely when neither type nor sections is supplied', () => {
+  const note = buildNoteResource(input())
+  const properties = note.properties as Record<string, unknown>
+  assert.equal(properties.crowsNest, undefined, 'no type and no sections means no crowsNest blob')
+})
 
 test('buildNoteResource omits timestamp and description when not supplied', () => {
   const note = buildNoteResource(input())

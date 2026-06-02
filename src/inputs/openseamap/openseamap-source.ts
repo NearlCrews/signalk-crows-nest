@@ -15,6 +15,7 @@
 import { LRUCache } from 'lru-cache'
 import type { OverpassClient, OverpassElement } from './overpass-client.js'
 import { renderOpenSeaMapDetail, tagValue } from './openseamap-detail.js'
+import { buildOpenSeaMapSections } from './openseamap-sections.js'
 import { elementMarking, seamarkRegex } from './seamark-mapping.js'
 import { parseOsmClearanceMeters } from './clearance.js'
 import type { PoiSource } from '../poi-source.js'
@@ -125,6 +126,9 @@ function toDetailView (element: OverpassElement): PoiDetailView {
     source: OPENSEAMAP_SOURCE_ID,
     attribution: OPENSEAMAP_ATTRIBUTION,
     description: renderOpenSeaMapDetail(element),
+    // Normalized detail alongside the HTML: a structured client renders these
+    // sections natively, a generic client renders `description`.
+    sections: buildOpenSeaMapSections(element),
     skIcon
   }
   if (element.timestamp !== undefined) view.timestamp = element.timestamp

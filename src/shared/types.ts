@@ -8,6 +8,8 @@
  * summary-API shapes.
  */
 
+import type { NormalizedSection } from './normalized-detail.js'
+
 /** A geographic point. Matches both SignalK and ActiveCaptain conventions. */
 export interface Position {
   latitude: number
@@ -181,6 +183,13 @@ export interface PoiDetailView {
   attribution: string
   /** Rendered HTML description. Omitted when none. */
   description?: string
+  /**
+   * Normalized, presentation-neutral detail a structured client can render
+   * natively, carried alongside the HTML `description` (not instead of it).
+   * Omitted by a source that does not yet produce it. Published on the note's
+   * `properties.crowsNest.sections`; see `src/shared/normalized-detail.ts`.
+   */
+  sections?: NormalizedSection[]
   /** ISO-8601 UTC last-modified time, omitted when unknown. */
   timestamp?: string
   /**
