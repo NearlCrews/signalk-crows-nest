@@ -68,10 +68,11 @@ export function buildLightListSections (record: LightListRecord): NormalizedSect
   }
 
   // Identity and provenance. Always present: every record carries an LLNR,
-  // volume, and district.
+  // volume, and district. LLNR and Volume are identifiers, not tallies, so they
+  // are 'text' rather than 'count' even though the values are numeric.
   const source: NormalizedItem[] = [
-    { label: 'LLNR', value: record.llnr, kind: 'count' },
-    { label: 'Volume', value: record.volume, kind: 'count' },
+    { label: 'LLNR', value: record.llnr, kind: 'text' },
+    { label: 'Volume', value: record.volume, kind: 'text' },
     { label: 'District', value: record.district, kind: 'text' }
   ]
   if (record.modifiedDate !== undefined) {

@@ -64,9 +64,10 @@ test('builds normalized sections for a fully populated light, mirroring the huma
   assert.deepEqual(section(sections, 'remarks')?.items, [
     { label: 'Remark', value: 'Visible 015° to 195°', kind: 'note' }
   ])
+  // LLNR and Volume are identifiers, not tallies, so they are 'text' not 'count'.
   assert.deepEqual(section(sections, 'source')?.items, [
-    { label: 'LLNR', value: 40100, kind: 'count' },
-    { label: 'Volume', value: 1, kind: 'count' },
+    { label: 'LLNR', value: 40100, kind: 'text' },
+    { label: 'Volume', value: 1, kind: 'text' },
     { label: 'District', value: 'D01', kind: 'text' },
     { label: 'Last updated', value: '2024-03-12', kind: 'text' }
   ])
