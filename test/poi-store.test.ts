@@ -35,6 +35,21 @@ function withTempDir (body: (dir: string) => void): void {
   }
 }
 
+test('clear removes a leftover temp file alongside the store file', () => {
+  withTempDir((dir) => {
+    const store = createPoiStore(dir, TTL_MINUTES)
+    store.persist('1', makeDetails('1'))
+    store.flush()
+    // Simulate a `.tmp` sibling left behind by a failed rename. clear() must
+    // remove it too, so a wipe leaves no debris for the next run to trip over.
+    const tempPath = join(dir, `${STORE_FILE_NAME}.tmp`)
+    writeFileSync(tempPath, '{}', 'utf8')
+    store.clear()
+    assert.equal(existsSync(join(dir, STORE_FILE_NAME)), false, 'the store file is removed')
+    assert.equal(existsSync(tempPath), false, 'the leftover temp file is removed too')
+  })
+})
+
 test('persisted entries survive into a fresh store instance', () => {
   withTempDir((dir) => {
     const writer = createPoiStore(dir, TTL_MINUTES)

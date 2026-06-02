@@ -207,20 +207,15 @@ export function createInputRegistry (
               if (!context.status.wasJustSkipped(sourceId)) {
                 context.status.recordListFetch(sourceId, result.value.pois.length)
               }
-              // The id rewrite is done via a spread-clone, not an in-place
-              // mutation: the per-source bbox-debounce caches now return the
-              // same PoiSummary[] reference across hits, and mutating the
-              // shared objects would re-apply the prefix on every cached
-              // tick (`activecaptain-12345` becoming
-              // `activecaptain-activecaptain-12345` and so on, breaking
-              // detail lookup and proximity-alarm hysteresis).
-              //
-              // The `position` object is cloned for the same reason: the
-              // bbox-debounce caches share the same `PoiSummary[]` (and
-              // therefore the same `position` objects) across hits, and a
-              // downstream consumer that mutates `note.position` (the chart
-              // plotter's projection step, for example) would silently
-              // corrupt the cached entry for the next caller.
+              // The id rewrite is a spread-clone, not an in-place mutation:
+              // ActiveCaptain's bbox-debounce cache returns the same
+              // PoiSummary (and position) object references across hits, so
+              // mutating them would re-apply the prefix every cached tick
+              // (`activecaptain-12345` becoming `activecaptain-activecaptain-12345`,
+              // breaking detail lookup and proximity-alarm hysteresis) and a
+              // consumer that mutates `note.position` (a projection step, say)
+              // would corrupt the cached entry. OpenSeaMap and NOAA build fresh
+              // summaries per call, but the uniform clone is harmless for them.
               const prefix = `${sourceId}-`
               for (const poi of result.value.pois) {
                 merged.push({

@@ -12,7 +12,9 @@
  * - For an ActiveCaptain bridge with no clearance on the summary, the resolver
  *   kicks off a deduped, fire-and-forget `getDetails` (which is itself
  *   TTL-and-disk cached) and returns `null` for this tick. The resolved value
- *   is cached, so a later tick returns it. The scan box is far wider than the
+ *   is cached (with a freshness TTL after which a later encounter re-resolves
+ *   it, picking up an upstream correction), so a later tick returns it while
+ *   it is fresh. The scan box is far wider than the
  *   alarm radius, so a one-tick lag before an ActiveCaptain clearance is known
  *   never costs a real alarm.
  * - Any other bridge with no clearance resolves to `null` with no fetch: no
@@ -27,8 +29,17 @@
 import { LRUCache } from 'lru-cache'
 import { ACTIVE_CAPTAIN_SOURCE_ID } from '../../shared/source-ids.js'
 import { MAX_POI_CACHE_ENTRIES } from '../../shared/cache.js'
+import { MS_PER_MINUTE } from '../../shared/time.js'
 import { toFiniteNumber } from '../../shared/numbers.js'
 import type { PoiDetailView, PoiSummary } from '../../shared/types.js'
+
+/**
+ * Default freshness window for a resolved clearance, in minutes. Bridge
+ * clearances are physically static, so six hours is far longer than any single
+ * approach yet short enough that a multi-day voyage re-resolves a few times,
+ * picking up an upstream data correction without needing a plugin restart.
+ */
+const DEFAULT_CLEARANCE_TTL_MINUTES = 360
 
 /** Dependencies for {@link createBridgeClearanceResolver}. */
 export interface ClearanceResolverDeps {
@@ -36,6 +47,14 @@ export interface ClearanceResolverDeps {
   getDetails: (id: string) => Promise<PoiDetailView>
   /** Plugin debug logger. */
   debug: (message: string) => void
+  /**
+   * How long, in minutes, a resolved clearance stays fresh before the resolver
+   * re-fetches it on the next encounter. Defaults to
+   * {@link DEFAULT_CLEARANCE_TTL_MINUTES}.
+   */
+  ttlMinutes?: number
+  /** Clock source, injectable for tests. Defaults to `Date.now`. */
+  now?: () => number
 }
 
 /** Public surface of the bridge clearance resolver. */
@@ -51,15 +70,20 @@ export interface BridgeClearanceResolver {
 /** A resolved ActiveCaptain clearance: a number, or `null` for "detail had none." */
 interface CachedClearance {
   clearance: number | null
+  /** Epoch ms (from the injected clock) at which this clearance was resolved. */
+  resolvedAt: number
 }
 
 /** Create a bridge clearance resolver. */
 export function createBridgeClearanceResolver (deps: ClearanceResolverDeps): BridgeClearanceResolver {
   const { getDetails, debug } = deps
+  const ttlMs = (deps.ttlMinutes ?? DEFAULT_CLEARANCE_TTL_MINUTES) * MS_PER_MINUTE
+  const now = deps.now ?? Date.now
   // Resolved ActiveCaptain clearances, keyed by POI id. Bounded by an LRU so a
   // long voyage past many bridges cannot grow the map without limit. A
   // CachedClearance wrapper lets a "detail carried no clearance" result be
-  // cached as `{ clearance: null }`, which the LRU cannot store as a bare null.
+  // cached as `{ clearance: null }`, which the LRU cannot store as a bare null,
+  // and carries the resolve time so a stale entry can be re-fetched.
   const cache = new LRUCache<string, CachedClearance>({ max: MAX_POI_CACHE_ENTRIES })
   // Ids with a detail fetch in flight, so a burst of ticks cannot stack
   // duplicate fetches for the same bridge.
@@ -69,7 +93,7 @@ export function createBridgeClearanceResolver (deps: ClearanceResolverDeps): Bri
     inFlight.add(id)
     getDetails(id)
       .then((detail) => {
-        cache.set(id, { clearance: toFiniteNumber(detail.verticalClearanceMeters) })
+        cache.set(id, { clearance: toFiniteNumber(detail.verticalClearanceMeters), resolvedAt: now() })
       })
       .catch((error: unknown) => {
         // Transient failure: leave it uncached so a later encounter retries.
@@ -94,13 +118,15 @@ export function createBridgeClearanceResolver (deps: ClearanceResolverDeps): Bri
       return null
     }
     const cached = cache.get(poi.id)
-    if (cached !== undefined) {
-      return cached.clearance
-    }
-    if (!inFlight.has(poi.id)) {
+    const fresh = cached !== undefined && now() - cached.resolvedAt < ttlMs
+    // (Re-)fetch on a miss or a stale entry, unless one is already in flight.
+    if (!fresh && !inFlight.has(poi.id)) {
       startFetch(poi.id)
     }
-    return null
+    // Serve a known clearance, even a stale one, while a refresh runs, so a
+    // tick never regresses to "unknown" once the value is known; the next tick
+    // returns the refreshed value.
+    return cached?.clearance ?? null
   }
 
   return { clearanceMeters }

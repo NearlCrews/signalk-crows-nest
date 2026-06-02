@@ -89,11 +89,27 @@ export interface LightListStore {
   /** Return the current in-memory index without reading disk. */
   snapshot: () => LightListIndex
   /**
+   * Number of records currently held in the in-memory index, in O(1). Reads
+   * the per-record tile bookkeeping rather than allocating the full key list
+   * of the records map (~57,700 strings) on every call, and stays accurate
+   * after a partial-decode recovery, where summing the per-district
+   * `recordCount` metas would over-report.
+   */
+  recordCount: () => number
+  /**
    * Return every record whose position falls within `bbox`, using the
    * in-memory tile index. Per-call cost is O(tiles_in_bbox + records_in_tiles)
    * rather than O(total_records).
    */
   queryBbox: (bbox: Bbox) => LightListRecord[]
+  /**
+   * Mark the store closed. A closed store's {@link flush} becomes a no-op, so a
+   * refresh still in flight when a run is torn down (plugin stop or a
+   * config-change restart) cannot write its index over a freshly started run
+   * pointing at the same data dir. Write protection lives here, with the
+   * component that owns the disk writes, rather than in each caller.
+   */
+  close: () => void
 }
 
 /** A fresh, empty index. */
@@ -126,7 +142,15 @@ function districtKey (district: string, page: number): string {
 /** Compute the integer tile key for a position. */
 function tileKey (position: Position): number {
   const latCell = Math.floor((position.latitude + 90) * TILE_CELLS_PER_DEGREE)
-  const lonCell = Math.floor((position.longitude + 180) * TILE_CELLS_PER_DEGREE)
+  // Clamp the longitude cell into range. Longitude exactly +180 (which
+  // isValidLongitude permits) computes LON_CELL_COUNT, one past the last cell,
+  // aliasing onto the next latitude row's cell 0. An antimeridian (wrap) query,
+  // whose longitude range stops at the last in-range cell, would then never
+  // visit it and would silently drop the aid.
+  const lonCell = Math.min(
+    LON_CELL_COUNT - 1,
+    Math.floor((position.longitude + 180) * TILE_CELLS_PER_DEGREE)
+  )
   return latCell * LON_CELL_COUNT + lonCell
 }
 
@@ -205,6 +229,9 @@ export function createLightListStore (dataDir: string): LightListStore {
   // metadata file: a page upsert always counts, since it bumps the
   // `generated` timestamp and the per-district fetchedAt.
   let metadataDirty = false
+  // Set by close(). A closed store skips flush so a torn-down run cannot write
+  // over a freshly started run sharing the same data dir.
+  let closed = false
 
   function addRecordToIndex (record: LightListRecord): void {
     // Idempotent: if this LLNR already lives in the tile index (from a
@@ -325,7 +352,10 @@ export function createLightListStore (dataDir: string): LightListStore {
       const key = districtKey(district, page)
       const previous = index.districts[key]
       if (previous !== undefined) {
-        for (const llnr of previous.llnrs) {
+        // Tolerate a district meta missing `llnrs` (a corrupt or truncated
+        // index): an unguarded for...of threw per page and wedged the source.
+        // The upsert below rewrites a clean meta, so the store self-heals.
+        for (const llnr of previous.llnrs ?? []) {
           removeRecordFromIndex(llnr)
         }
       }
@@ -352,6 +382,10 @@ export function createLightListStore (dataDir: string): LightListStore {
     },
 
     async flush () {
+      // A run torn down mid-refresh must not write onto a freshly started run
+      // pointing at the same data dir; the next run re-refreshes from its own
+      // loaded index.
+      if (closed) return
       if (!metadataDirty && dirtyPages.size === 0) return
       await mkdir(pagesDir, { recursive: true })
       // Write every dirty page in parallel: each is its own atomic
@@ -381,6 +415,17 @@ export function createLightListStore (dataDir: string): LightListStore {
 
     snapshot () {
       return index
+    },
+
+    recordCount () {
+      // recordTile holds exactly one entry per record in the index (kept in
+      // sync by addRecordToIndex/removeRecordFromIndex), so its size is the
+      // live record total without scanning or allocating.
+      return recordTile.size
+    },
+
+    close () {
+      closed = true
     },
 
     queryBbox (bbox) {

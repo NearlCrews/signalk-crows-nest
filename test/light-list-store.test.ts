@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createLightListStore } from '../src/inputs/uscg-light-list/light-list-store.js'
@@ -125,6 +126,26 @@ test('store falls back to an empty index when index.json is unparseable', async 
   }
 })
 
+test('a closed store does not flush dirty data to disk', async () => {
+  // Write protection lives in the store: after close(), even a dirty flush is
+  // a no-op, so a run torn down mid-refresh cannot write its index over a
+  // freshly started run sharing the same data dir.
+  const dir = await mkdtemp(join(tmpdir(), 'll-store-'))
+  try {
+    const store = createLightListStore(dir)
+    await store.load()
+    store.upsertDistrict('D01', 1, [sampleRecord(100)], {}) // marks the page dirty
+    store.close()
+    await store.flush()
+    assert.equal(
+      existsSync(join(dir, 'uscg-light-list', 'index.json')), false,
+      'a closed store writes nothing on flush'
+    )
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test('queryBbox returns records inside the bbox using the spatial tile index', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'll-store-'))
   try {
@@ -161,6 +182,70 @@ test('queryBbox returns records on both sides of an antimeridian-crossing bbox',
     const wrap = store.queryBbox({ south: 51, west: 178, north: 53, east: -178 })
     const llnrs = wrap.map(r => r.llnr).sort()
     assert.deepEqual(llnrs, [800, 801])
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('queryBbox finds a record at exactly longitude 180 across an antimeridian bbox', async () => {
+  // A record at +180 lands in the highest longitude cell. The tile key must
+  // clamp that cell into range; otherwise it collides with the next latitude
+  // row's cell 0 and a wrap (antimeridian) query, whose longitude range stops
+  // at the last in-range cell, never visits it, silently dropping the aid.
+  const dir = await mkdtemp(join(tmpdir(), 'll-store-'))
+  try {
+    const store = createLightListStore(dir)
+    await store.load()
+    store.upsertDistrict('D17', 1, [
+      { ...sampleRecord(810, 'D17'), position: { latitude: 52, longitude: 180 } }
+    ], {})
+    // A narrow latitude band that holds the record's own tile row but NOT the
+    // row the unclamped +180 cell aliases into (lonCell 3600 == next row's
+    // cell 0). With the wide band the alias row is visited and masks the bug.
+    const wrap = store.queryBbox({ south: 51.95, west: 178, north: 52.05, east: -178 })
+    assert.deepEqual(wrap.map(r => r.llnr), [810])
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('load tolerates a district meta missing llnrs/recordCount without wedging later upserts', async () => {
+  // A corrupt, truncated, or hand-edited index.json can carry a district
+  // entry missing llnrs/recordCount. load must not crash, and the next
+  // refresh upsert of that district must not throw: the old code dereferenced
+  // previous.llnrs unguarded, threw per page, and (since the throw aborted
+  // before the page was marked dirty) repeated every refresh, permanently
+  // wedging the source until the data dir was wiped.
+  const dir = await mkdtemp(join(tmpdir(), 'll-store-'))
+  try {
+    await mkdir(join(dir, 'uscg-light-list'), { recursive: true })
+    await writeFile(
+      join(dir, 'uscg-light-list', 'index.json'),
+      JSON.stringify({ generated: 'x', districts: { D01_1: { fetchedAt: 'x' } } }),
+      'utf8'
+    )
+    const store = createLightListStore(dir)
+    await assert.doesNotReject(store.load())
+    assert.doesNotThrow(() => store.upsertDistrict('D01', 1, [sampleRecord(100)], {}))
+    const hit = store.queryBbox({ south: 41, west: -72, north: 43, east: -70 })
+    assert.deepEqual(hit.map(r => r.llnr), [100], 'the store self-heals: the new record is queryable')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('recordCount reflects the live in-memory record total, not stale per-district counts', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'll-store-'))
+  try {
+    const store = createLightListStore(dir)
+    await store.load()
+    store.upsertDistrict('D01', 1, [sampleRecord(100), sampleRecord(101)], {})
+    store.upsertDistrict('D05', 1, [sampleRecord(500, 'D05')], {})
+    assert.equal(store.recordCount(), 3)
+    // A re-upsert that shrinks a district is reflected at once, so the
+    // source's cacheSize cannot over-report after a partial-decode recovery.
+    store.upsertDistrict('D01', 1, [sampleRecord(100)], {})
+    assert.equal(store.recordCount(), 2)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

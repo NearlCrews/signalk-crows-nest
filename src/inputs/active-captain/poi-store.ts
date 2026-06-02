@@ -224,8 +224,11 @@ export function createPoiStore (directoryPath: string, ttlMinutes: number): PoiS
       entries = {}
       try {
         rmSync(filePath, { force: true })
+        // Also remove any `.tmp` sibling a failed rename may have left behind,
+        // so a wipe leaves no debris.
+        rmSync(tempPath, { force: true })
       } catch {
-        // Nothing persisted, or the file cannot be removed: nothing to do.
+        // Nothing persisted, or a file cannot be removed: nothing to do.
       }
     }
   }

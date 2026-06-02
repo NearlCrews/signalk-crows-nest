@@ -111,6 +111,35 @@ test('a fetch failure is not cached, so a later encounter retries', async () => 
   assert.ok(calls >= 2, 'a transient failure is retried on a later encounter')
 })
 
+test('re-resolves an ActiveCaptain clearance after its TTL so an upstream correction is picked up', async () => {
+  // Without a TTL the resolver pins the first resolved clearance for the life
+  // of the run, so a corrected ActiveCaptain bridge height (or one the detail
+  // cache later refreshes) is never seen until a restart. An injectable clock
+  // keeps the test deterministic with no real timers.
+  let clock = 1000
+  let upstream = 4.2
+  let calls = 0
+  const resolver = createBridgeClearanceResolver({
+    getDetails: async () => { calls += 1; return detail(upstream) },
+    debug: () => {},
+    ttlMinutes: 10,
+    now: () => clock
+  })
+  const ac = bridge({ id: 'ac5' })
+  assert.equal(resolver.clearanceMeters(ac), null, 'first tick: unknown, fetch started')
+  await flush()
+  assert.equal(resolver.clearanceMeters(ac), 4.2, 'served from cache while fresh')
+  assert.equal(calls, 1)
+
+  // The bridge height is corrected upstream; advance time past the TTL.
+  upstream = 3.0
+  clock += 10 * 60 * 1000 + 1
+  assert.equal(resolver.clearanceMeters(ac), 4.2, 'serves the stale value once while it revalidates')
+  await flush()
+  assert.equal(resolver.clearanceMeters(ac), 3.0, 'after the TTL the corrected clearance is picked up')
+  assert.ok(calls >= 2, 'the stale entry triggered a re-fetch')
+})
+
 test('never fetches for a non-ActiveCaptain bridge with no summary clearance', async () => {
   let calls = 0
   const resolver = createBridgeClearanceResolver({

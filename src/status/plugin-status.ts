@@ -41,17 +41,17 @@ export interface PluginStatus {
    * is outside US waters and the source covers US data only. A skip is not a
    * failure: it leaves `apiReachable` and `lastListFetch` untouched and is not
    * added to the recent-errors list. It does set a per-source `justSkipped`
-   * flag that the aggregate input registry reads through
+   * flag that the aggregate input registry reads (and consumes) through
    * {@link wasJustSkipped} so a follow-on `recordListFetch(0)` does not
    * overwrite the previous fetch with a bogus "fetched zero POIs" success.
    */
   recordSkipped: (source: string, reason: string) => void
   /**
-   * True when `recordSkipped` was the most recent recording call for the
-   * source: the source declined to issue a request and any follow-on empty
-   * list result should be treated as a skip, not a "fetched zero POIs"
-   * success. The flag clears the next time `recordListFetch` or
-   * `recordError` records a real outcome for that source.
+   * True when the source's most recent recorded event was a skip, i.e. the
+   * source declined to issue a request, so a follow-on empty list result
+   * should be treated as a skip, not a "fetched zero POIs" success. Reading
+   * the flag CONSUMES it: it reflects only the skip immediately preceding the
+   * read, so a later real fetch is recorded normally rather than suppressed.
    */
   wasJustSkipped: (source: string) => boolean
   /**
@@ -67,11 +67,12 @@ interface SourceState {
   apiReachable: boolean | null
   lastListFetch: LastListFetch | null
   /**
-   * Set by {@link PluginStatus.recordSkipped} and cleared by the next
-   * `recordListFetch`/`recordError` for the same source. The aggregate
-   * input registry reads this flag through {@link PluginStatus.wasJustSkipped}
-   * to decide whether an empty list result is a "fetched zero POIs" success
-   * or a "did not bother" skip that should leave the row untouched.
+   * Set by {@link PluginStatus.recordSkipped} and cleared on read by
+   * {@link PluginStatus.wasJustSkipped} (and by the next
+   * `recordListFetch`/`recordError` for the same source). The aggregate
+   * input registry reads this flag to decide whether an empty list result is
+   * a "fetched zero POIs" success or a "did not bother" skip that should leave
+   * the row untouched; consuming it on read keeps the skip strictly per-call.
    */
   justSkipped: boolean
 }
@@ -147,7 +148,20 @@ export function createPluginStatus (sources: ReadonlyArray<StatusSource>): Plugi
     },
 
     wasJustSkipped: (source: string): boolean => {
-      return states.get(source)?.justSkipped === true
+      const state = states.get(source)
+      if (state === undefined) {
+        return false
+      }
+      // Consume the flag on read: it marks only the skip that immediately
+      // preceded THIS read. The registry reads it once per source per list
+      // call to tell a real empty fetch from a skip; clearing it here means a
+      // later real fetch after a skip is recorded rather than suppressed for
+      // the rest of the run. The flag used to clear only via recordListFetch,
+      // which the registry gates behind this very flag, so once set it never
+      // cleared and the row froze.
+      const skipped = state.justSkipped
+      state.justSkipped = false
+      return skipped
     },
 
     snapshot: (cachedPoiCount: number): StatusSnapshot => ({

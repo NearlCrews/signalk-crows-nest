@@ -138,6 +138,8 @@ export function createUscgLightListSource (
       })())
     }
     await Promise.all(workers)
+    // The store no-ops this flush if the run has been closed mid-refresh, so a
+    // torn-down run cannot write over a freshly started one at the same dir.
     await store.flush()
   }
 
@@ -195,23 +197,19 @@ export function createUscgLightListSource (
       }
       return view
     },
-    // `index.records` is a `Record<llnr, LightListRecord>`. Reading
-    // the entry count via `Object.keys(...).length` allocates a fresh
-    // array of every key (57.7 k strings) per status poll, which the
-    // status snapshot then triggers every 5 s. The DistrictMeta entries
-    // already carry the per-page record count; sum them for an O(K)
-    // count where K is the number of districts (37 today), avoiding
-    // the per-poll 57.7 k-element allocation.
-    cacheSize: () => {
-      const districts = store.snapshot().districts
-      let total = 0
-      for (const key in districts) total += districts[key].recordCount
-      return total
-    },
+    // The store exposes its live record total in O(1) (per-record tile
+    // bookkeeping). That avoids both the per-poll 57.7 k-key allocation of
+    // `Object.keys(records).length` (the status snapshot polls every 5 s) AND
+    // the stale over-count of summing the per-district `recordCount` metas,
+    // which a partial-decode recovery leaves higher than the records actually
+    // loaded.
+    cacheSize: () => store.recordCount(),
     close: () => {
-      // The refresh scheduler is owned by the input module: it chains its own
-      // teardown onto this close. The source itself holds no resources to
-      // release here.
+      // The refresh scheduler is owned by the input module, which clears its
+      // timers before chaining onto this close. Closing the store makes an
+      // in-flight refreshAll's final flush a no-op, so a late refresh cannot
+      // write onto a torn-down or restarted run's store.
+      store.close()
     },
     refreshAll
   }

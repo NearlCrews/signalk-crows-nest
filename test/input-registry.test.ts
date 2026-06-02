@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createInputRegistry } from '../src/inputs/input-registry.js'
+import { createPluginStatus } from '../src/status/plugin-status.js'
 import type { InputModule, PoiSource } from '../src/inputs/poi-source.js'
 import type { Bbox, PoiDetailView, PoiSummary } from '../src/shared/types.js'
 
@@ -381,4 +382,40 @@ test('listPointsOfInterest does NOT record a list fetch when a source returned e
   // Only the working source records a list fetch; the skipped source does
   // not, even though it returned a fulfilled empty array.
   assert.deepEqual(fetches, [{ source: 'worker', count: 2 }])
+})
+
+test('a source that skipped on one tick is not frozen out of recording a later real fetch', async () => {
+  // Regression for the sticky-justSkipped freeze: a US-only source gates
+  // itself out (recordSkipped + empty return) on tick 1, then returns POIs
+  // on tick 2 after re-entering US waters. The later real fetch MUST be
+  // recorded; with the old flag lifecycle, recordListFetch was gated behind
+  // the very flag it would clear, so the row stayed null for the whole run.
+  // Uses the real PluginStatus, not a stub, since the bug lived in the flag's
+  // interaction with the registry's gate.
+  const status = createPluginStatus([{ source: 'usonly', name: 'US Only' }])
+  let outsideUsWaters = true
+  const usonly = stubModule('usonly', true, stubSource('usonly', {
+    list: async () => {
+      if (outsideUsWaters) {
+        status.recordSkipped('usonly', 'outside US waters')
+        return []
+      }
+      return [summary('1', 'usonly')]
+    }
+  }))
+  const ctx = { app: {}, config: {}, dataDir: '/tmp', status } as never
+  const source = createInputRegistry([usonly]).createSource(ctx)
+
+  // Tick 1: the source gates itself out and returns empty.
+  await source.listPointsOfInterest(SAMPLE_BBOX, '')
+  // Tick 2: the vessel re-enters US waters and the source returns POIs.
+  outsideUsWaters = false
+  await source.listPointsOfInterest(SAMPLE_BBOX, '')
+
+  const row = status.snapshot(0).sources.find((s) => s.source === 'usonly')
+  assert.equal(
+    row?.apiReachable, true,
+    'the real fetch after a skip is recorded, not suppressed for the rest of the run'
+  )
+  assert.equal(row?.lastListFetch?.poiCount, 1)
 })

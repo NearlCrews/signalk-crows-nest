@@ -83,6 +83,36 @@ function loadOne (store: LightListStore, record: LightListRecord = sampleRecord(
   store.upsertDistrict('D01', 1, [record], {})
 }
 
+test('a refresh in flight when close() runs does not flush after stop', async () => {
+  // On plugin stop (or a config-change restart) the input module clears the
+  // scheduler timers and calls the source's close while a refreshAll may still
+  // be running. That late refresh must not flush onto a torn-down (or a freshly
+  // restarted) run's store at the same data dir. A fake store counts flushes.
+  let flushes = 0
+  let closed = false
+  const fakeStore: LightListStore = {
+    load: async () => ({ generated: '', districts: {}, records: {} }),
+    upsertDistrict: () => {},
+    flush: async () => { if (!closed) flushes += 1 },
+    snapshot: () => ({ generated: '', districts: {}, records: {} }),
+    recordCount: () => 0,
+    close: () => { closed = true },
+    queryBbox: () => []
+  }
+  const { status } = fakeStatus()
+  const source = createUscgLightListSource({
+    client: fakeClient(),
+    store: fakeStore,
+    minimumYear: 0,
+    status,
+    getCurrentPosition: () => undefined
+  })
+  const pass = source.refreshAll() // fans out; suspends awaiting the downloads
+  source.close() // stop while the refresh is in flight
+  await pass
+  assert.equal(flushes, 0, 'a refresh completing after close must not flush')
+})
+
 test('listPointsOfInterest filters by bbox and tags every summary with the source', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'll-src-'))
   try {
