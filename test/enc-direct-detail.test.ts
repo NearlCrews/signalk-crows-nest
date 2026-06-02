@@ -30,6 +30,9 @@ test('renders a dangerous-wreck record with charted depth and survey technique',
   assert.ok(html.includes('SS Portland'))
   assert.ok(html.includes('dangerous wreck'))
   assert.ok(html.includes('always submerged'))
+  // QUASOU 6 is a least-depth sounding, so the label is the safety-critical
+  // "Least depth", referenced to chart datum (MLLW on US ENCs).
+  assert.ok(html.includes('Least depth (MLLW)'))
   assert.ok(html.includes('23.7 m'))
   assert.ok(html.includes('±0.5 m'))
   assert.ok(html.includes('side-scan sonar'))
@@ -50,6 +53,9 @@ test('renders an unnamed obstruction with the layer label as a fallback header',
   assert.ok(html.includes('Obstruction'))
   assert.ok(html.includes('foul ground'))
   assert.ok(html.includes('always submerged'))
+  // No least-depth QUASOU here, so the plain charted-depth label is used, still
+  // datum-tagged.
+  assert.ok(html.includes('Charted depth (MLLW)'))
   assert.ok(html.includes('8.2 m'))
 })
 

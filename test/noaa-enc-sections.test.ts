@@ -42,15 +42,18 @@ test('builds normalized sections for a property-rich wreck, mirroring the humani
     SORDAT: '20240312'
   }))
 
-  // Feature section: OBJNAM, category (CATWRK humanized), water level (WATLEV).
+  // Feature section: the dangerous/non-dangerous status leads as a flag a
+  // consumer can surface prominently, then OBJNAM. The decoded category string
+  // is not repeated as a separate "Category" item once the flag captures it.
   assert.deepEqual(section(sections, 'feature')?.items, [
-    { label: 'Name', value: 'USS Example', kind: 'text' },
-    { label: 'Category', value: 'dangerous wreck', kind: 'text' },
-    { label: 'Water level', value: 'always submerged', kind: 'text' }
+    { label: 'Dangerous', value: true, kind: 'flag' },
+    { label: 'Name', value: 'USS Example', kind: 'text' }
   ])
-  // Depth section: VALSOU sounding (measure, metres) plus sounding accuracy.
+  // Depth section: the least-depth sounding (QUASOU 6) labeled and datum-tagged,
+  // the water level kept adjacent to the depth, then the sounding accuracy.
   assert.deepEqual(section(sections, 'depth')?.items, [
-    { label: 'Charted depth', value: 12.3, kind: 'measure', unit: 'm' },
+    { label: 'Least depth (MLLW)', value: 12.3, kind: 'measure', unit: 'm' },
+    { label: 'Water level', value: 'always submerged', kind: 'text' },
     { label: 'Sounding accuracy', value: 0.5, kind: 'measure', unit: 'm' }
   ])
   // Quality section: QUASOU position quality and TECSOU survey technique.
@@ -75,12 +78,46 @@ test('uses the obstruction category and the six-character SORDAT precision', () 
     DSNM: 'US5MA12M',
     SORDAT: '202403'
   }))
+  // "foul ground" carries no dangerous/non-dangerous word, so it stays a
+  // descriptive Category text item rather than a danger flag.
   assert.deepEqual(section(sections, 'feature')?.items, [
     { label: 'Category', value: 'foul ground', kind: 'text' }
   ])
   assert.deepEqual(section(sections, 'source')?.items, [
     { label: 'Dataset', value: 'US5MA12M', kind: 'text' },
     { label: 'Surveyed', value: '2024-03', kind: 'text' }
+  ])
+})
+
+test('emits a non-dangerous wreck as a false danger flag, not a Category item', () => {
+  const sections = buildNoaaEncSections('wreck', feature({
+    OBJNAM: 'Old Barge',
+    CATWRK: 'non-dangerous wreck'
+  }))
+  assert.deepEqual(section(sections, 'feature')?.items, [
+    { label: 'Dangerous', value: false, kind: 'flag' },
+    { label: 'Name', value: 'Old Barge', kind: 'text' }
+  ])
+})
+
+test('keeps a descriptive wreck category as a Category item when it carries no danger word', () => {
+  const sections = buildNoaaEncSections('wreck', feature({
+    OBJNAM: 'Schooner',
+    CATWRK: 'wreck showing mast'
+  }))
+  assert.deepEqual(section(sections, 'feature')?.items, [
+    { label: 'Name', value: 'Schooner', kind: 'text' },
+    { label: 'Category', value: 'wreck showing mast', kind: 'text' }
+  ])
+})
+
+test('labels a plain charted-depth sounding (no least-depth QUASOU) with the datum', () => {
+  const sections = buildNoaaEncSections('rock', feature({
+    VALSOU: 8.2,
+    QUASOU: '1'
+  }))
+  assert.deepEqual(section(sections, 'depth')?.items, [
+    { label: 'Charted depth (MLLW)', value: 8.2, kind: 'measure', unit: 'm' }
   ])
 })
 
@@ -102,15 +139,18 @@ test('omits empty sections for a sparse, unnamed, uncategorized rock', () => {
   assert.deepEqual(sections, [])
 })
 
-test('drops the sounding accuracy when VALSOU is absent', () => {
+test('drops the sounding accuracy when VALSOU is absent but keeps the water level', () => {
   // Sounding accuracy is meaningless without a sounding, so SOUACC is only
-  // surfaced alongside a present VALSOU, mirroring the HTML renderer.
+  // surfaced alongside a present VALSOU, mirroring the HTML renderer. The water
+  // level is still depth-state information, so it stays in the depth section
+  // even when no numeric sounding is present.
   const sections = buildNoaaEncSections('wreck', feature({
     SOUACC: 0.5,
     WATLEV: 5
   }))
-  assert.equal(section(sections, 'depth'), undefined)
-  assert.deepEqual(section(sections, 'feature')?.items, [
+  assert.deepEqual(section(sections, 'depth')?.items, [
     { label: 'Water level', value: 'awash', kind: 'text' }
   ])
+  // With no name, category, or danger status, the feature section is dropped.
+  assert.equal(section(sections, 'feature'), undefined)
 })

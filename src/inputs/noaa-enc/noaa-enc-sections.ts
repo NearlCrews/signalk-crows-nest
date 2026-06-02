@@ -20,32 +20,19 @@ import {
   WATLEV,
   QUASOU,
   TECSOU,
+  categoryLabel,
+  classifyDangerous,
+  encDepthLabel,
   formatSordatDisplay,
   humanizeCategory,
-  lookupCode
+  lookupCode,
+  lookupParsedCode,
+  parseS57Code,
+  readNumber
 } from './s57-mapping.js'
 import type { EncFeature, EncLayerKey } from './enc-direct-types.js'
-import { toFiniteNumber } from '../../shared/numbers.js'
 import { pushSection } from '../../shared/normalized-detail.js'
 import type { NormalizedItem, NormalizedSection } from '../../shared/normalized-detail.js'
-
-/**
- * Resolve the humanized category label: CATWRK for a wreck, CATOBS for an
- * obstruction, none for a rock. Mirrors the renderer's `categoryLabel`.
- */
-function categoryLabel (
-  layerKey: EncLayerKey,
-  properties: Record<string, unknown>
-): string | undefined {
-  if (layerKey === 'wreck') return humanizeCategory(properties.CATWRK)
-  if (layerKey === 'obstruction') return humanizeCategory(properties.CATOBS)
-  return undefined
-}
-
-/** Read a finite numeric property, treating null and non-numbers as absent. */
-function readNumber (raw: unknown): number | undefined {
-  return toFiniteNumber(raw) ?? undefined
-}
 
 /** Build the normalized detail sections for one ENC Direct feature. */
 export function buildNoaaEncSections (
@@ -55,29 +42,44 @@ export function buildNoaaEncSections (
   const properties = feature.properties
   const sections: NormalizedSection[] = []
 
-  // Feature identity and classification: OBJNAM, the layer-specific category,
-  // and the water level, the same trio the renderer puts in the popup header.
+  // Feature identity and classification. For a hazard the safety-critical lead
+  // is whether it is a dangerous or non-dangerous feature, so when the category
+  // decodes to a danger word it leads as a `flag` a consumer can surface
+  // prominently. A descriptive category that carries no danger word (e.g.
+  // "foul ground", "wreck showing mast") stays a plain Category text item.
   const featureItems: NormalizedItem[] = []
+  const category = categoryLabel(layerKey, properties)
+  const dangerous = classifyDangerous(category)
+  if (dangerous !== undefined) {
+    featureItems.push({ label: 'Dangerous', value: dangerous, kind: 'flag' })
+  }
   const name = humanizeCategory(properties.OBJNAM)
   if (name !== undefined) {
     featureItems.push({ label: 'Name', value: name, kind: 'text' })
   }
-  const category = categoryLabel(layerKey, properties)
-  if (category !== undefined) {
+  if (category !== undefined && dangerous === undefined) {
     featureItems.push({ label: 'Category', value: category, kind: 'text' })
-  }
-  const watlev = lookupCode(WATLEV, properties.WATLEV)
-  if (watlev !== undefined) {
-    featureItems.push({ label: 'Water level', value: watlev, kind: 'text' })
   }
   pushSection(sections, 'feature', 'Feature', featureItems)
 
-  // Depth: the VALSOU charted depth and, only alongside it, the SOUACC
-  // sounding accuracy. The renderer surfaces accuracy only with a sounding.
+  // Depth: the VALSOU sounding, the water level kept adjacent to it (the depth
+  // state qualifies the number, e.g. an "awash" feature with no charted
+  // sounding still carries depth-state information), and, only alongside a
+  // present sounding, the SOUACC sounding accuracy. The depth label calls out a
+  // least-depth sounding (the worst case over the feature) and the chart datum.
+  // QUASOU drives both the depth label and the position-quality lookup, so it is
+  // parsed once here and the parsed code feeds both.
+  const quasou = parseS57Code(properties.QUASOU)
   const depth: NormalizedItem[] = []
   const valsou = readNumber(properties.VALSOU)
   if (valsou !== undefined) {
-    depth.push({ label: 'Charted depth', value: valsou, kind: 'measure', unit: 'm' })
+    depth.push({ label: encDepthLabel(quasou), value: valsou, kind: 'measure', unit: 'm' })
+  }
+  const watlev = lookupCode(WATLEV, properties.WATLEV)
+  if (watlev !== undefined) {
+    depth.push({ label: 'Water level', value: watlev, kind: 'text' })
+  }
+  if (valsou !== undefined) {
     const souacc = readNumber(properties.SOUACC)
     if (souacc !== undefined) {
       depth.push({ label: 'Sounding accuracy', value: souacc, kind: 'measure', unit: 'm' })
@@ -87,7 +89,7 @@ export function buildNoaaEncSections (
 
   // Survey quality: QUASOU position quality and TECSOU survey technique.
   const quality: NormalizedItem[] = []
-  const positionQuality = lookupCode(QUASOU, properties.QUASOU)
+  const positionQuality = lookupParsedCode(QUASOU, quasou)
   if (positionQuality !== undefined) {
     quality.push({ label: 'Position quality', value: positionQuality, kind: 'text' })
   }

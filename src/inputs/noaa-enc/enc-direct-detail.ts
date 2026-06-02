@@ -17,39 +17,20 @@ import {
   QUASOU,
   TECSOU,
   LAYER_LABEL,
+  categoryLabel,
+  encDepthLabel,
   formatSordatDisplay,
   humanizeCategory,
-  lookupCode
+  lookupCode,
+  lookupParsedCode,
+  parseS57Code,
+  readNumber
 } from './s57-mapping.js'
 import type { EncLayerKey } from './enc-direct-types.js'
 import { escapeHtml, labeledParagraph } from '../../shared/html-escape.js'
-import { toFiniteNumber } from '../../shared/numbers.js'
 
 /** NOAA's standard disclaimer for ENC data published through Coast Survey. */
 const DISCLAIMER = 'NOAA ENC data is not intended for primary navigation.'
-
-/**
- * Resolve the category label (CATWRK for a wreck, CATOBS for an obstruction).
- * Rocks have no category field. Returns undefined when the field is null,
- * blank, or absent.
- */
-function categoryLabel (
-  layerKey: EncLayerKey,
-  properties: Record<string, unknown>
-): string | undefined {
-  if (layerKey === 'wreck') {
-    return humanizeCategory(properties.CATWRK)
-  }
-  if (layerKey === 'obstruction') {
-    return humanizeCategory(properties.CATOBS)
-  }
-  return undefined
-}
-
-/** Read a finite numeric property, treating null and non-numbers as absent. */
-function readNumber (raw: unknown): number | undefined {
-  return toFiniteNumber(raw) ?? undefined
-}
 
 /**
  * Render the popup HTML for one feature. The `layerKey` selects the
@@ -72,16 +53,24 @@ export function renderEncDirectDetail (
   const headerTail = headerSuffix.length > 0 ? ` (${escapeHtml(headerSuffix)})` : ''
   blocks.push(`<h4>${escapeHtml(name)}${headerTail}</h4>`)
 
+  // QUASOU drives both the depth label and the position-quality line, so it is
+  // parsed once here and the parsed code feeds both.
+  const quasou = parseS57Code(properties.QUASOU)
   const valsou = readNumber(properties.VALSOU)
   if (valsou !== undefined) {
     const souacc = readNumber(properties.SOUACC)
     const accuracy = souacc !== undefined
       ? ` (sounding accuracy ±${souacc.toFixed(1)} m)`
       : ''
-    blocks.push(`<p><strong>Charted depth:</strong> ${valsou.toFixed(1)} m${accuracy}.</p>`)
+    // A least-depth sounding (QUASOU 6/7) reports the worst-case depth over the
+    // feature, so the label says so; otherwise it is the charted depth. Both are
+    // referenced to chart datum (MLLW on US ENCs). The section builder shares
+    // this label via `encDepthLabel`, so the two cannot drift.
+    const depthLabel = encDepthLabel(quasou)
+    blocks.push(`<p><strong>${depthLabel}:</strong> ${valsou.toFixed(1)} m${accuracy}.</p>`)
   }
 
-  const quality = lookupCode(QUASOU, properties.QUASOU)
+  const quality = lookupParsedCode(QUASOU, quasou)
   if (quality !== undefined) {
     blocks.push(labeledParagraph('Position quality', quality))
   }

@@ -24,8 +24,14 @@ import assert from 'node:assert/strict'
 import {
   LAYER_POI_TYPE,
   LAYER_SK_ICON,
+  categoryLabel,
+  classifyDangerous,
+  encDepthLabel,
   humanizeCategory,
   lookupCode,
+  lookupParsedCode,
+  parseS57Code,
+  readNumber,
   WATLEV,
   QUASOU,
   TECSOU
@@ -77,4 +83,59 @@ test('lookupCode treats null, undefined, blank string, and unknown codes as abse
   assert.equal(lookupCode(WATLEV, ' '), undefined)
   assert.equal(lookupCode(WATLEV, 999), undefined)
   assert.equal(lookupCode(QUASOU, 'not a number'), undefined)
+})
+
+test('classifyDangerous reads the decoded CATWRK/CATOBS danger word', () => {
+  assert.equal(classifyDangerous('dangerous wreck'), true)
+  assert.equal(classifyDangerous('non-dangerous wreck'), false)
+  // The hyphen is sometimes a space on the wire; both read as non-dangerous.
+  assert.equal(classifyDangerous('non dangerous wreck'), false)
+  // Case is normalized before the test.
+  assert.equal(classifyDangerous('Dangerous Wreck'), true)
+})
+
+test('classifyDangerous returns undefined when no danger word is present', () => {
+  // Descriptive categories carry no dangerous/non-dangerous status.
+  assert.equal(classifyDangerous('foul ground'), undefined)
+  assert.equal(classifyDangerous('wreck showing mast'), undefined)
+  assert.equal(classifyDangerous(undefined), undefined)
+})
+
+test('parseS57Code reads the wire shapes and rejects non-numbers', () => {
+  assert.equal(parseS57Code('6'), 6)
+  assert.equal(parseS57Code(7), 7)
+  assert.equal(parseS57Code(null), undefined)
+  assert.equal(parseS57Code(undefined), undefined)
+  assert.equal(parseS57Code(' '), undefined)
+  assert.equal(parseS57Code('not a number'), undefined)
+})
+
+test('lookupParsedCode indexes a table with an already-parsed code', () => {
+  assert.equal(lookupParsedCode(QUASOU, 6), 'least depth known')
+  assert.equal(lookupParsedCode(WATLEV, 3), 'always submerged')
+  assert.equal(lookupParsedCode(QUASOU, undefined), undefined)
+  assert.equal(lookupParsedCode(QUASOU, 999), undefined)
+})
+
+test('encDepthLabel says Least depth for a least-depth code, else Charted depth, both MLLW', () => {
+  // QUASOU 6 (least depth known) and 7 (least depth unknown but safe to depth
+  // shown) both mean the value is the LEAST depth over the feature. The helper
+  // takes the parsed code, so callers parse QUASOU once.
+  assert.equal(encDepthLabel(6), 'Least depth (MLLW)')
+  assert.equal(encDepthLabel(7), 'Least depth (MLLW)')
+  assert.equal(encDepthLabel(1), 'Charted depth (MLLW)')
+  assert.equal(encDepthLabel(undefined), 'Charted depth (MLLW)')
+})
+
+test('categoryLabel reads CATWRK for a wreck, CATOBS for an obstruction, none for a rock', () => {
+  assert.equal(categoryLabel('wreck', { CATWRK: 'dangerous wreck' }), 'dangerous wreck')
+  assert.equal(categoryLabel('obstruction', { CATOBS: 'foul ground' }), 'foul ground')
+  assert.equal(categoryLabel('rock', { CATWRK: 'dangerous wreck' }), undefined)
+  assert.equal(categoryLabel('wreck', { CATWRK: null }), undefined)
+})
+
+test('readNumber returns finite numbers and treats null and non-numbers as absent', () => {
+  assert.equal(readNumber(12.3), 12.3)
+  assert.equal(readNumber(null), undefined)
+  assert.equal(readNumber('nope'), undefined)
 })

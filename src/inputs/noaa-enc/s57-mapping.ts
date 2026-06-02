@@ -82,18 +82,17 @@ export const TECSOU: Readonly<Record<number, string>> = {
 }
 
 /**
- * Look up a numeric S-57 code in `table`. Accepts the wire shapes the ENC
- * Direct service produces: a JSON number, a single-digit JSON string, `null`,
+ * Parse an S-57 code to its number. Accepts the wire shapes the ENC Direct
+ * service produces: a JSON number, a single-digit JSON string, `null`,
  * `undefined`, or a blank string. Returns `undefined` for any value that does
- * not parse to an integer the table indexes.
+ * not parse to a finite number. Exported so a caller that reads one raw code
+ * for several derivations (e.g. QUASOU for both the depth label and the
+ * position-quality lookup) can parse it once and pass the number on.
  */
-export function lookupCode (
-  table: Readonly<Record<number, string>>,
-  raw: unknown
-): string | undefined {
+export function parseS57Code (raw: unknown): number | undefined {
   const numeric = toFiniteNumber(raw)
   if (numeric !== null) {
-    return table[numeric]
+    return numeric
   }
   if (typeof raw === 'string') {
     const trimmed = raw.trim()
@@ -101,9 +100,82 @@ export function lookupCode (
       return undefined
     }
     const parsed = Number.parseInt(trimmed, 10)
-    return Number.isFinite(parsed) ? table[parsed] : undefined
+    return Number.isFinite(parsed) ? parsed : undefined
   }
   return undefined
+}
+
+/**
+ * Look up an already-parsed S-57 code in `table`. Returns `undefined` for an
+ * absent code or one the table does not index. A caller that parses a raw code
+ * once (via {@link parseS57Code}) and derives several values from it uses this
+ * rather than re-parsing through {@link lookupCode}.
+ */
+export function lookupParsedCode (
+  table: Readonly<Record<number, string>>,
+  code: number | undefined
+): string | undefined {
+  return code !== undefined ? table[code] : undefined
+}
+
+/**
+ * Look up a numeric S-57 code in `table`. Accepts the wire shapes the ENC
+ * Direct service produces (see {@link parseS57Code}). Returns `undefined` for
+ * any value that does not parse to an integer the table indexes.
+ */
+export function lookupCode (
+  table: Readonly<Record<number, string>>,
+  raw: unknown
+): string | undefined {
+  return lookupParsedCode(table, parseS57Code(raw))
+}
+
+/**
+ * QUASOU codes that report the LEAST depth over a feature rather than a plain
+ * charted depth: 6 (least depth known) and 7 (least depth unknown but safe to
+ * the depth shown). For a wreck, rock, or obstruction this is the
+ * safety-critical reading, so the depth label calls it out.
+ */
+const LEAST_DEPTH_QUASOU_CODES: ReadonlySet<number> = new Set([6, 7])
+
+/**
+ * Depth label for an ENC sounding, from an already-parsed QUASOU code. The
+ * value is referenced to chart datum, which on US ENCs is Mean Lower Low Water,
+ * so the label states MLLW. When QUASOU marks a least-depth sounding (codes 6
+ * and 7) the safety-critical fact is the LEAST depth over the feature, so the
+ * label says so; otherwise it is the charted depth. Shared by the HTML renderer
+ * and the section builder so the two cannot drift.
+ */
+export function encDepthLabel (quasouCode: number | undefined): string {
+  const leastDepth = quasouCode !== undefined && LEAST_DEPTH_QUASOU_CODES.has(quasouCode)
+  return leastDepth ? 'Least depth (MLLW)' : 'Charted depth (MLLW)'
+}
+
+/**
+ * Matches the "non-dangerous" status word with either the hyphen or the space
+ * the wire uses. The space form is load-bearing: the substring "dangerous"
+ * inside "non dangerous" would otherwise misclassify a space-formatted value as
+ * dangerous.
+ */
+const NON_DANGEROUS_PATTERN = /non[- ]dangerous/
+
+/**
+ * Classify a decoded CATWRK/CATOBS category string as dangerous or not. The
+ * wire decodes these to strings such as `"dangerous wreck"` or
+ * `"non-dangerous wreck"` (the hyphen is sometimes a space). Returns `true` for
+ * a dangerous status, `false` for a non-dangerous one, and `undefined` when the
+ * category carries no explicit danger word (a descriptive value such as
+ * `"foul ground"` or `"wreck showing mast"`, or an absent category).
+ */
+export function classifyDangerous (category: string | undefined): boolean | undefined {
+  if (category === undefined) {
+    return undefined
+  }
+  const lower = category.toLowerCase()
+  if (!lower.includes('dangerous')) {
+    return undefined
+  }
+  return !NON_DANGEROUS_PATTERN.test(lower)
 }
 
 /**
@@ -121,6 +193,25 @@ export function humanizeCategory (raw: unknown): string | undefined {
   }
   const trimmed = raw.trim()
   return trimmed.length > 0 ? trimmed : undefined
+}
+
+/**
+ * Resolve the humanized category label for a hazard feature: CATWRK for a
+ * wreck, CATOBS for an obstruction, none for a rock. Shared by the HTML
+ * renderer and the section builder so the two cannot drift.
+ */
+export function categoryLabel (
+  layerKey: EncLayerKey,
+  properties: Record<string, unknown>
+): string | undefined {
+  if (layerKey === 'wreck') return humanizeCategory(properties.CATWRK)
+  if (layerKey === 'obstruction') return humanizeCategory(properties.CATOBS)
+  return undefined
+}
+
+/** Read a finite numeric property, treating null and non-numbers as absent. */
+export function readNumber (raw: unknown): number | undefined {
+  return toFiniteNumber(raw) ?? undefined
 }
 
 /**
