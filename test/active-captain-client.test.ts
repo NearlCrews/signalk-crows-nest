@@ -398,12 +398,17 @@ test('the request queue spaces request starts by minDelayMs', async () => {
         client.listPointsOfInterest(sampleBbox, 'Marina')
       ])
       assert.equal(starts.length, 3)
-      for (let i = 1; i < starts.length; i++) {
-        assert.ok(
-          starts[i] - starts[i - 1] >= 30,
-          `expected ~40ms spacing, got ${starts[i] - starts[i - 1]}ms`
-        )
-      }
+      // Three serialized requests at minDelayMs: 40 should span at least one
+      // full delay of cumulative spacing. Asserting the cumulative span rather
+      // than each gap tolerates the coarse Date.now() and timer resolution on
+      // Windows, where a single 40 ms gap can measure as little as ~24 ms while
+      // the two gaps together still clear one delay. Without throttling all
+      // three would start within a couple of milliseconds.
+      const cumulativeSpacing = starts[starts.length - 1] - starts[0]
+      assert.ok(
+        cumulativeSpacing >= 40,
+        `expected the throttle to space the starts, got ${cumulativeSpacing}ms cumulative`
+      )
     }
   )
 })
