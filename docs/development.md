@@ -92,7 +92,8 @@ src/                      # TypeScript source
 │   ├── output-registry.ts # Holds the outputs, starts the enabled ones
 │   ├── notes-resource/    # The SignalK notes resource provider output
 │   ├── proximity-alarm/   # The proximity hazard-alarm output
-│   └── route-hazard/      # The route-corridor hazard-scan output
+│   ├── route-hazard/      # The route-corridor hazard-scan output
+│   └── bridge-air-draft/  # The bridge air-draft check (proximity + route-ahead warning)
 ├── monitoring/           # position-monitor.ts: drives the per-tick scan
 ├── geo/                  # position-utilities.ts: bounding-box and great-circle helpers
 ├── status/               # plugin-status.ts (per-source recorder), status-router.ts, status-types.ts
@@ -110,8 +111,13 @@ src/                      # TypeScript source
 │                         #   id form), notification-path.ts, notification-tracker.ts,
 │                         #   numbers.ts (toFiniteNumber, positiveFiniteNumber,
 │                         #   isValidLatitude/Longitude, isWireTruthy), cache.ts,
-│                         #   time.ts (MS_PER_SECOND, MS_PER_MINUTE, MS_PER_HOUR,
-│                         #   MS_PER_DAY)
+│                         #   time.ts (MS_PER_SECOND/MINUTE/HOUR and
+│                         #   SECONDS_PER_MINUTE/HOUR/DAY), source-ids.ts,
+│                         #   bbox-debounce.ts (the geographic stale-while-revalidate
+│                         #   cache), map-link.ts, bridge-clearance.ts, length.ts,
+│                         #   proximity-radius.ts, light-character.ts, and
+│                         #   normalized-detail.ts (the structured-notes schema).
+│                         #   See CLAUDE.md for the complete module map
 └── panel/                # Federated React configuration panel (bundled to public/)
     ├── index.tsx          # Federation entry; re-exports PluginConfigurationPanel
     ├── PluginConfigurationPanel.tsx  # Root panel component

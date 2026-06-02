@@ -79,19 +79,24 @@ self-contained module registered on one line in `src/index.ts`.
       private to this input), `poi-cache.ts` (TTL detail cache), `poi-store.ts`
       (disk-backed detail store, readable offline), `poi-detail-renderer.ts`
       (Handlebars helpers and POI detail rendering), `templates.ts` (inlined
-      Handlebars templates), and `rating-filter.ts` (drops list entries below
-      the configured minimum rating).
+      Handlebars templates), `rating-filter.ts` (drops list entries below
+      the configured minimum rating), and `active-captain-sections.ts` (builds
+      the normalized `properties.crowsNest` detail sections from the
+      `PoiDetails`, reusing the renderer's humanizer so the two cannot drift).
     - `openseamap/` - the OpenSeaMap input (OpenStreetMap marine data via the
       OSM Overpass API): `openseamap-input.ts` (the `InputModule`),
       `openseamap-source.ts` (the `PoiSource` adapter over the client and an
       in-memory detail cache; uses an underscore-separated internal id form
       like `node_123` so the slash in raw OSM ids never splits the resource
       URL), `overpass-client.ts` (the Overpass HTTP client built on
-      `http-client.ts`, with the required `User-Agent`), and
+      `http-client.ts`, with the required `User-Agent`),
       `seamark-mapping.ts` (maps every `seamark:type` value onto the
       plugin's `PoiType` union AND onto a Freeboard-registered `:sk-` icon,
       with isolated-danger marks rendered as hazards; defines the seamark
-      feature groups).
+      feature groups), `openseamap-detail.ts` (the plain-English HTML detail
+      renderer), `clearance.ts` (parses the OSM vertical-clearance tags for the
+      bridge air-draft check), and `openseamap-sections.ts` (the
+      normalized-detail section builder).
     - `uscg-light-list/` - the USCG Light List input (US Aids to Navigation,
       US-only, defaults off): `uscg-light-list-input.ts` (the `InputModule`
       with the periodic refresh scheduler), `uscg-light-list-source.ts` (the
@@ -105,8 +110,10 @@ self-contained module registered on one line in `src/index.ts`.
       wire record types, private to this input), `light-list-mapping.ts`
       (maps each AID_TYPE to the plugin's `PoiType` union and the matching
       Freeboard-registered `:sk-` icon, with isolated-danger marks rendered
-      as hazards), and `light-list-detail.ts` (renders the record's
-      characteristic, structure, sectors, and remarks as plain-English HTML).
+      as hazards), `light-list-detail.ts` (renders the record's
+      characteristic, structure, sectors, and remarks as plain-English HTML),
+      and `light-list-sections.ts` (the normalized-detail section builder,
+      reusing the renderer's humanizers).
     - `noaa-enc/` - the NOAA ENC Direct input (US authoritative wrecks,
       obstructions, and underwater rocks, US-only, defaults off):
       `noaa-enc-input.ts` (the `InputModule`), `noaa-enc-source.ts` (the
@@ -123,7 +130,9 @@ self-contained module registered on one line in `src/index.ts`.
       tables (WATLEV, QUASOU, TECSOU) plus per-layer `PoiType` and
       `:sk-` icon mappings and a `humanizeCategory` helper. CATWRK and
       CATOBS are intentionally absent because the wire serves them as
-      decoded strings).
+      decoded strings), `enc-direct-detail.ts` (the plain-English S-57 HTML
+      detail renderer), and `noaa-enc-sections.ts` (the normalized-detail
+      section builder).
   - `outputs/` - SignalK consumers of POI data.
     - `output.ts` - the `OutputModule`, `OutputHandle`, `OutputContext`, and
       `PositionScanContributor` contracts an output implements.
@@ -131,7 +140,9 @@ self-contained module registered on one line in `src/index.ts`.
       enabled ones.
     - `notes-resource/` - the `notes` resource output: `notes-resource-output.ts`
       (the `OutputModule` that registers the SignalK `notes` provider),
-      `note-builder.ts` (turns a POI into a `notes` resource object), and
+      `note-builder.ts` (turns a POI into a `notes` resource object, publishing
+      the source-agnostic normalized detail on `properties.crowsNest` alongside
+      the HTML description so a structured client can render it natively), and
       `resource-query.ts` (parses a resource query into a bounding box).
     - `proximity-alarm/` - the proximity-alarm output: `proximity-alarm-output.ts`
       (the `OutputModule`) and `proximity-alarms.ts` (emits SignalK hazard
@@ -238,9 +249,14 @@ self-contained module registered on one line in `src/index.ts`.
     `proximity-radius.ts` (the vessel-proximity alarm geometry shared by the two
     proximity outputs, the two alarm modules, and the panel: the default radius,
     the scan floor and factor, the exit-radius factor, and
-    `vesselScanRadiusMeters`), and `light-character.ts` (the IALA
+    `vesselScanRadiusMeters`), `light-character.ts` (the IALA
     light-character humanizer the OpenSeaMap and USCG Light List detail
-    renderers share).
+    renderers share), and `normalized-detail.ts` (the source-agnostic
+    structured-notes schema: `NormalizedSection`, `NormalizedItem`, the
+    item-`kind` union, the `schemaVersion`, and the shared `pushSection`
+    builder every source's section builder produces onto a note's
+    `properties.crowsNest`; documented for consumers in
+    `docs/notes-resource-format.md`).
   - `panel/` - federated React configuration panel. Root and reducer:
     `index.tsx` (Module Federation entry), `PluginConfigurationPanel.tsx`,
     `config-reducer.ts`, `normalize-config.ts`, plus the UI-metadata
@@ -283,7 +299,8 @@ self-contained module registered on one line in `src/index.ts`.
     root so the four card bodies share one stable map.
 - `test/` - `node:test` test suite, run through `tsx`.
 - `docs/` - project documentation: the development guide, troubleshooting, the
-  Garmin API research notes, decision records, and maintainer notes.
+  notes-resource integration guide (`notes-resource-format.md`), the Garmin API
+  research notes, decision records, and maintainer notes.
 - `assets/` - committed, published static files: `icons/` (the plugin icon in
   SVG and PNG sizes, wired through the `signalk.appIcon` field) and
   `screenshots/` (the admin-panel and Freeboard-SK images declared under

@@ -41,7 +41,9 @@ terms-of-service exposure.
 - Bridge and lock schedule notifications on approach.
 - Night-vision (red) theme for the panel and the rendered note descriptions.
 - NOAA tide and current cross-reference for the nearest station.
-- CI release automation and SignalK App Store polish (icon, metadata).
+- CI release automation and SignalK App Store polish (icon, metadata). Shipped:
+  a GitHub-release-driven npm publish with provenance, the plugin app icon,
+  the registry screenshots, and a SignalK plugin-ci run on the published commit.
 
 ## Tier 3: ambitious or gated
 

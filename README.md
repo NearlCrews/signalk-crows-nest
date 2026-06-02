@@ -163,7 +163,7 @@ internal cache rebuilds on the next request.
 - **Signal K Server**: 2.x. The `notes` resources and the notifications
   work on any 2.x server; the configuration panel needs admin UI 2.26.0+
 - **Node.js**: 20.3+
-- **`@signalk/server-api`**: 2.24.0+
+- **`@signalk/server-api`**: 2.25.0+
 - **TypeScript**: 6.0+ (development only)
 - **Chart plotters**: Freeboard-SK is the reference consumer; any
   client that reads Signal K `notes` resources will see the markers
