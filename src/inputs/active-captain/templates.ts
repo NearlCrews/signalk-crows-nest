@@ -48,6 +48,10 @@ export const NOTES_PARTIAL = `{{~#if this~}}
  * confirmed in over two years. The warning is factual rather than alarmist: it
  * states how long ago the report was last updated and asks the crew to confirm
  * conditions locally.
+ *
+ * The review summary and featured review render only inside the `showsReviews`
+ * block, so a hazard, navigational mark, bridge, or similar non-business
+ * feature never shows a star rating or user review.
  */
 export const HEADER_PARTIAL = `<sup>last updated {{fromNow data.pointOfInterest.dateLastModified}}</sup><br/>
 {{#staleHazard}}
@@ -56,8 +60,10 @@ export const HEADER_PARTIAL = `<sup>last updated {{fromNow data.pointOfInterest.
 
 {{> notes data.pointOfInterest.notes}}
 
+{{#showsReviews}}
 {{#if data.reviewSummary.numberOfReviews}}{{> review data.reviewSummary id=data.pointOfInterest.id}}{{/if}}
-{{#if data.featuredReview.text}}{{> featuredReview data.featuredReview}}{{/if}}`
+{{#if data.featuredReview.text}}{{> featuredReview data.featuredReview}}{{/if}}
+{{/showsReviews}}`
 
 /** Business partial: payment and opening details for business points. */
 export const BUSINESS_PARTIAL = `<hr/>
@@ -71,20 +77,22 @@ export const BUSINESS_PARTIAL = `<hr/>
 </div>
 {{> notes notes}}`
 
-/** Dockage partial: berth pricing, capacity, and access details. */
+/** Dockage partial: berth pricing, capacity, vessel-size limits, and access. */
 export const DOCKAGE_PARTIAL = `<hr/>
 <div>
     <h4>\u{1F17F}\u{FE0F} Dockage</h4>
     {{freeLine isFree "docks"}}
     {{#if total}}\u{1F6E5}\u{FE0F} {{total}} berths in total<br/>{{/if}}
     {{#if transient}}\u{1F6E5}\u{FE0F} {{transient}} berths for visiting vessels<br/>{{/if}}
+    {{#if loaMax}}\u{1F6E5}\u{FE0F} Maximum LOA {{loaMax}} {{distanceUnit}}<br/>{{/if}}
+    {{#if beamMax}}\u{1F6E5}\u{FE0F} Maximum beam {{beamMax}} {{distanceUnit}}<br/>{{/if}}
     {{availabilityLine liveaboard "Liveaboard"}}
     {{availabilityLine secureAccess "Secure access"}}
     {{availabilityLine securityPatrol "Security patrol"}}
 </div>
 {{> notes notes}}`
 
-/** Fuel partial: fuel types available at the point. */
+/** Fuel partial: fuel types and the fuel-dock depth. */
 export const FUEL_PARTIAL = `<hr/>
 <div>
     <h4>\u{26FD} Fuel</h4>
@@ -93,6 +101,7 @@ export const FUEL_PARTIAL = `<hr/>
     {{availabilityLine gas "Unleaded"}}
     {{availabilityLine propane "Propane"}}
     {{availabilityLine electric "Electric charging"}}
+    {{#if depthFuel}}\u{1F4CF} Fuel dock depth {{depthFuel}} {{distanceUnit}}<br/>{{/if}}
 </div>
 {{> notes notes}}`
 
@@ -131,9 +140,13 @@ export const CONTACT_PARTIAL = `<hr/>
 /** Review partial: aggregate rating and a link to the reviews page. */
 export const REVIEW_PARTIAL = '{{averageRating}}/5 \u{2B50} from <a href="https://activecaptain.garmin.com/en-US/pois/{{id}}/Reviews">({{numberOfReviews}} reviews)</a>'
 
-/** Featured-review partial: one highlighted user review. Context is the review itself. */
+/**
+ * Featured-review partial: one highlighted user review. Context is the review
+ * itself. The review's own rating is intentionally not shown: it duplicates the
+ * aggregate star rating in the review summary line above it.
+ */
 export const FEATURED_REVIEW_PARTIAL = `<div>
-    <sup>\u{1F4DD} \u{201C}{{title}}\u{201D} ({{rating}}/5 \u{2B50})</sup><br/>
+    <sup>\u{1F4DD} \u{201C}{{title}}\u{201D}</sup><br/>
     <em>{{multiline text}}</em><br/>
     <sub>reviewed by {{createdBy}}</sub>
 </div>`

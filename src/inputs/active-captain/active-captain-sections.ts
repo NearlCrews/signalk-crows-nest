@@ -13,8 +13,16 @@
  * use, so the structured payload and the HTML stay in lockstep: an availability
  * line shows only for a definite Yes / No / Nearby value, a free/paid flag only
  * for a known boolean, a current strength only when not 'Unknown', and a
- * numeric measurement or count only when positive. A section with zero items is
+ * numeric measurement or count only when positive. A measurement keeps its
+ * value even when the unit is absent (a go/no-go depth or clearance must not be
+ * dropped over a missing unit), matching the HTML. A section with zero items is
  * omitted so a marina with no fuel data shows no empty "Fuel" heading.
+ *
+ * The review summary and featured review are emitted only for POI types that
+ * carry reviews (marinas, anchorages, businesses, and boat ramps), shared with
+ * the HTML renderer through `poiTypeShowsReviews`, so a hazard or navigational
+ * feature never gets a star rating. The free-text notes are always kept,
+ * regardless of type, since that is where on-the-water intel lives.
  */
 
 import type {
@@ -22,7 +30,7 @@ import type {
   PoiDetails,
   PoiNote
 } from './active-captain-types.js'
-import { humanizeField } from './poi-detail-renderer.js'
+import { noteFieldLabel, poiTypeShowsReviews } from './poi-detail-renderer.js'
 import { pushSection } from '../../shared/normalized-detail.js'
 import type { NormalizedItem, NormalizedSection } from '../../shared/normalized-detail.js'
 
@@ -49,14 +57,19 @@ function pushCount (items: NormalizedItem[], label: string, value: number | unde
 }
 
 /**
- * Push a measure item for a positive numeric measurement with a unit, mirroring
- * the navigation partial's `{{#if}}` guard. An absent or zero value, or an
- * absent unit, emits nothing.
+ * Push a measure item for a positive numeric measurement, mirroring the
+ * partials' `{{#if}}` guard. An absent or zero value emits nothing. A missing
+ * unit does NOT drop the value: a depth, clearance, or length is a go/no-go
+ * fact, and a missing measurement and a unitless one are very different to a
+ * skipper, so the value is emitted unitless when the unit is absent (matching
+ * the HTML, which renders the value with an empty `{{distanceUnit}}`).
  */
 function pushMeasure (items: NormalizedItem[], label: string, value: number | undefined, unit: string | undefined): void {
-  if (typeof value === 'number' && value > 0 && typeof unit === 'string' && unit.length > 0) {
-    items.push({ label, value, kind: 'measure', unit })
+  if (typeof value !== 'number' || value <= 0) {
+    return
   }
+  const hasUnit = typeof unit === 'string' && unit.length > 0
+  items.push({ label, value, kind: 'measure', ...(hasUnit && { unit }) })
 }
 
 /**
@@ -86,7 +99,7 @@ function pushText (items: NormalizedItem[], label: string, value: string | undef
  */
 function pushNotes (items: NormalizedItem[], notes: PoiNote[] | undefined): void {
   for (const note of notes ?? []) {
-    items.push({ label: humanizeField(note.field), value: note.value, kind: 'note' })
+    items.push({ label: noteFieldLabel(note.field), value: note.value, kind: 'note' })
   }
 }
 
@@ -97,25 +110,31 @@ export function buildActiveCaptainSections (entity: PoiDetails): NormalizedSecti
   // Header content. The HTML header renders the review summary, the featured
   // review, and the POI-level notes; each becomes its own structured section.
 
-  // Review summary: rendered only when the POI carries at least one review.
-  const review: NormalizedItem[] = []
-  if (typeof entity.reviewSummary?.numberOfReviews === 'number' && entity.reviewSummary.numberOfReviews > 0) {
-    review.push({ label: 'Average rating', value: entity.reviewSummary.averageRating, kind: 'rating' })
-    review.push({ label: 'Reviews', value: entity.reviewSummary.numberOfReviews, kind: 'count' })
-  }
-  pushSection(sections, 'review', 'Reviews', review)
-
-  // Featured review: rendered only when the highlighted review carries prose.
-  const featured = entity.featuredReview
-  if (featured !== undefined && typeof featured.text === 'string' && featured.text.length > 0) {
-    const featuredItems: NormalizedItem[] = [
-      { label: featured.title ?? 'Featured review', value: featured.text, kind: 'note' }
-    ]
-    if (typeof featured.rating === 'number') {
-      featuredItems.push({ label: 'Rating', value: featured.rating, kind: 'rating' })
+  // Review chrome (the aggregate rating and the featured review) is a marina and
+  // business signal. A hazard, navigational mark, bridge, lock, or similar
+  // feature gets none of it: a star rating on a rock is nonsense. The notes
+  // below are always kept, since that is where on-the-water intel lives.
+  if (poiTypeShowsReviews(entity.pointOfInterest.poiType)) {
+    // Review summary: rendered only when the POI carries at least one review.
+    const review: NormalizedItem[] = []
+    if (typeof entity.reviewSummary?.numberOfReviews === 'number' && entity.reviewSummary.numberOfReviews > 0) {
+      review.push({ label: 'Average rating', value: entity.reviewSummary.averageRating, kind: 'rating' })
+      review.push({ label: 'Reviews', value: entity.reviewSummary.numberOfReviews, kind: 'count' })
     }
-    pushText(featuredItems, 'Reviewed by', featured.createdBy)
-    pushSection(sections, 'featuredReview', 'Featured review', featuredItems)
+    pushSection(sections, 'review', 'Reviews', review)
+
+    // Featured review: rendered only when the highlighted review carries prose.
+    // The review title is content, so it rides under a stable "Title" label
+    // rather than in the label slot. The review's own rating is not repeated
+    // here: it duplicates the aggregate rating in the review section above.
+    const featured = entity.featuredReview
+    if (featured !== undefined && typeof featured.text === 'string' && featured.text.length > 0) {
+      const featuredItems: NormalizedItem[] = []
+      pushText(featuredItems, 'Title', featured.title)
+      featuredItems.push({ label: 'Review', value: featured.text, kind: 'note' })
+      pushText(featuredItems, 'Reviewed by', featured.createdBy)
+      pushSection(sections, 'featuredReview', 'Featured review', featuredItems)
+    }
   }
 
   // POI-level notes.
@@ -133,6 +152,8 @@ export function buildActiveCaptainSections (entity: PoiDetails): NormalizedSecti
     pushFreeFlag(items, 'Docks', dockage.isFree)
     pushCount(items, 'Berths in total', dockage.total)
     pushCount(items, 'Berths for visiting vessels', dockage.transient)
+    pushMeasure(items, 'Maximum LOA', dockage.loaMax, dockage.distanceUnit)
+    pushMeasure(items, 'Maximum beam', dockage.beamMax, dockage.distanceUnit)
     pushAvailability(items, 'Liveaboard', dockage.liveaboard)
     pushAvailability(items, 'Secure access', dockage.secureAccess)
     pushAvailability(items, 'Security patrol', dockage.securityPatrol)
@@ -173,6 +194,7 @@ export function buildActiveCaptainSections (entity: PoiDetails): NormalizedSecti
     pushAvailability(items, 'Unleaded', fuel.gas)
     pushAvailability(items, 'Propane', fuel.propane)
     pushAvailability(items, 'Electric charging', fuel.electric)
+    pushMeasure(items, 'Fuel dock depth', fuel.depthFuel, fuel.distanceUnit)
     pushNotes(items, fuel.notes)
     pushSection(sections, 'fuel', 'Fuel', items)
   }

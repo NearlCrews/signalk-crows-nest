@@ -29,6 +29,7 @@ import {
 } from './templates.js'
 
 import type { PoiDetails, PoiNote } from './active-captain-types.js'
+import type { PoiType } from '../../shared/types.js'
 import { formatRelativeDelta } from '../../shared/relative-time-format.js'
 import { MS_PER_SECOND, SECONDS_PER_DAY, SECONDS_PER_HOUR, SECONDS_PER_MINUTE } from '../../shared/time.js'
 
@@ -124,12 +125,44 @@ const HUMANIZE_PATTERN = /([a-z0-9])([A-Z])/g
 
 /**
  * Turn a PascalCase API field id (such as "CellReception") into spaced words
- * ("Cell Reception") for display. Shared by the `humanize` Handlebars helper
- * and the normalized-section builder so a note's field label reads the same in
- * the HTML description and in the structured `sections` payload.
+ * ("Cell Reception") for display. Internal base for {@link noteFieldLabel},
+ * which is the single entry point both the `humanize` Handlebars helper and the
+ * normalized-section builder consume.
  */
-export function humanizeField (value: string): string {
+function humanizeField (value: string): string {
   return value.replace(HUMANIZE_PATTERN, '$1 $2')
+}
+
+/**
+ * Label for a free-form note's field id. Humanizes the PascalCase id, then
+ * collapses the catch-all `PoiNotes` field (which would otherwise read as the
+ * stuttering "Poi Notes") to a plain "Notes". Shared by the `humanize`
+ * Handlebars helper and the normalized-section builder so the label reads the
+ * same in the HTML description and the structured payload.
+ */
+export function noteFieldLabel (field: string): string {
+  if (field.toLowerCase() === 'poinotes') {
+    return 'Notes'
+  }
+  return humanizeField(field)
+}
+
+/**
+ * POI types that carry user reviews and a star rating. Reviews are a marina and
+ * business signal: a hazard, navigational mark, bridge, lock, or similar feature
+ * should never show a star rating or featured review (a four-star rating on a
+ * rock is nonsense), so review chrome is emitted only for these types.
+ */
+const REVIEW_POI_TYPES: ReadonlySet<PoiType> = new Set<PoiType>([
+  'Marina',
+  'Anchorage',
+  'Business',
+  'BoatRamp'
+])
+
+/** True when a POI type should carry its review summary and featured review. */
+export function poiTypeShowsReviews (poiType: PoiType): boolean {
+  return REVIEW_POI_TYPES.has(poiType)
 }
 
 /** Matches CR, LF, or CRLF so a multi-line note renders with `<br/>` breaks. */
@@ -150,7 +183,9 @@ export function fromNow (date: Date, now: Date = new Date()): string {
 
 /** True when the fuel section is present and carries at least one definite value. */
 export function hasFuel (details: PoiDetails): boolean {
-  return hasDefiniteAvailability(details.fuel) || hasNotes(details.fuel?.notes)
+  return hasDefiniteAvailability(details.fuel) ||
+    isPositiveNumber(details.fuel?.depthFuel) ||
+    hasNotes(details.fuel?.notes)
 }
 
 /** True when the dockage section is present and carries usable detail. */
@@ -164,7 +199,11 @@ export function hasDockage (details: PoiDetails): boolean {
   // "Free docks" / "Paid docks" line.
   return hasDefiniteAvailability(dockage) ||
     hasNotes(dockage.notes) ||
-    dockage.isFree !== undefined
+    dockage.isFree !== undefined ||
+    isPositiveNumber(dockage.total) ||
+    isPositiveNumber(dockage.transient) ||
+    isPositiveNumber(dockage.loaMax) ||
+    isPositiveNumber(dockage.beamMax)
 }
 
 /** True when the contact section is present and carries at least one populated field. */
@@ -315,8 +354,9 @@ function buildEnvironment (): typeof Handlebars {
   })
 
   // Turns a PascalCase API field id (such as "CellReception") into spaced
-  // words ("Cell Reception") for display.
-  env.registerHelper('humanize', (value: unknown): string => humanizeField(String(value)))
+  // words ("Cell Reception") for display, collapsing the catch-all PoiNotes
+  // field to a plain "Notes".
+  env.registerHelper('humanize', (value: unknown): string => noteFieldLabel(String(value)))
 
   // Escapes text and converts its line breaks to <br/>, so a multi-line note
   // is not collapsed onto one line in the rendered HTML. An absent value
@@ -379,6 +419,13 @@ function buildEnvironment (): typeof Handlebars {
   // stale, so the header can carry a freshness warning the crew must see.
   env.registerHelper('staleHazard', function (this: TemplateRoot, options: Handlebars.HelperOptions) {
     return isStaleHazard(this.data) ? options.fn(this) : options.inverse(this)
+  })
+
+  // Block helper that renders its body only for a POI type that carries reviews
+  // (marinas, anchorages, businesses, and boat ramps), so a hazard or
+  // navigational feature shows no star rating or featured review.
+  env.registerHelper('showsReviews', function (this: TemplateRoot, options: Handlebars.HelperOptions) {
+    return poiTypeShowsReviews(this.data.pointOfInterest.poiType) ? options.fn(this) : options.inverse(this)
   })
 
   return env

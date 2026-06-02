@@ -112,6 +112,12 @@ export interface DockageSection {
   total?: number
   /** Number of berths available to transient (visiting) vessels. */
   transient?: number
+  /** Maximum vessel length overall the marina accepts, in `distanceUnit`. */
+  loaMax?: number
+  /** Maximum vessel beam the marina accepts, in `distanceUnit`. */
+  beamMax?: number
+  /** Unit for `loaMax` and `beamMax`, e.g. "Meter". */
+  distanceUnit?: string
   notes?: PoiNote[]
 }
 
@@ -121,6 +127,10 @@ export interface FuelSection {
   gas?: Availability
   propane?: Availability
   electric?: Availability
+  /** Depth at the fuel dock, in `distanceUnit`. A dockside go/no-go fact. */
+  depthFuel?: number
+  /** Unit for `depthFuel`, e.g. "Meter". */
+  distanceUnit?: string
   notes?: PoiNote[]
 }
 

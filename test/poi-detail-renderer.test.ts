@@ -376,3 +376,58 @@ test('renderDescription does not warn for a stale non-Hazard point of interest',
 
   assert.doesNotMatch(html, /Hazard report not recently confirmed/)
 })
+
+test('the featured review shows its title but not its own star rating', () => {
+  const html = renderDescription(fullMarina())
+  // The review title is content and stays.
+  assert.match(html, /Great stop/)
+  // The aggregate rating still leads the review summary ("4.5/5 ... 27 reviews").
+  assert.match(html, /27 reviews/)
+  assert.match(html, /4\.5\/5/)
+  // The featured review no longer repeats its own rating parenthetical "(5/5 ⭐)".
+  assert.doesNotMatch(html, /\(5\/5/)
+})
+
+test('renderDescription suppresses reviews on a non-business POI type', () => {
+  // A Hazard carrying review data must show neither a star rating nor a featured
+  // review: those belong to marinas and businesses.
+  const reviewedHazard: PoiDetails = {
+    pointOfInterest: {
+      id: 654,
+      name: 'Submerged Piling',
+      poiType: 'Hazard',
+      mapLocation: { latitude: 27.1, longitude: -82.5 },
+      dateLastModified: THREE_DAYS_AGO.toISOString(),
+      notes: [{ field: 'GeneralInfo', value: 'Reported by a passing vessel.' }]
+    },
+    reviewSummary: { averageRating: 4, numberOfReviews: 3 },
+    featuredReview: { title: 'Watch out', text: 'Hit it at low tide.', rating: 1, createdBy: 'A Sailor' }
+  }
+  const html = renderDescription(reviewedHazard)
+
+  assert.doesNotMatch(html, /reviews/)
+  assert.doesNotMatch(html, /Watch out/)
+  assert.doesNotMatch(html, /Hit it at low tide/)
+  // The free-text note still renders.
+  assert.match(html, /Reported by a passing vessel/)
+})
+
+test('renderDescription labels the catch-all PoiNotes field as plain "Notes"', () => {
+  const marina = bareMarina()
+  marina.pointOfInterest.notes = [{ field: 'PoiNotes', value: 'Call ahead.' }]
+  const html = renderDescription(marina)
+
+  assert.match(html, /Notes: Call ahead\./)
+  assert.doesNotMatch(html, /Poi Notes/)
+})
+
+test('renderDescription renders maximum LOA and beam, and the fuel dock depth', () => {
+  const marina = bareMarina()
+  marina.dockage = { loaMax: 18, beamMax: 5.5, distanceUnit: 'Meter' }
+  marina.fuel = { diesel: 'Yes', depthFuel: 3.2, distanceUnit: 'Meter' }
+  const html = renderDescription(marina)
+
+  assert.match(html, /Maximum LOA 18 Meter/)
+  assert.match(html, /Maximum beam 5\.5 Meter/)
+  assert.match(html, /Fuel dock depth 3\.2 Meter/)
+})

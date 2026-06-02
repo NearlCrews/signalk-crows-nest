@@ -115,10 +115,12 @@ test('builds normalized sections for a fully populated POI, mirroring the render
     { label: 'Reviews', value: 28, kind: 'count' }
   ])
 
-  // Featured review: prose, with the rating and author as supporting items.
+  // Featured review: the review title is content carried under a stable label,
+  // not put in the label slot, and the prose is a note. The review's own rating
+  // is not repeated here (the aggregate rating already leads the review section).
   assert.deepEqual(section(sections, 'featuredReview')?.items, [
-    { label: 'Great stay', value: 'Easy approach and helpful dockhands.', kind: 'note' },
-    { label: 'Rating', value: 5, kind: 'rating' },
+    { label: 'Title', value: 'Great stay', kind: 'text' },
+    { label: 'Review', value: 'Easy approach and helpful dockhands.', kind: 'note' },
     { label: 'Reviewed by', value: 'skipper42', kind: 'text' }
   ])
 
@@ -215,5 +217,98 @@ test('shows a dockage section carrying only the price flag', () => {
   }))
   assert.deepEqual(section(sections, 'dockage')?.items, [
     { label: 'Docks', value: true, kind: 'flag' }
+  ])
+})
+
+test('suppresses review chrome on a non-business POI type but keeps the notes', () => {
+  const sections = buildActiveCaptainSections(details({
+    pointOfInterest: {
+      id: 7,
+      name: 'Submerged Piling',
+      poiType: 'Hazard',
+      mapLocation: { latitude: 42.0, longitude: -71.0 },
+      dateLastModified: '2024-03-12T00:00:00.000',
+      notes: [{ field: 'GeneralInfo', value: 'Reported by a passing vessel.' }]
+    },
+    reviewSummary: { averageRating: 4, numberOfReviews: 3 },
+    featuredReview: { title: 'Watch out', text: 'Hit it at low tide.', rating: 1, createdBy: 'skipper42' }
+  }))
+  // A hazard, obstruction, or other non-business feature gets no star rating or
+  // user reviews: those belong to marinas and businesses, not navigation hazards.
+  assert.equal(section(sections, 'review'), undefined)
+  assert.equal(section(sections, 'featuredReview'), undefined)
+  // The free-text notes survive: that is where the on-the-water intel lives.
+  assert.deepEqual(section(sections, 'notes')?.items, [
+    { label: 'General Info', value: 'Reported by a passing vessel.', kind: 'note' }
+  ])
+})
+
+test('keeps review chrome for an anchorage', () => {
+  const sections = buildActiveCaptainSections(details({
+    pointOfInterest: {
+      id: 8,
+      name: 'Quiet Cove',
+      poiType: 'Anchorage',
+      mapLocation: { latitude: 42.0, longitude: -71.0 },
+      dateLastModified: '2024-03-12T00:00:00.000'
+    },
+    reviewSummary: { averageRating: 4.2, numberOfReviews: 9 },
+    featuredReview: { title: 'Great holding', text: 'Mud bottom, well sheltered.', rating: 5, createdBy: 'skipper42' }
+  }))
+  assert.deepEqual(section(sections, 'review')?.items, [
+    { label: 'Average rating', value: 4.2, kind: 'rating' },
+    { label: 'Reviews', value: 9, kind: 'count' }
+  ])
+  assert.deepEqual(section(sections, 'featuredReview')?.items, [
+    { label: 'Title', value: 'Great holding', kind: 'text' },
+    { label: 'Review', value: 'Mud bottom, well sheltered.', kind: 'note' },
+    { label: 'Reviewed by', value: 'skipper42', kind: 'text' }
+  ])
+})
+
+test('normalizes the PoiNotes field id to a plain "Notes" label', () => {
+  const sections = buildActiveCaptainSections(details({
+    pointOfInterest: {
+      id: 9,
+      name: 'Test Marina',
+      poiType: 'Marina',
+      mapLocation: { latitude: 42.0, longitude: -71.0 },
+      dateLastModified: '2024-03-12T00:00:00.000',
+      notes: [{ field: 'PoiNotes', value: 'Call ahead.' }]
+    }
+  }))
+  assert.deepEqual(section(sections, 'notes')?.items, [
+    { label: 'Notes', value: 'Call ahead.', kind: 'note' }
+  ])
+})
+
+test('emits approach depth unitless rather than dropping it when the unit is absent', () => {
+  // A go/no-go depth must never be silently dropped because the unit field is
+  // missing: a missing depth and a unitless depth are very different to a skipper.
+  const sections = buildActiveCaptainSections(details({
+    navigation: { depthApproach: 9 }
+  }))
+  assert.deepEqual(section(sections, 'navigation')?.items, [
+    { label: 'Approach depth', value: 9, kind: 'measure' }
+  ])
+})
+
+test('emits maximum LOA and beam from the dockage payload', () => {
+  const sections = buildActiveCaptainSections(details({
+    dockage: { loaMax: 18, beamMax: 5.5, distanceUnit: 'Meter' }
+  }))
+  assert.deepEqual(section(sections, 'dockage')?.items, [
+    { label: 'Maximum LOA', value: 18, kind: 'measure', unit: 'Meter' },
+    { label: 'Maximum beam', value: 5.5, kind: 'measure', unit: 'Meter' }
+  ])
+})
+
+test('emits the fuel dock depth from the fuel payload', () => {
+  const sections = buildActiveCaptainSections(details({
+    fuel: { diesel: 'Yes', depthFuel: 3.2, distanceUnit: 'Meter' }
+  }))
+  assert.deepEqual(section(sections, 'fuel')?.items, [
+    { label: 'Diesel', value: 'Yes', kind: 'availability' },
+    { label: 'Fuel dock depth', value: 3.2, kind: 'measure', unit: 'Meter' }
   ])
 })
