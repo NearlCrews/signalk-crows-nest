@@ -82,7 +82,9 @@ self-contained module registered on one line in `src/index.ts`.
       Handlebars templates), `rating-filter.ts` (drops list entries below
       the configured minimum rating), and `active-captain-sections.ts` (builds
       the normalized `properties.crowsNest` detail sections from the
-      `PoiDetails`, reusing the renderer's humanizer so the two cannot drift).
+      `PoiDetails`, reusing the renderer's shared helpers, the note-field
+      humanizer and the review-type gate, so the structured sections and the
+      HTML cannot drift; reviews are emitted only for review-bearing POI types).
     - `openseamap/` - the OpenSeaMap input (OpenStreetMap marine data via the
       OSM Overpass API): `openseamap-input.ts` (the `InputModule`),
       `openseamap-source.ts` (the `PoiSource` adapter over the client and an
@@ -128,11 +130,15 @@ self-contained module registered on one line in `src/index.ts`.
       the wire-shape quirks: CATWRK as a decoded string, WATLEV as a
       number, OBJNAM frequently null), and `s57-mapping.ts` (the S-57 enum
       tables (WATLEV, QUASOU, TECSOU) plus per-layer `PoiType` and
-      `:sk-` icon mappings and a `humanizeCategory` helper. CATWRK and
-      CATOBS are intentionally absent because the wire serves them as
-      decoded strings), `enc-direct-detail.ts` (the plain-English S-57 HTML
-      detail renderer), and `noaa-enc-sections.ts` (the normalized-detail
-      section builder).
+      `:sk-` icon mappings, the `humanizeCategory` and `categoryLabel`
+      readers for the decoded CATWRK/CATOBS strings, the `classifyDangerous`
+      helper that turns a hazard's category into its dangerous or
+      non-dangerous status, and `encDepthLabel`, the datum-tagged
+      least-depth or charted-depth label shared by the HTML renderer and the
+      section builder. There are no numeric CATWRK/CATOBS enum tables because
+      the wire serves those fields as decoded strings), `enc-direct-detail.ts`
+      (the plain-English S-57 HTML detail renderer), and `noaa-enc-sections.ts`
+      (the normalized-detail section builder).
   - `outputs/` - SignalK consumers of POI data.
     - `output.ts` - the `OutputModule`, `OutputHandle`, `OutputContext`, and
       `PositionScanContributor` contracts an output implements.

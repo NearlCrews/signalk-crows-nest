@@ -5,6 +5,50 @@
 > development milestones that preceded this publication. Their content is
 > incorporated into the `v0.4.2` release.
 
+<a id="unreleased"></a>
+
+### Unreleased
+
+Refinements to the normalized `properties.crowsNest` detail a structured chart
+plotter renders, driven by a UX and marine-domain review of how the data shows
+in a detail panel. The changes are additive and backward compatible: the schema
+version is unchanged, the HTML `description` and the structured `sections` still
+mirror the same facts, and a generic notes consumer is unaffected.
+
+#### Hazard safety framing (NOAA ENC)
+
+- A wreck or obstruction now leads its feature section with a `Dangerous`
+  boolean flag (from CATWRK/CATOBS) a consumer can surface prominently, instead
+  of burying the danger status in a mid-list "Category" text item. A descriptive
+  category with no danger word (for example "foul ground" or "wreck showing
+  mast") still reads as a plain Category item.
+- A least-depth sounding (QUASOU 6 or 7) is labeled "Least depth", the
+  safety-critical worst-case depth over the feature, rather than a generic
+  "Charted depth". Both depth labels are datum-tagged "(MLLW)", the chart datum
+  for US ENCs. The water level is kept adjacent to the depth, and a water level
+  is no longer dropped when the feature carries no numeric sounding.
+
+#### ActiveCaptain
+
+- Reviews and star ratings are emitted only for review-bearing POI types
+  (marinas, anchorages, businesses, and boat ramps): a hazard, navigational
+  mark, bridge, lock, or similar feature no longer gets a star rating or
+  featured review. The free-text notes are always kept, since that is where
+  on-the-water intel lives.
+- The featured review no longer repeats its own star rating (it duplicated the
+  aggregate rating), the review title rides under a stable label instead of in
+  the item label slot, and the catch-all `PoiNotes` field reads as a plain
+  "Notes".
+- Marina decision facts now surface: maximum LOA and beam (from the dockage
+  payload) and the fuel-dock depth (from the fuel payload). An approach,
+  dockside, or other go/no-go depth is emitted even when the wire carried no
+  unit, rather than being silently dropped.
+
+#### USCG Light List
+
+- LLNR and Volume are emitted as `text` rather than `count`: they are
+  identifiers, not tallies.
+
 <a id="v070"></a>
 
 ### v0.7.0 (2026/05/30) - bridge air-draft check
