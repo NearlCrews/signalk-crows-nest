@@ -187,8 +187,8 @@ export function createActiveCaptainSource (config: ActiveCaptainSourceConfig): P
       // key includes `poiTypes` because the Garmin endpoint filters
       // server-side on that argument: a notes-resource call without Hazard
       // must not poison a later proximity-alarm scan that needs Hazard.
-      const tagged = await bboxCache.get(bbox, async () => {
-        const summaries = await client.listPointsOfInterest(bbox, poiTypes)
+      const tagged = await bboxCache.get(bbox, async (fetchBbox) => {
+        const summaries = await client.listPointsOfInterest(fetchBbox, poiTypes)
         // The client is source-agnostic; tag each summary with the source slug,
         // its public ActiveCaptain page, the attribution credit, and the
         // Freeboard icon for its type.

@@ -181,8 +181,8 @@ export function createOpenSeaMapSource (config: OpenSeaMapSourceConfig): PoiSour
       // next list call rather than after the TTL, and so a click on a
       // marker whose detail entry has been LRU-evicted between two list
       // calls re-seeds rather than re-fetching upstream.
-      const elements = await bboxCache.get(bbox, async () =>
-        await client.listPointsOfInterest(bbox, regex))
+      const elements = await bboxCache.get(bbox, async (fetchBbox) =>
+        await client.listPointsOfInterest(fetchBbox, regex))
       const summaries: PoiSummary[] = []
       for (const element of elements) {
         const summary = toSummary(element)
@@ -194,10 +194,17 @@ export function createOpenSeaMapSource (config: OpenSeaMapSourceConfig): PoiSour
       return filterByMinimumYear(summaries, minimumYear)
     },
     getDetails: async (id: string): Promise<PoiDetailView> => {
+      // A cache hit makes no upstream call, so it is not evidence of Overpass
+      // reachability: serve it without recording a success (mirrors the NOAA
+      // ENC source). Only the real getById below updates the status row.
+      const hit = cache.get(id)
+      if (hit !== undefined) {
+        return toDetailView(hit)
+      }
       try {
-        // The cache key matches the registry-side underscore id; on a miss the
-        // Overpass client is queried with the slash form it parses.
-        const element = cache.get(id) ?? await client.getById(toOverpassTypedId(id))
+        // On a miss the Overpass client is queried with the slash form it
+        // parses (the cache key is the registry-side underscore id).
+        const element = await client.getById(toOverpassTypedId(id))
         if (element === undefined) {
           throw new Error(`No OpenSeaMap element found for "${id}"`)
         }
@@ -213,6 +220,9 @@ export function createOpenSeaMapSource (config: OpenSeaMapSourceConfig): PoiSour
     },
     cacheSize: () => cache.size,
     close: () => {
+      // Drop the in-memory detail LRU on close so a per-config-change restart
+      // does not carry a stopped run's entries, matching the NOAA ENC source.
+      cache.clear()
       bboxCache.clear()
       client.close()
     }

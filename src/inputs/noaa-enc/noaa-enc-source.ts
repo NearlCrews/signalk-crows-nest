@@ -224,10 +224,10 @@ export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
       // next list call rather than after the TTL, and so the detail LRU is
       // re-seeded on every cache hit rather than going stale alongside the
       // bbox cache.
-      const cached = await bboxCache.get(bbox, async () => {
+      const cached = await bboxCache.get(bbox, async (fetchBbox) => {
         const results = await Promise.allSettled(
           layers.map(async (layerKey) => {
-            const response = await client.queryLayer({ band, layerKey, bbox })
+            const response = await client.queryLayer({ band, layerKey, bbox: fetchBbox })
             return { layerKey, features: response.features }
           })
         )
@@ -258,7 +258,11 @@ export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
           )
         }
         return layerFeatures
-      })
+      // Only cache a full result. A partial result (a layer transiently
+      // failed) is returned for this call but not cached, so the failed
+      // layer is retried on the next call rather than its POIs staying absent
+      // for the whole debounce window.
+      }, undefined, (layerFeatures) => layerFeatures.length === layers.length)
       const summaries: PoiSummary[] = []
       for (const { layerKey, features } of cached) {
         for (const feature of features) {

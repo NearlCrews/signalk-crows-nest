@@ -126,6 +126,46 @@ test('listPointsOfInterest fans out across enabled layers and tags summaries', a
   assert.equal(wreck.position.longitude, -71.0)
 })
 
+test('a partial layer failure is not cached, so the failed layer is retried on the next call', async () => {
+  // One layer transiently fails while another succeeds. The source returns the
+  // partial result for THIS call but must NOT cache it: caching would hide the
+  // failed layer's POIs for the whole bbox-debounce window. The next call must
+  // re-query so a recovered layer reappears promptly rather than after the TTL.
+  let wreckCalls = 0
+  let wreckFails = true
+  const client: FakeClient = {
+    queryLayer: async ({ layerKey }) => {
+      if (layerKey === 'wreck') {
+        wreckCalls += 1
+        if (wreckFails) throw new Error('arcgis 500')
+        return { features: [namedWreck] }
+      }
+      return { features: [unnamedObstruction] }
+    },
+    queryById: async () => undefined
+  }
+  const { status } = fakeStatus()
+  const source = createNoaaEncSource({
+    client: client as never,
+    band: 'coastal',
+    includeWrecks: true,
+    includeObstructions: true,
+    includeRocks: false,
+    minimumYear: 0,
+    refreshSeconds: 60, // caching ON: only the no-cache-on-partial rule lets the retry through
+    status: status as never,
+    getCurrentPosition: () => undefined
+  })
+  const bbox = { south: 41, west: -72, north: 43, east: -70 }
+  const first = await source.listPointsOfInterest(bbox, '')
+  assert.equal(first.length, 1, 'the partial result carries only the layer that succeeded')
+  assert.equal(wreckCalls, 1)
+  wreckFails = false
+  const second = await source.listPointsOfInterest(bbox, '')
+  assert.equal(wreckCalls, 2, 'the partial result was not cached, so the failed layer is retried')
+  assert.equal(second.length, 2, 'the recovered wreck appears alongside the obstruction')
+})
+
 test('listPointsOfInterest only queries layers that are enabled', async () => {
   const calls: string[] = []
   const client: FakeClient = {

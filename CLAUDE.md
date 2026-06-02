@@ -182,9 +182,11 @@ self-contained module registered on one line in `src/index.ts`.
     `shouldSkipOutsideUsWaters` helper the US-only inputs call to skip
     outbound HTTP, and record the skip, when the vessel is outside US
     waters), `bbox-debounce.ts`
-    (the per-bbox LRU debounce cache, which caches the in-flight fetch
-    promise so a concurrent same-bbox burst collapses into one upstream
-    request, plus the canonical
+    (the per-source geographic stale-while-revalidate cache, which snaps each
+    viewport to a coarse tile so a small pan reuses the previous fetch, serves
+    a stale tile immediately while revalidating it in the background, and
+    collapses a concurrent same-tile burst into one upstream request, plus the
+    canonical
     `DEFAULT_BBOX_DEBOUNCE_SECONDS` / `MIN_BBOX_DEBOUNCE_SECONDS` /
     `MAX_BBOX_DEBOUNCE_SECONDS` bounds, the `clampBboxDebounceSeconds`
     helper that every input module and the panel's normalize-config

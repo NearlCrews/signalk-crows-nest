@@ -1,18 +1,31 @@
 /**
- * Per-bbox debounce cache for POI sources.
+ * Per-source geographic stale-while-revalidate cache for POI sources.
  *
  * Every source hits its upstream on every `listPointsOfInterest` call. The
- * position-monitor scan path is already throttled at the monitor (vessel
- * moved at least 100 m and at least 60 s elapsed), but the chart-display
- * path through the notes-resource output is one upstream request per
- * Freeboard refresh on the same viewport. A short-lived LRU keyed on the
- * bbox returns the previous summaries when the same bbox is requested
- * within the configured window, so a refresh burst on a stationary view
- * does not flood the upstream.
+ * position-monitor scan path is throttled at the monitor, but the chart-display
+ * path through the notes-resource output is one upstream request per chart
+ * refresh, and a pan or zoom to a new viewport is a fresh request. This cache
+ * cuts the delay two ways:
  *
- * Off-sentinel matches the rest of the codebase: `ttlSeconds <= 0` disables
- * the cache (the wrapped fetcher is always called). The TTL is measured in
- * seconds because the typical chart-plotter cadence is sub-minute.
+ * - Snapping: each viewport is snapped OUTWARD to a coarse tile grid
+ *   (0.1 degrees, about 11 km) and keyed on the snapped tile, so a small pan
+ *   that stays inside a tile reuses the previous fetch instead of querying
+ *   upstream again. The fetcher receives the snapped tile, a superset of the
+ *   viewport, which is safe because the notes output never clips to the
+ *   requested box. The trade-off is a "grid cliff": a pan that crosses a tile
+ *   line misses. The grid is a fixed size (viewport-span-agnostic): a zoomed-in
+ *   view still fetches a whole tile and a zoomed-out view snaps to the
+ *   enclosing tiles; a zoom-adaptive grid is a possible future refinement.
+ * - Stale-while-revalidate: a tile past its freshness window is returned
+ *   immediately and refreshed in the background, so only a genuinely new tile
+ *   blocks on upstream. POIs change slowly, so serving a slightly stale tile
+ *   for a tick is harmless. There is no max-stale ceiling: a tile whose
+ *   refresh keeps failing is served indefinitely, which is the intended trade
+ *   for slow-changing POI data.
+ *
+ * Off-sentinel matches the rest of the codebase: `ttlSeconds <= 0` disables the
+ * cache, and the raw viewport (no snap) is fetched on every call. The freshness
+ * window is in seconds because the typical chart-plotter cadence is sub-minute.
  *
  * The cache is per-source: ActiveCaptain, NOAA ENC, and OpenSeaMap each
  * instantiate their own. They share the `MAX_BBOX_CACHE_ENTRIES` ceiling
@@ -73,20 +86,39 @@ export function refreshSecondsSchema (title: string): Record<string, unknown> {
 }
 
 /**
- * A bbox debounce cache. `get` returns the cached value when the bbox
- * has been seen within the TTL; otherwise it calls `fetch` and caches the
- * result. The value type is generic so each source caches its own shape.
+ * A geographic stale-while-revalidate cache. `get` snaps the viewport to a
+ * coarse tile, serves a fresh tile as-is, serves a stale tile immediately while
+ * revalidating it in the background, and fetches (blocking) only on a genuine
+ * miss. The value type is generic so each source caches its own shape.
  */
 export interface BboxDebounceCache<T> {
   /**
-   * Return the cached value for `bbox` (and the optional `extraKey`) when
-   * it is fresh, otherwise call `fetch`, cache its result, and return it.
-   * `extraKey` is appended to the cache key so a source whose upstream
-   * filters server-side on a request argument (ActiveCaptain's `poiTypes`,
-   * for example) does not let one caller's narrower request poison a later
-   * caller's wider one.
+   * Return POIs for `bbox`. The cache snaps `bbox` outward to a tile grid and
+   * keys on the snapped tile (plus the optional `extraKey`), so a small pan
+   * inside the tile hits. `fetch` receives the SNAPPED bbox to query upstream;
+   * fetching the tile (a superset of the viewport) is safe because the notes
+   * output never clips to the requested box.
+   *
+   * Freshness: a tile younger than the TTL is returned as-is; a stale tile is
+   * returned immediately and revalidated in the background; a missing tile is
+   * fetched and awaited (the only blocking path), with a concurrent same-tile
+   * burst collapsed onto one in-flight fetch.
+   *
+   * `extraKey` is appended to the key so a source whose upstream filters
+   * server-side on a request argument (ActiveCaptain's `poiTypes`) does not let
+   * one caller's narrower request poison a later caller's wider one.
+   *
+   * `shouldCache`, when given, is consulted with the resolved value: if it
+   * returns false the value is returned to the caller but not retained, so the
+   * next call re-fetches. A source uses it to avoid caching a degraded result
+   * (a partial multi-layer response, say).
    */
-  get: (bbox: Bbox, fetch: () => Promise<T>, extraKey?: string) => Promise<T>
+  get: (
+    bbox: Bbox,
+    fetch: (fetchBbox: Bbox) => Promise<T>,
+    extraKey?: string,
+    shouldCache?: (value: T) => boolean
+  ) => Promise<T>
   /** Drop every entry. Called by the source on close to release memory. */
   clear: () => void
 }
@@ -110,48 +142,160 @@ function bboxKey (bbox: Bbox, extraKey?: string): string {
 }
 
 /**
- * Create a debounce cache with the given TTL (in seconds) and entry limit.
- * `ttlSeconds <= 0` disables the cache: `get` always calls `fetch`.
+ * Tile grid resolution, in integer cells per degree. 10 cells = 0.1-degree
+ * tiles (about 11 km): coarse enough that a small pan stays in one tile and
+ * hits the cache, fine enough that the fetched superset is not far larger than
+ * the viewport. Kept as an integer (not the 0.1-degree size) so a snapped edge
+ * reconstructs exactly as `cell / SNAP_CELLS_PER_DEGREE`, dodging the float
+ * drift of `cell * 0.1`.
+ */
+const SNAP_CELLS_PER_DEGREE = 10
+
+/**
+ * Snap one coordinate to a grid cell boundary with `round` (floor for the
+ * south/west edges, ceil for north/east). `coord * 10` carries float noise
+ * (`42.0 * 10 === 420.00000000000006`), so the product is rounded to 1e-6 cell
+ * precision before floor/ceil; that lands a grid-aligned edge on its own
+ * boundary instead of one cell off.
+ */
+function snapCell (coord: number, round: (n: number) => number): number {
+  return round(Number((coord * SNAP_CELLS_PER_DEGREE).toFixed(6)))
+}
+
+/**
+ * Snap a viewport OUTWARD to the smallest grid-aligned tile that fully contains
+ * it. The reconstructed edges are exact multiples of the cell size (division by
+ * the integer cells-per-degree), so two viewports in the same tile produce an
+ * identical box and therefore an identical cache key.
+ */
+function snapBbox (bbox: Bbox): Bbox {
+  return {
+    south: snapCell(bbox.south, Math.floor) / SNAP_CELLS_PER_DEGREE,
+    west: snapCell(bbox.west, Math.floor) / SNAP_CELLS_PER_DEGREE,
+    north: snapCell(bbox.north, Math.ceil) / SNAP_CELLS_PER_DEGREE,
+    east: snapCell(bbox.east, Math.ceil) / SNAP_CELLS_PER_DEGREE
+  }
+}
+
+/** A cached tile: the in-flight or settled fetch plus its freshness state. */
+interface GeoEntry<T> {
+  /** The fetch promise; awaited by concurrent callers during a cold miss. */
+  promise: Promise<T>
+  /** The resolved value, undefined until the fetch first succeeds. */
+  value: T | undefined
+  /** Clock time the value resolved, compared against the freshness window. */
+  freshAt: number
+  /** True once the fetch has resolved successfully. */
+  ok: boolean
+  /** True while a background revalidation of this tile is in flight. */
+  revalidating: boolean
+}
+
+/**
+ * Create a geographic stale-while-revalidate cache with the given freshness
+ * window (in seconds) and entry limit. `ttlSeconds <= 0` disables the cache:
+ * `get` always fetches the raw viewport. `now` is injectable for tests.
  *
- * The cache wraps `LRUCache` with its built-in `ttl` option so per-entry
- * expiry, eviction, and size accounting all happen inside one library
- * with no per-entry wrapper object of our own.
+ * The LRU bounds size only (no library `ttl`): a stale tile must remain
+ * readable so it can be served while it revalidates, so freshness is tracked
+ * per entry against `now`.
  */
 export function createBboxDebounceCache<T extends NonNullable<unknown>> (
   ttlSeconds: number,
-  maxEntries: number
+  maxEntries: number,
+  now: () => number = Date.now
 ): BboxDebounceCache<T> {
   const ttlMs = Math.max(0, ttlSeconds) * MS_PER_SECOND
-  // ttl: 0 would tell LRUCache to keep entries forever, which is the
-  // opposite of what `ttlSeconds <= 0` means in this module's contract.
-  // So when ttlSeconds is the off sentinel, build a 1-entry cache that we
-  // never read from and short-circuit `get` to always call the fetcher.
-  // The cache holds the in-flight fetch promise, not just its resolved value,
-  // so a refresh burst that requests the same bbox before the first fetch
-  // settles collapses into one upstream round-trip rather than N.
   const cache = ttlMs > 0
-    ? new LRUCache<string, Promise<T>>({ max: maxEntries, ttl: ttlMs })
+    ? new LRUCache<string, GeoEntry<T>>({ max: maxEntries })
     : null
-  return {
-    get: async (bbox, fetch, extraKey) => {
-      if (cache === null) {
-        return await fetch()
-      }
-      const key = bboxKey(bbox, extraKey)
-      const hit = cache.get(key)
-      if (hit !== undefined) {
-        return await hit
-      }
-      const pending = fetch()
-      cache.set(key, pending)
-      try {
-        return await pending
-      } catch (error) {
-        // Evict the rejected promise so the next call retries upstream rather
-        // than replaying the failure for the rest of the TTL.
-        if (cache.get(key) === pending) cache.delete(key)
+
+  // Start a fetch, store it as the tile's entry, and wire up resolve/reject: a
+  // resolved value stamps the entry fresh (and is dropped when vetoed); a
+  // rejection evicts the entry so the next call retries rather than replaying
+  // the failure. The promise is built before the entry so its callbacks can
+  // close over the entry they update.
+  function fetchInto (
+    key: string,
+    fetchBbox: Bbox,
+    fetch: (fetchBbox: Bbox) => Promise<T>,
+    shouldCache?: (value: T) => boolean
+  ): GeoEntry<T> {
+    // The promise is assigned just after the entry is built so its callbacks
+    // can close over the entry they update; the placeholder is overwritten at
+    // once on the next statement.
+    const entry: GeoEntry<T> = {
+      promise: undefined as unknown as Promise<T>,
+      value: undefined,
+      freshAt: 0,
+      ok: false,
+      revalidating: false
+    }
+    entry.promise = fetch(fetchBbox)
+      .then((value) => {
+        entry.value = value
+        entry.freshAt = now()
+        entry.ok = true
+        if (shouldCache !== undefined && !shouldCache(value) && cache?.get(key) === entry) {
+          cache.delete(key)
+        }
+        return value
+      })
+      .catch((error: unknown) => {
+        if (cache?.get(key) === entry) cache.delete(key)
         throw error
+      })
+    cache?.set(key, entry)
+    return entry
+  }
+
+  // Refresh a stale tile in the background, updating the live entry in place so
+  // concurrent stale reads keep serving the old value until the refresh lands.
+  // A transient failure leaves the stale entry to be retried on a later read.
+  function revalidate (
+    key: string,
+    fetchBbox: Bbox,
+    fetch: (fetchBbox: Bbox) => Promise<T>,
+    entry: GeoEntry<T>,
+    shouldCache?: (value: T) => boolean
+  ): void {
+    entry.revalidating = true
+    fetch(fetchBbox)
+      .then((value) => {
+        if (shouldCache !== undefined && !shouldCache(value)) {
+          if (cache?.get(key) === entry) cache.delete(key)
+          return
+        }
+        entry.value = value
+        entry.freshAt = now()
+      })
+      .catch(() => { /* keep serving the stale entry; retry on a later read */ })
+      .finally(() => { entry.revalidating = false })
+  }
+
+  return {
+    get: async (bbox, fetch, extraKey, shouldCache) => {
+      if (cache === null) {
+        return await fetch(bbox)
       }
+      const fetchBbox = snapBbox(bbox)
+      const key = bboxKey(fetchBbox, extraKey)
+      const existing = cache.get(key)
+      if (existing !== undefined) {
+        if (!existing.ok) {
+          // A cold fetch is still in flight: share it (collapse the burst).
+          return await existing.promise
+        }
+        if (now() - existing.freshAt < ttlMs) {
+          return existing.value as T
+        }
+        // Stale: serve the last-known value now, revalidate once in background.
+        if (!existing.revalidating) {
+          revalidate(key, fetchBbox, fetch, existing, shouldCache)
+        }
+        return existing.value as T
+      }
+      return await fetchInto(key, fetchBbox, fetch, shouldCache).promise
     },
     clear: () => { cache?.clear() }
   }

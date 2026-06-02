@@ -185,17 +185,16 @@ test('cacheSize reflects the elements stashed from a list query', async () => {
   source.close()
 })
 
-test('getDetails records a per-source detail success on the status recorder', async () => {
+test('getDetails records a per-source detail success on a real upstream fetch (cache miss)', async () => {
   const successes: string[] = []
   const status: PluginStatus = {
     ...silentStatus(),
     recordDetailSuccess: (source) => successes.push(source)
   }
   const source = createOpenSeaMapSource({ client: fakeClient().client, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 0, status })
-  await source.listPointsOfInterest(sampleBbox, '')
-  // The aggregate registry hands the source the underscore form, so the
-  // detail tests use it too: passing the slash form would silently miss
-  // the cache and re-query the upstream, hiding cache-coupled regressions.
+  // No preceding list call, so the id is a cache miss: getDetails performs a
+  // real getById and that upstream success is what records the detail
+  // success (a cache hit must NOT, covered by its own test).
   await source.getDetails('node_123')
   assert.deepEqual(successes, ['openseamap'])
   source.close()
@@ -294,6 +293,31 @@ test('listPointsOfInterest reuses the bbox-cached result within refreshSeconds',
   await source.listPointsOfInterest(sampleBbox, '')
   assert.equal(calls, 1, 'the second call within the TTL hits the bbox cache')
   source.close()
+})
+
+test('getDetails on a cache hit does not record a detail success', async () => {
+  // A detail cache hit makes no upstream call, so it is not evidence of
+  // Overpass reachability: recording a success would flip a stale
+  // apiReachable=false back to true just because the user clicked a
+  // previously loaded marker. Mirrors the NOAA ENC source.
+  const successes: string[] = []
+  const status: PluginStatus = {
+    ...silentStatus(),
+    recordDetailSuccess: (source) => successes.push(source)
+  }
+  const source = createOpenSeaMapSource({ client: fakeClient().client, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 0, status })
+  await source.listPointsOfInterest(sampleBbox, '') // seeds the detail cache
+  await source.getDetails('node_123') // served from cache, no upstream call
+  assert.deepEqual(successes, [], 'a cache hit records no detail success')
+  source.close()
+})
+
+test('close clears the in-memory detail cache', async () => {
+  const source = createOpenSeaMapSource({ client: fakeClient().client, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 0, status: silentStatus() })
+  await source.listPointsOfInterest(sampleBbox, '')
+  assert.equal(source.cacheSize(), 2)
+  source.close()
+  assert.equal(source.cacheSize(), 0, 'close drops the detail cache, matching the NOAA source')
 })
 
 test('listPointsOfInterest queries upstream every call when refreshSeconds is 0 (off)', async () => {
