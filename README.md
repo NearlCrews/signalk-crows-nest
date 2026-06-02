@@ -25,20 +25,24 @@ with a plain-English popup, and the whole plugin is configured from one panel.
 | --- | --- | --- |
 | [![An ActiveCaptain hazard note open in Freeboard-SK, showing the rating, the review text, and a staleness warning](assets/screenshots/freeboard-activecaptain-hazard.png)](assets/screenshots/freeboard-activecaptain-hazard.png) | [![A USCG Light List buoy note open in Freeboard-SK, showing the light characteristic and the source citation](assets/screenshots/freeboard-uscg-light-list.png)](assets/screenshots/freeboard-uscg-light-list.png) | [![The Crow's Nest configuration panel, showing per-source live status and the data-source cards](assets/screenshots/admin-panel.png)](assets/screenshots/admin-panel.png) |
 
-## What's New in v0.7.0
+## What's New in v0.8.0
 
-A feature release: the new **bridge air-draft check** warns when a bridge would
-not clear the vessel. It compares each bridge's vertical clearance against the
-vessel air draft (`design.airHeight`, or a configured fallback) plus a
-configurable safety margin, then raises a proximity alarm as the vessel nears a
-too-low bridge and upgrades a too-low bridge on the active route to a
-clearance-specific route warning. Clearance is read from OpenSeaMap's OSM tags
-and ActiveCaptain's detail, and the dedupe pass keeps the more conservative
-figure. This release also folds in two whole-codebase `/cleanup` passes (about
-forty reuse and quality fixes with no behavior change beyond the feature), and
-all 663 tests pass.
+A feature release centered on **structured notes detail for chart-plotter
+clients**. Each POI note now carries a source-agnostic, presentation-neutral
+detail view on `properties.crowsNest` (titled sections of labeled items),
+ALONGSIDE the existing HTML `description`: a structured client renders the
+sections natively, while a generic notes client keeps rendering the HTML, so
+nothing breaks. POIs also reach the chart faster, through a geographic
+stale-while-revalidate cache that reuses a fetch across a small pan or zoom and
+serves a stale tile while refreshing it in the background. A UX and
+marine-domain review then tightened that detail: a NOAA ENC wreck or obstruction
+leads with a `Dangerous` flag and a datum-tagged least-depth reading, reviews
+and star ratings are limited to marinas and businesses (no more four-star rocks),
+and marina decision facts (maximum LOA and beam, and the fuel-dock depth) now
+surface. All 715 tests pass.
 
-See the [v0.7.0 changelog entry](CHANGELOG.md#v070) and the
+See the [v0.8.0 changelog entry](CHANGELOG.md#v080), the consumer
+[notes-resource integration guide](docs/notes-resource-format.md), and the
 [full release history](CHANGELOG.md).
 
 ## Features

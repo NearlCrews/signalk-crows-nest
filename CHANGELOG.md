@@ -5,15 +5,48 @@
 > development milestones that preceded this publication. Their content is
 > incorporated into the `v0.4.2` release.
 
-<a id="unreleased"></a>
+<a id="v080"></a>
 
-### Unreleased
+### v0.8.0 (2026/06/02) - structured notes detail for chart plotters
 
-Refinements to the normalized `properties.crowsNest` detail a structured chart
-plotter renders, driven by a UX and marine-domain review of how the data shows
-in a detail panel. The changes are additive and backward compatible: the schema
-version is unchanged, the HTML `description` and the structured `sections` still
-mirror the same facts, and a generic notes consumer is unaffected.
+A feature release. Each POI note now carries a source-agnostic, structured
+detail payload a chart-plotter client can render natively, POIs reach the chart
+faster through a geographic stale-while-revalidate cache, and a UX and
+marine-domain review tightened the safety framing and the content of that
+detail. All 715 tests pass.
+
+#### Normalized notes detail (structured clients)
+
+- Every note now carries a presentation-neutral detail view on
+  `properties.crowsNest`, ALONGSIDE the existing HTML `description` (never
+  instead of it). A structured chart plotter reads
+  `properties.crowsNest.sections` (titled sections of labeled items) and renders
+  natively; a generic notes client (stock Freeboard-SK) ignores the extra
+  property and renders the HTML. There is no server-side format switch, so both
+  representations always ship and interoperability is preserved.
+- A per-source section builder for each of the four sources (ActiveCaptain,
+  OpenSeaMap, USCG Light List, and NOAA ENC) mirrors exactly what that source's
+  HTML renderer surfaces, structured rather than rendered, sharing each source's
+  humanizer so the two cannot drift.
+- `properties.crowsNest` carries `type` (the POI type) on both list and detail
+  responses, so a marker is styleable without a detail fetch, and `sections` on
+  detail responses. `schemaVersion` lets a consumer detect the shape and fall
+  back to the HTML on an unrecognized version.
+- New integration guide for consumers: `docs/notes-resource-format.md`.
+
+#### Faster POI loading (geographic stale-while-revalidate cache)
+
+- The per-source bounding-box cache is now a geographic stale-while-revalidate
+  cache. Each viewport snaps outward to a coarse tile and keys on it, so a small
+  pan or zoom that stays in the tile reuses the previous fetch instead of a
+  fresh upstream round-trip. A tile past its freshness window is served at once
+  and refreshed in the background, so only a genuinely new tile blocks, and
+  concurrent same-tile bursts collapse onto one upstream request.
+- Caching-review correctness fixes: a cache hit no longer masks an upstream
+  outage as a recorded success, a per-source skip flag no longer freezes a
+  source's status for the rest of a run, the USCG on-disk index self-heals on a
+  corrupt read, and the bridge-clearance resolver cache gained a freshness TTL
+  so an upstream correction is picked up without a restart.
 
 #### Hazard safety framing (NOAA ENC)
 
@@ -48,6 +81,14 @@ mirror the same facts, and a generic notes consumer is unaffected.
 
 - LLNR and Volume are emitted as `text` rather than `count`: they are
   identifiers, not tallies.
+
+#### Maintenance
+
+- Dependencies refreshed (React and React DOM 19.2.7, `@types/react` 19.2.16,
+  `tsx` 4.22.4, and the transitive tree), with `npm audit` clean of runtime
+  vulnerabilities. ESLint stays on 9 because neostandard peers to `eslint ^9`.
+- The living docs (README, `docs/development.md`, `docs/roadmap.md`, and
+  CLAUDE.md) were brought back in line with the shipped code.
 
 <a id="v070"></a>
 
