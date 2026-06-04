@@ -18,6 +18,9 @@ import type { Position, Bbox } from '../shared/types.js'
 /** Mean radius of the Earth in kilometers, used for great-circle estimates. */
 const EARTH_RADIUS_KM = 6371
 
+/** Mean radius of the Earth in meters, the unit the distance helpers return. */
+const EARTH_RADIUS_METERS = EARTH_RADIUS_KM * 1000
+
 /** Compass bearing (degrees) from the center toward the north-west corner. */
 const NW_BEARING_DEGREES = -45
 
@@ -128,7 +131,7 @@ export function distanceMeters (a: Position, b: Position): number {
   // negative is NaN.
   const angularDistance = 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(Math.max(0, 1 - haversine)))
 
-  return EARTH_RADIUS_KM * 1000 * angularDistance
+  return EARTH_RADIUS_METERS * angularDistance
 }
 
 /**
@@ -253,7 +256,7 @@ export function projectPointOntoLeg (
   point: Position,
   bearingToEnd: number = initialBearingRad(start, end)
 ): TrackProjection {
-  const radiusMeters = EARTH_RADIUS_KM * 1000
+  const radiusMeters = EARTH_RADIUS_METERS
   const angularDistanceToPoint = distanceMeters(start, point) / radiusMeters
   const bearingToPoint = initialBearingRad(start, point)
 

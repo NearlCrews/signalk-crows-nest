@@ -5,17 +5,16 @@
  * points of interest. This module applies that threshold.
  */
 
-import type { PoiSummary, PoiType } from '../../shared/types.js'
+import type { PoiSummary } from '../../shared/types.js'
+import { poiTypeShowsReviews } from './active-captain-types.js'
 
-/**
- * Point-of-interest types that carry ActiveCaptain user reviews. Only these
- * are subject to the rating filter. Navigation and infrastructure types
- * (Hazard, Bridge, Lock, and so on) are never reviewed, so an absent rating on
- * one of them means "not a ratable thing", not "poor quality": filtering them
- * out would wrongly strip safety-relevant markers, hazards above all, from the
- * chart even with their POI-type toggle on.
- */
-const RATABLE_POI_TYPES = new Set<PoiType>(['Marina', 'Anchorage', 'Business'])
+// The set of ratable types is exactly the set that shows reviews, so the filter
+// reuses `poiTypeShowsReviews` (the single source of truth in
+// active-captain-types.ts). Navigation and infrastructure types (Hazard,
+// Bridge, Lock, and so on) are never reviewed, so an absent rating on one of
+// them means "not a ratable thing", not "poor quality": filtering them out
+// would wrongly strip safety-relevant markers, hazards above all, from the
+// chart even with their POI-type toggle on.
 
 /**
  * Drop point-of-interest summaries whose average rating is below
@@ -25,9 +24,10 @@ const RATABLE_POI_TYPES = new Set<PoiType>(['Marina', 'Anchorage', 'Business'])
  *
  * - A `minimumRating` of 0 (or any value at or below 0) is the "show
  *   everything" case: the input array is returned unchanged.
- * - An entry of a non-ratable type (anything outside {@link RATABLE_POI_TYPES})
- *   is always kept: it has no rating to clear the bar with, and hiding it would
- *   remove navigation markers, not declutter low-quality destinations.
+ * - An entry of a non-ratable type (one for which {@link poiTypeShowsReviews}
+ *   is false) is always kept: it has no rating to clear the bar with, and
+ *   hiding it would remove navigation markers, not declutter low-quality
+ *   destinations.
  * - A ratable entry whose `rating` is at or above the threshold is kept.
  * - A ratable entry with no `rating` (undefined) has had no reviews, so it has
  *   no average to compare. When `minimumRating` is greater than 0 such an entry
@@ -46,7 +46,7 @@ export function filterByRating (pois: PoiSummary[], minimumRating: number): PoiS
     return pois
   }
   return pois.filter(poi => {
-    if (!RATABLE_POI_TYPES.has(poi.type)) {
+    if (!poiTypeShowsReviews(poi.type)) {
       return true
     }
     return poi.rating !== undefined && poi.rating >= minimumRating

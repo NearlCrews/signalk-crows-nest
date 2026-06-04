@@ -5,7 +5,7 @@ import {
   DEFAULT_CACHE_DURATION_MINUTES,
   DEFAULT_MINIMUM_RATING,
   DEFAULT_NOAA_ENC_SCALE_BAND,
-  DEFAULT_OPENSEAMAP_DEDUPE_RADIUS_METERS,
+  DEFAULT_DEDUPE_RADIUS_METERS,
   DEFAULT_OPENSEAMAP_ENDPOINT,
   DEFAULT_PROXIMITY_ALARM_RADIUS_METERS,
   DEFAULT_ROUTE_CORRIDOR_WIDTH_METERS,
@@ -108,6 +108,23 @@ test('normalizeConfig defaults the OpenSeaMap options for an empty config', () =
   assert.equal(config.openSeaMapEnabled, false)
   assert.equal(config.openSeaMapEndpoint, DEFAULT_OPENSEAMAP_ENDPOINT)
   assert.deepEqual(config.openSeaMapSeamarkGroups, [...SEAMARK_GROUP_IDS])
+  assert.deepEqual(config.openSeaMapFallbackEndpoints, [],
+    'fallback endpoints default to an empty list')
+})
+
+test('normalizeConfig cleans the OpenSeaMap fallback endpoints (trim, drop blanks, dedupe)', () => {
+  const config = normalizeConfig({
+    openSeaMapFallbackEndpoints: [' https://a.test/api ', '', 'https://a.test/api', 'https://b.test/api', 42]
+  })
+  assert.deepEqual(config.openSeaMapFallbackEndpoints, ['https://a.test/api', 'https://b.test/api'])
+})
+
+test('normalizeConfig treats a non-array fallback-endpoints value as empty', () => {
+  assert.deepEqual(
+    normalizeConfig({ openSeaMapFallbackEndpoints: 'https://a.test/api' as unknown as string[] })
+      .openSeaMapFallbackEndpoints,
+    []
+  )
 })
 
 test('normalizeConfig preserves an explicitly enabled OpenSeaMap source', () => {
@@ -230,7 +247,7 @@ test('normalizeConfig treats a non-false openSeaMapDedupe value as true', () => 
 test('normalizeConfig defaults the dedupe merge radius for an empty config', () => {
   assert.equal(
     normalizeConfig({}).openSeaMapDedupeRadiusMeters,
-    DEFAULT_OPENSEAMAP_DEDUPE_RADIUS_METERS
+    DEFAULT_DEDUPE_RADIUS_METERS
   )
 })
 
@@ -245,7 +262,7 @@ test('normalizeConfig falls back to the default for an unusable dedupe merge rad
   for (const input of [0, -5, 'near', Number.NaN]) {
     assert.equal(
       normalizeConfig({ openSeaMapDedupeRadiusMeters: input }).openSeaMapDedupeRadiusMeters,
-      DEFAULT_OPENSEAMAP_DEDUPE_RADIUS_METERS
+      DEFAULT_DEDUPE_RADIUS_METERS
     )
   }
 })

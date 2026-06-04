@@ -19,6 +19,38 @@ import type { Position, PoiType } from '../../shared/types.js'
  */
 export type Availability = 'Yes' | 'No' | 'Unknown' | 'Nearby'
 
+/**
+ * True when an availability field carries a definite value (`'Yes'`, `'No'`, or
+ * `'Nearby'`). An absent field, `'Unknown'`, or a non-availability value does
+ * not count as populated. Shared by the HTML renderer's section-populated test
+ * and the structured section builder's availability push so the two cannot
+ * disagree on what counts as definite.
+ */
+export function isDefiniteAvailability (value: unknown): value is 'Yes' | 'No' | 'Nearby' {
+  return value === 'Yes' || value === 'No' || value === 'Nearby'
+}
+
+/**
+ * POI types that carry ActiveCaptain user reviews and a star rating. Reviews
+ * are a marina and business signal: a hazard, navigational mark, bridge, lock,
+ * or similar feature never carries one, so review chrome is emitted only for
+ * these types AND only these types are subject to the rating filter. Keeping
+ * one source of truth here means the popup's star rating and the rating filter
+ * cannot diverge (a type that shows a rating is exactly a type that the rating
+ * filter can hide).
+ */
+const REVIEW_POI_TYPES: ReadonlySet<PoiType> = new Set<PoiType>([
+  'Marina',
+  'Anchorage',
+  'Business',
+  'BoatRamp'
+])
+
+/** True when a POI type carries reviews, so it shows review chrome and is rating-filtered. */
+export function poiTypeShowsReviews (poiType: PoiType): boolean {
+  return REVIEW_POI_TYPES.has(poiType)
+}
+
 /** A free-form note attached to a section of a point of interest. */
 export interface PoiNote {
   field: string

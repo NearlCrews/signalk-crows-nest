@@ -33,6 +33,18 @@ export const SCAN_RADIUS_FACTOR = 3
 export const EXIT_RADIUS_FACTOR = 1.2
 
 /**
+ * The distance threshold for an alarm, applying hysteresis: an alarm not yet
+ * active triggers within `radiusMeters`, while an already-active alarm stays
+ * raised until the point of interest passes the wider clear radius
+ * ({@link EXIT_RADIUS_FACTOR} times the radius). The gap between the two stops
+ * an alarm chattering when a point of interest sits right on the boundary. The
+ * two alarm modules share this so `EXIT_RADIUS_FACTOR` stays in one place.
+ */
+export function hysteresisThreshold (radiusMeters: number, isActive: boolean): number {
+  return isActive ? radiusMeters * EXIT_RADIUS_FACTOR : radiusMeters
+}
+
+/**
  * Size the per-tick fetch radius from an alarm radius: wider than the alarm
  * radius by {@link SCAN_RADIUS_FACTOR}, with a {@link MIN_SCAN_RADIUS_METERS}
  * floor so a small alarm radius still fetches enough surrounding data.

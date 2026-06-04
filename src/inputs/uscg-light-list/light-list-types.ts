@@ -29,7 +29,6 @@ export interface LightListProperties {
   DECIMAL_LATITUDE: number
   DECIMAL_LONGITUDE: number
   LIGHT_CHAR?: string | null
-  COLOR?: string | null
   LIGHT_NOM_RANGE?: number | null
   LIGHT_NOM_RANGE_UNIT?: string | null
   LIGHT_FOCAL_PLANE?: number | null
@@ -60,7 +59,6 @@ export interface LightListRecord {
   name: string
   position: Position
   lightChar?: string
-  color?: string
   nominalRange?: { value: number, unit: string }
   focalPlane?: { value: number, unit: string }
   structureType?: string

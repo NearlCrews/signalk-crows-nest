@@ -16,93 +16,69 @@ import { SEAMARK_GROUP_REFS, type SeamarkGroupRef } from '../../shared/seamark-g
 import type { PoiType } from '../../shared/types.js'
 
 /**
- * Map a `seamark:type` value onto a `PoiType`. `rock`, `wreck`, and
- * `obstruction` become `Hazard`, so they flow into the existing proximity and
- * route-corridor alarms. An unrecognized value maps to `Unknown`.
- */
-const SEAMARK_POI_TYPE: Readonly<Record<string, PoiType>> = {
-  rock: 'Hazard',
-  wreck: 'Hazard',
-  obstruction: 'Hazard',
-  harbour: 'Marina',
-  marina: 'Marina',
-  lock_basin: 'Lock',
-  bridge: 'Bridge',
-  light_major: 'Navigational',
-  light_minor: 'Navigational',
-  light_float: 'Navigational',
-  light_vessel: 'Navigational',
-  landmark: 'Navigational',
-  beacon_lateral: 'Navigational',
-  beacon_cardinal: 'Navigational',
-  beacon_isolated_danger: 'Navigational',
-  beacon_safe_water: 'Navigational',
-  beacon_special_purpose: 'Navigational',
-  buoy_lateral: 'Navigational',
-  buoy_cardinal: 'Navigational',
-  buoy_isolated_danger: 'Navigational',
-  buoy_safe_water: 'Navigational',
-  buoy_special_purpose: 'Navigational',
-  anchorage: 'Anchorage',
-  anchor_berth: 'Anchorage',
-  mooring: 'Anchorage'
-}
-
-/** Map a `seamark:type` value to a `PoiType`, defaulting to `Unknown`. */
-export function seamarkToPoiType (value: string): PoiType {
-  return SEAMARK_POI_TYPE[value] ?? 'Unknown'
-}
-
-/**
- * Map a `seamark:type` value onto a Freeboard-SK note icon name (without the
- * `sk-` prefix the renderer applies). Freeboard registers a fixed set of POI
- * icons under that namespace, so an unregistered name silently falls back to
- * a default yellow square. Each value here is one of Freeboard's actually
- * registered icons.
+ * Single mapping from a `seamark:type` value to its `PoiType`, its Freeboard-SK
+ * note icon, and its plain-English label. One table keeps the three in
+ * lockstep: a new seamark type is one row here, not three parallel edits across
+ * this file and openseamap-detail.ts.
  *
- * Isolated-danger buoys and beacons render with the `hazard` glyph: their
- * entire purpose is to flag a danger, so the hazard icon is the visually
- * correct cue. Their `PoiType` stays `Navigational` so they do not falsely
- * trigger the proximity alarms; the icon decoupling is what makes that
- * possible.
+ * `rock`, `wreck`, and `obstruction` become `Hazard`, so they flow into the
+ * existing proximity and route-corridor alarms; an unrecognized value maps to
+ * `Unknown` (see the readers below). Freeboard registers a fixed set of POI
+ * icons under the `sk-` namespace, so an unregistered icon name silently falls
+ * back to a default yellow square; every icon here is one Freeboard actually
+ * registers. Isolated-danger buoys and beacons carry the `hazard` glyph because
+ * their whole purpose is to flag a danger, yet their `PoiType` stays
+ * `Navigational` so they do not falsely trigger the proximity alarms:
+ * decoupling the icon from the type is what makes that possible.
  */
-const SEAMARK_SK_ICON: Readonly<Record<string, string>> = {
-  rock: 'hazard',
-  wreck: 'hazard',
-  obstruction: 'hazard',
-  harbour: 'marina',
-  marina: 'marina',
-  lock_basin: 'lock',
-  bridge: 'bridge',
-  light_major: 'navigation-structure',
-  light_minor: 'navigation-structure',
-  light_float: 'navigation-structure',
-  light_vessel: 'navigation-structure',
-  landmark: 'navigation-structure',
-  beacon_lateral: 'navigation-structure',
-  beacon_cardinal: 'navigation-structure',
-  beacon_isolated_danger: 'hazard',
-  beacon_safe_water: 'navigation-structure',
-  beacon_special_purpose: 'navigation-structure',
-  buoy_lateral: 'navigation-structure',
-  buoy_cardinal: 'navigation-structure',
-  buoy_isolated_danger: 'hazard',
-  buoy_safe_water: 'navigation-structure',
-  buoy_special_purpose: 'navigation-structure',
-  anchorage: 'anchorage',
-  anchor_berth: 'anchorage',
-  mooring: 'anchorage'
+const SEAMARK_MAPPING: Readonly<Record<string, { type: PoiType, icon: string, label: string }>> = {
+  rock: { type: 'Hazard', icon: 'hazard', label: 'Rock' },
+  wreck: { type: 'Hazard', icon: 'hazard', label: 'Wreck' },
+  obstruction: { type: 'Hazard', icon: 'hazard', label: 'Obstruction' },
+  harbour: { type: 'Marina', icon: 'marina', label: 'Harbour' },
+  marina: { type: 'Marina', icon: 'marina', label: 'Marina' },
+  lock_basin: { type: 'Lock', icon: 'lock', label: 'Lock' },
+  bridge: { type: 'Bridge', icon: 'bridge', label: 'Bridge' },
+  light_major: { type: 'Navigational', icon: 'navigation-structure', label: 'Major light' },
+  light_minor: { type: 'Navigational', icon: 'navigation-structure', label: 'Minor light' },
+  light_float: { type: 'Navigational', icon: 'navigation-structure', label: 'Light float' },
+  light_vessel: { type: 'Navigational', icon: 'navigation-structure', label: 'Light vessel' },
+  landmark: { type: 'Navigational', icon: 'navigation-structure', label: 'Landmark' },
+  beacon_lateral: { type: 'Navigational', icon: 'navigation-structure', label: 'Lateral beacon' },
+  beacon_cardinal: { type: 'Navigational', icon: 'navigation-structure', label: 'Cardinal beacon' },
+  beacon_isolated_danger: { type: 'Navigational', icon: 'hazard', label: 'Isolated-danger beacon' },
+  beacon_safe_water: { type: 'Navigational', icon: 'navigation-structure', label: 'Safe-water beacon' },
+  beacon_special_purpose: { type: 'Navigational', icon: 'navigation-structure', label: 'Special-purpose beacon' },
+  buoy_lateral: { type: 'Navigational', icon: 'navigation-structure', label: 'Lateral buoy' },
+  buoy_cardinal: { type: 'Navigational', icon: 'navigation-structure', label: 'Cardinal buoy' },
+  buoy_isolated_danger: { type: 'Navigational', icon: 'hazard', label: 'Isolated-danger buoy' },
+  buoy_safe_water: { type: 'Navigational', icon: 'navigation-structure', label: 'Safe-water buoy' },
+  buoy_special_purpose: { type: 'Navigational', icon: 'navigation-structure', label: 'Special-purpose buoy' },
+  anchorage: { type: 'Anchorage', icon: 'anchorage', label: 'Anchorage' },
+  anchor_berth: { type: 'Anchorage', icon: 'anchorage', label: 'Anchor berth' },
+  mooring: { type: 'Anchorage', icon: 'anchorage', label: 'Mooring' }
 }
 
 /** Generic fallback icon, used when no specific Freeboard icon fits. */
 const FALLBACK_SK_ICON = 'notice-to-mariners'
 
+/** Map a `seamark:type` value to a `PoiType`, defaulting to `Unknown`. */
+export function seamarkToPoiType (value: string): PoiType {
+  return SEAMARK_MAPPING[value]?.type ?? 'Unknown'
+}
+
 /**
- * Map a `seamark:type` value onto a Freeboard-SK note icon name, defaulting
- * to a generic notice glyph for an unmapped value.
+ * Map a `seamark:type` value onto a Freeboard-SK note icon name (without the
+ * `sk-` prefix the renderer applies), defaulting to a generic notice glyph for
+ * an unmapped value so a missing icon never renders as a bare yellow square.
  */
 export function seamarkSkIcon (value: string): string {
-  return SEAMARK_SK_ICON[value] ?? FALLBACK_SK_ICON
+  return SEAMARK_MAPPING[value]?.icon ?? FALLBACK_SK_ICON
+}
+
+/** Plain-English label for a `seamark:type` value, or undefined when unmapped. */
+export function seamarkLabel (value: string): string | undefined {
+  return SEAMARK_MAPPING[value]?.label
 }
 
 /**
@@ -117,7 +93,8 @@ export function seamarkSkIcon (value: string): string {
 export function elementMarking (tags: Record<string, string>): { type: PoiType, skIcon: string } {
   const seamark = tags['seamark:type']?.trim().toLowerCase()
   if (seamark !== undefined && seamark.length > 0) {
-    return { type: seamarkToPoiType(seamark), skIcon: seamarkSkIcon(seamark) }
+    const mapping = SEAMARK_MAPPING[seamark]
+    return { type: mapping?.type ?? 'Unknown', skIcon: mapping?.icon ?? FALLBACK_SK_ICON }
   }
   if (tags.leisure?.trim().toLowerCase() === 'marina') {
     return { type: 'Marina', skIcon: 'marina' }

@@ -83,6 +83,9 @@ export function filterByMinimumYear (
   return pois.filter((poi) => isOnOrAfter(poi.timestamp, minimumYear))
 }
 
+/** Character code for `-`, used by the ISO fast path in {@link isOnOrAfter}. */
+const HYPHEN_CODE = 0x2d
+
 /**
  * True when `timestamp` represents a year greater than or equal to
  * `minimumYear`. Undefined and unparseable timestamps return true so the
@@ -103,6 +106,3 @@ function isOnOrAfter (timestamp: string | undefined, minimumYear: number): boole
   if (!Number.isFinite(parsedMs)) return true
   return new Date(parsedMs).getUTCFullYear() >= minimumYear
 }
-
-/** Character code for `-`, used by the ISO fast path in {@link isOnOrAfter}. */
-const HYPHEN_CODE = 0x2d

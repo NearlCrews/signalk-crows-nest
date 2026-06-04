@@ -18,11 +18,14 @@ import { SEAMARK_GROUP_IDS } from '../../shared/seamark-groups.js'
 import { OPENSEAMAP_SOURCE_ID } from '../../shared/source-ids.js'
 import type { PluginConfig } from '../../shared/types.js'
 import { clampMinimumYear, minimumYearSchema } from '../../shared/year-filter.js'
+import {
+  DEFAULT_OVERPASS_ENDPOINT,
+  RECOMMENDED_OVERPASS_FALLBACK_ENDPOINTS,
+  normalizeFallbackEndpoints,
+  resolvePrimaryEndpoint
+} from '../../shared/overpass-endpoints.js'
 
-/** Default Overpass interpreter URL when configuration omits one. */
-const DEFAULT_ENDPOINT = 'https://overpass-api.de/api/interpreter'
-
-/** The enable, endpoint, seamark-group, dedupe, and radius config fragment. */
+/** The enable, endpoint, fallback, seamark-group, dedupe, and radius config fragment. */
 const CONFIG_SCHEMA: Record<string, unknown> = {
   openSeaMapEnabled: {
     type: 'boolean',
@@ -32,7 +35,20 @@ const CONFIG_SCHEMA: Record<string, unknown> = {
   openSeaMapEndpoint: {
     type: 'string',
     title: 'Overpass API endpoint URL',
-    default: DEFAULT_ENDPOINT
+    default: DEFAULT_OVERPASS_ENDPOINT
+  },
+  openSeaMapFallbackEndpoints: {
+    type: 'array',
+    title: 'Overpass fallback endpoints (tried in order when the primary fails)',
+    description:
+      'Optional mirror endpoints the OpenSeaMap source fails over to when the ' +
+      'primary Overpass endpoint is unreachable. Leave empty to use only the ' +
+      'primary. Suggested full-planet mirrors: ' +
+      RECOMMENDED_OVERPASS_FALLBACK_ENDPOINTS.join(', ') +
+      '. Avoid regional extracts such as overpass.osm.ch, which answer with no ' +
+      'data outside their region.',
+    items: { type: 'string' },
+    default: []
   },
   openSeaMapSeamarkGroups: {
     type: 'array',
@@ -54,13 +70,18 @@ const CONFIG_SCHEMA: Record<string, unknown> = {
   )
 }
 
-/** Resolve the Overpass endpoint from raw config, applying the default. */
-function resolveEndpoint (raw: unknown): string {
-  if (typeof raw !== 'string') {
-    return DEFAULT_ENDPOINT
-  }
-  const trimmed = raw.trim()
-  return trimmed.length > 0 ? trimmed : DEFAULT_ENDPOINT
+/**
+ * Resolve the ordered Overpass endpoint list from config: the primary endpoint
+ * first, then any configured fallback mirrors, with blanks and duplicates (and
+ * any fallback equal to the primary) removed. The dedupe is delegated to the
+ * shared {@link normalizeFallbackEndpoints} so the rule lives in one place. The
+ * client tries the endpoints in order, failing over on each failure. Exported
+ * for unit testing.
+ */
+export function resolveEndpoints (config: PluginConfig): string[] {
+  const primary = resolvePrimaryEndpoint(config.openSeaMapEndpoint)
+  const fallbacks = normalizeFallbackEndpoints(config.openSeaMapFallbackEndpoints)
+  return normalizeFallbackEndpoints([primary, ...fallbacks])
 }
 
 /** Resolve the seamark groups from raw config, applying the all-groups default. */
@@ -86,7 +107,7 @@ export const openSeaMapInput: InputModule = {
   createSource: (context: InputContext) => {
     const { app, config, status } = context
     return createOpenSeaMapSource({
-      client: createOverpassClient(resolveEndpoint(config.openSeaMapEndpoint), app),
+      client: createOverpassClient(resolveEndpoints(config), app),
       seamarkGroups: resolveSeamarkGroups(config.openSeaMapSeamarkGroups),
       minimumYear: clampMinimumYear(config.openSeaMapMinimumYear),
       refreshSeconds: clampBboxDebounceSeconds(config.openSeaMapRefreshSeconds),

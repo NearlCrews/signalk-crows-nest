@@ -75,13 +75,12 @@ export function humanizeLightChar (raw: string): string {
 }
 
 /**
- * Compose the descriptive Light line from the four light-related fields, or
+ * Compose the descriptive Light line from the three light-related fields, or
  * null when the aid carries none of them (a daymark-only buoy, for example).
  */
 function lightLine (record: LightListRecord): string | null {
   if (
     record.lightChar === undefined &&
-    record.color === undefined &&
     record.nominalRange === undefined &&
     record.focalPlane === undefined
   ) {

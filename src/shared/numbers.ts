@@ -28,9 +28,8 @@ export function toFiniteNumber (value: unknown): number | null {
  * to the source's default" rather than "off."
  */
 export function positiveFiniteNumber (value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0
-    ? value
-    : null
+  const finite = toFiniteNumber(value)
+  return finite !== null && finite > 0 ? finite : null
 }
 
 /**

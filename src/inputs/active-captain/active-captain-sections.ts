@@ -30,9 +30,11 @@ import type {
   PoiDetails,
   PoiNote
 } from './active-captain-types.js'
-import { noteFieldLabel, poiTypeShowsReviews } from './poi-detail-renderer.js'
+import { isDefiniteAvailability, poiTypeShowsReviews } from './active-captain-types.js'
+import { noteFieldLabel } from './poi-detail-renderer.js'
 import { pushSection } from '../../shared/normalized-detail.js'
 import type { NormalizedItem, NormalizedSection } from '../../shared/normalized-detail.js'
+import { safeLinkUrl } from '../../shared/url-safety.js'
 
 /**
  * Push an availability item for a definite Yes / No / Nearby value, mirroring
@@ -40,7 +42,7 @@ import type { NormalizedItem, NormalizedSection } from '../../shared/normalized-
  * nothing.
  */
 function pushAvailability (items: NormalizedItem[], label: string, value: Availability | undefined): void {
-  if (value === 'Yes' || value === 'No' || value === 'Nearby') {
+  if (isDefiniteAvailability(value)) {
     items.push({ label, value, kind: 'availability' })
   }
 }
@@ -89,6 +91,20 @@ function pushFreeFlag (items: NormalizedItem[], label: string, isFree: boolean |
 function pushText (items: NormalizedItem[], label: string, value: string | undefined, kind: NormalizedItem['kind'] = 'text'): void {
   if (typeof value === 'string' && value.length > 0) {
     items.push({ label, value, kind })
+  }
+}
+
+/**
+ * Push a `link` item only when the value is a safe URL (an http, https, or
+ * mailto scheme), mirroring the HTML path's `safeWebsite` gate so an
+ * attacker-controlled `javascript:` value never reaches a structured client as
+ * a clickable anchor. An unsafe or absent value emits nothing, matching the
+ * template's suppress-on-reject behavior.
+ */
+function pushLink (items: NormalizedItem[], label: string, url: string | undefined): void {
+  const safe = safeLinkUrl(url)
+  if (safe !== undefined) {
+    items.push({ label, value: safe, kind: 'link' })
   }
 }
 
@@ -181,8 +197,13 @@ export function buildActiveCaptainSections (entity: PoiDetails): NormalizedSecti
     pushText(items, 'VHF', contact.vhfChannel)
     pushText(items, 'Phone', contact.phone)
     pushText(items, 'After hours', contact.afterHourContact)
-    pushText(items, 'Email', contact.email, 'link')
-    pushText(items, 'Website', contact.website, 'link')
+    // Email and Website are emitted as link items only after the scheme guard,
+    // matching the HTML path. The email rides as a mailto: URL, as the template
+    // hardcodes a mailto: href.
+    pushLink(items, 'Email', typeof contact.email === 'string' && contact.email.length > 0
+      ? `mailto:${contact.email}`
+      : undefined)
+    pushLink(items, 'Website', contact.website)
     pushSection(sections, 'contact', 'Contact', items)
   }
 

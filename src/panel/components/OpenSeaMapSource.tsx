@@ -1,9 +1,10 @@
 /**
  * The OpenSeaMap data-source card body. Field order follows the same
  * convention every per-source card uses: the connection override (the
- * Overpass endpoint) sits above the four buckets; then layers (seamark
- * groups); then refresh period (per-bbox debounce in seconds); then update
- * year; then merge option (dedupe toggle plus merge radius).
+ * Overpass endpoint, then its optional fallback mirrors) sits above the four
+ * buckets; then layers (seamark groups); then refresh period (per-bbox
+ * debounce in seconds); then update year; then merge option (dedupe toggle
+ * plus merge radius).
  */
 
 import type * as React from 'react'
@@ -18,6 +19,7 @@ import { SEAMARK_GROUP_IDS } from '../../shared/seamark-groups.js'
 import { S } from '../styles.js'
 import type { PluginConfig } from '../../shared/types.js'
 import EndpointUrlField from './EndpointUrlField.js'
+import FallbackEndpointsField from './FallbackEndpointsField.js'
 import MergeWithActiveCaptain from './MergeWithActiveCaptain.js'
 import MinimumYearField from './MinimumYearField.js'
 import RefreshSecondsField from './RefreshSecondsField.js'
@@ -39,6 +41,10 @@ export default function OpenSeaMapSource ({ state, dispatch }: Props): React.Rea
       <EndpointUrlField
         value={state.openSeaMapEndpoint ?? DEFAULT_OPENSEAMAP_ENDPOINT}
         onChange={(endpoint) => dispatch({ type: 'setOpenSeaMapEndpoint', endpoint })}
+      />
+      <FallbackEndpointsField
+        value={state.openSeaMapFallbackEndpoints ?? []}
+        onChange={(endpoints) => dispatch({ type: 'setOpenSeaMapFallbackEndpoints', endpoints })}
       />
       <SeamarkGroups
         selected={selected}

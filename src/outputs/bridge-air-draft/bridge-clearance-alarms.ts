@@ -28,7 +28,7 @@
 import { emitNotification, type NotificationValue } from '../../shared/notification-path.js'
 import { createNotificationTracker, type NotificationTrackerApp } from '../../shared/notification-tracker.js'
 import { bridgeBlocksVessel, formatMeters } from '../../shared/bridge-clearance.js'
-import { EXIT_RADIUS_FACTOR } from '../../shared/proximity-radius.js'
+import { hysteresisThreshold } from '../../shared/proximity-radius.js'
 import { distanceMeters } from '../../geo/position-utilities.js'
 import type { BridgeClearanceResolver } from './bridge-clearance-resolver.js'
 import type { PoiSummary, PoiType, Position } from '../../shared/types.js'
@@ -145,8 +145,6 @@ export function createBridgeClearanceAlarms (
     )
   }
 
-  const exitRadiusMeters = radiusMeters * EXIT_RADIUS_FACTOR
-
   function evaluate (vesselPosition: Position, pois: PoiSummary[]): void {
     const airDraftMeters = getAirDraft()
     const available = airDraftMeters !== null
@@ -182,7 +180,7 @@ export function createBridgeClearanceAlarms (
         app.debug(`Bridge clearance alarm skipped bridge ${poi.id}: non-finite distance`)
         continue
       }
-      const threshold = tracker.has(poi.id) ? exitRadiusMeters : radiusMeters
+      const threshold = hysteresisThreshold(radiusMeters, tracker.has(poi.id))
       if (distance > threshold) {
         continue
       }
@@ -203,13 +201,10 @@ export function createBridgeClearanceAlarms (
       }
     }
 
-    // Exit: an alarming bridge that has left the clear radius (or no longer
-    // blocks). Snapshot the entries first, since clear() mutates the active set.
-    for (const [poiId] of [...tracker.entries()]) {
-      if (!inAlarm.has(poiId)) {
-        tracker.clear(poiId)
-      }
-    }
+    // Exit: clear any alarming bridge no longer in the in-alarm set (left the
+    // clear radius or no longer blocks). clearStale sanitizes the kept ids into
+    // the tracker's key space, so a raw id and its wire identity cannot disagree.
+    tracker.clearStale(inAlarm.keys())
   }
 
   return { evaluate, clearAll: tracker.clearAll }

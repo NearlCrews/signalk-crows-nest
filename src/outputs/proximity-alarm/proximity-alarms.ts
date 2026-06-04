@@ -25,7 +25,7 @@
 
 import { emitNotification, type NotificationValue } from '../../shared/notification-path.js'
 import { createNotificationTracker, type NotificationTrackerApp } from '../../shared/notification-tracker.js'
-import { EXIT_RADIUS_FACTOR } from '../../shared/proximity-radius.js'
+import { hysteresisThreshold } from '../../shared/proximity-radius.js'
 import { distanceMeters } from '../../geo/position-utilities.js'
 import { PROXIMITY_ALARM_POI_TYPE } from './poi-types.js'
 import type { PoiSummary, Position } from '../../shared/types.js'
@@ -97,8 +97,6 @@ export function createProximityAlarms (app: AlarmApp, radiusMeters: number): Pro
     app.debug(`Proximity alarm raised for hazard ${poiId} ("${name}") at ${Math.round(distance)} m`)
   }
 
-  const exitRadiusMeters = radiusMeters * EXIT_RADIUS_FACTOR
-
   function evaluate (vesselPosition: Position, pois: PoiSummary[]): void {
     // Hazards that should be alarming after this pass, with the distance kept
     // for the alarm message. A hazard not yet alarming must come inside the
@@ -116,7 +114,7 @@ export function createProximityAlarms (app: AlarmApp, radiusMeters: number): Pro
         app.debug(`Proximity alarm skipped hazard ${poi.id}: non-finite distance`)
         continue
       }
-      const threshold = tracker.has(poi.id) ? exitRadiusMeters : radiusMeters
+      const threshold = hysteresisThreshold(radiusMeters, tracker.has(poi.id))
       if (distance <= threshold) {
         inAlarm.set(poi.id, { name: poi.name, distance })
       }
@@ -129,13 +127,10 @@ export function createProximityAlarms (app: AlarmApp, radiusMeters: number): Pro
       }
     }
 
-    // Exit: an alarming hazard that has left the clear radius. Snapshot the
-    // entries first, since clear() mutates the active set as it iterates.
-    for (const [poiId] of [...tracker.entries()]) {
-      if (!inAlarm.has(poiId)) {
-        tracker.clear(poiId)
-      }
-    }
+    // Exit: clear any alarming hazard no longer in the in-alarm set. clearStale
+    // sanitizes the kept ids into the tracker's key space, so a raw id and its
+    // wire identity cannot disagree.
+    tracker.clearStale(inAlarm.keys())
   }
 
   return { evaluate, clearAll: tracker.clearAll }

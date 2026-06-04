@@ -22,6 +22,7 @@
 
 import { distanceMeters } from '../geo/position-utilities.js'
 import { ACTIVE_CAPTAIN_SOURCE_ID } from '../shared/source-ids.js'
+import { DEFAULT_DEDUPE_RADIUS_METERS } from '../shared/dedupe-radius.js'
 import type { PoiSummary, PoiType, Position } from '../shared/types.js'
 
 /**
@@ -31,15 +32,20 @@ import type { PoiSummary, PoiType, Position } from '../shared/types.js'
  */
 const BASE_SOURCE_ID = ACTIVE_CAPTAIN_SOURCE_ID
 
+// The default merge radius (150 m, wide enough to catch the routine 80-to-250 m
+// gap between two sources' placement of the same feature without merging
+// genuine neighbors) is owned by src/shared/dedupe-radius.ts. Re-exported so the
+// input registry and the schema builder below keep importing it from here.
+export { DEFAULT_DEDUPE_RADIUS_METERS }
+
 /**
- * Default merge radius, in meters, when a caller does not specify one. Real
- * ActiveCaptain-vs-OpenSeaMap placements of the same physical feature are
- * routinely 80 to 250 meters apart, so the default is wide enough to catch
- * those without merging genuinely separate neighbors. A caller (typically the
- * input registry, reading the user's `openSeaMapDedupeRadiusMeters` setting)
- * can tighten or loosen this.
+ * Smallest radius the cell packing supports without collision. Used both as the
+ * merge-radius schema's `minimum` and as a defensive clamp in
+ * `dedupeAgainstBase`, since the dedupe function is also called directly by the
+ * registry with the raw config value, not only through the schema-validated
+ * panel.
  */
-export const DEFAULT_DEDUPE_RADIUS_METERS = 150
+const MIN_SAFE_RADIUS_METERS = 1
 
 /**
  * Config-schema fragment for a non-base source's "merge duplicates of an
@@ -56,7 +62,7 @@ export function dedupeToggleSchema (title: string): Record<string, unknown> {
  * meters. Defaults to {@link DEFAULT_DEDUPE_RADIUS_METERS}.
  */
 export function dedupeRadiusSchema (title: string): Record<string, unknown> {
-  return { type: 'number', title, default: DEFAULT_DEDUPE_RADIUS_METERS, minimum: 1 }
+  return { type: 'number', title, default: DEFAULT_DEDUPE_RADIUS_METERS, minimum: MIN_SAFE_RADIUS_METERS }
 }
 
 /** Meters per degree of latitude, used to project positions for the grid. */
@@ -75,14 +81,6 @@ const METERS_PER_DEGREE = 111320
  * `dedupeAgainstBase` clamps the input radius to the safe minimum.
  */
 const CELL_KEY_STRIDE = 100_000_000
-
-/**
- * Smallest radius the cell packing supports without collision. The schema
- * enforces 1 m at the panel layer, but the dedupe function is also called
- * directly by the registry with the config value, so an out-of-range
- * radius is clamped here as a defense.
- */
-const MIN_SAFE_RADIUS_METERS = 1
 
 /** Pack (x, y) cell coordinates into a single integer suitable for a Map key. */
 function packCellKey (x: number, y: number): number {

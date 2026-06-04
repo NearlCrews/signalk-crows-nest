@@ -15,18 +15,12 @@ import { createLightListClient } from './light-list-client.js'
 import { createLightListStore } from './light-list-store.js'
 import type { InputContext, InputModule } from '../poi-source.js'
 import { positiveFiniteNumber } from '../../shared/numbers.js'
+import { clampRefreshHours, refreshHoursSchema } from '../../shared/refresh-hours.js'
 import { USCG_LIGHT_LIST_SOURCE_ID } from '../../shared/source-ids.js'
 import { MS_PER_HOUR, MS_PER_SECOND } from '../../shared/time.js'
 import type { PluginConfig } from '../../shared/types.js'
 import { dedupeRadiusSchema, dedupeToggleSchema } from '../dedupe-pois.js'
 import { clampMinimumYear, minimumYearSchema } from '../../shared/year-filter.js'
-
-/** Default background refresh period, in hours. */
-const DEFAULT_REFRESH_HOURS = 6
-
-/** Lower and upper bounds on the configurable refresh period, in hours. */
-const MIN_REFRESH_HOURS = 1
-const MAX_REFRESH_HOURS = 168
 
 /** Delay before the first refresh fires after a plugin start, in seconds. */
 const INITIAL_REFRESH_DELAY_SECONDS = 30
@@ -44,26 +38,10 @@ const CONFIG_SCHEMA: Record<string, unknown> = {
   uscgLightListDedupeRadiusMeters: dedupeRadiusSchema(
     'Merge radius for USCG Light List points of interest, in meters'
   ),
-  uscgLightListRefreshHours: {
-    type: 'number',
-    title: 'USCG Light List background refresh period, in hours',
-    default: DEFAULT_REFRESH_HOURS,
-    minimum: MIN_REFRESH_HOURS,
-    maximum: MAX_REFRESH_HOURS
-  },
+  uscgLightListRefreshHours: refreshHoursSchema('USCG Light List background refresh period, in hours'),
   uscgLightListMinimumUpdateYear: minimumYearSchema(
     'Earliest USCG Light List update year (0 to import every record)'
   )
-}
-
-/** Resolve the refresh period from raw config, clamping to the allowed range. */
-function resolveRefreshHours (raw: unknown): number {
-  if (typeof raw !== 'number' || !Number.isFinite(raw)) {
-    return DEFAULT_REFRESH_HOURS
-  }
-  if (raw < MIN_REFRESH_HOURS) return MIN_REFRESH_HOURS
-  if (raw > MAX_REFRESH_HOURS) return MAX_REFRESH_HOURS
-  return raw
 }
 
 /** The USCG Light List input module. */
@@ -97,11 +75,11 @@ export const uscgLightListInput: InputModule = {
       status,
       getCurrentPosition
     })
-    const refreshHours = resolveRefreshHours(config.uscgLightListRefreshHours)
+    const refreshHours = clampRefreshHours(config.uscgLightListRefreshHours)
     const intervalMs = refreshHours * MS_PER_HOUR
     const delayMs = INITIAL_REFRESH_DELAY_SECONDS * MS_PER_SECOND
     // In-flight guard: a refresh pass that takes longer than the configured
-    // window (37 conditional GETs against a slow NAVCEN, fanned out four at a
+    // window (62 conditional GETs against a slow NAVCEN, fanned out four at a
     // time) would otherwise let the next setInterval tick start a concurrent
     // refreshAll, racing on store.upsertDistrict and clobbering each other's
     // writes. The guard skips overlapping ticks; the next interval fires

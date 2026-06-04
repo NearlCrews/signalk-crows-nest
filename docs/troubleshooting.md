@@ -79,6 +79,13 @@ responses with exponential backoff and honors `Retry-After`, so transient
 errors usually clear on the next query. A source whose calls keep failing
 shows a red cross in its row; the other enabled sources keep working.
 
+If the primary Overpass endpoint is down for a sustained period, add one or more
+fallback mirrors in the OpenSeaMap card's "Fallback endpoints" field (one per
+line). The source tries the primary first and fails over to each mirror in
+order, so a single Overpass instance outage no longer takes OpenSeaMap offline.
+Use full-planet mirrors only: a regional extract answers an out-of-region query
+with no data rather than an error.
+
 ## Configuration changes do not take effect
 
 Signal K reloads plugin configuration when you save it, and the plugin rebuilds

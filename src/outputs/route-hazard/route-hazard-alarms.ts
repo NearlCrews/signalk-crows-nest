@@ -205,13 +205,10 @@ export function createRouteHazardAlarms (app: RouteAlarmApp): RouteHazardAlarms 
       }
     }
 
-    // Exit: an alarming point that is no longer flagged. Snapshot the entries
-    // first, since clear() mutates the active set as it iterates.
-    for (const [poiId] of [...tracker.entries()]) {
-      if (!flagged.has(poiId)) {
-        tracker.clear(poiId)
-      }
-    }
+    // Exit: clear any alarming point no longer flagged. clearStale sanitizes
+    // the kept ids into the tracker's key space, so a raw id and its wire
+    // identity cannot disagree.
+    tracker.clearStale(flagged.keys())
   }
 
   return { evaluate, clearAll: tracker.clearAll }

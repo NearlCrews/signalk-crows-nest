@@ -213,8 +213,7 @@ export function createBboxDebounceCache<T extends NonNullable<unknown>> (
   // Start a fetch, store it as the tile's entry, and wire up resolve/reject: a
   // resolved value stamps the entry fresh (and is dropped when vetoed); a
   // rejection evicts the entry so the next call retries rather than replaying
-  // the failure. The promise is built before the entry so its callbacks can
-  // close over the entry they update.
+  // the failure.
   function fetchInto (
     key: string,
     fetchBbox: Bbox,

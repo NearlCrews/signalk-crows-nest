@@ -11,37 +11,9 @@
  */
 
 import type { OverpassElement } from './overpass-client.js'
+import { seamarkLabel } from './seamark-mapping.js'
 import { escapeHtml, labeledParagraph } from '../../shared/html-escape.js'
 import { humanizeLightCharacter } from '../../shared/light-character.js'
-
-/** Plain-English label for every `seamark:type` the plugin fetches. */
-const TYPE_LABEL: Readonly<Record<string, string>> = {
-  rock: 'Rock',
-  wreck: 'Wreck',
-  obstruction: 'Obstruction',
-  harbour: 'Harbour',
-  marina: 'Marina',
-  lock_basin: 'Lock',
-  bridge: 'Bridge',
-  light_major: 'Major light',
-  light_minor: 'Minor light',
-  light_float: 'Light float',
-  light_vessel: 'Light vessel',
-  landmark: 'Landmark',
-  beacon_lateral: 'Lateral beacon',
-  beacon_cardinal: 'Cardinal beacon',
-  beacon_isolated_danger: 'Isolated-danger beacon',
-  beacon_safe_water: 'Safe-water beacon',
-  beacon_special_purpose: 'Special-purpose beacon',
-  buoy_lateral: 'Lateral buoy',
-  buoy_cardinal: 'Cardinal buoy',
-  buoy_isolated_danger: 'Isolated-danger buoy',
-  buoy_safe_water: 'Safe-water buoy',
-  buoy_special_purpose: 'Special-purpose buoy',
-  anchorage: 'Anchorage',
-  anchor_berth: 'Anchor berth',
-  mooring: 'Mooring'
-}
 
 /** Underscore separator in raw OSM enum values, replaced with a space for display. */
 const UNDERSCORE_PATTERN = /_/g
@@ -108,9 +80,9 @@ function buildLightLine (tags: Readonly<Record<string, string>>): string | null 
 function buildHeader (tags: Readonly<Record<string, string>>): string {
   const type = tagValue(tags, 'seamark:type')?.toLowerCase()
   const leisure = tagValue(tags, 'leisure')?.toLowerCase()
-  const label = (type !== undefined && TYPE_LABEL[type] !== undefined)
-    ? TYPE_LABEL[type]
-    : (leisure === 'marina' ? TYPE_LABEL.marina : 'OpenSeaMap feature')
+  const label = (type !== undefined ? seamarkLabel(type) : undefined) ??
+    (leisure === 'marina' ? seamarkLabel('marina') : undefined) ??
+    'OpenSeaMap feature'
   const name = tagValue(tags, 'name') ?? tagValue(tags, 'seamark:name')
   return name !== undefined
     ? `${escapeHtml(label)}: ${escapeHtml(name)}`

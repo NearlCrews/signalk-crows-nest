@@ -4,7 +4,7 @@
  * Issues GET requests against the NAVCEN MSI GeoJSON files and parses each
  * feature into a LightListRecord. Supports conditional GET via
  * If-Modified-Since and If-None-Match so a daily refresh tick that finds no
- * upstream change does no work. The 37 file URLs follow the pattern
+ * upstream change does no work. The 62 file URLs follow the pattern
  * `<baseUrl>/sites/default/files/msi/lightList{district}_{page}.geojson`.
  */
 
@@ -137,8 +137,6 @@ function copyOptionalProperties (
 ): void {
   const lightChar = presentString(properties.LIGHT_CHAR)
   if (lightChar !== undefined) record.lightChar = lightChar
-  const color = presentString(properties.COLOR)
-  if (color !== undefined) record.color = color
   const range = presentNumber(properties.LIGHT_NOM_RANGE)
   const rangeUnit = presentString(properties.LIGHT_NOM_RANGE_UNIT)
   if (range !== undefined && rangeUnit !== undefined) {

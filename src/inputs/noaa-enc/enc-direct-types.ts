@@ -1,5 +1,5 @@
 /**
- * Wire types for the NOAA ENC Direct ArcGIS REST FeatureServer.
+ * Wire types for the NOAA ENC Direct ArcGIS REST MapServer.
  *
  * The server returns standard GeoJSON when `f=geojson` is set, plus an
  * `exceededTransferLimit` flag the ENC Direct HTTP client uses to drive
@@ -8,14 +8,12 @@
  * `(band, layerKey)` to layer-id resolution downstream of this module.
  */
 
-/** The ENC Direct scale bands the plugin queries. */
-export type ScaleBand =
-  | 'overview'
-  | 'general'
-  | 'coastal'
-  | 'approach'
-  | 'harbour'
-  | 'berthing'
+// The ScaleBand type is owned by src/shared/scale-band.ts (browser-safe so the
+// panel can read the band list too). Imported for use within this module and
+// re-exported so this input's existing importers keep their
+// `./enc-direct-types.js` path.
+import type { ScaleBand } from '../../shared/scale-band.js'
+export type { ScaleBand }
 
 /** The three S-57 point hazard layers the plugin reads. */
 export type EncLayerKey = 'wreck' | 'obstruction' | 'rock'
@@ -28,11 +26,11 @@ export interface LayerIds {
 }
 
 /**
- * One ENC Direct GeoJSON feature as returned by the FeatureServer.
+ * One ENC Direct GeoJSON feature as returned by the MapServer.
  *
  * The `properties` bag carries raw S-57 attributes. Observed wire shapes from
- * a live coastal-band wreck query (3 features) that the S-57 mapping in
- * Phase 4 needs to handle:
+ * a live coastal-band wreck query (3 features) that the S-57 mapping needs to
+ * handle:
  *
  *  - `CATWRK` is a DECODED STRING already, e.g. `"dangerous wreck"`, not a
  *    numeric S-57 enum code. A `Record<number, string>` lookup table on this
@@ -60,9 +58,8 @@ export interface EncFeature {
 
 /**
  * Numeric ArcGIS layer ids per scale band. Discovered live from the ENC Direct
- * MapServer endpoints in Task 3.2 of the implementation plan; every entry was
- * cross-checked against `MapServer/<id>?f=json` so the id matches the layer
- * name. A `test/enc-layer-ids.test.ts` guard asserts no zero placeholders
+ * MapServer endpoints; every entry was cross-checked against
+ * `MapServer/<id>?f=json` so the id matches the layer name. A `test/enc-layer-ids.test.ts` guard asserts no zero placeholders
  * survive so a contributor cannot silently ship a default-zero entry.
  */
 export const LAYER_IDS_BY_BAND: Readonly<Record<ScaleBand, LayerIds>> = {

@@ -10,6 +10,7 @@
  */
 
 import type { Logger } from '../shared/types.js'
+import { MS_PER_SECOND } from '../shared/time.js'
 
 /** Tunable rate-limit knobs. All optional at the call site; defaults fill gaps. */
 export interface RateLimitOptions {
@@ -123,7 +124,7 @@ function parseRetryAfter (headerValue: string | null): number | undefined {
   }
   const seconds = Number(headerValue)
   if (Number.isFinite(seconds)) {
-    return Math.max(0, seconds * 1000)
+    return Math.max(0, seconds * MS_PER_SECOND)
   }
   const dateMs = Date.parse(headerValue)
   if (Number.isFinite(dateMs)) {

@@ -69,7 +69,7 @@ interface MockApp {
   resourceCalls: Array<{ resType: string, resId: string }>
   courseCallCount: () => number
   /** Push a delta into every Course API stream the reader subscribed to. */
-  emitCourseDelta: () => void
+  emitCourseDelta: (delta?: Partial<NormalizedDelta>) => void
   subscribedPaths: () => string[]
   unsubscribedCount: () => number
 }
@@ -127,9 +127,9 @@ function createMockApp (options: MockOptions): MockApp {
     app,
     resourceCalls,
     courseCallCount: () => courseCalls,
-    emitCourseDelta: () => {
+    emitCourseDelta: (delta: Partial<NormalizedDelta> = {}) => {
       for (const handler of handlers) {
-        handler({} as unknown as NormalizedDelta)
+        handler(delta as NormalizedDelta)
       }
     },
     subscribedPaths: () => paths,
@@ -451,6 +451,25 @@ test('a course delta clearing the route resets the cache to null', async () => {
   await flush()
 
   assert.equal(reader.getRouteAhead(), null)
+  reader.stop()
+})
+
+test('a null-valued activeRoute delta clears the cache synchronously', async () => {
+  let course = courseWithRoute('/resources/routes/route-1', 0, false)
+  const { app, emitCourseDelta } = createMockApp({
+    course: async () => course,
+    resource: routeResource(THREE_LEG_ROUTE)
+  })
+  const reader = createCourseReader({ app })
+  await flush()
+  assert.equal(reader.getRouteAhead()?.routeId, 'route-1')
+
+  // The Course API signals a cleared route with a null delta value. The handler
+  // drops the cache synchronously, without (and before) any getCourse round
+  // trip: asserting null with no intervening flush proves the fast path ran.
+  course = courseWithoutRoute()
+  emitCourseDelta({ value: null })
+  assert.equal(reader.getRouteAhead(), null, 'cleared synchronously on the null delta')
   reader.stop()
 })
 

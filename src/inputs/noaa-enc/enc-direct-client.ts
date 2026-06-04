@@ -29,7 +29,15 @@ import type { Bbox } from '../../shared/types.js'
 import { PLUGIN_USER_AGENT } from '../../shared/plugin-id.js'
 import { MS_PER_MINUTE } from '../../shared/time.js'
 
-const DEFAULT_BASE_URL = 'https://gis.charttools.noaa.gov'
+/**
+ * Default ArcGIS REST host for the ENC Direct service. NOAA's own ENC Direct
+ * documentation and the data.gov catalog publish `encdirect.noaa.gov` as the
+ * access point, so it is the canonical, more future-proof host to depend on.
+ * `gis.charttools.noaa.gov` is a live alias of the same service: both resolve
+ * to the same address and return byte-identical responses for the same path,
+ * so this default can move between them with no behavioral change.
+ */
+const DEFAULT_BASE_URL = 'https://encdirect.noaa.gov'
 
 /** ArcGIS' per-response cap. The client pages while the upstream signals more. */
 const PAGE_SIZE = 1000
@@ -85,11 +93,10 @@ async function fetchJson (url: string, headers: Record<string, string>): Promise
   if (response.status < 200 || response.status >= 300) {
     throw new Error(`ENC Direct HTTP ${response.status} for ${url}`)
   }
-  try {
-    return JSON.parse(response.body)
-  } catch (error) {
-    throw error instanceof Error ? error : new Error(String(error))
-  }
+  // JSON.parse only throws a SyntaxError (already an Error), so the parse is
+  // returned directly: a try/catch that rethrows the same value would be a
+  // no-op. The caller treats a parse failure as a failed layer query.
+  return JSON.parse(response.body)
 }
 
 function buildBboxUrl (

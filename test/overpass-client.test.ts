@@ -30,16 +30,18 @@ function jsonResponse (body: unknown, status = 200, headers: Record<string, stri
  * stub records every call's init so tests can assert on the request.
  */
 async function withMockFetch (
-  handler: (callIndex: number, init?: RequestInit) => Response | Promise<Response>,
-  fn: (calls: { count: number, lastInit?: RequestInit }) => Promise<void>
+  handler: (callIndex: number, init?: RequestInit, url?: string) => Response | Promise<Response>,
+  fn: (calls: { count: number, lastInit?: RequestInit, urls: string[] }) => Promise<void>
 ): Promise<void> {
   const original = globalThis.fetch
-  const calls: { count: number, lastInit?: RequestInit } = { count: 0 }
-  globalThis.fetch = (async (_url: unknown, init?: RequestInit): Promise<Response> => {
+  const calls: { count: number, lastInit?: RequestInit, urls: string[] } = { count: 0, urls: [] }
+  globalThis.fetch = (async (url: unknown, init?: RequestInit): Promise<Response> => {
     const callIndex = calls.count
     calls.count++
     calls.lastInit = init
-    return handler(callIndex, init)
+    const urlString = String(url)
+    calls.urls.push(urlString)
+    return handler(callIndex, init, urlString)
   }) as typeof fetch
   try {
     await fn(calls)
@@ -190,6 +192,78 @@ test('close() aborts a new request and stops the retry loop', async () => {
       client.close()
       await assert.rejects(() => client.listPointsOfInterest(sampleBbox, '^(rock)$'))
       assert.equal(calls.count, 1, 'expected no retry once the client is closed')
+    }
+  )
+})
+
+/** A primary endpoint and one fallback mirror, tried in this order. */
+const failoverEndpoints = [
+  'https://primary.test/api/interpreter',
+  'https://mirror.test/api/interpreter'
+]
+
+test('a single endpoint string keeps the prior single-endpoint behavior', async () => {
+  await withMockFetch(
+    () => jsonResponse({ elements: [] }),
+    async (calls) => {
+      const client = createOverpassClient(endpoint, silentLog, fastLimits)
+      await client.listPointsOfInterest(sampleBbox, '^(rock)$')
+      assert.equal(calls.count, 1)
+      assert.deepEqual(calls.urls, [endpoint])
+    }
+  )
+})
+
+test('a non-ok status on the primary fails over to the next endpoint', async () => {
+  await withMockFetch(
+    (callIndex) => callIndex === 0
+      ? jsonResponse({ error: 'forbidden' }, 403)
+      : jsonResponse({ elements: [{ type: 'node', id: 1, lat: 50, lon: 1, tags: { 'seamark:type': 'rock' } }] }),
+    async (calls) => {
+      const client = createOverpassClient(failoverEndpoints, silentLog, fastLimits)
+      const result = await client.listPointsOfInterest(sampleBbox, '^(rock)$')
+      assert.equal(result.length, 1, 'the fallback endpoint result is returned')
+      assert.equal(calls.count, 2, 'the primary is tried once, then the fallback')
+      assert.deepEqual(calls.urls, failoverEndpoints, 'endpoints are tried in order')
+    }
+  )
+})
+
+test('a network error on the primary fails over to the next endpoint', async () => {
+  const noRetry: Partial<RateLimitOptions> = { ...fastLimits, maxRetries: 0 }
+  await withMockFetch(
+    (callIndex) => {
+      if (callIndex === 0) throw new Error('connection refused')
+      return jsonResponse({ elements: [] })
+    },
+    async (calls) => {
+      const client = createOverpassClient(failoverEndpoints, silentLog, noRetry)
+      await client.listPointsOfInterest(sampleBbox, '^(rock)$')
+      assert.equal(calls.count, 2)
+      assert.deepEqual(calls.urls, failoverEndpoints)
+    }
+  )
+})
+
+test('the fallback is not tried when the primary succeeds', async () => {
+  await withMockFetch(
+    () => jsonResponse({ elements: [] }),
+    async (calls) => {
+      const client = createOverpassClient(failoverEndpoints, silentLog, fastLimits)
+      await client.listPointsOfInterest(sampleBbox, '^(rock)$')
+      assert.equal(calls.count, 1, 'a healthy primary short-circuits the fallback')
+      assert.deepEqual(calls.urls, [failoverEndpoints[0]])
+    }
+  )
+})
+
+test('the query rejects when every endpoint fails', async () => {
+  await withMockFetch(
+    () => jsonResponse({ error: 'forbidden' }, 403),
+    async (calls) => {
+      const client = createOverpassClient(failoverEndpoints, silentLog, fastLimits)
+      await assert.rejects(() => client.listPointsOfInterest(sampleBbox, '^(rock)$'))
+      assert.equal(calls.count, 2, 'both endpoints are tried before giving up')
     }
   )
 })

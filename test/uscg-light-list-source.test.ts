@@ -381,3 +381,35 @@ test('an undated record always survives the year filter', async () => {
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+test('DISTRICT_PAGES matches the live NAVCEN per-district page coverage', () => {
+  // Pinned from a direct probe of every district on navcen.uscg.gov: each
+  // district publishes pages 1..max as contiguous lightListD{NN}_{n}.geojson
+  // files. Locking the exact coverage here guards against the table silently
+  // drifting behind NAVCEN (which previously dropped whole pages of aids) or
+  // overreaching past the last published page (which would log 404s).
+  const expectedMaxPage: Record<string, number> = {
+    D01: 10, D02: 4, D05: 9, D07: 15, D08: 11, D09: 5, D11: 2, D13: 3, D14: 1, D17: 2
+  }
+
+  const expectedTotal = Object.values(expectedMaxPage).reduce((sum, max) => sum + max, 0)
+  assert.equal(DISTRICT_PAGES.length, expectedTotal,
+    `expected ${expectedTotal} (district, page) pairs across all districts`)
+
+  const pagesByDistrict = new Map<string, number[]>()
+  for (const [district, page] of DISTRICT_PAGES) {
+    const pages = pagesByDistrict.get(district) ?? []
+    pages.push(page)
+    pagesByDistrict.set(district, pages)
+  }
+
+  assert.deepEqual([...pagesByDistrict.keys()].sort(), Object.keys(expectedMaxPage).sort(),
+    'the table covers exactly the districts NAVCEN publishes (and no D03)')
+
+  for (const [district, max] of Object.entries(expectedMaxPage)) {
+    const pages = (pagesByDistrict.get(district) ?? []).slice().sort((a, b) => a - b)
+    const contiguous = Array.from({ length: max }, (_unused, index) => index + 1)
+    assert.deepEqual(pages, contiguous,
+      `district ${district} should pin pages 1..${max} with no gaps or duplicates`)
+  }
+})

@@ -21,8 +21,10 @@ Base URL: `https://activecaptain.garmin.com/community/api/v1`
 
 No API key, no authentication. The service sits behind Cloudflare. It responds
 with `api-supported-versions: 1.0`. A `User-Agent` header is accepted but not
-required (requests without one still return 200); the plugin sends
-`User-Agent: Signal K Active Captain Plugin`, which is fine to keep.
+required (requests without one still return 200); the plugin sends the shared
+`PLUGIN_USER_AGENT`, currently
+`User-Agent: signalk-crows-nest (+https://github.com/NearlCrews/signalk-crows-nest)`,
+which is fine to keep.
 
 ### 1.1 List POIs in a bounding box
 
@@ -265,7 +267,7 @@ Treat the plugin as a good citizen. Concrete values for the API client:
 | Do not retry on | other `4xx` (notably `404` = POI does not exist, permanent) |
 | Backoff | exponential with full jitter: base 1 s, factor 2, cap 30 s, max 4 retries |
 | `Retry-After` | if present on a `429`/`503`, honor it instead of the computed backoff, but cap the wait at the maximum backoff (30 s) so a huge header value cannot stall a request indefinitely |
-| User-Agent | keep `Signal K Active Captain Plugin` |
+| User-Agent | keep the shared `PLUGIN_USER_AGENT` (`signalk-crows-nest (+https://github.com/NearlCrews/signalk-crows-nest)`) |
 
 The single most effective limiter is **caching**, which the plugin already does:
 summaries are cached (default 60 minutes via `cachingDurationMinutes`). Keep

@@ -22,15 +22,14 @@ import {
   MIN_RATING
 } from '../../shared/rating.js'
 
-/** Default caching window, in minutes, when configuration omits it. */
-const DEFAULT_CACHING_DURATION_MINUTES = 60
+import { DEFAULT_CACHE_DURATION_MINUTES } from '../../shared/cache-duration.js'
 
 /** The cache-duration, minimum-rating, and POI-type-toggle config fragment. */
 const CONFIG_SCHEMA: Record<string, unknown> = {
   cachingDurationMinutes: {
     type: 'number',
     title: 'How long to cache data from Active Captain in minutes (longer = less data traffic; shorter = more up to date data)',
-    default: DEFAULT_CACHING_DURATION_MINUTES,
+    default: DEFAULT_CACHE_DURATION_MINUTES,
     // Minimum 1 so the admin UI clamps the field and AJV rejects a 0 or
     // negative submit, matching every other numeric in this schema. The
     // runtime resolveCachingDuration already falls back on a non-positive
@@ -65,7 +64,7 @@ const CONFIG_SCHEMA: Record<string, unknown> = {
 
 /** Resolve the caching duration from raw config, applying the default. */
 function resolveCachingDuration (raw: unknown): number {
-  return positiveFiniteNumber(raw) ?? DEFAULT_CACHING_DURATION_MINUTES
+  return positiveFiniteNumber(raw) ?? DEFAULT_CACHE_DURATION_MINUTES
 }
 
 /** The ActiveCaptain input module. */

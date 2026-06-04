@@ -170,13 +170,12 @@ export const S = {
     rowGap: 4,
     alignItems: 'center'
   },
-  // Each SourceRow becomes one logical row by wrapping its four cells
-  // in a `display: contents` div with `role='row'`: the div carries the
-  // ARIA row semantic without participating in layout, so the grid
-  // still places the cells in its four columns AND assistive tech sees
-  // one row per source. The contents-wrapper also pins the 4-cells
-  // contract: a future fifth cell would land outside this row, making
-  // the drift visible.
+  // Each SourceRow wraps its four cells in a `display: contents` div so the
+  // grid still places the cells in its four columns while the wrapper itself
+  // does not participate in layout. The wrapper pins the 4-cells contract: a
+  // future fifth cell would land outside this row, making the drift visible.
+  // No ARIA role is applied here (see SourceRow): the status bar is a passive
+  // health readout, not an interactive data grid.
   statusGridRow: {
     display: 'contents'
   },
@@ -278,14 +277,6 @@ export const S = {
   // per group. Used by both the ActiveCaptain POI-type selector and the
   // OpenSeaMap seamark-group checklist.
   groupsSection: { marginBottom: 16 },
-  groupsHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 8
-  },
-  groupsTitle: { fontSize: 13, fontWeight: 600, color: 'var(--ac-text)', marginRight: 4 },
   btnBulk: {
     padding: '4px 12px',
     background: 'var(--ac-surface-raised)',

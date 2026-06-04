@@ -76,7 +76,11 @@ self-contained module registered on one line in `src/index.ts`.
       over the client, cache, and store), `active-captain-client.ts` (the
       ActiveCaptain-specific HTTP client built on `http-client.ts`),
       `active-captain-types.ts` (the ActiveCaptain summary-API wire types,
-      private to this input), `poi-cache.ts` (TTL detail cache), `poi-store.ts`
+      private to this input, plus the `poiTypeShowsReviews` review-type gate
+      and the `isDefiniteAvailability` predicate the renderer, the section
+      builder, and the rating filter all share so the popup star rating and
+      the rating filter cannot diverge), `poi-cache.ts` (TTL detail cache),
+      `poi-store.ts`
       (disk-backed detail store, readable offline), `poi-detail-renderer.ts`
       (Handlebars helpers and POI detail rendering), `templates.ts` (inlined
       Handlebars templates), `rating-filter.ts` (drops list entries below
@@ -91,20 +95,25 @@ self-contained module registered on one line in `src/index.ts`.
       in-memory detail cache; uses an underscore-separated internal id form
       like `node_123` so the slash in raw OSM ids never splits the resource
       URL), `overpass-client.ts` (the Overpass HTTP client built on
-      `http-client.ts`, with the required `User-Agent`),
-      `seamark-mapping.ts` (maps every `seamark:type` value onto the
-      plugin's `PoiType` union AND onto a Freeboard-registered `:sk-` icon,
-      with isolated-danger marks rendered as hazards; defines the seamark
-      feature groups), `openseamap-detail.ts` (the plain-English HTML detail
-      renderer), `clearance.ts` (parses the OSM vertical-clearance tags for the
+      `http-client.ts`, with the required `User-Agent`; it takes an ordered
+      endpoint list, a primary plus any configured fallback mirrors, and fails
+      over to the next on a failure so a single instance outage does not take
+      the source offline),
+      `seamark-mapping.ts` (one table mapping every `seamark:type` value to
+      the plugin's `PoiType` union, a Freeboard-registered `:sk-` icon, and a
+      plain-English label in lockstep, with isolated-danger marks rendered as
+      hazards; exposes `seamarkLabel` to the detail renderer and defines the
+      seamark feature groups), `openseamap-detail.ts` (the plain-English HTML
+      detail renderer), `clearance.ts` (parses the OSM vertical-clearance tags for the
       bridge air-draft check), and `openseamap-sections.ts` (the
       normalized-detail section builder).
     - `uscg-light-list/` - the USCG Light List input (US Aids to Navigation,
       US-only, defaults off): `uscg-light-list-input.ts` (the `InputModule`
       with the periodic refresh scheduler), `uscg-light-list-source.ts` (the
       `PoiSource` adapter over the client and store, with a position-gated
-      `refreshAll` that iterates the pinned 37 (district, page) pairs and
-      skips outbound HTTP when the vessel is outside US waters),
+      `refreshAll` that iterates the pinned 62 (district, page) pairs (locked
+      to the live NAVCEN coverage by a test) and skips outbound HTTP when the
+      vessel is outside US waters),
       `light-list-client.ts` (the NAVCEN HTTP client built on
       `http-one-shot.ts`, with conditional-GET via `If-Modified-Since` and
       `If-None-Match`), `light-list-store.ts` (the persistent on-disk index
@@ -195,7 +204,12 @@ self-contained module registered on one line in `src/index.ts`.
     `poiTypes` string the aggregate source uses), `seamark-groups.ts` (the
     OpenSeaMap seamark group ids and labels, the single source of truth
     consumed by the OpenSeaMap input, its config-schema fragment, and the
-    panel), `us-waters.ts` (the `isInUsWaters` gate plus the
+    panel), `overpass-endpoints.ts` (the browser-safe single source of truth
+    for the default Overpass endpoint, the vetted fallback-mirror suggestions,
+    `resolvePrimaryEndpoint`, and `normalizeFallbackEndpoints`, shared by the
+    OpenSeaMap input, the panel's normalize-config, and the fallback-endpoints
+    field; `overpass.osm.ch` is deliberately excluded from the suggestions as a
+    Switzerland-only extract), `us-waters.ts` (the `isInUsWaters` gate plus the
     `shouldSkipOutsideUsWaters` helper the US-only inputs call to skip
     outbound HTTP, and record the skip, when the vessel is outside US
     waters), `bbox-debounce.ts`
@@ -215,12 +229,19 @@ self-contained module registered on one line in `src/index.ts`.
     so the four metacharacters plus the apostrophe are escaped from one
     place, plus `labeledParagraph`, the `<p><strong>Label:</strong>
     value.</p>` builder the structured detail renderers share),
+    `url-safety.ts` (the `safeLinkUrl` scheme allowlist both the
+    Handlebars detail templates and the structured section builders gate a
+    link value through, so a `javascript:` value cannot reach either the
+    HTML popup or a structured client as a clickable anchor),
     `notification-path.ts` (builds path-safe SignalK notification
     deltas, shared by the alarm outputs, with a `sourceSuffix` arg so
     proximity and route alarms get distinct `$source` brands),
     `notification-tracker.ts` (raise/clear bookkeeping shared by the
-    proximity and route-hazard outputs, keyed by the sanitized POI id
-    so the in-memory and on-wire identities cannot drift),
+    proximity, route-hazard, and bridge air-draft outputs, keyed by the
+    sanitized POI id so the in-memory and on-wire identities cannot drift,
+    with a `clearStale` sweep that sanitizes the still-active ids into the
+    same key space so a clear-and-re-raise chatter on a safety alarm is
+    impossible by construction),
     `year-filter.ts` (the `filterByMinimumYear` helper plus the shared
     `MIN_YEAR` / `MAX_YEAR` / `DEFAULT_MINIMUM_YEAR`
     bounds and the `clampMinimumYear` helper every opting-in source uses
@@ -229,11 +250,20 @@ self-contained module registered on one line in `src/index.ts`.
     `MIN_RATING` / `MAX_RATING` / `DEFAULT_MINIMUM_RATING` bounds and the
     `clampMinimumRating` helper the ActiveCaptain input and the panel's
     normalize-config share, mirroring the year-filter and bbox-debounce
-    shared-bounds pattern), `numbers.ts` (the `toFiniteNumber`
-    and `positiveFiniteNumber` narrowing helpers, both returning `null`
-    on a non-usable value, plus `isValidLatitude`, `isValidLongitude`,
-    `isWireTruthy`, and the `clampNumber` bound-and-fallback helper the four
-    config-bounds modules delegate to), `cache.ts`
+    shared-bounds pattern), `cache-duration.ts`, `dedupe-radius.ts`,
+    `refresh-hours.ts`, `scale-band.ts`, and `route-corridor.ts` (browser-safe
+    single-source-of-truth homes for, respectively, the ActiveCaptain
+    cache-duration default; the dedupe merge-radius default, named for the
+    dedupe rather than one source since all three non-base sources use it; the
+    USCG refresh-hours bounds plus `clampRefreshHours` and `refreshHoursSchema`;
+    the NOAA `ScaleBand` type plus `SCALE_BANDS`, `DEFAULT_SCALE_BAND`, and
+    `resolveScaleBand`; and the route-corridor-width default. Each is imported
+    by both its source module and the panel's normalize-config so the two cannot
+    drift, completing the bounds-sharing pattern), `numbers.ts` (the
+    `toFiniteNumber` and `positiveFiniteNumber` narrowing helpers, both
+    returning `null` on a non-usable value, plus `isValidLatitude`,
+    `isValidLongitude`, `isWireTruthy`, and the `clampNumber` bound-and-fallback
+    helper the config-bounds modules delegate to), `cache.ts`
     (the `MAX_POI_CACHE_ENTRIES` and `MAX_BBOX_CACHE_ENTRIES` ceilings
     shared by the per-source detail and bbox caches),
     `relative-time-format.ts` (the `formatRelativeDelta` unit-stepping the
@@ -254,7 +284,8 @@ self-contained module registered on one line in `src/index.ts`.
     helper, and the config-fragment builders; pure and panel-bundle-safe),
     `proximity-radius.ts` (the vessel-proximity alarm geometry shared by the two
     proximity outputs, the two alarm modules, and the panel: the default radius,
-    the scan floor and factor, the exit-radius factor, and
+    the scan floor and factor, the exit-radius factor, `hysteresisThreshold`
+    (the shared raise/clear distance both alarm modules apply), and
     `vesselScanRadiusMeters`), `light-character.ts` (the IALA
     light-character humanizer the OpenSeaMap and USCG Light List detail
     renderers share), and `normalized-detail.ts` (the source-agnostic
@@ -287,8 +318,9 @@ self-contained module registered on one line in `src/index.ts`.
     `OpenSeaMapSource`, `UscgLightListSource`, and `NoaaEncSource` (the
     per-source card bodies), `AlertsSection` (the proximity, route-hazard, and
     bridge air-draft controls); plus the per-field input components
-    `CacheDurationField`, `EndpointUrlField`, `NumberField` (the shared
-    label-plus-input-plus-hint row), `ToggleFieldset` (the shared opt-in
+    `CacheDurationField`, `EndpointUrlField`, `FallbackEndpointsField` (the
+    OpenSeaMap one-per-line Overpass fallback-mirror textarea), `NumberField`
+    (the shared label-plus-input-plus-hint row), `ToggleFieldset` (the shared opt-in
     toggle-plus-legend fieldset shell), `AlarmFieldset` (the toggle-plus-numeric
     layout, composing `ToggleFieldset`, shared by both alarm controls),
     `RatingFilterField`, `MinimumYearField` (the shared earliest-year

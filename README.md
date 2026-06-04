@@ -37,7 +37,8 @@ stale-while-revalidate cache that reuses a fetch across a small pan or zoom and
 serves a stale tile while refreshing it in the background. A UX and
 marine-domain review then tightened that detail: a NOAA ENC wreck or obstruction
 leads with a `Dangerous` flag and a datum-tagged least-depth reading, reviews
-and star ratings are limited to marinas and businesses (no more four-star rocks),
+and star ratings are limited to the review-bearing types (marinas, anchorages,
+businesses, and boat ramps, with no more four-star rocks),
 and marina decision facts (maximum LOA and beam, and the fuel-dock depth) now
 surface. All 715 tests pass.
 

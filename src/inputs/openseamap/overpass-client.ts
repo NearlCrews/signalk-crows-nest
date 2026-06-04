@@ -1,16 +1,20 @@
 /**
  * HTTP client for the OpenStreetMap Overpass API.
  *
- * Builds Overpass QL queries, sends them to the configured endpoint, and
+ * Builds Overpass QL queries, sends them to the configured endpoint list, and
  * normalizes the responses. Concurrency, throttling, retry/backoff,
  * Retry-After honoring, and close() all live in the shared HTTP client (see
- * `../http-client.js`); this module owns only the Overpass-specific endpoint,
+ * `../http-client.js`); this module owns only the Overpass-specific endpoints,
  * headers, query building, and response shape.
  *
  * Overpass-specific behavior:
  *  - Every request is a POST whose body is an Overpass QL query.
  *  - A descriptive `User-Agent` header is REQUIRED by the Overpass usage
  *    policy and is sent on every request.
+ *  - The client takes an ordered endpoint list (a primary plus any configured
+ *    fallback mirrors) and fails over to the next endpoint when one fails, so a
+ *    single instance outage does not take the source offline. A single string
+ *    is still accepted and behaves as a one-endpoint list.
  *  - A requested bounding box is clamped to a maximum span, so a wide box
  *    cannot build a query that hits the server's runtime limit. Distant
  *    points of interest are picked up on a later, recentered request.
@@ -22,6 +26,8 @@
 
 import { assertResponseOk, createHttpClient, type RateLimitOptions } from '../http-client.js'
 import { PLUGIN_USER_AGENT } from '../../shared/plugin-id.js'
+import { MS_PER_SECOND } from '../../shared/time.js'
+import { normalizeFallbackEndpoints } from '../../shared/overpass-endpoints.js'
 import { splitOnFirstSeparator } from '../../shared/namespaced-id.js'
 import { isValidLatitude, isValidLongitude } from '../../shared/numbers.js'
 import type { Bbox, Logger, Position } from '../../shared/types.js'
@@ -78,7 +84,7 @@ const DETAIL_QUERY_TIMEOUT_SECONDS = 25
  * query budget so the client waits for a slow-but-progressing query rather
  * than aborting it.
  */
-const REQUEST_TIMEOUT_MS = 70000
+const REQUEST_TIMEOUT_MS = 70 * MS_PER_SECOND
 
 /**
  * Maximum span, in degrees, of either edge of a queried bounding box. A wider
@@ -250,30 +256,54 @@ function parseElement (wire: OverpassWireElement): OverpassElement | null {
 }
 
 /**
+ * Normalize the endpoint argument into a non-empty, ordered, deduped list. A
+ * single string becomes a one-element list (the long-standing single-endpoint
+ * behavior). The trim, drop-blank, and dedupe pass is shared with the input
+ * module via {@link normalizeFallbackEndpoints}; this wrapper adds only the
+ * client's own contract: throw when nothing usable remains, since an Overpass
+ * client with no endpoint could never query.
+ */
+function normalizeEndpoints (endpoints: string | readonly string[]): string[] {
+  const list = normalizeFallbackEndpoints(typeof endpoints === 'string' ? [endpoints] : endpoints)
+  if (list.length === 0) {
+    throw new Error('createOverpassClient requires at least one endpoint')
+  }
+  return list
+}
+
+/**
  * Create an Overpass client.
  *
- * @param endpoint The Overpass interpreter URL every query is POSTed to.
- * @param log      Logging surface used for diagnostics.
- * @param options  Optional rate-limit overrides. Mainly used by tests to keep
- *                 them fast; production callers can pass just the endpoint and
- *                 the logger.
+ * @param endpoints The Overpass interpreter URL, or an ordered list of them:
+ *                  the primary first, then any fallback mirrors. Each query is
+ *                  tried against the endpoints in order until one answers.
+ * @param log       Logging surface used for diagnostics.
+ * @param options   Optional rate-limit overrides. Mainly used by tests to keep
+ *                  them fast; production callers can pass just the endpoints and
+ *                  the logger.
  */
 export function createOverpassClient (
-  endpoint: string,
+  endpoints: string | readonly string[],
   log: Logger,
   options: Partial<RateLimitOptions> = {}
 ): OverpassClient {
+  const endpointList = normalizeEndpoints(endpoints)
   const http = createHttpClient(log, {
     label: 'Overpass',
     requestTimeoutMs: REQUEST_TIMEOUT_MS,
     defaults: DEFAULTS
   }, options)
 
-  /** Run an Overpass QL query and return its parsed, normalized elements. */
-  async function runQuery (query: string, errorPrefix: string): Promise<OverpassElement[]> {
+  /**
+   * Run one query attempt against a single endpoint. Rejects on any HTTP,
+   * network, or parsing failure so the caller can fail over to the next.
+   */
+  async function attemptQuery (
+    endpoint: string, query: string, errorPrefix: string
+  ): Promise<OverpassElement[]> {
     const response = await http.fetch(endpoint, {
       method: 'POST',
-      headers: { ...BASE_HEADERS },
+      headers: BASE_HEADERS,
       body: query
     })
 
@@ -296,6 +326,31 @@ export function createOverpassClient (
       log.debug(`Skipped ${skipped} malformed Overpass element(s)`)
     }
     return parsed
+  }
+
+  /**
+   * Run an Overpass QL query across the endpoint list, failing over to the next
+   * mirror on any failure (a network error after the per-endpoint retries are
+   * exhausted, a non-ok HTTP status, or a malformed body). The first endpoint
+   * that answers wins; when every endpoint fails, the last error is rethrown.
+   */
+  async function runQuery (query: string, errorPrefix: string): Promise<OverpassElement[]> {
+    let lastError: unknown
+    for (let i = 0; i < endpointList.length; i++) {
+      const endpoint = endpointList[i]
+      try {
+        return await attemptQuery(endpoint, query, errorPrefix)
+      } catch (error) {
+        lastError = error
+        if (i < endpointList.length - 1) {
+          log.debug(
+            `Overpass endpoint ${endpoint} failed (${String(error)}); ` +
+            `failing over to ${endpointList[i + 1]}`
+          )
+        }
+      }
+    }
+    throw lastError
   }
 
   async function listPointsOfInterest (

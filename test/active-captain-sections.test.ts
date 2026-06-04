@@ -152,7 +152,7 @@ test('builds normalized sections for a fully populated POI, mirroring the render
     { label: 'VHF', value: '16', kind: 'text' },
     { label: 'Phone', value: '+1-555-0100', kind: 'text' },
     { label: 'After hours', value: 'Night dockmaster', kind: 'text' },
-    { label: 'Email', value: 'dock@example.com', kind: 'link' },
+    { label: 'Email', value: 'mailto:dock@example.com', kind: 'link' },
     { label: 'Website', value: 'https://example.com', kind: 'link' }
   ])
 
@@ -311,4 +311,27 @@ test('emits the fuel dock depth from the fuel payload', () => {
     { label: 'Diesel', value: 'Yes', kind: 'availability' },
     { label: 'Fuel dock depth', value: 3.2, kind: 'measure', unit: 'Meter' }
   ])
+})
+
+test('the contact section rejects a javascript: website and neutralizes a javascript: email, matching the HTML scheme guard', () => {
+  const sections = buildActiveCaptainSections(details({
+    contact: {
+      phone: '+1-555-0100',
+      email: 'javascript:alert(1)',
+      website: 'javascript:alert(document.cookie)'
+    }
+  }))
+  const items = section(sections, 'contact')?.items ?? []
+  // The website is a raw href: a javascript: scheme is not allowed, so the
+  // whole link item is dropped, matching the HTML template's suppress-on-reject.
+  assert.equal(items.find((i) => i.label === 'Website'), undefined,
+    'a javascript: website must not reach a structured client as a link')
+  // The email rides as a mailto: URL, an inert scheme, so even a javascript:
+  // payload cannot execute. This matches the template's hardcoded mailto: href.
+  assert.equal(items.find((i) => i.label === 'Email')?.value, 'mailto:javascript:alert(1)')
+  // Belt and suspenders: no contact item ships a javascript: scheme value.
+  for (const item of items) {
+    assert.ok(!String(item.value).toLowerCase().startsWith('javascript:'),
+      `no contact item should carry a javascript: scheme, got ${String(item.value)}`)
+  }
 })

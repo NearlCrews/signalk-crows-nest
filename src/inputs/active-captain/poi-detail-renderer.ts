@@ -29,9 +29,10 @@ import {
 } from './templates.js'
 
 import type { PoiDetails, PoiNote } from './active-captain-types.js'
-import type { PoiType } from '../../shared/types.js'
+import { isDefiniteAvailability, poiTypeShowsReviews } from './active-captain-types.js'
 import { formatRelativeDelta } from '../../shared/relative-time-format.js'
 import { MS_PER_SECOND, SECONDS_PER_DAY, SECONDS_PER_HOUR, SECONDS_PER_MINUTE } from '../../shared/time.js'
+import { safeLinkUrl } from '../../shared/url-safety.js'
 
 /** The root context handed to the point-of-interest template. */
 interface TemplateRoot {
@@ -39,21 +40,12 @@ interface TemplateRoot {
 }
 
 /**
- * True when an availability field carries a definite value. An absent field
- * (`undefined`), `'Unknown'`, or a non-availability value does not count as
- * populated.
- */
-function isDefinite (value: unknown): boolean {
-  return value === 'Yes' || value === 'No' || value === 'Nearby'
-}
-
-/**
  * True when any field of a summary section carries a definite availability
  * value. Non-availability fields (ids, dates, units, notes arrays) never match
- * `isDefinite`, so passing a whole section object is safe.
+ * `isDefiniteAvailability`, so passing a whole section object is safe.
  */
 function hasDefiniteAvailability (section: object | undefined): boolean {
-  return section !== undefined && Object.values(section).some(isDefinite)
+  return section !== undefined && Object.values(section).some(isDefiniteAvailability)
 }
 
 /** True when a contact string field holds a non-empty value. */
@@ -145,24 +137,6 @@ export function noteFieldLabel (field: string): string {
     return 'Notes'
   }
   return humanizeField(field)
-}
-
-/**
- * POI types that carry user reviews and a star rating. Reviews are a marina and
- * business signal: a hazard, navigational mark, bridge, lock, or similar feature
- * should never show a star rating or featured review (a four-star rating on a
- * rock is nonsense), so review chrome is emitted only for these types.
- */
-const REVIEW_POI_TYPES: ReadonlySet<PoiType> = new Set<PoiType>([
-  'Marina',
-  'Anchorage',
-  'Business',
-  'BoatRamp'
-])
-
-/** True when a POI type should carry its review summary and featured review. */
-export function poiTypeShowsReviews (poiType: PoiType): boolean {
-  return REVIEW_POI_TYPES.has(poiType)
 }
 
 /** Matches CR, LF, or CRLF so a multi-line note renders with `<br/>` breaks. */
@@ -335,9 +309,9 @@ function buildEnvironment (): typeof Handlebars {
     const text = env.escapeExpression(String(label))
     if (value === 'Yes') return new env.SafeString(`\u{2705} ${text}<br/>`)
     if (value === 'No') return new env.SafeString(`\u{274C} ${text}<br/>`)
-    // 'Nearby' is a definite value (isDefinite counts it), so it must render a
-    // line: otherwise a section whose only values are 'Nearby' shows an empty
-    // header.
+    // 'Nearby' is a definite value (isDefiniteAvailability counts it), so it
+    // must render a line: otherwise a section whose only values are 'Nearby'
+    // shows an empty header.
     if (value === 'Nearby') return new env.SafeString(`\u{1F4CD} ${text} (nearby)<br/>`)
     return ''
   })
@@ -371,20 +345,9 @@ function buildEnvironment (): typeof Handlebars {
   // `{{value}}` interpolation but does not validate URL schemes, so a wire
   // value of `javascript:alert(1)` would survive auto-escape and ship as a
   // working click-to-execute link. This helper gates the only attacker-
-  // controllable href on the popup.
-  env.registerHelper('safeWebsite', (value: unknown): string => {
-    if (typeof value !== 'string' || value.length === 0) return ''
-    try {
-      const parsed = new URL(value)
-      const protocol = parsed.protocol.toLowerCase()
-      if (protocol === 'http:' || protocol === 'https:' || protocol === 'mailto:') {
-        return value
-      }
-      return ''
-    } catch {
-      return ''
-    }
-  })
+  // controllable href on the popup, sharing the scheme allowlist with the
+  // structured section builder via `safeLinkUrl`.
+  env.registerHelper('safeWebsite', (value: unknown): string => safeLinkUrl(value) ?? '')
 
   // Renders a "Free" or "Paid" line for a known boolean, and nothing when the
   // value is absent, so an unknown price is not asserted as "Paid".

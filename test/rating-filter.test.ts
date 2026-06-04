@@ -83,6 +83,30 @@ test('filterByRating keeps non-ratable types regardless of their missing rating'
   )
 })
 
+test('filterByRating treats a BoatRamp as ratable, so a low-rated one is hidden', () => {
+  // BoatRamp carries reviews and a star rating (it is in the review-bearing
+  // set), so it must be subject to the rating filter just like a marina: the
+  // popup star rating and the filter share one source of truth.
+  const lowRamp: PoiSummary = {
+    id: 'r1',
+    type: 'BoatRamp',
+    position: { latitude: 0, longitude: 0 },
+    name: 'Concrete ramp',
+    source: 'activecaptain',
+    url: 'https://activecaptain.garmin.com/en-US/pois/r1',
+    attribution: 'Data from Garmin ActiveCaptain',
+    skIcon: 'boat-ramp',
+    rating: 1.5,
+    reviewCount: 3
+  }
+  const goodRamp: PoiSummary = { ...lowRamp, id: 'r2', name: 'Wide ramp', rating: 4.5 }
+  assert.deepEqual(
+    filterByRating([lowRamp, goodRamp], 3).map(p => p.id),
+    ['r2'],
+    'the low-rated boat ramp is dropped, the well-rated one survives'
+  )
+})
+
 test('filterByRating does not mutate the input array', () => {
   const pois = [poi('a', 1.0), poi('b', 5.0)]
   filterByRating(pois, 3)

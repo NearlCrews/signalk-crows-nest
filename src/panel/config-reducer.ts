@@ -22,6 +22,7 @@ export type ConfigAction =
   | { type: 'setBridgeClearanceMargin', meters: number }
   | { type: 'setOpenSeaMapEnabled', enabled: boolean }
   | { type: 'setOpenSeaMapEndpoint', endpoint: string }
+  | { type: 'setOpenSeaMapFallbackEndpoints', endpoints: string[] }
   | { type: 'setOpenSeaMapSeamarkGroups', groups: string[] }
   | { type: 'setOpenSeaMapDedupe', enabled: boolean }
   | { type: 'setOpenSeaMapDedupeRadius', meters: number }
@@ -45,6 +46,23 @@ export type ConfigAction =
   | { type: 'discard', config: PluginConfig }
 
 /**
+ * Set one scalar config field, preserving identity on a no-op. Returning the
+ * same `state` when the value is unchanged is what lets the panel use identity
+ * equality against the last-saved snapshot as a sound dirty check, so every
+ * scalar case routes through this one helper rather than repeating the guard.
+ */
+function setField<K extends keyof PluginConfig> (
+  state: PluginConfig, key: K, value: PluginConfig[K]
+): PluginConfig {
+  return state[key] === value ? state : { ...state, [key]: value }
+}
+
+/** True when two string lists are element-for-element equal in the same order. */
+function sameOrder (a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((value, index) => value === b[index])
+}
+
+/**
  * Apply an action to the configuration. Each case returns a new object only
  * when something actually changed and returns the input state otherwise, so
  * the panel can use identity equality against the last-saved snapshot as a
@@ -55,116 +73,90 @@ export function configReducer (state: PluginConfig, action: ConfigAction): Plugi
     case 'discard':
       return action.config
     case 'setCacheDuration':
-      if (state.cachingDurationMinutes === action.minutes) return state
-      return { ...state, cachingDurationMinutes: action.minutes }
+      return setField(state, 'cachingDurationMinutes', action.minutes)
     case 'setPoiType':
-      if (state[action.flag] === action.enabled) return state
-      return { ...state, [action.flag]: action.enabled }
+      return setField(state, action.flag, action.enabled)
     case 'setAllPoiTypes': {
-      let changed = false
-      const next: PluginConfig = { ...state }
+      // Build the next state lazily, only once a flag actually differs, so an
+      // All / None click that changes nothing preserves identity.
+      let next: PluginConfig | null = null
       for (const [flag] of POI_TYPE_FLAGS) {
-        if (next[flag] !== action.enabled) {
+        if (state[flag] !== action.enabled) {
+          next ??= { ...state }
           next[flag] = action.enabled
-          changed = true
         }
       }
-      return changed ? next : state
+      return next ?? state
     }
     case 'setMinimumRating':
-      if (state.minimumRating === action.rating) return state
-      return { ...state, minimumRating: action.rating }
+      return setField(state, 'minimumRating', action.rating)
     case 'setProximityAlarmsEnabled':
-      if (state.enableProximityAlarms === action.enabled) return state
-      return { ...state, enableProximityAlarms: action.enabled }
+      return setField(state, 'enableProximityAlarms', action.enabled)
     case 'setProximityAlarmRadius':
-      if (state.proximityAlarmRadiusMeters === action.meters) return state
-      return { ...state, proximityAlarmRadiusMeters: action.meters }
+      return setField(state, 'proximityAlarmRadiusMeters', action.meters)
     case 'setRouteHazardScanEnabled':
-      if (state.enableRouteHazardScan === action.enabled) return state
-      return { ...state, enableRouteHazardScan: action.enabled }
+      return setField(state, 'enableRouteHazardScan', action.enabled)
     case 'setRouteCorridorWidth':
-      if (state.routeCorridorWidthMeters === action.meters) return state
-      return { ...state, routeCorridorWidthMeters: action.meters }
+      return setField(state, 'routeCorridorWidthMeters', action.meters)
     case 'setBridgeAirDraftCheckEnabled':
-      if (state.enableBridgeAirDraftCheck === action.enabled) return state
-      return { ...state, enableBridgeAirDraftCheck: action.enabled }
+      return setField(state, 'enableBridgeAirDraftCheck', action.enabled)
     case 'setVesselAirDraft':
-      if (state.vesselAirDraftMeters === action.meters) return state
-      return { ...state, vesselAirDraftMeters: action.meters }
+      return setField(state, 'vesselAirDraftMeters', action.meters)
     case 'setBridgeClearanceMargin':
-      if (state.bridgeClearanceMarginMeters === action.meters) return state
-      return { ...state, bridgeClearanceMarginMeters: action.meters }
+      return setField(state, 'bridgeClearanceMarginMeters', action.meters)
     case 'setOpenSeaMapEnabled':
-      if (state.openSeaMapEnabled === action.enabled) return state
-      return { ...state, openSeaMapEnabled: action.enabled }
+      return setField(state, 'openSeaMapEnabled', action.enabled)
     case 'setOpenSeaMapEndpoint':
-      if (state.openSeaMapEndpoint === action.endpoint) return state
-      return { ...state, openSeaMapEndpoint: action.endpoint }
+      return setField(state, 'openSeaMapEndpoint', action.endpoint)
+    case 'setOpenSeaMapFallbackEndpoints': {
+      const current = state.openSeaMapFallbackEndpoints ?? []
+      return sameOrder(current, action.endpoints)
+        ? state
+        : { ...state, openSeaMapFallbackEndpoints: action.endpoints }
+    }
     case 'setOpenSeaMapSeamarkGroups': {
       const current = state.openSeaMapSeamarkGroups ?? []
-      if (current.length === action.groups.length &&
-        current.every((group, index) => group === action.groups[index])) {
-        return state
-      }
-      return { ...state, openSeaMapSeamarkGroups: action.groups }
+      return sameOrder(current, action.groups)
+        ? state
+        : { ...state, openSeaMapSeamarkGroups: action.groups }
     }
     case 'setOpenSeaMapDedupe':
-      if (state.openSeaMapDedupe === action.enabled) return state
-      return { ...state, openSeaMapDedupe: action.enabled }
+      return setField(state, 'openSeaMapDedupe', action.enabled)
     case 'setOpenSeaMapDedupeRadius':
-      if (state.openSeaMapDedupeRadiusMeters === action.meters) return state
-      return { ...state, openSeaMapDedupeRadiusMeters: action.meters }
+      return setField(state, 'openSeaMapDedupeRadiusMeters', action.meters)
     case 'setUscgLightListEnabled':
-      if (state.uscgLightListEnabled === action.enabled) return state
-      return { ...state, uscgLightListEnabled: action.enabled }
+      return setField(state, 'uscgLightListEnabled', action.enabled)
     case 'setUscgLightListDedupe':
-      if (state.uscgLightListDedupe === action.enabled) return state
-      return { ...state, uscgLightListDedupe: action.enabled }
+      return setField(state, 'uscgLightListDedupe', action.enabled)
     case 'setUscgLightListDedupeRadius':
-      if (state.uscgLightListDedupeRadiusMeters === action.meters) return state
-      return { ...state, uscgLightListDedupeRadiusMeters: action.meters }
+      return setField(state, 'uscgLightListDedupeRadiusMeters', action.meters)
     case 'setUscgLightListRefreshHours':
-      if (state.uscgLightListRefreshHours === action.hours) return state
-      return { ...state, uscgLightListRefreshHours: action.hours }
+      return setField(state, 'uscgLightListRefreshHours', action.hours)
     case 'setNoaaEncEnabled':
-      if (state.noaaEncEnabled === action.enabled) return state
-      return { ...state, noaaEncEnabled: action.enabled }
+      return setField(state, 'noaaEncEnabled', action.enabled)
     case 'setNoaaEncDedupe':
-      if (state.noaaEncDedupe === action.enabled) return state
-      return { ...state, noaaEncDedupe: action.enabled }
+      return setField(state, 'noaaEncDedupe', action.enabled)
     case 'setNoaaEncDedupeRadius':
-      if (state.noaaEncDedupeRadiusMeters === action.meters) return state
-      return { ...state, noaaEncDedupeRadiusMeters: action.meters }
+      return setField(state, 'noaaEncDedupeRadiusMeters', action.meters)
     case 'setNoaaEncScaleBand':
-      if (state.noaaEncScaleBand === action.band) return state
-      return { ...state, noaaEncScaleBand: action.band }
+      return setField(state, 'noaaEncScaleBand', action.band)
     case 'setNoaaEncIncludeWrecks':
-      if (state.noaaEncIncludeWrecks === action.enabled) return state
-      return { ...state, noaaEncIncludeWrecks: action.enabled }
+      return setField(state, 'noaaEncIncludeWrecks', action.enabled)
     case 'setNoaaEncIncludeObstructions':
-      if (state.noaaEncIncludeObstructions === action.enabled) return state
-      return { ...state, noaaEncIncludeObstructions: action.enabled }
+      return setField(state, 'noaaEncIncludeObstructions', action.enabled)
     case 'setNoaaEncIncludeRocks':
-      if (state.noaaEncIncludeRocks === action.enabled) return state
-      return { ...state, noaaEncIncludeRocks: action.enabled }
+      return setField(state, 'noaaEncIncludeRocks', action.enabled)
     case 'setOpenSeaMapMinimumYear':
-      if (state.openSeaMapMinimumYear === action.year) return state
-      return { ...state, openSeaMapMinimumYear: action.year }
+      return setField(state, 'openSeaMapMinimumYear', action.year)
     case 'setUscgLightListMinimumUpdateYear':
-      if (state.uscgLightListMinimumUpdateYear === action.year) return state
-      return { ...state, uscgLightListMinimumUpdateYear: action.year }
+      return setField(state, 'uscgLightListMinimumUpdateYear', action.year)
     case 'setNoaaEncMinimumSurveyYear':
-      if (state.noaaEncMinimumSurveyYear === action.year) return state
-      return { ...state, noaaEncMinimumSurveyYear: action.year }
+      return setField(state, 'noaaEncMinimumSurveyYear', action.year)
     case 'setOpenSeaMapRefreshSeconds':
-      if (state.openSeaMapRefreshSeconds === action.seconds) return state
-      return { ...state, openSeaMapRefreshSeconds: action.seconds }
+      return setField(state, 'openSeaMapRefreshSeconds', action.seconds)
     case 'setNoaaEncRefreshSeconds':
-      if (state.noaaEncRefreshSeconds === action.seconds) return state
-      return { ...state, noaaEncRefreshSeconds: action.seconds }
+      return setField(state, 'noaaEncRefreshSeconds', action.seconds)
     case 'setActiveCaptainRefreshSeconds':
-      if (state.activeCaptainRefreshSeconds === action.seconds) return state
-      return { ...state, activeCaptainRefreshSeconds: action.seconds }
+      return setField(state, 'activeCaptainRefreshSeconds', action.seconds)
   }
 }

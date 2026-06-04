@@ -11,22 +11,14 @@
 
 import { createNoaaEncSource } from './noaa-enc-source.js'
 import { createEncDirectClient } from './enc-direct-client.js'
-import type { ScaleBand } from './enc-direct-types.js'
 import { dedupeRadiusSchema, dedupeToggleSchema } from '../dedupe-pois.js'
+import { SCALE_BANDS, DEFAULT_SCALE_BAND, resolveScaleBand } from '../../shared/scale-band.js'
 import type { InputContext, InputModule } from '../poi-source.js'
 import { clampBboxDebounceSeconds, refreshSecondsSchema } from '../../shared/bbox-debounce.js'
 import { positiveFiniteNumber } from '../../shared/numbers.js'
 import { NOAA_ENC_SOURCE_ID } from '../../shared/source-ids.js'
 import type { PluginConfig } from '../../shared/types.js'
 import { clampMinimumYear, minimumYearSchema } from '../../shared/year-filter.js'
-
-/** The six ENC Direct scale bands, ordered overview to berthing. */
-const SCALE_BANDS: readonly ScaleBand[] = [
-  'overview', 'general', 'coastal', 'approach', 'harbour', 'berthing'
-]
-
-/** Default scale band when the configuration omits one. */
-const DEFAULT_SCALE_BAND: ScaleBand = 'coastal'
 
 /** The enable, dedupe, scale-band, and per-layer config fragment. */
 const CONFIG_SCHEMA: Record<string, unknown> = {
@@ -70,16 +62,6 @@ const CONFIG_SCHEMA: Record<string, unknown> = {
   )
 }
 
-/** Resolve the scale band from raw config, falling back to the default. */
-function resolveBand (raw: unknown): ScaleBand {
-  if (typeof raw !== 'string') {
-    return DEFAULT_SCALE_BAND
-  }
-  return (SCALE_BANDS as readonly string[]).includes(raw)
-    ? raw as ScaleBand
-    : DEFAULT_SCALE_BAND
-}
-
 /** The NOAA ENC Direct input module. */
 export const noaaEncInput: InputModule = {
   id: NOAA_ENC_SOURCE_ID,
@@ -97,7 +79,7 @@ export const noaaEncInput: InputModule = {
     const { config, status, getCurrentPosition } = context
     return createNoaaEncSource({
       client: createEncDirectClient(),
-      band: resolveBand(config.noaaEncScaleBand),
+      band: resolveScaleBand(config.noaaEncScaleBand),
       // Wrecks and obstructions default on; only an explicit false turns
       // them off. Rocks default off because a coastal-band query can return
       // tens of thousands of underwater rocks; only an explicit true opts in.

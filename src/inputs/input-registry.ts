@@ -12,6 +12,7 @@ import type { InputContext, InputModule, PoiSource } from './poi-source.js'
 import { dedupeAgainstBase } from './dedupe-pois.js'
 import { ACTIVE_CAPTAIN_SOURCE_ID } from '../shared/source-ids.js'
 import { splitOnFirstSeparator } from '../shared/namespaced-id.js'
+import { MS_PER_SECOND } from '../shared/time.js'
 import type { PoiSummary } from '../shared/types.js'
 
 /**
@@ -194,7 +195,7 @@ export function createInputRegistry (
                 anyTimeout = true
                 context.status.recordSkipped(
                   sourceId,
-                  `list request exceeded ${Math.round(perSourceListTimeoutMs / 1000)}s; result will appear on next refresh`
+                  `list request exceeded ${Math.round(perSourceListTimeoutMs / MS_PER_SECOND)}s; result will appear on next refresh`
                 )
                 return
               }

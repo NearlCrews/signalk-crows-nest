@@ -16,11 +16,17 @@ import type { SourceStatus, StatusSnapshot } from '../../status/status-types.js'
 import { relativeTime } from '../relative-time.js'
 import { S } from '../styles.js'
 
+// The dot base merged with each state variant once at module load, rather than
+// rebuilding the merged object on every row of every 5 s poll render.
+const DOT_OK: React.CSSProperties = { ...S.dot, ...S.dotOk }
+const DOT_OFF: React.CSSProperties = { ...S.dot, ...S.dotOff }
+const DOT_ERROR: React.CSSProperties = { ...S.dot, ...S.dotError }
+
 /** Map the tri-state apiReachable flag to a status dot style and label. */
 function apiState (reachable: boolean | null): { dot: React.CSSProperties, label: string } {
-  if (reachable === true) return { dot: S.dotOk, label: 'reachable' }
-  if (reachable === false) return { dot: S.dotError, label: 'unreachable' }
-  return { dot: S.dotOff, label: 'not yet contacted' }
+  if (reachable === true) return { dot: DOT_OK, label: 'reachable' }
+  if (reachable === false) return { dot: DOT_ERROR, label: 'unreachable' }
+  return { dot: DOT_OFF, label: 'not yet contacted' }
 }
 
 /**
@@ -40,7 +46,7 @@ function SourceRow ({ source }: { source: SourceStatus }): React.ReactElement {
     : `updated ${relativeTime(source.lastListFetch.at)}`
   return (
     <div style={S.statusGridRow}>
-      <span style={{ ...S.dot, ...api.dot }} aria-hidden='true' />
+      <span style={api.dot} aria-hidden='true' />
       <span style={S.statusGridName}>{source.name}</span>
       <span style={S.statusGridState}>{api.label}</span>
       <span style={S.statusGridFetch}>{fetched}</span>
@@ -69,7 +75,7 @@ export default function StatusBar ({ status }: Props): React.ReactElement {
         <span style={S.statusBarTitle}>Plugin status</span>
         <div style={S.statusBarBody}>
           <span style={S.statusBarLoading}>
-            <span style={{ ...S.dot, ...S.dotOff }} aria-hidden='true' />
+            <span style={DOT_OFF} aria-hidden='true' />
             Loading status...
           </span>
         </div>

@@ -88,8 +88,10 @@ export interface Logger {
 }
 
 /**
- * The categories of point of interest exposed by ActiveCaptain. The values are
- * the exact strings the API expects and returns.
+ * The plugin-wide categories of point of interest. The string values originate
+ * from ActiveCaptain's API (the exact strings it expects and returns), but the
+ * union is the cross-source type every input maps onto: OpenSeaMap, the USCG
+ * Light List, and NOAA ENC all resolve their features to one of these members.
  */
 export type PoiType =
   | 'Marina'
@@ -265,6 +267,11 @@ export interface PluginConfig {
   openSeaMapEnabled?: boolean
   /** Overpass API endpoint URL the OpenSeaMap source queries. */
   openSeaMapEndpoint?: string
+  /**
+   * Ordered Overpass fallback mirror endpoints the OpenSeaMap source fails over
+   * to, in order, when the primary endpoint is unreachable. Empty by default.
+   */
+  openSeaMapFallbackEndpoints?: string[]
   /** Which OpenSeaMap seamark feature groups to import. */
   openSeaMapSeamarkGroups?: string[]
   /** Merge OpenSeaMap points of interest that duplicate an ActiveCaptain marker. */

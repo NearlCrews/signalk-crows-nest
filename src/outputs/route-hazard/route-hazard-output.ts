@@ -17,13 +17,12 @@ import { createRouteHazardAlarms, type BridgeClearanceVerdict } from './route-ha
 import { CORRIDOR_POI_TYPES, routeLegPoints, scanRouteCorridor } from './route-corridor.js'
 import type { OutputContext, OutputHandle, OutputModule, PositionScanContributor } from '../output.js'
 import { createBridgeClearanceResolver, type BridgeClearanceResolver } from '../bridge-air-draft/bridge-clearance-resolver.js'
+import { BRIDGE_POI_TYPE } from '../bridge-air-draft/bridge-clearance-alarms.js'
 import { bridgeBlocksVessel, clampClearanceMargin, readVesselAirDraft } from '../../shared/bridge-clearance.js'
 import { positiveFiniteNumber } from '../../shared/numbers.js'
 import { distanceMeters, positionToBbox, unionBbox } from '../../geo/position-utilities.js'
 import type { Bbox, CorridorPoi, PoiSummary, Position, RoutePolyline } from '../../shared/types.js'
-
-/** Default route-corridor half-width, in meters; mirrors the schema default. */
-const DEFAULT_ROUTE_CORRIDOR_WIDTH_METERS = 500
+import { DEFAULT_ROUTE_CORRIDOR_WIDTH_METERS } from '../../shared/route-corridor.js'
 
 /** Meters in a nautical mile. */
 const METERS_PER_NAUTICAL_MILE = 1852
@@ -110,7 +109,7 @@ export function resolveTooLowBridges (input: TooLowBridgeInput): Map<string, Bri
   if (airDraftMeters === null) {
     return tooLow
   }
-  const bridges = corridorPois.filter((poi) => poi.type === 'Bridge')
+  const bridges = corridorPois.filter((poi) => poi.type === BRIDGE_POI_TYPE)
   if (bridges.length === 0) {
     return tooLow
   }

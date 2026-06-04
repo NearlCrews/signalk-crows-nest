@@ -12,7 +12,7 @@
  */
 
 import type * as React from 'react'
-import { DEFAULT_OPENSEAMAP_DEDUPE_RADIUS_METERS } from '../normalize-config.js'
+import { DEFAULT_DEDUPE_RADIUS_METERS } from '../normalize-config.js'
 import NumberField from './NumberField.js'
 import ToggleFieldset from './ToggleFieldset.js'
 
@@ -62,7 +62,7 @@ export default function MergeWithActiveCaptain ({
         id={radiusInputId}
         label='Merge radius (meters)'
         hint='How far apart two markers can be and still count as the same point.'
-        value={radiusMeters ?? DEFAULT_OPENSEAMAP_DEDUPE_RADIUS_METERS}
+        value={radiusMeters ?? DEFAULT_DEDUPE_RADIUS_METERS}
         onChange={onChangeRadius}
         min={MIN_DEDUPE_RADIUS_METERS}
         step={10}

@@ -10,7 +10,7 @@
 import type { Position } from './types.js'
 import type { PluginStatus } from '../status/plugin-status.js'
 
-interface Bbox {
+interface UsWatersEnvelope {
   readonly minLat: number
   readonly maxLat: number
   readonly minLon: number
@@ -18,7 +18,7 @@ interface Bbox {
 }
 
 /** The set of disjoint envelopes that together cover US waters. */
-const US_WATERS_BBOXES: readonly Bbox[] = [
+const US_WATERS_BBOXES: readonly UsWatersEnvelope[] = [
   // CONUS coastal and inland waters, including the Great Lakes.
   { minLat: 24.0, maxLat: 49.5, minLon: -125.5, maxLon: -66.0 },
   // Alaska (the main landmass and the Aleutian arc up to the dateline).
@@ -36,12 +36,12 @@ const US_WATERS_BBOXES: readonly Bbox[] = [
 /** True when a position is inside one of the US-waters envelopes. */
 export function isInUsWaters (position: Position): boolean {
   const { latitude, longitude } = position
-  for (const bbox of US_WATERS_BBOXES) {
+  for (const envelope of US_WATERS_BBOXES) {
     if (
-      latitude >= bbox.minLat &&
-      latitude <= bbox.maxLat &&
-      longitude >= bbox.minLon &&
-      longitude <= bbox.maxLon
+      latitude >= envelope.minLat &&
+      latitude <= envelope.maxLat &&
+      longitude >= envelope.minLon &&
+      longitude <= envelope.maxLon
     ) {
       return true
     }

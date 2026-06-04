@@ -8,12 +8,13 @@ import { positiveFiniteNumber, toFiniteNumber } from '../shared/numbers.js'
 import { SEAMARK_GROUP_IDS } from '../shared/seamark-groups.js'
 import type { PluginConfig } from '../shared/types.js'
 
-/**
- * Fallback caching duration. Mirrors DEFAULT_CACHING_DURATION_MINUTES in
- * src/inputs/active-captain/active-captain-input.ts; keep the two in step so
- * the panel and the plugin agree.
- */
-export const DEFAULT_CACHE_DURATION_MINUTES = 60
+// The ActiveCaptain detail-cache default is owned by
+// src/shared/cache-duration.ts so the panel and the ActiveCaptain input module
+// consume one value. Imported because normalizeConfig falls back to it, and
+// re-exported so panel components and tests that already import from
+// normalize-config do not need a second import line.
+import { DEFAULT_CACHE_DURATION_MINUTES } from '../shared/cache-duration.js'
+export { DEFAULT_CACHE_DURATION_MINUTES }
 
 // The rating bounds, default, and clamp helper are owned by
 // src/shared/rating.ts so the panel and the ActiveCaptain input module consume
@@ -30,54 +31,55 @@ import { clampMinimumRating } from '../shared/rating.js'
 import { DEFAULT_PROXIMITY_ALARM_RADIUS_METERS } from '../shared/proximity-radius.js'
 export { DEFAULT_PROXIMITY_ALARM_RADIUS_METERS }
 
-/**
- * Fallback route-corridor half-width, in meters. Mirrors the
- * `routeCorridorWidthMeters` schema default in
- * src/outputs/route-hazard/route-hazard-output.ts; keep the two in step so the
- * panel and the plugin agree.
- */
-export const DEFAULT_ROUTE_CORRIDOR_WIDTH_METERS = 500
+// The route-corridor half-width default is owned by src/shared/route-corridor.ts
+// so the panel and the route-hazard output consume one value. Imported because
+// normalizeConfig falls back to it, and re-exported for panel components and
+// tests that already import from normalize-config.
+import { DEFAULT_ROUTE_CORRIDOR_WIDTH_METERS } from '../shared/route-corridor.js'
+export { DEFAULT_ROUTE_CORRIDOR_WIDTH_METERS }
 
 /**
- * Fallback Overpass API endpoint for the OpenSeaMap source. Mirrors the
- * `openSeaMapEndpoint` schema default in
- * src/inputs/openseamap/openseamap-input.ts; keep the two in step so the panel
- * and the plugin agree.
+ * Fallback Overpass API endpoint for the OpenSeaMap source. Re-exported from
+ * the shared `overpass-endpoints` module, which is the single source of truth
+ * the input module's schema default also reads, so the panel and the plugin
+ * cannot drift. The recommended fallback-mirror suggestions live there too.
  */
-export const DEFAULT_OPENSEAMAP_ENDPOINT = 'https://overpass-api.de/api/interpreter'
+export {
+  DEFAULT_OVERPASS_ENDPOINT as DEFAULT_OPENSEAMAP_ENDPOINT,
+  RECOMMENDED_OVERPASS_FALLBACK_ENDPOINTS
+} from '../shared/overpass-endpoints.js'
+import { normalizeFallbackEndpoints, resolvePrimaryEndpoint } from '../shared/overpass-endpoints.js'
 
-/**
- * Fallback merge radius, in meters, for OpenSeaMap dedupe against the
- * ActiveCaptain base. Mirrors the `openSeaMapDedupeRadiusMeters` schema
- * default and the `DEFAULT_DEDUPE_RADIUS_METERS` constant in
- * src/inputs/dedupe-pois.ts; keep them in step so the panel and the plugin
- * agree.
- */
-export const DEFAULT_OPENSEAMAP_DEDUPE_RADIUS_METERS = 150
+// The dedupe merge-radius default is owned by src/shared/dedupe-radius.ts so the
+// panel and the dedupe module consume one value. It backs all three non-base
+// sources (OpenSeaMap, USCG, NOAA), so it is named for the dedupe, not for one
+// source. Imported because normalizeConfig falls back to it, and re-exported for
+// panel components and tests that already import from normalize-config.
+import { DEFAULT_DEDUPE_RADIUS_METERS } from '../shared/dedupe-radius.js'
+export { DEFAULT_DEDUPE_RADIUS_METERS }
 
-/**
- * Fallback USCG Light List background refresh period, in hours. Mirrors the
- * `uscgLightListRefreshHours` schema default in
- * src/inputs/uscg-light-list/uscg-light-list-input.ts; keep the two in step so
- * the panel and the plugin agree.
- */
-export const DEFAULT_USCG_LIGHT_LIST_REFRESH_HOURS = 6
+// The USCG refresh-hours bounds and default are owned by
+// src/shared/refresh-hours.ts. Imported because normalizeConfig validates with
+// them, and re-exported under the panel's existing names so the USCG card and
+// the status section that already import from normalize-config do not change.
+// The panel keeps its own out-of-range-to-default rule here (the input module
+// clamps instead); only the bounds are shared.
+import { DEFAULT_REFRESH_HOURS, MIN_REFRESH_HOURS, MAX_REFRESH_HOURS } from '../shared/refresh-hours.js'
+export {
+  DEFAULT_REFRESH_HOURS as DEFAULT_USCG_LIGHT_LIST_REFRESH_HOURS,
+  MIN_REFRESH_HOURS as MIN_USCG_LIGHT_LIST_REFRESH_HOURS,
+  MAX_REFRESH_HOURS as MAX_USCG_LIGHT_LIST_REFRESH_HOURS
+} from '../shared/refresh-hours.js'
 
-/** Lower and upper bounds on the configurable USCG Light List refresh, in hours. */
-export const MIN_USCG_LIGHT_LIST_REFRESH_HOURS = 1
-export const MAX_USCG_LIGHT_LIST_REFRESH_HOURS = 168
-
-/**
- * Fallback NOAA ENC scale band. Mirrors the `noaaEncScaleBand` schema default
- * in src/inputs/noaa-enc/noaa-enc-input.ts; keep the two in step so the panel
- * and the plugin agree.
- */
-export const DEFAULT_NOAA_ENC_SCALE_BAND = 'coastal'
-
-/** The six NOAA ENC chart scale bands, ordered overview to berthing. */
-export const NOAA_ENC_SCALE_BANDS = [
-  'overview', 'general', 'coastal', 'approach', 'harbour', 'berthing'
-] as const
+// The NOAA scale bands, default, and validation are owned by
+// src/shared/scale-band.ts. Imported because normalizeConfig resolves with them,
+// and re-exported under the panel's existing names so the NOAA card and the
+// status section that already import from normalize-config do not change.
+import { resolveScaleBand } from '../shared/scale-band.js'
+export {
+  DEFAULT_SCALE_BAND as DEFAULT_NOAA_ENC_SCALE_BAND,
+  SCALE_BANDS as NOAA_ENC_SCALE_BANDS
+} from '../shared/scale-band.js'
 
 // The minimum-year filter bounds, default, and clamp helper are owned by
 // src/shared/year-filter.ts so the panel and the three input modules consume
@@ -165,11 +167,13 @@ export function normalizeConfig (configuration: unknown): PluginConfig {
   config.openSeaMapEnabled = raw.openSeaMapEnabled === true
 
   // A blank or non-string endpoint would leave the source unable to query, so
-  // it falls back to the default Overpass endpoint.
-  const endpoint = raw.openSeaMapEndpoint
-  config.openSeaMapEndpoint = typeof endpoint === 'string' && endpoint.trim() !== ''
-    ? endpoint
-    : DEFAULT_OPENSEAMAP_ENDPOINT
+  // it falls back to the default Overpass endpoint (shared with the input
+  // module's schema default via resolvePrimaryEndpoint).
+  config.openSeaMapEndpoint = resolvePrimaryEndpoint(raw.openSeaMapEndpoint)
+
+  // Optional fallback mirrors, tried in order when the primary fails. Cleaned
+  // to a deduped, blank-free list (an old config that omits the key yields []).
+  config.openSeaMapFallbackEndpoints = normalizeFallbackEndpoints(raw.openSeaMapFallbackEndpoints)
 
   // An old config omits the seamark groups entirely; it then imports every
   // group. An explicit array is kept, filtered to the known group ids, so a
@@ -188,7 +192,7 @@ export function normalizeConfig (configuration: unknown): PluginConfig {
   // A zero or negative dedupe radius would leave dedupe enabled but unable to
   // ever match, so it is treated as unusable and falls back to the default.
   config.openSeaMapDedupeRadiusMeters =
-    positiveFiniteNumber(raw.openSeaMapDedupeRadiusMeters) ?? DEFAULT_OPENSEAMAP_DEDUPE_RADIUS_METERS
+    positiveFiniteNumber(raw.openSeaMapDedupeRadiusMeters) ?? DEFAULT_DEDUPE_RADIUS_METERS
 
   config.uscgLightListEnabled = raw.uscgLightListEnabled === true
   // Dedupe defaults on, matching the schema: an old config that omits the key
@@ -198,32 +202,28 @@ export function normalizeConfig (configuration: unknown): PluginConfig {
   // Per-source merge radius. A zero or non-positive value falls back to the
   // shared default rather than leaving dedupe enabled but unable to match.
   config.uscgLightListDedupeRadiusMeters =
-    positiveFiniteNumber(raw.uscgLightListDedupeRadiusMeters) ?? DEFAULT_OPENSEAMAP_DEDUPE_RADIUS_METERS
+    positiveFiniteNumber(raw.uscgLightListDedupeRadiusMeters) ?? DEFAULT_DEDUPE_RADIUS_METERS
 
   // A non-numeric, infinite, or out-of-range refresh period falls back to the
   // default rather than letting the scheduler misbehave.
   const refreshHours = raw.uscgLightListRefreshHours
   config.uscgLightListRefreshHours =
     typeof refreshHours === 'number' && Number.isFinite(refreshHours) &&
-    refreshHours >= MIN_USCG_LIGHT_LIST_REFRESH_HOURS &&
-    refreshHours <= MAX_USCG_LIGHT_LIST_REFRESH_HOURS
+    refreshHours >= MIN_REFRESH_HOURS &&
+    refreshHours <= MAX_REFRESH_HOURS
       ? refreshHours
-      : DEFAULT_USCG_LIGHT_LIST_REFRESH_HOURS
+      : DEFAULT_REFRESH_HOURS
 
   config.noaaEncEnabled = raw.noaaEncEnabled === true
   // Dedupe defaults on, matching the schema: only an explicit false turns it off.
   config.noaaEncDedupe = raw.noaaEncDedupe !== false
   // Per-source merge radius. Same fallback semantic as the USCG key above.
   config.noaaEncDedupeRadiusMeters =
-    positiveFiniteNumber(raw.noaaEncDedupeRadiusMeters) ?? DEFAULT_OPENSEAMAP_DEDUPE_RADIUS_METERS
+    positiveFiniteNumber(raw.noaaEncDedupeRadiusMeters) ?? DEFAULT_DEDUPE_RADIUS_METERS
 
   // A non-string or unknown band falls back to the default rather than leaving
   // the source unable to resolve a layer-id triple.
-  const scaleBand = raw.noaaEncScaleBand
-  config.noaaEncScaleBand =
-    typeof scaleBand === 'string' && (NOAA_ENC_SCALE_BANDS as readonly string[]).includes(scaleBand)
-      ? scaleBand
-      : DEFAULT_NOAA_ENC_SCALE_BAND
+  config.noaaEncScaleBand = resolveScaleBand(raw.noaaEncScaleBand)
 
   // Wrecks and obstructions default on; only an explicit false turns them off.
   // Rocks default off because a coastal-band query can return tens of thousands

@@ -58,6 +58,14 @@ export interface NotificationTracker<T> {
    * the active set, and optionally log. A no-op when `poiId` is not active.
    */
   clear: (poiId: string) => void
+  /**
+   * Clear every active entry whose POI id is not in `activeIds`. The ids are
+   * sanitized into the tracker's key space before the comparison, so a caller
+   * can pass raw POI ids and the kept set still matches the wire identities. A
+   * raw-vs-sanitized key-space mismatch would otherwise clear and re-raise a
+   * still-active alarm every tick (alarm chatter on a safety alarm).
+   */
+  clearStale: (activeIds: Iterable<string>) => void
   /** Clear every active entry. Called on plugin stop. */
   clearAll: () => void
 }
@@ -91,6 +99,19 @@ export function createNotificationTracker<T> (
     }
   }
 
+  function clearStale (activeIds: Iterable<string>): void {
+    const keep = new Set<string>()
+    for (const id of activeIds) {
+      keep.add(sanitizePoiId(id))
+    }
+    // Snapshot the keys first: clear() deletes from the map as it iterates.
+    for (const safeId of [...active.keys()]) {
+      if (!keep.has(safeId)) {
+        clear(safeId)
+      }
+    }
+  }
+
   function clearAll (): void {
     // Snapshot the keys first: clear() deletes from the map as it iterates.
     for (const safeId of [...active.keys()]) {
@@ -104,6 +125,7 @@ export function createNotificationTracker<T> (
     set: (poiId, entry) => { active.set(sanitizePoiId(poiId), entry) },
     entries: () => active.entries(),
     clear,
+    clearStale,
     clearAll
   }
 }

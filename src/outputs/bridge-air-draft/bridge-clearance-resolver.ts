@@ -28,6 +28,7 @@
 
 import { LRUCache } from 'lru-cache'
 import { ACTIVE_CAPTAIN_SOURCE_ID } from '../../shared/source-ids.js'
+import { BRIDGE_POI_TYPE } from './bridge-clearance-alarms.js'
 import { MAX_POI_CACHE_ENTRIES } from '../../shared/cache.js'
 import { MS_PER_MINUTE } from '../../shared/time.js'
 import { toFiniteNumber } from '../../shared/numbers.js'
@@ -114,7 +115,7 @@ export function createBridgeClearanceResolver (deps: ClearanceResolverDeps): Bri
     // Only ActiveCaptain carries a clearance the summary lacked, and only in a
     // bridge's detail. Every other source either put the clearance on the
     // summary or has none to give.
-    if (poi.source !== ACTIVE_CAPTAIN_SOURCE_ID || poi.type !== 'Bridge') {
+    if (poi.source !== ACTIVE_CAPTAIN_SOURCE_ID || poi.type !== BRIDGE_POI_TYPE) {
       return null
     }
     const cached = cache.get(poi.id)

@@ -47,6 +47,11 @@ const ACTIVE_CAPTAIN_ATTRIBUTION = 'Data from Garmin ActiveCaptain'
 /** Public ActiveCaptain page for a point of interest, by id. */
 const POI_PAGE_URL_PREFIX = 'https://activecaptain.garmin.com/en-US/pois/'
 
+/** Build the public ActiveCaptain page URL for a point of interest id. */
+function poiPageUrl (id: string | number): string {
+  return `${POI_PAGE_URL_PREFIX}${id}`
+}
+
 /** HTTP status for a point of interest that does not exist. */
 const HTTP_NOT_FOUND = 404
 
@@ -196,7 +201,7 @@ export function createActiveCaptainSource (config: ActiveCaptainSourceConfig): P
         return summaries.map((summary) => ({
           ...summary,
           source: ACTIVE_CAPTAIN_SOURCE_ID,
-          url: `${POI_PAGE_URL_PREFIX}${summary.id}`,
+          url: poiPageUrl(summary.id),
           attribution: ACTIVE_CAPTAIN_ATTRIBUTION,
           skIcon: activeCaptainSkIcon(summary.type)
         }))
@@ -232,7 +237,7 @@ export function createActiveCaptainSource (config: ActiveCaptainSourceConfig): P
         name: poi.name,
         position: { ...poi.mapLocation },
         type: poi.poiType,
-        url: `${POI_PAGE_URL_PREFIX}${id}`,
+        url: poiPageUrl(id),
         source: ACTIVE_CAPTAIN_SOURCE_ID,
         attribution: ACTIVE_CAPTAIN_ATTRIBUTION,
         skIcon: activeCaptainSkIcon(poi.poiType),

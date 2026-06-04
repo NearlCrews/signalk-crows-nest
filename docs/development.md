@@ -115,7 +115,9 @@ src/                      # TypeScript source
 │                         #   SECONDS_PER_MINUTE/HOUR/DAY), source-ids.ts,
 │                         #   bbox-debounce.ts (the geographic stale-while-revalidate
 │                         #   cache), map-link.ts, bridge-clearance.ts, length.ts,
-│                         #   proximity-radius.ts, light-character.ts, and
+│                         #   proximity-radius.ts, light-character.ts, url-safety.ts
+│                         #   (the safeLinkUrl scheme allowlist), overpass-endpoints.ts
+│                         #   (the OpenSeaMap default and fallback mirrors), and
 │                         #   normalized-detail.ts (the structured-notes schema).
 │                         #   See CLAUDE.md for the complete module map
 └── panel/                # Federated React configuration panel (bundled to public/)
@@ -130,8 +132,9 @@ src/                      # TypeScript source
     └── components/        # StatusBar, FooterBar, DataSourcesSection (per-source
                            #   accordion shell), DataSourceCard (one collapsible card),
                            #   ActiveCaptainSource, OpenSeaMapSource, UscgLightListSource,
-                           #   NoaaEncSource (card bodies), AlertsSection (the proximity
-                           #   and route-hazard controls); and the per-field input
+                           #   NoaaEncSource (card bodies), AlertsSection (the proximity,
+                           #   route-hazard, and bridge air-draft controls); and the
+                           #   per-field input
                            #   components, including the shared NumberField,
                            #   MinimumYearField (the per-source earliest-year
                            #   filter), and AlarmFieldset layouts

@@ -5,6 +5,64 @@
 > development milestones that preceded this publication. Their content is
 > incorporated into the `v0.4.2` release.
 
+<a id="unreleased"></a>
+
+### Unreleased
+
+Endpoint and data-source maintenance plus a full-codebase cleanup pass. All 733
+tests pass.
+
+#### Data sources and endpoints
+
+- USCG Light List: the pinned district coverage expanded from 37 to 62
+  (district, page) pairs to match the current NAVCEN MSI index, which had grown
+  several pages per district. The plugin was silently under-fetching aids in
+  districts 1, 5, and 8 among others. A test now locks the coverage so future
+  NAVCEN growth is a deliberate table edit, not silent drift.
+- NOAA ENC Direct: the default ArcGIS host moved to `encdirect.noaa.gov`, the
+  hostname NOAA's own documentation and the data.gov catalog publish. It is a
+  byte-identical alias of the previous `gis.charttools.noaa.gov`, so there is no
+  behavioral change, just alignment with the documented access point.
+- OpenSeaMap: the Overpass endpoint is now backed by an optional,
+  admin-configurable fallback-mirror list. When the primary endpoint fails, the
+  client fails over to the next mirror in order, so a single Overpass instance
+  outage no longer takes the source offline. The recommended planet-wide mirrors
+  are surfaced as suggestions; a regional extract (overpass.osm.ch) is
+  deliberately excluded because it serves no data outside its region.
+
+#### Fixes
+
+- Security: the structured `properties.crowsNest` output now gates the
+  ActiveCaptain website and email link values through the same URL-scheme
+  allowlist the HTML popup already applied, so a `javascript:` value can no
+  longer reach a structured client as a click-to-execute anchor.
+- A BoatRamp now obeys the minimum-rating filter, matching the fact that it
+  already shows a star rating; the review-bearing set and the ratable set are
+  now one source of truth.
+- A USCG aid with a colour but no light character no longer renders an empty
+  "Light:" line.
+- The course reader's synchronous route-clear fast path now fires on a cleared
+  active-route delta: it was testing the delta object instead of its value, so a
+  cleared route now drops the cached corridor immediately rather than on the
+  next background refresh.
+- The proximity, route-hazard, and bridge air-draft alarms now clear stale
+  entries through a tracker helper that compares ids in one key space. The old
+  exit loops compared the tracker's sanitized ids against a raw-id map, which
+  would have chattered a safety alarm for any id containing a character outside
+  the sanitized set (latent: no current source id triggers it).
+
+#### Internal
+
+- Full-codebase cleanup. A shared URL-safety helper; a single merged seamark
+  mapping table replacing three parallel tables; one source of truth for the
+  cache-duration, dedupe-radius, refresh-hours, scale-band, and
+  route-corridor-width defaults (browser-safe shared modules the panel and the
+  plugin both import, completing the pattern the rating and year-filter bounds
+  already use); a reducer field-setter helper; an alarm-tracker `clearStale`
+  helper and a shared hysteresis-threshold helper; shared millisecond and
+  earth-radius constants in place of inline magic numbers; and assorted comment
+  and dead-code corrections.
+
 <a id="v080"></a>
 
 ### v0.8.0 (2026/06/02) - structured notes detail for chart plotters
