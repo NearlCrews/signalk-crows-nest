@@ -5,12 +5,12 @@
 > development milestones that preceded this publication. Their content is
 > incorporated into the `v0.4.2` release.
 
-<a id="unreleased"></a>
+<a id="v081"></a>
 
-### Unreleased
+### v0.8.1 (2026/06/04) - endpoint resilience, safety fixes, and cleanup
 
-Endpoint and data-source maintenance plus a full-codebase cleanup pass. All 733
-tests pass.
+Endpoint and data-source maintenance, two safety-relevant fixes, a new Overpass
+resilience option, plus a full-codebase cleanup pass. All 733 tests pass.
 
 #### Data sources and endpoints
 

@@ -25,24 +25,22 @@ with a plain-English popup, and the whole plugin is configured from one panel.
 | --- | --- | --- |
 | [![An ActiveCaptain hazard note open in Freeboard-SK, showing the rating, the review text, and a staleness warning](assets/screenshots/freeboard-activecaptain-hazard.png)](assets/screenshots/freeboard-activecaptain-hazard.png) | [![A USCG Light List buoy note open in Freeboard-SK, showing the light characteristic and the source citation](assets/screenshots/freeboard-uscg-light-list.png)](assets/screenshots/freeboard-uscg-light-list.png) | [![The Crow's Nest configuration panel, showing per-source live status and the data-source cards](assets/screenshots/admin-panel.png)](assets/screenshots/admin-panel.png) |
 
-## What's New in v0.8.0
+## What's New in v0.8.1
 
-A feature release centered on **structured notes detail for chart-plotter
-clients**. Each POI note now carries a source-agnostic, presentation-neutral
-detail view on `properties.crowsNest` (titled sections of labeled items),
-ALONGSIDE the existing HTML `description`: a structured client renders the
-sections natively, while a generic notes client keeps rendering the HTML, so
-nothing breaks. POIs also reach the chart faster, through a geographic
-stale-while-revalidate cache that reuses a fetch across a small pan or zoom and
-serves a stale tile while refreshing it in the background. A UX and
-marine-domain review then tightened that detail: a NOAA ENC wreck or obstruction
-leads with a `Dangerous` flag and a datum-tagged least-depth reading, reviews
-and star ratings are limited to the review-bearing types (marinas, anchorages,
-businesses, and boat ramps, with no more four-star rocks),
-and marina decision facts (maximum LOA and beam, and the fuel-dock depth) now
-surface. All 715 tests pass.
+A maintenance release with two safety-relevant fixes, endpoint and data-source
+upkeep, and a new resilience option. The structured `properties.crowsNest`
+detail now gates its website and email links through the same URL-scheme
+allowlist the popup already applied, so a hostile link value cannot reach a
+structured client as a clickable anchor. The proximity, route, and bridge alarms
+now clear stale entries in a single id key space, removing a latent re-raise
+chatter on a safety alarm. OpenSeaMap gains admin-configurable Overpass fallback
+mirrors with in-order failover, so a single Overpass instance outage no longer
+takes the source offline. The USCG Light List now fetches the full current
+NAVCEN coverage (62 district pages, up from 37, so no aids are silently
+skipped), and NOAA ENC defaults to NOAA's documented `encdirect.noaa.gov` host.
+A full-codebase cleanup pass rounds it out. All 733 tests pass.
 
-See the [v0.8.0 changelog entry](CHANGELOG.md#v080), the consumer
+See the [v0.8.1 changelog entry](CHANGELOG.md#v081), the consumer
 [notes-resource integration guide](docs/notes-resource-format.md), and the
 [full release history](CHANGELOG.md).
 
