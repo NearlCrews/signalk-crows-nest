@@ -5,6 +5,102 @@
 > development milestones that preceded this publication. Their content is
 > incorporated into the `v0.4.2` release.
 
+<a id="v082"></a>
+
+### v0.8.2 (2026/06/11) - cleanup, panel modernization, and static-POI caching
+
+A six-agent whole-codebase cleanup (every finding applied, including nits), a
+configuration-panel modernization in the style of the
+signalk-nmea2000-emitter-cannon panel, and a caching overhaul built on the
+observation that POI data is nearly static: a buoy does not move, and a
+harbor rarely changes. All 743 tests pass.
+
+#### Caching
+
+- Offline-first ActiveCaptain details: the on-disk store now keeps its own
+  30-day, entry-capped retention independent of the freshness TTL, old
+  entries hydrate as stale-but-usable, and a lapsed entry whose refetch
+  fails (offline, API down) is served instead of rejected. Previously the
+  offline store was emptied by the same TTL that governed refetching, so a
+  restart more than an hour after the last fetch hydrated nothing.
+- The ActiveCaptain detail freshness TTL default rose from 1 hour to
+  24 hours: with stale-on-error in place the TTL governs upstream traffic,
+  not data availability.
+- Per-source viewport-cache defaults now match each upstream's real update
+  rate: ActiveCaptain stays at 30 seconds, OpenSeaMap defaults to
+  10 minutes, and NOAA ENC Direct (refreshed weekly by NOAA) to 30 minutes,
+  with the configurable maximum raised to one hour. The
+  stale-while-revalidate design means longer windows have no latency cost.
+- Tile prefetch: when a small viewport (the vessel-centered alarm scan, or
+  a close-zoom chart view) approaches a tile edge, the neighbor tile warms
+  in the background, so a vessel underway crosses the grid cliff onto an
+  already-fetched tile instead of blocking the proximity-alarm scan path.
+- The viewport cache keeps 64 tiles per source (up from 16), enough for a
+  full day's coastal passage instead of evicting the morning's tiles.
+- The USCG Light List background refresh default stretched from 6 hours to
+  daily (NAVCEN publishes weekly; conditional GET makes the check cheap),
+  and resolved bridge clearances stay fresh for 24 hours instead of 6.
+
+#### Fixes
+
+- A start-time failure (dead position monitor or failed output) now latches
+  the plugin error in the admin UI: the notes provider's per-request healthy
+  status no longer overwrites the "safety alarms are not running" message
+  seconds after start.
+- An OpenSeaMap or NOAA ENC detail request for a feature that no longer
+  exists upstream is recorded as a normal not-found rather than flipping the
+  source's health row to unreachable; the policy now lives in one shared
+  helper (`fetchDetailRecorded`) mirroring the ActiveCaptain 404 handling.
+- Alarm notifications keep their `createdAt` at the start of the alarm
+  episode across refreshes and the clear delta, stamped centrally by the
+  shared notification tracker.
+- ActiveCaptain detail responses now validate latitude and longitude the way
+  the list path always has, so a malformed detail cannot place a bad marker.
+
+#### Configuration panel
+
+- Theme system: light, dark, and a red-preserving night theme for night
+  vision at the helm, pinnable from a new theme toggle (persisted as
+  `ac-theme`) with scale tokens and `color-scheme` so native widgets follow.
+  The SignalK admin has no theme switcher of its own, so the toggle is how
+  dark and night mode are reached.
+- Marine touch sizing: 22px checkboxes with accent fill and 36px minimum
+  control heights.
+- Unsaved edits now warn before a tab close or reload, the footer is sticky
+  so Save stays reachable, and the status bar shows a "checked Ns ago"
+  freshness note.
+- Recent errors in the status bar are clickable: they expand and scroll to
+  the source card the error belongs to.
+- Field hints are programmatically linked to their controls
+  (`aria-describedby`) through a new shared `LabeledField` scaffold.
+- A getting-started callout points at the off-by-default sources while none
+  is enabled.
+
+#### Refactors and hardening
+
+- Every bounded numeric config key now shares one clamp-plus-schema pattern,
+  with generous upper bounds so a hand-edited config cannot blow up a scan
+  box or pin a cache forever; the panel and the runtime resolve values
+  through the same shared helpers, including the USCG refresh period, which
+  the panel now clamps the way the scheduler does.
+- Dead code removed: the unused `seamarkToPoiType` and `seamarkSkIcon`
+  wrappers (tests now exercise `elementMarking`, the shipped reader), the
+  notification tracker's unused `entries()` and public `clear()`, and three
+  internal proximity-radius constants are no longer exported.
+- Duplicated wire readers consolidated (`presentString`,
+  `finiteOrUndefined`, `isKnown`), the USCG source-slug literals routed
+  through the shared constant, and the structured phone item now rides as a
+  `tel:` link matching the HTML popup.
+- The queued HTTP client's `close()` tears down immediately: pending
+  throttle timers are cleared and queued waiters rejected, instead of firing
+  one doomed request per throttle interval after stop.
+- The bridge air-draft and route-hazard outputs share one clearance resolver
+  per run, so the same bridge is never resolved and cached twice.
+- Per-request debug log arguments are built only while the admin debug
+  toggle is on, the NOAA list path caches only year-filter survivors, and
+  the panel memoizes its sections so a status poll re-renders only the
+  status bar and a keystroke no longer re-renders the whole panel.
+
 <a id="v081"></a>
 
 ### v0.8.1 (2026/06/04) - endpoint resilience, safety fixes, and cleanup

@@ -25,22 +25,23 @@ with a plain-English popup, and the whole plugin is configured from one panel.
 | --- | --- | --- |
 | [![An ActiveCaptain hazard note open in Freeboard-SK, showing the rating, the review text, and a staleness warning](assets/screenshots/freeboard-activecaptain-hazard.png)](assets/screenshots/freeboard-activecaptain-hazard.png) | [![A USCG Light List buoy note open in Freeboard-SK, showing the light characteristic and the source citation](assets/screenshots/freeboard-uscg-light-list.png)](assets/screenshots/freeboard-uscg-light-list.png) | [![The Crow's Nest configuration panel, showing per-source live status and the data-source cards](assets/screenshots/admin-panel.png)](assets/screenshots/admin-panel.png) |
 
-## What's New in v0.8.1
+## What's New in v0.8.2
 
-A maintenance release with two safety-relevant fixes, endpoint and data-source
-upkeep, and a new resilience option. The structured `properties.crowsNest`
-detail now gates its website and email links through the same URL-scheme
-allowlist the popup already applied, so a hostile link value cannot reach a
-structured client as a clickable anchor. The proximity, route, and bridge alarms
-now clear stale entries in a single id key space, removing a latent re-raise
-chatter on a safety alarm. OpenSeaMap gains admin-configurable Overpass fallback
-mirrors with in-order failover, so a single Overpass instance outage no longer
-takes the source offline. The USCG Light List now fetches the full current
-NAVCEN coverage (62 district pages, up from 37, so no aids are silently
-skipped), and NOAA ENC defaults to NOAA's documented `encdirect.noaa.gov` host.
-A full-codebase cleanup pass rounds it out. All 733 tests pass.
+The configuration panel is modernized: a theme toggle adds light, dark, and a
+red-preserving night mode for night vision at the helm, controls grow to
+marine touch sizes, unsaved edits warn before a tab close, the footer stays
+reachable on a long panel, and status errors are clickable shortcuts to the
+card they belong to. Caching is rebuilt around the fact that POI data is
+nearly static: ActiveCaptain details are now offline-first (a 30-day on-disk
+retention, with lapsed entries served when the vessel cannot reach the API),
+per-source refresh windows match each upstream's real update rate, and the
+viewport cache prefetches the next tile ahead of a moving vessel so the
+proximity-alarm scan never blocks on a tile boundary. A six-agent
+whole-codebase cleanup also fixed a status overwrite that could mask a dead
+safety alarm and made a vanished upstream feature read as a normal miss
+rather than an outage. All 743 tests pass.
 
-See the [v0.8.1 changelog entry](CHANGELOG.md#v081), the consumer
+See the [v0.8.2 changelog entry](CHANGELOG.md#v082), the consumer
 [notes-resource integration guide](docs/notes-resource-format.md), and the
 [full release history](CHANGELOG.md).
 
@@ -88,7 +89,8 @@ See the [v0.8.1 changelog entry](CHANGELOG.md#v081), the consumer
   Hazard whose report has not been confirmed in over two years
 - **React configuration panel** with a per-source status bar, a
   per-source accordion of cards each with a live-status pill, a global
-  Alerts section, and opportunistic dark-mode token support
+  Alerts section, and a theme toggle with light, dark, and a
+  red-preserving night mode for night vision at the helm
 - **TypeScript 6** under strict flags, **MIT-licensed**, Node 20.3+
 
 ## Requirements
@@ -130,14 +132,18 @@ ActiveCaptain-only setup; opt-in to the other sources from their cards.
 The plugin ships a React config panel that the Signal K admin loads via
 webpack 5 Module Federation. The panel has these areas:
 
-1. **Per-source status bar** at the top: reachability and last-fetch
-   time for each enabled source, plus any recent errors
-2. **Data sources accordion** with one collapsible card per source
+1. **Theme toggle** in the top corner: Auto, Light, Dark, or a
+   red-preserving Night mode for night vision at the helm; the choice
+   persists across visits
+2. **Per-source status bar**: reachability and last-fetch time for each
+   enabled source, a "checked Ns ago" freshness note, plus any recent
+   errors, each clickable to jump to the source card it belongs to
+3. **Data sources accordion** with one collapsible card per source
    (ActiveCaptain, OpenSeaMap, USCG Light List, NOAA ENC Direct). Each
    card's body groups its options into bordered fieldsets: import
    layers, refresh and freshness, filters (when present), and merge
    with ActiveCaptain
-3. **Alerts section** (collapsed by default, opens automatically when an
+4. **Alerts section** (collapsed by default, opens automatically when an
    alarm is enabled): the proximity-alarm, route-corridor scan, and
    bridge air-draft check controls, each in its own fieldset with an
    opt-in toggle and its numeric settings

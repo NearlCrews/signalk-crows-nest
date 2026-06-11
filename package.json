@@ -1,6 +1,6 @@
 {
   "name": "signalk-crows-nest",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "Imports Garmin ActiveCaptain, OpenSeaMap, USCG Light List, and NOAA ENC Direct points of interest as Signal K notes resources, with proximity, route-corridor, and bridge air-draft alarms.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -52,7 +52,8 @@
     ],
     "recommends": [
       "@signalk/freeboard-sk",
-      "signalk-nmea2000-emitter-cannon"
+      "signalk-nmea2000-emitter-cannon",
+      "signalk-binnacle"
     ]
   },
   "engines": {
@@ -88,8 +89,8 @@
     "@babel/preset-typescript": "^7.29.7",
     "@signalk/server-api": "^2.25.0",
     "@types/express": "^5.0.6",
-    "@types/node": "^25.9.1",
-    "@types/react": "^19.2.15",
+    "@types/node": "^25.9.3",
+    "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "babel-loader": "^10.1.1",
     "eslint": "^9.39.4",
