@@ -12,9 +12,12 @@
 export const MAX_POI_CACHE_ENTRIES = 5000
 
 /**
- * Hard ceiling on entries in the per-source bbox-debounce cache. Chart
- * plotters cycle through a small handful of viewports at once (the rendered
- * map view plus a few zoom-out parents), so 16 entries is plenty; the LRU
- * evicts the oldest if the user really pans through more.
+ * Hard ceiling on entries in the per-source bbox-debounce cache. At the
+ * cache's 0.1-degree tiles a coastal passage crosses a tile roughly every
+ * 6 nautical miles, so 64 entries keeps a full day's track (plus the zoom-out
+ * parents a chart plotter cycles through) warm instead of evicting the
+ * morning's tiles by lunch; each entry is one viewport's summaries, so the
+ * ceiling stays a few megabytes at worst. The LRU evicts the oldest if the
+ * user pans through more.
  */
-export const MAX_BBOX_CACHE_ENTRIES = 16
+export const MAX_BBOX_CACHE_ENTRIES = 64

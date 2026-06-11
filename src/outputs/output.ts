@@ -10,6 +10,7 @@
  */
 
 import type { ServerAPI } from '@signalk/server-api'
+import type { BridgeClearanceResolver } from './bridge-air-draft/bridge-clearance-resolver.js'
 import type { PoiSource } from '../inputs/poi-source.js'
 import type { PluginStatus } from '../status/plugin-status.js'
 import type { Bbox, PluginConfig, PoiSummary, Position } from '../shared/types.js'
@@ -57,6 +58,14 @@ export interface OutputContext {
   pois: PoiSource
   /** The status recorder. */
   status: PluginStatus
+  /**
+   * The run's shared bridge-clearance resolver, built once per start by the
+   * plugin shell. The bridge air-draft and route-hazard outputs both consume
+   * it, so the same bridge resolves once (one LRU, one in-flight dedupe set)
+   * when both are enabled, and the resolver's lifetime is visibly tied to
+   * the start that assembled this context.
+   */
+  bridgeClearanceResolver: BridgeClearanceResolver
 }
 
 /** A registrable consumer of POI data. */

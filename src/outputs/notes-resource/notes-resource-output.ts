@@ -9,11 +9,12 @@
  * server unregisters it on stop, so `stop()` here is a no-op.
  */
 
-import type { ResourceProviderMethods, SourceRef } from '@signalk/server-api'
+import type { ResourceProviderMethods } from '@signalk/server-api'
 import type { OutputContext, OutputHandle, OutputModule } from '../output.js'
 import { buildNoteResource, readProperty } from './note-builder.js'
 import { resolveBbox } from './resource-query.js'
 import { buildPoiTypesString } from '../../shared/poi-type-selection.js'
+import { debugIsEnabled } from '../../shared/debug.js'
 import { PLUGIN_ID } from '../../shared/plugin-id.js'
 import type { PoiSummary } from '../../shared/types.js'
 
@@ -40,12 +41,17 @@ function buildMethods (context: OutputContext): ResourceProviderMethods {
 
   return {
     listResources: async (query: Record<string, unknown>): Promise<Record<string, unknown>> => {
-      app.debug(`Incoming request to list note resources - query: ${JSON.stringify(query)}`)
+      const logDebug = debugIsEnabled(app.debug)
+      if (logDebug) {
+        app.debug(`Incoming request to list note resources - query: ${JSON.stringify(query)}`)
+      }
       // Resolve the bbox first: a Freeboard probe without a viewport is the
       // common no-op, and bailing here skips the upstream list request.
       const bbox = resolveBbox(query)
       if (bbox === null) {
-        app.debug(`Could not derive a bounding box from query ${JSON.stringify(query)}`)
+        if (logDebug) {
+          app.debug(`Could not derive a bounding box from query ${JSON.stringify(query)}`)
+        }
         return {}
       }
       if (poiTypes === null) {
@@ -115,7 +121,9 @@ function buildMethods (context: OutputContext): ResourceProviderMethods {
      * is a list-time-only artifact of the dedupe pass.
      */
     getResource: async (id: string, property?: string): Promise<object> => {
-      app.debug(`Incoming request to get note ${id}${property != null ? ` property ${property}` : ''}`)
+      if (debugIsEnabled(app.debug)) {
+        app.debug(`Incoming request to get note ${id}${property != null ? ` property ${property}` : ''}`)
+      }
       const view = await pois.getDetails(id)
       const note = buildNoteResource({
         name: view.name,
@@ -150,7 +158,7 @@ function buildMethods (context: OutputContext): ResourceProviderMethods {
       // happy on sources whose record carries no date.
       const response: Record<string, unknown> = {
         value,
-        $source: PLUGIN_ID as SourceRef
+        $source: PLUGIN_ID
       }
       if (note.timestamp !== undefined) {
         response.timestamp = note.timestamp

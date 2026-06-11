@@ -127,7 +127,7 @@ export function createPluginStatus (sources: ReadonlyArray<StatusSource>): Plugi
         state.apiReachable = false
         state.justSkipped = false
       }
-      recentErrors.unshift({ at: new Date().toISOString(), message })
+      recentErrors.unshift({ at: new Date().toISOString(), message, source })
       if (recentErrors.length > MAX_RECENT_ERRORS) {
         recentErrors.length = MAX_RECENT_ERRORS
       }

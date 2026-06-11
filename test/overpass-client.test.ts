@@ -179,7 +179,7 @@ test('getById rejects a malformed typed id without issuing a request', async () 
   )
 })
 
-test('close() aborts a new request and stops the retry loop', async () => {
+test('close() rejects a new request without touching the network', async () => {
   await withMockFetch(
     (_callIndex, init) => {
       if (init?.signal?.aborted === true) {
@@ -190,8 +190,9 @@ test('close() aborts a new request and stops the retry loop', async () => {
     async (calls) => {
       const client = createOverpassClient(endpoint, silentLog, fastLimits)
       client.close()
-      await assert.rejects(() => client.listPointsOfInterest(sampleBbox, '^(rock)$'))
-      assert.equal(calls.count, 1, 'expected no retry once the client is closed')
+      // The closed queue rejects at enqueue, before any fetch or retry runs.
+      await assert.rejects(() => client.listPointsOfInterest(sampleBbox, '^(rock)$'), /client closed/)
+      assert.equal(calls.count, 0, 'expected no fetch once the client is closed')
     }
   )
 })

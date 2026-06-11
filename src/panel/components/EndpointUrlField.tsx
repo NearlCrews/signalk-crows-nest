@@ -5,6 +5,7 @@
  */
 
 import type * as React from 'react'
+import LabeledField from './LabeledField.js'
 import { S } from '../styles.js'
 
 /** Stable id linking the visible label to its input. */
@@ -17,25 +18,26 @@ interface Props {
 
 /** The Overpass API endpoint field shown in the OpenSeaMap card body. */
 export default function EndpointUrlField ({ value, onChange }: Props): React.ReactElement {
-  // Same Fragment-with-sibling-hint shape NumberField uses, so the hint
-  // sits below the row instead of wrapping awkwardly beside the wide URL
-  // input on narrow widths.
   return (
-    <>
-      <div style={S.fieldRow}>
-        <label htmlFor={FIELD_ID} style={S.label}>Overpass API endpoint URL</label>
+    <LabeledField
+      id={FIELD_ID}
+      label='Overpass API endpoint URL'
+      hint={
+        <>
+          The OpenStreetMap Overpass API endpoint the OpenSeaMap source queries.
+          Leave the default unless you run your own Overpass instance.
+        </>
+      }
+    >
+      {(controlProps) => (
         <input
-          id={FIELD_ID}
+          {...controlProps}
           type='url'
           style={S.inputWide}
           value={value}
           onChange={(e) => onChange(e.target.value)}
         />
-      </div>
-      <p style={S.hintBelow}>
-        The OpenStreetMap Overpass API endpoint the OpenSeaMap source queries.
-        Leave the default unless you run your own Overpass instance.
-      </p>
-    </>
+      )}
+    </LabeledField>
   )
 }

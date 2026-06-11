@@ -23,7 +23,7 @@ import type { EncFeature, EncLayerKey, ScaleBand } from './enc-direct-types.js'
 import { LAYER_LABEL, LAYER_POI_TYPE, LAYER_SK_ICON, sordatToIsoTimestamp } from './s57-mapping.js'
 import { renderEncDirectDetail } from './enc-direct-detail.js'
 import { buildNoaaEncSections } from './noaa-enc-sections.js'
-import type { PoiSource } from '../poi-source.js'
+import { fetchDetailRecorded, type PoiSource } from '../poi-source.js'
 import { createBboxDebounceCache } from '../../shared/bbox-debounce.js'
 import { MAX_BBOX_CACHE_ENTRIES, MAX_POI_CACHE_ENTRIES } from '../../shared/cache.js'
 import { splitOnFirstUnderscore } from '../../shared/namespaced-id.js'
@@ -31,7 +31,7 @@ import { isValidLatitude, isValidLongitude } from '../../shared/numbers.js'
 import type { Bbox, PoiDetailView, PoiSummary, Position } from '../../shared/types.js'
 import { shouldSkipOutsideUsWaters } from '../../shared/us-waters.js'
 import { openSeaMapMarkerUrl } from '../../shared/map-link.js'
-import { filterByMinimumYear } from '../../shared/year-filter.js'
+import { passesMinimumYear } from '../../shared/year-filter.js'
 import type { PluginStatus } from '../../status/plugin-status.js'
 
 import { NOAA_ENC_SOURCE_ID } from '../../shared/source-ids.js'
@@ -275,13 +275,17 @@ export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
           // `<layer>_unknown` marker whose click-through would 404.
           const summary = toSummary(layerKey, feature)
           if (summary === null) continue
+          // Year filter is applied source-side so the rest of the pipeline
+          // (dedupe, notes output, alarms) never sees filtered features,
+          // and BEFORE the detail-cache insert: a filtered feature's marker
+          // is never placed, so caching it would only evict entries a
+          // click-through can actually reach.
+          if (!passesMinimumYear(summary.timestamp, minimumYear)) continue
           cache.set(summary.id, { layerKey, feature })
           summaries.push(summary)
         }
       }
-      // Year filter is applied source-side so the rest of the pipeline
-      // (dedupe, notes output, alarms) never sees filtered features.
-      return filterByMinimumYear(summaries, minimumYear)
+      return summaries
     },
     getDetails: async (id: string): Promise<PoiDetailView> => {
       const hit = cache.get(id)
@@ -297,28 +301,24 @@ export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
       if (parsed === undefined) {
         throw new Error(`Malformed NOAA ENC id "${id}"`)
       }
-      try {
-        const feature = await client.queryById({
+      // The shared wrapper owns the miss-vs-outage policy: the ArcGIS query
+      // answering normally keeps the source reachable even when the feature
+      // is gone or carries no usable geometry, so the throws below cannot
+      // flip the status row to unreachable.
+      const feature = await fetchDetailRecorded(status, NOAA_ENC_SOURCE_ID,
+        () => client.queryById({
           band, layerKey: parsed.layerKey, objectId: parsed.objectId
-        })
-        if (feature === undefined) {
-          throw new Error(`No NOAA ENC feature for "${id}"`)
-        }
-        const cachedFeature = { layerKey: parsed.layerKey, feature }
-        const view = toDetailView(cachedFeature)
-        if (view === null) {
-          throw new Error(`NOAA ENC feature "${id}" carries no usable geometry`)
-        }
-        cache.set(id, cachedFeature)
-        status.recordDetailSuccess(NOAA_ENC_SOURCE_ID)
-        return view
-      } catch (error) {
-        status.recordError(
-          NOAA_ENC_SOURCE_ID,
-          `Detail request failed: ${String(error)}`
-        )
-        throw error
+        }))
+      if (feature === undefined) {
+        throw new Error(`No NOAA ENC feature for "${id}"`)
       }
+      const cachedFeature = { layerKey: parsed.layerKey, feature }
+      const view = toDetailView(cachedFeature)
+      if (view === null) {
+        throw new Error(`NOAA ENC feature "${id}" carries no usable geometry`)
+      }
+      cache.set(id, cachedFeature)
+      return view
     },
     // The detail cache is the user-visible "POIs the plugin has loaded"
     // number on the status panel. The bbox-debounce cache is small and

@@ -11,18 +11,25 @@
  */
 
 import type * as React from 'react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import AlertsSection from './components/AlertsSection.js'
 import DataSourcesSection from './components/DataSourcesSection.js'
 import type { SourceSlug } from './components/DataSourcesSection.js'
+import { sourceCardDomId } from './components/DataSourceCard.js'
 import FooterBar from './components/FooterBar.js'
 import StatusBar from './components/StatusBar.js'
+import ThemeToggle from './components/ThemeToggle.js'
 import { useConfig } from './hooks/use-config.js'
 import { useStatus } from './hooks/use-status.js'
+import { useTheme } from './hooks/use-theme.js'
+import { SOURCE_SLUGS } from '../shared/source-ids.js'
 import { S, THEME_STYLE } from './styles.js'
 
 /** How long, in milliseconds, the "Saved" confirmation pill stays visible. */
 const SAVED_PILL_MS = 2500
+
+/** The card slugs the jump-to-error shortcut may expand; anything else is ignored. */
+const KNOWN_SLUGS: ReadonlySet<string> = new Set(SOURCE_SLUGS)
 
 interface Props {
   /** The plugin configuration supplied by the admin UI. Untyped at the federation boundary. */
@@ -33,8 +40,9 @@ interface Props {
 
 /** The configuration panel rendered inside the Signal K admin UI. */
 export default function PluginConfigurationPanel ({ configuration, save }: Props): React.ReactElement {
-  const { status, error } = useStatus()
+  const { status, error, lastUpdatedMs } = useStatus()
   const { state, savedState, dispatch, markSaved } = useConfig(configuration)
+  const [theme, setTheme] = useTheme()
   const [justSavedAt, setJustSavedAt] = useState<number | null>(null)
   // Per-source disclosure state lives at the panel root so it survives
   // saves, so the four DataSourceCards can iterate it with a stable map,
@@ -48,6 +56,18 @@ export default function PluginConfigurationPanel ({ configuration, save }: Props
     setExpandedCards((prev) => ({ ...prev, [cardId]: !(prev[cardId] === true) }))
   }, [])
 
+  // Jump-to-error shortcut: expand the offending source's card and scroll it
+  // into view. The KNOWN_SLUGS guard makes the SourceSlug cast safe against a
+  // status error recorded under an unexpected slug.
+  const jumpToSource = useCallback((slug: string): void => {
+    if (!KNOWN_SLUGS.has(slug)) return
+    setExpandedCards((prev) => ({ ...prev, [slug as SourceSlug]: true }))
+    // Scroll after the expansion has been committed and laid out.
+    requestAnimationFrame(() => {
+      document.getElementById(sourceCardDomId(slug))?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }, [])
+
   // Clear the "Saved" pill a short while after a save.
   useEffect(() => {
     if (justSavedAt === null) return
@@ -59,20 +79,46 @@ export default function PluginConfigurationPanel ({ configuration, save }: Props
   // inequality against the last-saved snapshot is a sound dirty check.
   const dirty = state !== savedState
 
+  // Warn before a tab close or reload while edits are unsaved, so a
+  // fat-fingered close cannot silently lose in-progress configuration.
+  useEffect(() => {
+    if (!dirty) return
+    const onBeforeUnload = (event: BeforeUnloadEvent): void => {
+      event.preventDefault()
+      // Chrome ignores preventDefault alone; setting returnValue is what
+      // actually triggers its leave-confirmation dialog.
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [dirty])
+
+  // handleSave reads the latest state through a ref so its identity does not
+  // change per keystroke; that keeps the memoized FooterBar from re-rendering
+  // until the dirty flag actually flips.
+  const stateRef = useRef(state)
+  stateRef.current = state
   const handleSave = useCallback((): void => {
-    save(state)
+    save(stateRef.current)
     markSaved()
     setJustSavedAt(Date.now())
-  }, [save, state, markSaved])
+  }, [save, markSaved])
 
   const handleDiscard = useCallback((): void => {
     dispatch({ type: 'discard', config: savedState })
   }, [dispatch, savedState])
 
   return (
-    <div className='ac-config-panel' style={S.root}>
+    <div
+      className='ac-config-panel'
+      data-ac-theme={theme === 'auto' ? undefined : theme}
+      style={S.root}
+    >
       <style>{THEME_STYLE}</style>
-      <StatusBar status={status} />
+      <div style={S.controlBar}>
+        <ThemeToggle value={theme} onChange={setTheme} />
+      </div>
+      <StatusBar status={status} lastUpdatedMs={lastUpdatedMs} onJumpToSource={jumpToSource} />
       {error !== null
         ? (
           <div role='alert' style={S.errorBanner}>

@@ -7,6 +7,10 @@ import { createPoiCache, type PoiDetailsSource } from '../src/inputs/active-capt
 import { createPoiStore } from '../src/inputs/active-captain/poi-store.js'
 import type { PoiDetails } from '../src/inputs/active-captain/active-captain-types.js'
 
+/** Sleep for `ms`, letting a short cache TTL lapse mid-test. */
+const delayMs = async (ms: number): Promise<void> =>
+  await new Promise(resolve => setTimeout(resolve, ms))
+
 /** Generous cache lifetime so entries never expire mid-test. */
 const TTL_MINUTES = 60
 
@@ -26,6 +30,8 @@ function makeDetails (id: string): PoiDetails {
 /** A PoiDetailsSource that counts calls and can be told to fail the next loads. */
 interface FakeSource extends PoiDetailsSource {
   callCount: () => number
+  /** Make the next `times` loads fail (Infinity for every later load). */
+  failNext: (times: number) => void
 }
 
 function createFakeSource (failTimes = 0): FakeSource {
@@ -40,7 +46,8 @@ function createFakeSource (failTimes = 0): FakeSource {
       }
       return makeDetails(id)
     },
-    callCount: () => calls
+    callCount: () => calls,
+    failNext: (times) => { remainingFailures = times }
   }
 }
 
@@ -88,7 +95,7 @@ test('an entry past its in-memory TTL is reloaded from the source', async () => 
 
   // Wait past the TTL window, then fetch again: the stale entry must trigger a
   // fresh load rather than serving an expired value.
-  await new Promise(resolve => setTimeout(resolve, 90))
+  await delayMs(90)
 
   const reloaded = await cache.get('1')
   assert.equal(reloaded.pointOfInterest.name, 'POI 1')
@@ -209,5 +216,43 @@ test('a failed load is not persisted to the store', async () => {
     // Nothing should have been persisted, so a fresh cache stays empty.
     const fresh = createPoiCache(createFakeSource(), TTL_MINUTES, {}, createPoiStore(dir, TTL_MINUTES))
     assert.equal(fresh.size(), 0)
+  })
+})
+
+test('a stale entry is served when the refetch fails (stale-on-error)', async () => {
+  // POI details are nearly static: when the freshness window has lapsed and
+  // the reload fails (offline, API down), the expired entry is the best
+  // available answer and must be served rather than rejecting.
+  const source = createFakeSource()
+  // 0.001 minutes is a 60ms TTL: short enough to expire within the test.
+  const cache = createPoiCache(source, 0.001)
+
+  await cache.get('1')
+  assert.equal(source.callCount(), 1)
+
+  await delayMs(90)
+  source.failNext(1)
+
+  const stale = await cache.get('1')
+  assert.equal(stale.pointOfInterest.name, 'POI 1', 'the lapsed entry is served on refetch failure')
+  assert.equal(source.callCount(), 2, 'the refetch was attempted before falling back')
+})
+
+test('a hydrated entry older than the freshness TTL is the offline fallback', async () => {
+  await withTempDir(async (dir) => {
+    // Seed the store with an entry, then build a cache whose freshness TTL
+    // has already lapsed for it. While the source is unreachable, the old
+    // entry must still serve; the store's long retention exists for this.
+    const seedStore = createPoiStore(dir)
+    seedStore.persist('1', makeDetails('1'))
+    seedStore.flush()
+    await delayMs(90)
+
+    const source = createFakeSource()
+    source.failNext(Number.POSITIVE_INFINITY)
+    const cache = createPoiCache(source, 0.001, {}, createPoiStore(dir))
+
+    const offline = await cache.get('1')
+    assert.equal(offline.pointOfInterest.name, 'POI 1', 'the retained entry serves offline')
   })
 })

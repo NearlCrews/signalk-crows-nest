@@ -27,12 +27,22 @@ export interface UseStatusResult {
   status: StatusSnapshot | null
   /** A non-fatal message describing the last failed poll, or null. */
   error: string | null
+  /**
+   * Epoch milliseconds of the most recent successful poll, or null before
+   * the first. Updated on every successful poll (unlike `status`, whose
+   * identity is kept stable across byte-identical payloads), so the status
+   * bar can show how fresh its readout is. The per-poll state change
+   * re-renders the panel root each 5 s tick; the section components are
+   * memoized so the tick reaches only the status bar.
+   */
+  lastUpdatedMs: number | null
 }
 
 /** Poll the plugin status endpoint and expose the latest snapshot. */
 export function useStatus (): UseStatusResult {
   const [status, setStatus] = useState<StatusSnapshot | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [lastUpdatedMs, setLastUpdatedMs] = useState<number | null>(null)
   const canceled = useRef(false)
   const inFlight = useRef(false)
   // The JSON of the last snapshot we committed to state, so a byte-identical
@@ -79,6 +89,7 @@ export function useStatus (): UseStatusResult {
             lastSnapshotJson.current = json
             setStatus(body)
           }
+          setLastUpdatedMs(Date.now())
           setError(null)
         }
       } catch (e) {
@@ -110,5 +121,5 @@ export function useStatus (): UseStatusResult {
     }
   }, [])
 
-  return { status, error }
+  return { status, error, lastUpdatedMs }
 }

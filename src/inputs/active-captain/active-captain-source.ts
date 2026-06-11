@@ -141,7 +141,11 @@ export function createActiveCaptainSource (config: ActiveCaptainSourceConfig): P
   // status, nor the on-disk store.
   let closed = false
 
-  const baseStore = createPoiStore(dataDir, cachingDurationMinutes)
+  // The store keeps its own long retention (30 days): the freshness TTL
+  // decides when an entry is refetched while online, while retention only
+  // bounds how long offline data is kept. Conflating the two would gut the
+  // offline cache whenever the TTL is short.
+  const baseStore = createPoiStore(dataDir)
   // Wrap the store so a load that resolves after close() does not write to
   // disk: that run is gone, and the entry would only mislead a later cold
   // start drawn from a partially torn-down run. Every other store method is

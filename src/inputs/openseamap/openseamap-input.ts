@@ -12,8 +12,12 @@ import { createOverpassClient } from './overpass-client.js'
 import { createOpenSeaMapSource } from './openseamap-source.js'
 import { dedupeRadiusSchema, dedupeToggleSchema } from '../dedupe-pois.js'
 import type { InputContext, InputModule } from '../poi-source.js'
-import { clampBboxDebounceSeconds, refreshSecondsSchema } from '../../shared/bbox-debounce.js'
-import { positiveFiniteNumber } from '../../shared/numbers.js'
+import {
+  clampBboxDebounceSeconds,
+  DEFAULT_OPENSEAMAP_DEBOUNCE_SECONDS,
+  refreshSecondsSchema
+} from '../../shared/bbox-debounce.js'
+import { cappedDedupeRadius } from '../../shared/dedupe-radius.js'
 import { SEAMARK_GROUP_IDS } from '../../shared/seamark-groups.js'
 import { OPENSEAMAP_SOURCE_ID } from '../../shared/source-ids.js'
 import type { PluginConfig } from '../../shared/types.js'
@@ -66,7 +70,8 @@ const CONFIG_SCHEMA: Record<string, unknown> = {
     'Earliest OpenSeaMap update year (0 to import every element)'
   ),
   openSeaMapRefreshSeconds: refreshSecondsSchema(
-    'OpenSeaMap bbox-debounce window, in seconds (0 to query Overpass on every list call)'
+    'OpenSeaMap bbox-debounce window, in seconds (0 to query Overpass on every list call)',
+    DEFAULT_OPENSEAMAP_DEBOUNCE_SECONDS
   )
 }
 
@@ -103,14 +108,16 @@ export const openSeaMapInput: InputModule = {
   isDedupeEnabled: (config: PluginConfig) => config.openSeaMapDedupe !== false,
   // Per-source merge radius surfaced on the OpenSeaMap card.
   dedupeRadiusMeters: (config: PluginConfig) =>
-    positiveFiniteNumber(config.openSeaMapDedupeRadiusMeters),
+    cappedDedupeRadius(config.openSeaMapDedupeRadiusMeters),
   createSource: (context: InputContext) => {
     const { app, config, status } = context
     return createOpenSeaMapSource({
       client: createOverpassClient(resolveEndpoints(config), app),
       seamarkGroups: resolveSeamarkGroups(config.openSeaMapSeamarkGroups),
       minimumYear: clampMinimumYear(config.openSeaMapMinimumYear),
-      refreshSeconds: clampBboxDebounceSeconds(config.openSeaMapRefreshSeconds),
+      refreshSeconds: clampBboxDebounceSeconds(
+        config.openSeaMapRefreshSeconds, DEFAULT_OPENSEAMAP_DEBOUNCE_SECONDS
+      ),
       status
     })
   }

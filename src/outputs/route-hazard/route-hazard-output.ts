@@ -16,13 +16,12 @@ import { createCourseReader } from './course-reader.js'
 import { createRouteHazardAlarms, type BridgeClearanceVerdict } from './route-hazard-alarms.js'
 import { CORRIDOR_POI_TYPES, routeLegPoints, scanRouteCorridor } from './route-corridor.js'
 import type { OutputContext, OutputHandle, OutputModule, PositionScanContributor } from '../output.js'
-import { createBridgeClearanceResolver, type BridgeClearanceResolver } from '../bridge-air-draft/bridge-clearance-resolver.js'
+import type { BridgeClearanceResolver } from '../bridge-air-draft/bridge-clearance-resolver.js'
 import { BRIDGE_POI_TYPE } from '../bridge-air-draft/bridge-clearance-alarms.js'
 import { bridgeBlocksVessel, clampClearanceMargin, readVesselAirDraft } from '../../shared/bridge-clearance.js'
-import { positiveFiniteNumber } from '../../shared/numbers.js'
 import { distanceMeters, positionToBbox, unionBbox } from '../../geo/position-utilities.js'
 import type { Bbox, CorridorPoi, PoiSummary, Position, RoutePolyline } from '../../shared/types.js'
-import { DEFAULT_ROUTE_CORRIDOR_WIDTH_METERS } from '../../shared/route-corridor.js'
+import { clampRouteCorridorWidth, routeCorridorWidthSchema } from '../../shared/route-corridor.js'
 
 /** Meters in a nautical mile. */
 const METERS_PER_NAUTICAL_MILE = 1852
@@ -42,12 +41,9 @@ const CONFIG_SCHEMA: Record<string, unknown> = {
     title: 'Scan the active route ahead for hazards, bridges, and locks (uses the Course API)',
     default: false
   },
-  routeCorridorWidthMeters: {
-    type: 'number',
-    title: 'Route corridor half-width in meters (a hazard is flagged within this distance either side of the route)',
-    default: DEFAULT_ROUTE_CORRIDOR_WIDTH_METERS,
-    minimum: 1
-  }
+  routeCorridorWidthMeters: routeCorridorWidthSchema(
+    'Route corridor half-width in meters (a hazard is flagged within this distance either side of the route)'
+  )
 }
 
 /**
@@ -159,7 +155,7 @@ export const routeHazardOutput: OutputModule = {
   isEnabled: (config) => config.enableRouteHazardScan === true,
   start: (context: OutputContext): OutputHandle => {
     const { app, config } = context
-    const corridorWidthMeters = positiveFiniteNumber(config.routeCorridorWidthMeters) ?? DEFAULT_ROUTE_CORRIDOR_WIDTH_METERS
+    const corridorWidthMeters = clampRouteCorridorWidth(config.routeCorridorWidthMeters)
     // The alarms are built before the course reader: createCourseReader opens
     // two Course API delta subscriptions, so if alarm construction were to
     // throw after that, those subscriptions would be orphaned with no stop()
@@ -175,10 +171,9 @@ export const routeHazardOutput: OutputModule = {
     // appears later in the voyage.
     const bridgeCheck: BridgeCheck | null = config.enableBridgeAirDraftCheck === true
       ? {
-          resolver: createBridgeClearanceResolver({
-            getDetails: (id) => context.pois.getDetails(id),
-            debug: (message) => { app.debug(message) }
-          }),
+          // Shared with the bridge air-draft output so the same bridge
+          // resolves once when both checks are enabled.
+          resolver: context.bridgeClearanceResolver,
           marginMeters: clampClearanceMargin(config.bridgeClearanceMarginMeters),
           getAirDraft: () => readVesselAirDraft(app, config.vesselAirDraftMeters)
         }

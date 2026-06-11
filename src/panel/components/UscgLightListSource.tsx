@@ -9,12 +9,12 @@
 import type * as React from 'react'
 import type { Dispatch } from 'react'
 import type { ConfigAction } from '../config-reducer.js'
+import { DEFAULT_MINIMUM_YEAR } from '../../shared/year-filter.js'
 import {
-  DEFAULT_MINIMUM_YEAR,
-  DEFAULT_USCG_LIGHT_LIST_REFRESH_HOURS,
-  MAX_USCG_LIGHT_LIST_REFRESH_HOURS,
-  MIN_USCG_LIGHT_LIST_REFRESH_HOURS
-} from '../normalize-config.js'
+  DEFAULT_REFRESH_HOURS,
+  MAX_REFRESH_HOURS,
+  MIN_REFRESH_HOURS
+} from '../../shared/refresh-hours.js'
 import { S } from '../styles.js'
 import type { PluginConfig } from '../../shared/types.js'
 import MergeWithActiveCaptain from './MergeWithActiveCaptain.js'
@@ -39,10 +39,10 @@ export default function UscgLightListSource ({ state, dispatch }: Props): React.
           id='ac-uscg-light-list-refresh-hours'
           label='Refresh period (hours)'
           hint='How often the plugin re-downloads the NAVCEN district files in the background. Longer periods reduce traffic; shorter periods pick up new aids sooner.'
-          value={state.uscgLightListRefreshHours ?? DEFAULT_USCG_LIGHT_LIST_REFRESH_HOURS}
+          value={state.uscgLightListRefreshHours ?? DEFAULT_REFRESH_HOURS}
           onChange={(hours) => dispatch({ type: 'setUscgLightListRefreshHours', hours })}
-          min={MIN_USCG_LIGHT_LIST_REFRESH_HOURS}
-          max={MAX_USCG_LIGHT_LIST_REFRESH_HOURS}
+          min={MIN_REFRESH_HOURS}
+          max={MAX_REFRESH_HOURS}
           step={1}
           integer
         />

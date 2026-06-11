@@ -24,6 +24,21 @@ export const SCALE_BANDS: readonly ScaleBand[] = [
 /** Default scale band when the configuration omits or mis-sets one. */
 export const DEFAULT_SCALE_BAND: ScaleBand = 'coastal'
 
+/**
+ * Human-readable label for each ENC chart scale band, kept next to the band
+ * list so the two cannot drift. The panel's band selector and the collapsed
+ * accordion summary both read it, so the summary shows "Harbor" rather than
+ * the raw NOAA wire value "harbour".
+ */
+export const SCALE_BAND_LABELS: Readonly<Record<ScaleBand, string>> = {
+  overview: 'Overview',
+  general: 'General',
+  coastal: 'Coastal',
+  approach: 'Approach',
+  harbour: 'Harbor',
+  berthing: 'Berthing'
+}
+
 /** Coerce a raw config value to a known scale band, falling back to the default. */
 export function resolveScaleBand (raw: unknown): ScaleBand {
   return typeof raw === 'string' && (SCALE_BANDS as readonly string[]).includes(raw)

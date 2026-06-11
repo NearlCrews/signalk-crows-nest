@@ -15,7 +15,7 @@ import ToggleFieldset from './ToggleFieldset.js'
 import {
   MIN_CLEARANCE_MARGIN_METERS,
   MAX_CLEARANCE_MARGIN_METERS
-} from '../normalize-config.js'
+} from '../../shared/bridge-clearance.js'
 
 /**
  * Smallest fallback air draft the field accepts. Zero is valid and means rely

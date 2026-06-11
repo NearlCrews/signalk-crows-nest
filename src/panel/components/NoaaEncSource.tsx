@@ -9,34 +9,18 @@
 import type * as React from 'react'
 import type { Dispatch } from 'react'
 import type { ConfigAction } from '../config-reducer.js'
-import {
-  DEFAULT_MINIMUM_YEAR,
-  DEFAULT_NOAA_ENC_SCALE_BAND,
-  DEFAULT_REFRESH_SECONDS,
-  NOAA_ENC_SCALE_BANDS
-} from '../normalize-config.js'
+import { DEFAULT_MINIMUM_YEAR } from '../../shared/year-filter.js'
+import { DEFAULT_NOAA_ENC_DEBOUNCE_SECONDS } from '../../shared/bbox-debounce.js'
 import { S } from '../styles.js'
+import { DEFAULT_SCALE_BAND, SCALE_BAND_LABELS, SCALE_BANDS } from '../../shared/scale-band.js'
 import type { PluginConfig } from '../../shared/types.js'
+import LabeledField from './LabeledField.js'
 import MergeWithActiveCaptain from './MergeWithActiveCaptain.js'
 import MinimumYearField from './MinimumYearField.js'
 import RefreshSecondsField from './RefreshSecondsField.js'
 
 /** Stable id linking the band selector's visible label to its `<select>`. */
 const BAND_FIELD_ID = 'ac-noaa-enc-scale-band'
-
-/**
- * Human-readable label for each ENC chart scale band. Exported so the
- * collapsed accordion summary in DataSourcesSection reads "Harbor" rather
- * than the raw NOAA wire value "harbour".
- */
-export const BAND_LABELS: Readonly<Record<typeof NOAA_ENC_SCALE_BANDS[number], string>> = {
-  overview: 'Overview',
-  general: 'General',
-  coastal: 'Coastal',
-  approach: 'Approach',
-  harbour: 'Harbor',
-  berthing: 'Berthing'
-}
 
 interface Props {
   state: PluginConfig
@@ -51,31 +35,33 @@ export default function NoaaEncSource ({ state, dispatch }: Props): React.ReactE
   const includeWrecks = state.noaaEncIncludeWrecks !== false
   const includeObstructions = state.noaaEncIncludeObstructions !== false
   const includeRocks = state.noaaEncIncludeRocks === true
-  const band = state.noaaEncScaleBand ?? DEFAULT_NOAA_ENC_SCALE_BAND
+  const band = state.noaaEncScaleBand ?? DEFAULT_SCALE_BAND
   const minimumSurveyYear = state.noaaEncMinimumSurveyYear ?? DEFAULT_MINIMUM_YEAR
 
   return (
     <>
       <fieldset style={S.group}>
         <legend style={S.groupTitle}>Import layers</legend>
-        <div style={S.fieldRow}>
-          <label htmlFor={BAND_FIELD_ID} style={S.label}>Chart scale band</label>
-          <select
-            id={BAND_FIELD_ID}
-            style={S.input}
-            value={band}
-            onChange={(e) => dispatch({ type: 'setNoaaEncScaleBand', band: e.target.value })}
-          >
-            {NOAA_ENC_SCALE_BANDS.map((bandId) => (
-              <option key={bandId} value={bandId}>{BAND_LABELS[bandId]}</option>
-            ))}
-          </select>
-        </div>
-        <p style={S.hintBelow}>
-          Which ENC chart scale to query. Overview returns large-area features
-          only; berthing returns the densest, finest detail. Coastal is the
-          recommended default for most underway use.
-        </p>
+        <LabeledField
+          id={BAND_FIELD_ID}
+          label='Chart scale band'
+          hint={'Which ENC chart scale to query. Overview returns large-area ' +
+            'features only; berthing returns the densest, finest detail. ' +
+            'Coastal is the recommended default for most underway use.'}
+        >
+          {(controlProps) => (
+            <select
+              {...controlProps}
+              style={S.input}
+              value={band}
+              onChange={(e) => dispatch({ type: 'setNoaaEncScaleBand', band: e.target.value })}
+            >
+              {SCALE_BANDS.map((bandId) => (
+                <option key={bandId} value={bandId}>{SCALE_BAND_LABELS[bandId]}</option>
+              ))}
+            </select>
+          )}
+        </LabeledField>
         <div style={S.checkboxGrid}>
           <label style={S.checkboxLabel}>
             <input
@@ -122,14 +108,10 @@ export default function NoaaEncSource ({ state, dispatch }: Props): React.ReactE
         <RefreshSecondsField
           id='ac-noaa-enc-refresh-seconds'
           label='Refresh period (seconds)'
-          hint={'How long to reuse the most recent ENC Direct result for the ' +
-            'same chart viewport before re-querying. A Freeboard refresh ' +
-            'burst on a stationary view stays inside the cache; a user who ' +
-            'pans to a fresh view re-queries immediately. NOAA refreshes ENC ' +
-            'data weekly, so a sub-minute cadence here mostly protects the ' +
-            'ArcGIS service from your own chart plotter. Leave at 0 to query ' +
-            'ENC Direct on every list call.'}
-          value={state.noaaEncRefreshSeconds ?? DEFAULT_REFRESH_SECONDS}
+          upstreamHint={'NOAA refreshes ENC data weekly, so the 30 minute ' +
+            'default only spares the ArcGIS service from re-serving identical ' +
+            'wrecks; raise it freely.'}
+          value={state.noaaEncRefreshSeconds ?? DEFAULT_NOAA_ENC_DEBOUNCE_SECONDS}
           onChange={(seconds) => dispatch({ type: 'setNoaaEncRefreshSeconds', seconds })}
         />
         <MinimumYearField

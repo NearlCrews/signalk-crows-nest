@@ -184,7 +184,7 @@ test('start builds the source and starts the enabled outputs', () => {
   assert.equal(input.sources.length, 1, 'one POI source is built')
   assert.equal(outA.handles.length, 1, 'output A is started')
   assert.equal(outB.handles.length, 1, 'output B is started')
-  assert.deepEqual(stub.statusMessages, ['Ready, waiting for resource requests'])
+  assert.deepEqual(stub.statusMessages, ['Starting', 'Ready, 1 source(s) and 2 output(s) enabled'])
   plugin.stop()
 })
 
@@ -294,7 +294,7 @@ test('an output start failure is surfaced as a plugin error, not as "Ready"', ()
   assert.equal(healthy.handles.length, 1, 'the healthy output still started')
   assert.equal(stub.pluginErrors.length, 1, 'a plugin error is surfaced')
   assert.match(stub.pluginErrors[0], /failing/, 'the error names the failed output')
-  assert.deepEqual(stub.statusMessages, [], '"Ready" must not mask the failure')
+  assert.deepEqual(stub.statusMessages, ['Starting'], '"Ready" must not mask the failure')
   plugin.stop()
 })
 
@@ -311,7 +311,74 @@ test('a position monitor construction failure is isolated and surfaced', () => {
   assert.equal(driven.handles.length, 1, 'the position-driven output is still started')
   assert.equal(stub.pluginErrors.length, 1, 'a plugin error is surfaced')
   assert.match(stub.pluginErrors[0], /alarms are not running/)
-  assert.deepEqual(stub.statusMessages, [], 'the bland Ready status does not overwrite the error')
+  assert.deepEqual(stub.statusMessages, ['Starting'], 'the bland Ready status does not overwrite the error')
+  plugin.stop()
+})
+
+test('a latched start error is not overwritten by an output status write', () => {
+  // The notes output reports each successful list request through
+  // setPluginStatus. The server shares one status slot, last writer wins, so
+  // when start() latched a plugin error (dead monitor or failed output) that
+  // per-request healthy status must not clear it: the guarded app the outputs
+  // receive suppresses status writes while the latch is set.
+  const input = createStubInput()
+  let capturedApp: ServerAPI | undefined
+  const capturing: OutputModule = {
+    id: 'capturing',
+    name: 'capturing',
+    configSchema: {},
+    isEnabled: () => true,
+    start: (context) => {
+      capturedApp = context.app
+      return { stop: () => {} }
+    }
+  }
+  const failing = createStubOutput({ id: 'failing', startThrows: true })
+  const stub = createStubApp()
+  const plugin = createPlugin(
+    stub.app,
+    createInputRegistry([input.module]),
+    createOutputRegistry([capturing, failing.module])
+  )
+  plugin.start(CONFIG, noopRestart)
+  assert.equal(stub.pluginErrors.length, 1, 'the failed output latched a plugin error')
+  capturedApp?.setPluginStatus('5 point(s) of interest from the last search')
+  assert.deepEqual(
+    stub.statusMessages,
+    ['Starting'],
+    'the healthy write is suppressed while the error is latched'
+  )
+  capturedApp?.setPluginError('list failed')
+  assert.equal(stub.pluginErrors.length, 2, 'error writes still delegate to the real app')
+  plugin.stop()
+})
+
+test('output status writes pass through when start succeeded', () => {
+  const input = createStubInput()
+  let capturedApp: ServerAPI | undefined
+  const capturing: OutputModule = {
+    id: 'capturing',
+    name: 'capturing',
+    configSchema: {},
+    isEnabled: () => true,
+    start: (context) => {
+      capturedApp = context.app
+      return { stop: () => {} }
+    }
+  }
+  const stub = createStubApp()
+  const plugin = createPlugin(
+    stub.app,
+    createInputRegistry([input.module]),
+    createOutputRegistry([capturing])
+  )
+  plugin.start(CONFIG, noopRestart)
+  capturedApp?.setPluginStatus('5 point(s) of interest from the last search')
+  assert.deepEqual(stub.statusMessages, [
+    'Starting',
+    'Ready, 1 source(s) and 1 output(s) enabled',
+    '5 point(s) of interest from the last search'
+  ])
   plugin.stop()
 })
 

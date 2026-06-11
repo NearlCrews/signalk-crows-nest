@@ -12,13 +12,12 @@
  */
 
 import type * as React from 'react'
+import { memo } from 'react'
 import type { Dispatch } from 'react'
 import type { ConfigAction } from '../config-reducer.js'
-import {
-  DEFAULT_PROXIMITY_ALARM_RADIUS_METERS,
-  DEFAULT_ROUTE_CORRIDOR_WIDTH_METERS,
-  DEFAULT_CLEARANCE_MARGIN_METERS
-} from '../normalize-config.js'
+import { DEFAULT_PROXIMITY_ALARM_RADIUS_METERS } from '../../shared/proximity-radius.js'
+import { DEFAULT_ROUTE_CORRIDOR_WIDTH_METERS } from '../../shared/route-corridor.js'
+import { DEFAULT_CLEARANCE_MARGIN_METERS, NO_FALLBACK_AIR_DRAFT_METERS } from '../../shared/bridge-clearance.js'
 import type { PluginConfig } from '../../shared/types.js'
 import ProximityAlarmFields from './ProximityAlarmFields.js'
 import RouteHazardScanFields from './RouteHazardScanFields.js'
@@ -30,8 +29,12 @@ interface Props {
   dispatch: Dispatch<ConfigAction>
 }
 
-/** The Alerts section shown in the configuration panel. */
-export default function AlertsSection ({ state, dispatch }: Props): React.ReactElement {
+/**
+ * The Alerts section shown in the configuration panel. Memoized so the 5 s
+ * status-poll tick on the panel root does not cascade here: `state` and
+ * `dispatch` both keep their identity across a tick.
+ */
+export default memo(function AlertsSection ({ state, dispatch }: Props): React.ReactElement {
   // Default-expanded only when the section has nothing to reveal: if
   // either alarm is already enabled, open the section so the operator
   // can see the live settings at a glance. SectionBox reads
@@ -57,7 +60,7 @@ export default function AlertsSection ({ state, dispatch }: Props): React.ReactE
       />
       <BridgeAirDraftFields
         enabled={state.enableBridgeAirDraftCheck === true}
-        airDraftMeters={state.vesselAirDraftMeters ?? 0}
+        airDraftMeters={state.vesselAirDraftMeters ?? NO_FALLBACK_AIR_DRAFT_METERS}
         marginMeters={state.bridgeClearanceMarginMeters ?? DEFAULT_CLEARANCE_MARGIN_METERS}
         onToggleEnabled={(enabled) => dispatch({ type: 'setBridgeAirDraftCheckEnabled', enabled })}
         onChangeAirDraft={(meters) => dispatch({ type: 'setVesselAirDraft', meters })}
@@ -65,4 +68,4 @@ export default function AlertsSection ({ state, dispatch }: Props): React.ReactE
       />
     </SectionBox>
   )
-}
+})

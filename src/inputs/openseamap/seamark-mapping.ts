@@ -62,20 +62,6 @@ const SEAMARK_MAPPING: Readonly<Record<string, { type: PoiType, icon: string, la
 /** Generic fallback icon, used when no specific Freeboard icon fits. */
 const FALLBACK_SK_ICON = 'notice-to-mariners'
 
-/** Map a `seamark:type` value to a `PoiType`, defaulting to `Unknown`. */
-export function seamarkToPoiType (value: string): PoiType {
-  return SEAMARK_MAPPING[value]?.type ?? 'Unknown'
-}
-
-/**
- * Map a `seamark:type` value onto a Freeboard-SK note icon name (without the
- * `sk-` prefix the renderer applies), defaulting to a generic notice glyph for
- * an unmapped value so a missing icon never renders as a bare yellow square.
- */
-export function seamarkSkIcon (value: string): string {
-  return SEAMARK_MAPPING[value]?.icon ?? FALLBACK_SK_ICON
-}
-
 /** Plain-English label for a `seamark:type` value, or undefined when unmapped. */
 export function seamarkLabel (value: string): string | undefined {
   return SEAMARK_MAPPING[value]?.label

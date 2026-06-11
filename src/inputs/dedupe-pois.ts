@@ -22,7 +22,8 @@
 
 import { distanceMeters } from '../geo/position-utilities.js'
 import { ACTIVE_CAPTAIN_SOURCE_ID } from '../shared/source-ids.js'
-import { DEFAULT_DEDUPE_RADIUS_METERS } from '../shared/dedupe-radius.js'
+import { DEFAULT_DEDUPE_RADIUS_METERS, MAX_DEDUPE_RADIUS_METERS } from '../shared/dedupe-radius.js'
+import { boundedNumberSchema } from '../shared/config-schema.js'
 import type { PoiSummary, PoiType, Position } from '../shared/types.js'
 
 /**
@@ -62,7 +63,9 @@ export function dedupeToggleSchema (title: string): Record<string, unknown> {
  * meters. Defaults to {@link DEFAULT_DEDUPE_RADIUS_METERS}.
  */
 export function dedupeRadiusSchema (title: string): Record<string, unknown> {
-  return { type: 'number', title, default: DEFAULT_DEDUPE_RADIUS_METERS, minimum: MIN_SAFE_RADIUS_METERS }
+  return boundedNumberSchema(
+    title, DEFAULT_DEDUPE_RADIUS_METERS, MIN_SAFE_RADIUS_METERS, MAX_DEDUPE_RADIUS_METERS
+  )
 }
 
 /** Meters per degree of latitude, used to project positions for the grid. */

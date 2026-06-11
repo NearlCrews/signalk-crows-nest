@@ -21,6 +21,15 @@ export function toFiniteNumber (value: unknown): number | null {
 }
 
 /**
+ * Narrow an unknown value into a finite `number`, or `undefined` when it is
+ * not. The `undefined` twin of {@link toFiniteNumber}, for the wire parsers
+ * whose record shapes use optional fields rather than `null` sentinels.
+ */
+export function finiteOrUndefined (value: unknown): number | undefined {
+  return toFiniteNumber(value) ?? undefined
+}
+
+/**
  * Narrow an unknown value into a strictly positive finite `number`, or
  * return `null` when it is not. The three input modules' optional
  * config-key validators all want this exact shape (a positive merge
@@ -51,6 +60,20 @@ export function clampNumber (
   if (value < min) value = min
   else if (value > max) value = max
   return truncate ? Math.trunc(value) : value
+}
+
+/**
+ * Resolve an optional positive numeric config value: a non-positive or
+ * non-numeric value falls back to `fallback` (matching the
+ * {@link positiveFiniteNumber} optional-default idiom), and a usable value is
+ * capped at `max`. The bounded config-key modules (cache-duration,
+ * proximity-radius, route-corridor) delegate here so the
+ * fallback-then-cap policy lives once, the way {@link clampNumber} holds the
+ * clamp-into-range policy.
+ */
+export function positiveCappedNumber (raw: unknown, max: number, fallback: number): number {
+  const value = positiveFiniteNumber(raw) ?? fallback
+  return Math.min(value, max)
 }
 
 /** True when `value` is a finite latitude in the standard `[-90, 90]` range. */

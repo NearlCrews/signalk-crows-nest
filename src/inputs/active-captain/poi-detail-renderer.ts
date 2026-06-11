@@ -58,8 +58,12 @@ function hasNotes (notes: PoiNote[] | undefined): boolean {
   return (notes?.length ?? 0) > 0
 }
 
-/** True for a string value that is present and not the API's 'Unknown'. */
-function isKnown (value: string | undefined): boolean {
+/**
+ * True for a string value that is present and not the API's 'Unknown'.
+ * Exported so the section builder applies the same "Unknown means absent"
+ * rule the HTML renderer does; the two outputs must not drift.
+ */
+export function isKnown (value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value !== 'Unknown'
 }
 
@@ -319,7 +323,7 @@ function buildEnvironment (): typeof Handlebars {
   // Renders "label: value" for a known value, and nothing for an absent or
   // 'Unknown' one. Used for descriptive (non-tri-state) fields.
   env.registerHelper('knownLine', (label: unknown, value: unknown): Handlebars.SafeString | string => {
-    if (typeof value !== 'string' || value.length === 0 || value === 'Unknown') {
+    if (!isKnown(value)) {
       return ''
     }
     return new env.SafeString(

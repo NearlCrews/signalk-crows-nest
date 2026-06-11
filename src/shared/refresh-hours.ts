@@ -7,9 +7,15 @@
  */
 
 import { clampNumber } from './numbers.js'
+import { boundedNumberSchema } from './config-schema.js'
 
-/** Default USCG Light List refresh period, in hours. */
-export const DEFAULT_REFRESH_HOURS = 6
+/**
+ * Default USCG Light List refresh period, in hours: daily. NAVCEN publishes
+ * Light List updates weekly, and the client's conditional GET makes a
+ * no-change refresh nearly free, so a daily check loses nothing while
+ * sparing the endpoint three needless sweeps a day.
+ */
+export const DEFAULT_REFRESH_HOURS = 24
 
 /** Lower bound on the configurable USCG Light List refresh, in hours. */
 export const MIN_REFRESH_HOURS = 1
@@ -24,5 +30,5 @@ export function clampRefreshHours (raw: unknown): number {
 
 /** Config-schema fragment for the USCG Light List refresh-hours field. */
 export function refreshHoursSchema (title: string): Record<string, unknown> {
-  return { type: 'number', title, default: DEFAULT_REFRESH_HOURS, minimum: MIN_REFRESH_HOURS, maximum: MAX_REFRESH_HOURS }
+  return boundedNumberSchema(title, DEFAULT_REFRESH_HOURS, MIN_REFRESH_HOURS, MAX_REFRESH_HOURS)
 }

@@ -153,6 +153,10 @@ export function createUscgLightListSource (
 
   return {
     id: USCG_LIGHT_LIST_SOURCE_ID,
+    // The aggregate's `poiTypes` argument is deliberately ignored, matching
+    // the NOAA ENC source: that string is the ActiveCaptain type selection,
+    // and this source's own enable toggle is its type filter (every record
+    // is an aid to navigation).
     listPointsOfInterest: async (bbox: Bbox): Promise<PoiSummary[]> => {
       // The store's spatial tile index narrows the candidate set from the
       // full ~57,700-record map to the records in the bbox's tiles.

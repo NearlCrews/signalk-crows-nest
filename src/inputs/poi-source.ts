@@ -84,3 +84,29 @@ export interface InputModule {
   /** Build the source. Called once per plugin start. */
   createSource: (context: InputContext) => PoiSource
 }
+
+/**
+ * Run a detail fetch with the shared reachability-recording policy: a
+ * transport failure records a per-source error, while a normal upstream
+ * answer records a detail success even when the feature turns out to be
+ * absent or unusable, because an API answering normally is not a
+ * reachability failure. The OpenSeaMap and NOAA ENC sources both wrap their
+ * client call in this helper (mirroring the ActiveCaptain 404 handling), so
+ * the miss-vs-outage policy lives once: a not-found thrown by the caller
+ * AFTER this resolves cannot flip the status row to unreachable.
+ */
+export async function fetchDetailRecorded<T> (
+  status: PluginStatus,
+  sourceId: string,
+  fetchUpstream: () => Promise<T>
+): Promise<T> {
+  let result: T
+  try {
+    result = await fetchUpstream()
+  } catch (error) {
+    status.recordError(sourceId, `Detail request failed: ${String(error)}`)
+    throw error
+  }
+  status.recordDetailSuccess(sourceId)
+  return result
+}

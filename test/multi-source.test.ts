@@ -97,7 +97,15 @@ function startMultiSource (dataDir: string): {
   const source = inputs.createSource({
     app, config: CONFIG, status, dataDir, getCurrentPosition: () => undefined
   })
-  const context: OutputContext = { app, config: CONFIG, pois: source, status }
+  const context: OutputContext = {
+    app,
+    config: CONFIG,
+    pois: source,
+    status,
+    // The notes output never touches the resolver; an inert stub satisfies
+    // the contract the plugin shell normally fills.
+    bridgeClearanceResolver: { clearanceMeters: () => null }
+  }
   notesResourceOutput.start(context)
 
   const methods = provider.methods as Record<string, unknown>

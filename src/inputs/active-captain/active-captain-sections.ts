@@ -31,7 +31,7 @@ import type {
   PoiNote
 } from './active-captain-types.js'
 import { isDefiniteAvailability, poiTypeShowsReviews } from './active-captain-types.js'
-import { noteFieldLabel } from './poi-detail-renderer.js'
+import { isKnown, noteFieldLabel } from './poi-detail-renderer.js'
 import { pushSection } from '../../shared/normalized-detail.js'
 import type { NormalizedItem, NormalizedSection } from '../../shared/normalized-detail.js'
 import { safeLinkUrl } from '../../shared/url-safety.js'
@@ -106,6 +106,16 @@ function pushLink (items: NormalizedItem[], label: string, url: string | undefin
   if (safe !== undefined) {
     items.push({ label, value: safe, kind: 'link' })
   }
+}
+
+/**
+ * Prefix a raw contact value into a URL (`tel:`, `mailto:`), or `undefined`
+ * when the value is absent or empty. The same present-text gate the HTML
+ * template's `{{#if}}` applies, so the two phone and email paths stay in
+ * lockstep through one helper.
+ */
+function prefixedLink (prefix: string, raw: string | undefined): string | undefined {
+  return typeof raw === 'string' && raw.length > 0 ? `${prefix}${raw}` : undefined
 }
 
 /**
@@ -195,14 +205,12 @@ export function buildActiveCaptainSections (entity: PoiDetails): NormalizedSecti
   if (contact !== undefined) {
     const items: NormalizedItem[] = []
     pushText(items, 'VHF', contact.vhfChannel)
-    pushText(items, 'Phone', contact.phone)
+    // Phone, email, and website are emitted as link items only after the
+    // scheme guard, matching the HTML path: the template hardcodes tel: and
+    // mailto: hrefs, so the structured items carry the same URL forms.
+    pushLink(items, 'Phone', prefixedLink('tel:', contact.phone))
     pushText(items, 'After hours', contact.afterHourContact)
-    // Email and Website are emitted as link items only after the scheme guard,
-    // matching the HTML path. The email rides as a mailto: URL, as the template
-    // hardcodes a mailto: href.
-    pushLink(items, 'Email', typeof contact.email === 'string' && contact.email.length > 0
-      ? `mailto:${contact.email}`
-      : undefined)
+    pushLink(items, 'Email', prefixedLink('mailto:', contact.email))
     pushLink(items, 'Website', contact.website)
     pushSection(sections, 'contact', 'Contact', items)
   }
@@ -288,7 +296,7 @@ export function buildActiveCaptainSections (entity: PoiDetails): NormalizedSecti
   const navigation = entity.navigation
   if (navigation !== undefined) {
     const items: NormalizedItem[] = []
-    if (typeof navigation.current === 'string' && navigation.current.length > 0 && navigation.current !== 'Unknown') {
+    if (isKnown(navigation.current)) {
       items.push({ label: 'Current', value: navigation.current, kind: 'text' })
     }
     pushAvailability(items, 'Fixed bridge', navigation.fixedBridge)

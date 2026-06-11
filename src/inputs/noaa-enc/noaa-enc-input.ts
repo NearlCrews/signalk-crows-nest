@@ -14,8 +14,12 @@ import { createEncDirectClient } from './enc-direct-client.js'
 import { dedupeRadiusSchema, dedupeToggleSchema } from '../dedupe-pois.js'
 import { SCALE_BANDS, DEFAULT_SCALE_BAND, resolveScaleBand } from '../../shared/scale-band.js'
 import type { InputContext, InputModule } from '../poi-source.js'
-import { clampBboxDebounceSeconds, refreshSecondsSchema } from '../../shared/bbox-debounce.js'
-import { positiveFiniteNumber } from '../../shared/numbers.js'
+import {
+  clampBboxDebounceSeconds,
+  DEFAULT_NOAA_ENC_DEBOUNCE_SECONDS,
+  refreshSecondsSchema
+} from '../../shared/bbox-debounce.js'
+import { cappedDedupeRadius } from '../../shared/dedupe-radius.js'
 import { NOAA_ENC_SOURCE_ID } from '../../shared/source-ids.js'
 import type { PluginConfig } from '../../shared/types.js'
 import { clampMinimumYear, minimumYearSchema } from '../../shared/year-filter.js'
@@ -58,7 +62,8 @@ const CONFIG_SCHEMA: Record<string, unknown> = {
     'Earliest NOAA ENC survey year (0 to import every survey)'
   ),
   noaaEncRefreshSeconds: refreshSecondsSchema(
-    'NOAA ENC bbox-debounce window, in seconds (0 to query upstream on every list call)'
+    'NOAA ENC bbox-debounce window, in seconds (0 to query upstream on every list call)',
+    DEFAULT_NOAA_ENC_DEBOUNCE_SECONDS
   )
 }
 
@@ -74,7 +79,7 @@ export const noaaEncInput: InputModule = {
   isDedupeEnabled: (config: PluginConfig) => config.noaaEncDedupe !== false,
   // Per-source merge radius surfaced on the NOAA card.
   dedupeRadiusMeters: (config: PluginConfig) =>
-    positiveFiniteNumber(config.noaaEncDedupeRadiusMeters),
+    cappedDedupeRadius(config.noaaEncDedupeRadiusMeters),
   createSource: (context: InputContext) => {
     const { config, status, getCurrentPosition } = context
     return createNoaaEncSource({
@@ -87,7 +92,9 @@ export const noaaEncInput: InputModule = {
       includeObstructions: config.noaaEncIncludeObstructions !== false,
       includeRocks: config.noaaEncIncludeRocks === true,
       minimumYear: clampMinimumYear(config.noaaEncMinimumSurveyYear),
-      refreshSeconds: clampBboxDebounceSeconds(config.noaaEncRefreshSeconds),
+      refreshSeconds: clampBboxDebounceSeconds(
+        config.noaaEncRefreshSeconds, DEFAULT_NOAA_ENC_DEBOUNCE_SECONDS
+      ),
       status,
       getCurrentPosition
     })

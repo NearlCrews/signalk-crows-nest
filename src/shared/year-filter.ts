@@ -20,6 +20,7 @@
  */
 
 import { clampNumber } from './numbers.js'
+import { boundedNumberSchema } from './config-schema.js'
 import type { PoiSummary } from './types.js'
 
 /**
@@ -62,7 +63,7 @@ export function clampMinimumYear (raw: unknown): number {
  * the shape lives here next to the bounds it carries.
  */
 export function minimumYearSchema (title: string): Record<string, unknown> {
-  return { type: 'number', title, default: DEFAULT_MINIMUM_YEAR, minimum: MIN_YEAR, maximum: MAX_YEAR }
+  return boundedNumberSchema(title, DEFAULT_MINIMUM_YEAR, MIN_YEAR, MAX_YEAR)
 }
 
 /**
@@ -81,6 +82,19 @@ export function filterByMinimumYear (
     return pois
   }
   return pois.filter((poi) => isOnOrAfter(poi.timestamp, minimumYear))
+}
+
+/**
+ * The per-item form of {@link filterByMinimumYear}: true when a POI with this
+ * `timestamp` passes the filter (including when the filter is off). For a
+ * caller whose summary loop also does per-item work (the NOAA source caches
+ * each survivor), testing inline avoids a second pass over the list.
+ */
+export function passesMinimumYear (timestamp: string | undefined, minimumYear: number): boolean {
+  if (!Number.isFinite(minimumYear) || minimumYear <= 0) {
+    return true
+  }
+  return isOnOrAfter(timestamp, minimumYear)
 }
 
 /** Character code for `-`, used by the ISO fast path in {@link isOnOrAfter}. */

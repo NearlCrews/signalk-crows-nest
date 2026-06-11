@@ -30,17 +30,17 @@ import { LRUCache } from 'lru-cache'
 import { ACTIVE_CAPTAIN_SOURCE_ID } from '../../shared/source-ids.js'
 import { BRIDGE_POI_TYPE } from './bridge-clearance-alarms.js'
 import { MAX_POI_CACHE_ENTRIES } from '../../shared/cache.js'
-import { MS_PER_MINUTE } from '../../shared/time.js'
+import { MINUTES_PER_DAY, MS_PER_MINUTE } from '../../shared/time.js'
 import { toFiniteNumber } from '../../shared/numbers.js'
 import type { PoiDetailView, PoiSummary } from '../../shared/types.js'
 
 /**
- * Default freshness window for a resolved clearance, in minutes. Bridge
- * clearances are physically static, so six hours is far longer than any single
- * approach yet short enough that a multi-day voyage re-resolves a few times,
- * picking up an upstream data correction without needing a plugin restart.
+ * Default freshness window for a resolved clearance, in minutes: 24 hours.
+ * Bridge clearances are physically static, so the window exists only to pick
+ * up an upstream data correction; a daily re-resolve catches that without a
+ * plugin restart while keeping any single approach on one fetch.
  */
-const DEFAULT_CLEARANCE_TTL_MINUTES = 360
+const DEFAULT_CLEARANCE_TTL_MINUTES = MINUTES_PER_DAY
 
 /** Dependencies for {@link createBridgeClearanceResolver}. */
 export interface ClearanceResolverDeps {

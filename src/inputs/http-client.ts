@@ -69,9 +69,12 @@ const delay = (ms: number): Promise<void> =>
 class RequestQueue {
   private active = 0
   private nextAllowedStart = 0
-  private readonly waiting: Array<() => void> = []
+  private closed = false
+  private readonly waiting: Array<{ start: () => void, abandon: (error: Error) => void }> = []
+  private readonly scheduled = new Map<NodeJS.Timeout, () => void>()
 
   constructor (
+    private readonly label: string,
     private readonly maxConcurrency: number,
     private readonly minDelayMs: number
   ) {}
@@ -85,9 +88,35 @@ class RequestQueue {
     }
   }
 
+  /**
+   * Tear the queue down for an immediate, clean stop. Every start already
+   * paced behind a throttle timer fires now (its task sees the aborted close
+   * signal and rejects at once), and every queued waiter rejects now, so a
+   * deep queue does not keep firing one doomed task per `minDelayMs` after
+   * the plugin has stopped.
+   */
+  close (): void {
+    this.closed = true
+    for (const [timer, start] of this.scheduled) {
+      clearTimeout(timer)
+      start()
+    }
+    this.scheduled.clear()
+    for (const waiter of this.waiting.splice(0)) {
+      waiter.abandon(this.closedError())
+    }
+  }
+
+  private closedError (): Error {
+    return new Error(`${this.label} client closed`)
+  }
+
   private acquire (): Promise<void> {
-    return new Promise(resolve => {
-      this.waiting.push(resolve)
+    if (this.closed) {
+      return Promise.reject(this.closedError())
+    }
+    return new Promise((resolve, reject) => {
+      this.waiting.push({ start: resolve, abandon: reject })
       this.pump()
     })
   }
@@ -104,7 +133,11 @@ class RequestQueue {
     const now = Date.now()
     const wait = Math.max(0, this.nextAllowedStart - now)
     this.nextAllowedStart = now + wait + this.minDelayMs
-    setTimeout(next, wait)
+    const timer: NodeJS.Timeout = setTimeout(() => {
+      this.scheduled.delete(timer)
+      next.start()
+    }, wait)
+    this.scheduled.set(timer, next.start)
   }
 
   private release (): void {
@@ -233,7 +266,7 @@ export function createHttpClient (
     maxRetryAfterMs: options.maxRetryAfterMs ?? config.defaults.maxRetryAfterMs
   }
 
-  const queue = new RequestQueue(limits.maxConcurrency, limits.minDelayMs)
+  const queue = new RequestQueue(config.label, limits.maxConcurrency, limits.minDelayMs)
 
   // Aborted by close(): cancels in-flight fetches and stops further retries so
   // a response cannot land after the plugin has stopped.
@@ -298,6 +331,11 @@ export function createHttpClient (
 
   return {
     fetch: (url, init) => queue.run(() => fetchWithRetry(url, init)),
-    close: () => { closeController.abort() }
+    close: () => {
+      // Abort before draining the queue, so a queued task the drain fires
+      // immediately sees the aborted signal and rejects without a request.
+      closeController.abort()
+      queue.close()
+    }
   }
 }

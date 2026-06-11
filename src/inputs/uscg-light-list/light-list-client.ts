@@ -16,7 +16,9 @@ import type {
 } from './light-list-types.js'
 import { requestText } from '../http-one-shot.js'
 import { PLUGIN_USER_AGENT } from '../../shared/plugin-id.js'
-import { isValidLatitude, isValidLongitude, isWireTruthy, toFiniteNumber } from '../../shared/numbers.js'
+import { USCG_LIGHT_LIST_SOURCE_ID } from '../../shared/source-ids.js'
+import { finiteOrUndefined, isValidLatitude, isValidLongitude, isWireTruthy } from '../../shared/numbers.js'
+import { presentString } from '../../shared/strings.js'
 import { MS_PER_MINUTE } from '../../shared/time.js'
 
 /** Default upstream host for the NAVCEN Maritime Safety Information files. */
@@ -63,27 +65,6 @@ export interface LightListClientConfig {
   baseUrl?: string
 }
 
-/**
- * Return `value` when it is a non-empty string, otherwise undefined. The MSI
- * wire ships absent values as an explicit `null` rather than a missing key, so
- * every optional-field copy guards through this helper to keep `null` out of
- * the parsed record shape.
- */
-function presentString (value: string | null | undefined): string | undefined {
-  if (value == null || value === '') {
-    return undefined
-  }
-  return value
-}
-
-/**
- * Return `value` when it is a finite number, otherwise undefined. Wire numbers
- * may arrive as `null` (absent) and the renderer requires a finite value.
- */
-function presentNumber (value: number | null | undefined): number | undefined {
-  return toFiniteNumber(value) ?? undefined
-}
-
 /** Parse a single GeoJSON feature into the in-memory record shape. */
 function parseFeature (
   feature: LightListFeature,
@@ -117,7 +98,7 @@ function parseFeature (
     position: { latitude, longitude },
     district,
     volume,
-    source: 'usclightlist',
+    source: USCG_LIGHT_LIST_SOURCE_ID,
     inactive: isWireTruthy(properties.INACTIVE)
   }
   copyOptionalProperties(properties, record)
@@ -128,8 +109,8 @@ function parseFeature (
  * Copy every optional wire field the renderer reads onto the parsed record.
  * Pulled out of {@link parseFeature} so the construction of the required
  * fields stays readable. Every copy goes through {@link presentString} or
- * {@link presentNumber} so a wire `null` is treated as "absent" rather than
- * leaking into the parsed shape.
+ * {@link finiteOrUndefined} so a wire `null` is treated as "absent" rather
+ * than leaking into the parsed shape.
  */
 function copyOptionalProperties (
   properties: LightListProperties,
@@ -137,19 +118,19 @@ function copyOptionalProperties (
 ): void {
   const lightChar = presentString(properties.LIGHT_CHAR)
   if (lightChar !== undefined) record.lightChar = lightChar
-  const range = presentNumber(properties.LIGHT_NOM_RANGE)
+  const range = finiteOrUndefined(properties.LIGHT_NOM_RANGE)
   const rangeUnit = presentString(properties.LIGHT_NOM_RANGE_UNIT)
   if (range !== undefined && rangeUnit !== undefined) {
     record.nominalRange = { value: range, unit: rangeUnit }
   }
-  const focal = presentNumber(properties.LIGHT_FOCAL_PLANE)
+  const focal = finiteOrUndefined(properties.LIGHT_FOCAL_PLANE)
   const focalUnit = presentString(properties.LIGHT_FOCAL_PLANE_UNIT)
   if (focal !== undefined && focalUnit !== undefined) {
     record.focalPlane = { value: focal, unit: focalUnit }
   }
   const structureType = presentString(properties.STRUCTURE_TYPE)
   if (structureType !== undefined) record.structureType = structureType
-  const height = presentNumber(properties.STRUCTURE_HEIGHT)
+  const height = finiteOrUndefined(properties.STRUCTURE_HEIGHT)
   const heightUnit = presentString(properties.STRUCTURE_HEIGHT_UNIT)
   if (height !== undefined && heightUnit !== undefined) {
     record.structureHeight = { value: height, unit: heightUnit }
@@ -173,7 +154,7 @@ function copyOptionalProperties (
   // (a January 1970 timestamp would fail every meaningful cutoff). MSI
   // values otherwise are millisecond epochs from the 2010s onwards, so
   // discarding `0` poses no realistic data loss.
-  const modified = presentNumber(properties.MODIFIED_DATE)
+  const modified = finiteOrUndefined(properties.MODIFIED_DATE)
   if (modified !== undefined && modified > 0) {
     record.modifiedDate = new Date(modified).toISOString()
   }

@@ -12,7 +12,7 @@
  */
 
 import type * as React from 'react'
-import { DEFAULT_DEDUPE_RADIUS_METERS } from '../normalize-config.js'
+import { DEFAULT_DEDUPE_RADIUS_METERS } from '../../shared/dedupe-radius.js'
 import NumberField from './NumberField.js'
 import ToggleFieldset from './ToggleFieldset.js'
 

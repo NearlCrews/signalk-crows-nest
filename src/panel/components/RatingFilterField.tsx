@@ -5,7 +5,7 @@
  */
 
 import type * as React from 'react'
-import { MAX_RATING, MIN_RATING } from '../normalize-config.js'
+import { MAX_RATING, MIN_RATING } from '../../shared/rating.js'
 import NumberField from './NumberField.js'
 
 interface Props {

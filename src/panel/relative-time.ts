@@ -22,10 +22,14 @@ const RELATIVE_UNITS: ReadonlyArray<RelativeUnit> = [
  */
 const RELATIVE_TIME_FORMAT = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
 
-/** Render an ISO-8601 timestamp as a localized, relative phrase. */
-export function relativeTime (iso: string): string {
-  const then = new Date(iso).getTime()
-  if (Number.isNaN(then)) return iso
+/**
+ * Render a timestamp (an ISO-8601 string, or epoch milliseconds) as a
+ * localized, relative phrase. The epoch-ms form lets a caller that already
+ * holds a millisecond clock value skip the ISO round trip.
+ */
+export function relativeTime (at: string | number): string {
+  const then = typeof at === 'number' ? at : new Date(at).getTime()
+  if (Number.isNaN(then)) return String(at)
 
   const deltaSeconds = Math.round((then - Date.now()) / 1000)
   return formatRelativeDelta(deltaSeconds, RELATIVE_UNITS, RELATIVE_TIME_FORMAT)

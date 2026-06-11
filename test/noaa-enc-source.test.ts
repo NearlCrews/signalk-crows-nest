@@ -13,6 +13,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createNoaaEncSource } from '../src/inputs/noaa-enc/noaa-enc-source.js'
 import type { EncFeature, EncLayerKey, ScaleBand } from '../src/inputs/noaa-enc/enc-direct-types.js'
+import type { Bbox } from '../src/shared/types.js'
 import { NOAA_ENC_SOURCE_ID } from '../src/shared/source-ids.js'
 
 interface FakeStatus {
@@ -81,7 +82,7 @@ const unnamedObstruction: EncFeature = {
 }
 
 interface FakeClient {
-  queryLayer: (request: { band: ScaleBand, layerKey: EncLayerKey }) => Promise<{ features: EncFeature[] }>
+  queryLayer: (request: { band: ScaleBand, layerKey: EncLayerKey, bbox: Bbox }) => Promise<{ features: EncFeature[] }>
   queryById: (request: { band: ScaleBand, layerKey: EncLayerKey, objectId: number }) => Promise<EncFeature | undefined>
 }
 
@@ -380,7 +381,7 @@ test('getDetails rejects when the upstream has no feature for the id', async () 
     queryLayer: async () => ({ features: [] }),
     queryById: async () => undefined
   }
-  const { status } = fakeStatus()
+  const { status, events } = fakeStatus()
   const source = createNoaaEncSource({
     client: client as never,
     band: 'coastal',
@@ -393,6 +394,9 @@ test('getDetails rejects when the upstream has no feature for the id', async () 
     getCurrentPosition: () => undefined
   })
   await assert.rejects(() => source.getDetails('wreck_404'), /wreck_404/)
+  // The ArcGIS query answered normally, so the miss records a detail
+  // success, never an error that would flip the status row to unreachable.
+  assert.deepEqual(events, [`detail-ok:${NOAA_ENC_SOURCE_ID}`])
 })
 
 test('cacheSize reports the LRU entry count', async () => {
@@ -541,9 +545,15 @@ test('minimumYear drops features whose SORDAT year is below the threshold', asyn
 })
 
 test('listPointsOfInterest reuses the bbox-cached result within refreshSeconds', async () => {
-  let calls = 0
+  // Fetches are counted per requested tile: the warm second call may also
+  // prefetch neighbor tiles in the background (the edge-proximity warmup),
+  // and those must not be mistaken for a re-fetch of the viewport itself.
+  const fetchedTiles: string[] = []
   const client: FakeClient = {
-    queryLayer: async () => { calls++; return { features: [namedWreck] } },
+    queryLayer: async ({ bbox }) => {
+      fetchedTiles.push(`${bbox.south}_${bbox.west}_${bbox.north}_${bbox.east}`)
+      return { features: [namedWreck] }
+    },
     queryById: async () => undefined
   }
   const { status } = fakeStatus()
@@ -561,7 +571,9 @@ test('listPointsOfInterest reuses the bbox-cached result within refreshSeconds',
   const bbox = { south: 41, west: -72, north: 43, east: -70 }
   await source.listPointsOfInterest(bbox, '')
   await source.listPointsOfInterest(bbox, '')
-  assert.equal(calls, 1, 'the second call within the TTL hits the bbox cache')
+  // The bbox is tile-aligned, so its snapped tile is itself.
+  const viewportFetches = fetchedTiles.filter((tile) => tile === '41_-72_43_-70')
+  assert.equal(viewportFetches.length, 1, 'the second call within the TTL hits the bbox cache')
 })
 
 test('listPointsOfInterest queries upstream every call when refreshSeconds is 0 (off)', async () => {

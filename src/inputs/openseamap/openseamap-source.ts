@@ -18,7 +18,7 @@ import { renderOpenSeaMapDetail, tagValue } from './openseamap-detail.js'
 import { buildOpenSeaMapSections } from './openseamap-sections.js'
 import { elementMarking, seamarkRegex } from './seamark-mapping.js'
 import { parseOsmClearanceMeters } from './clearance.js'
-import type { PoiSource } from '../poi-source.js'
+import { fetchDetailRecorded, type PoiSource } from '../poi-source.js'
 import { createBboxDebounceCache } from '../../shared/bbox-debounce.js'
 import { MAX_BBOX_CACHE_ENTRIES, MAX_POI_CACHE_ENTRIES } from '../../shared/cache.js'
 import { splitOnFirstUnderscore } from '../../shared/namespaced-id.js'
@@ -205,22 +205,19 @@ export function createOpenSeaMapSource (config: OpenSeaMapSourceConfig): PoiSour
       if (hit !== undefined) {
         return toDetailView(hit)
       }
-      try {
-        // On a miss the Overpass client is queried with the slash form it
-        // parses (the cache key is the registry-side underscore id).
-        const element = await client.getById(toOverpassTypedId(id))
-        if (element === undefined) {
-          throw new Error(`No OpenSeaMap element found for "${id}"`)
-        }
-        cache.set(id, element)
-        const view = toDetailView(element)
-        status.recordDetailSuccess(OPENSEAMAP_SOURCE_ID)
-        return view
-      } catch (error) {
-        status.recordError(
-          OPENSEAMAP_SOURCE_ID, `Detail request failed: ${String(error)}`)
-        throw error
+      // On a miss the Overpass client is queried with the slash form it
+      // parses (the cache key is the registry-side underscore id). The
+      // shared wrapper owns the miss-vs-outage policy: an absent element
+      // (deleted upstream, or a stale id after an LRU eviction) is a normal
+      // answer, so the not-found throw below cannot flip the status row to
+      // unreachable.
+      const element = await fetchDetailRecorded(status, OPENSEAMAP_SOURCE_ID,
+        () => client.getById(toOverpassTypedId(id)))
+      if (element === undefined) {
+        throw new Error(`No OpenSeaMap element found for "${id}"`)
       }
+      cache.set(id, element)
+      return toDetailView(element)
     },
     cacheSize: () => cache.size,
     close: () => {

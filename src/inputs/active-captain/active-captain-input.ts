@@ -12,41 +12,27 @@
 import { createActiveCaptainClient } from './active-captain-client.js'
 import { createActiveCaptainSource } from './active-captain-source.js'
 import type { InputContext, InputModule } from '../poi-source.js'
-import { clampBboxDebounceSeconds, refreshSecondsSchema } from '../../shared/bbox-debounce.js'
-import { positiveFiniteNumber } from '../../shared/numbers.js'
-import { ACTIVE_CAPTAIN_SOURCE_ID } from '../../shared/source-ids.js'
 import {
-  clampMinimumRating,
-  DEFAULT_MINIMUM_RATING,
-  MAX_RATING,
-  MIN_RATING
-} from '../../shared/rating.js'
-
-import { DEFAULT_CACHE_DURATION_MINUTES } from '../../shared/cache-duration.js'
+  clampBboxDebounceSeconds,
+  DEFAULT_ACTIVE_CAPTAIN_DEBOUNCE_SECONDS,
+  refreshSecondsSchema
+} from '../../shared/bbox-debounce.js'
+import { ACTIVE_CAPTAIN_SOURCE_ID } from '../../shared/source-ids.js'
+import { clampMinimumRating, minimumRatingSchema } from '../../shared/rating.js'
+import { cacheDurationSchema, clampCacheDurationMinutes } from '../../shared/cache-duration.js'
 
 /** The cache-duration, minimum-rating, and POI-type-toggle config fragment. */
 const CONFIG_SCHEMA: Record<string, unknown> = {
-  cachingDurationMinutes: {
-    type: 'number',
-    title: 'How long to cache data from Active Captain in minutes (longer = less data traffic; shorter = more up to date data)',
-    default: DEFAULT_CACHE_DURATION_MINUTES,
-    // Minimum 1 so the admin UI clamps the field and AJV rejects a 0 or
-    // negative submit, matching every other numeric in this schema. The
-    // runtime resolveCachingDuration already falls back on a non-positive
-    // value, but accepting one in the form and then silently overriding it
-    // is a confusing UX inconsistency with the bounded sibling fields.
-    minimum: 1
-  },
-  activeCaptainRefreshSeconds: refreshSecondsSchema(
-    'ActiveCaptain bbox-debounce window, in seconds (0 to query Garmin on every list call)'
+  cachingDurationMinutes: cacheDurationSchema(
+    'How long to cache data from Active Captain in minutes (longer = less data traffic; shorter = more up to date data)'
   ),
-  minimumRating: {
-    type: 'number',
-    title: 'Minimum rating: hide points of interest rated below this (0 to 5; 0 shows all)',
-    default: DEFAULT_MINIMUM_RATING,
-    minimum: MIN_RATING,
-    maximum: MAX_RATING
-  },
+  activeCaptainRefreshSeconds: refreshSecondsSchema(
+    'ActiveCaptain bbox-debounce window, in seconds (0 to query Garmin on every list call)',
+    DEFAULT_ACTIVE_CAPTAIN_DEBOUNCE_SECONDS
+  ),
+  minimumRating: minimumRatingSchema(
+    'Minimum rating: hide points of interest rated below this (0 to 5; 0 shows all)'
+  ),
   includeMarinas: { type: 'boolean', title: 'Include marinas', default: true },
   includeAnchorages: { type: 'boolean', title: 'Include anchorages', default: true },
   includeHazards: { type: 'boolean', title: 'Include hazards', default: true },
@@ -62,11 +48,6 @@ const CONFIG_SCHEMA: Record<string, unknown> = {
   includeAirports: { type: 'boolean', title: 'Include airports', default: true }
 }
 
-/** Resolve the caching duration from raw config, applying the default. */
-function resolveCachingDuration (raw: unknown): number {
-  return positiveFiniteNumber(raw) ?? DEFAULT_CACHE_DURATION_MINUTES
-}
-
 /** The ActiveCaptain input module. */
 export const activeCaptainInput: InputModule = {
   id: ACTIVE_CAPTAIN_SOURCE_ID,
@@ -77,9 +58,11 @@ export const activeCaptainInput: InputModule = {
     const { app, config, status, dataDir } = context
     return createActiveCaptainSource({
       client: createActiveCaptainClient(app),
-      cachingDurationMinutes: resolveCachingDuration(config.cachingDurationMinutes),
+      cachingDurationMinutes: clampCacheDurationMinutes(config.cachingDurationMinutes),
       minimumRating: clampMinimumRating(config.minimumRating),
-      refreshSeconds: clampBboxDebounceSeconds(config.activeCaptainRefreshSeconds),
+      refreshSeconds: clampBboxDebounceSeconds(
+        config.activeCaptainRefreshSeconds, DEFAULT_ACTIVE_CAPTAIN_DEBOUNCE_SECONDS
+      ),
       dataDir,
       status,
       app

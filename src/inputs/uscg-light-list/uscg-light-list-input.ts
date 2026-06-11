@@ -14,7 +14,7 @@ import type { UscgLightListSource } from './uscg-light-list-source.js'
 import { createLightListClient } from './light-list-client.js'
 import { createLightListStore } from './light-list-store.js'
 import type { InputContext, InputModule } from '../poi-source.js'
-import { positiveFiniteNumber } from '../../shared/numbers.js'
+import { cappedDedupeRadius } from '../../shared/dedupe-radius.js'
 import { clampRefreshHours, refreshHoursSchema } from '../../shared/refresh-hours.js'
 import { USCG_LIGHT_LIST_SOURCE_ID } from '../../shared/source-ids.js'
 import { MS_PER_HOUR, MS_PER_SECOND } from '../../shared/time.js'
@@ -56,7 +56,7 @@ export const uscgLightListInput: InputModule = {
   isDedupeEnabled: (config: PluginConfig) => config.uscgLightListDedupe !== false,
   // Per-source merge radius surfaced on the USCG card.
   dedupeRadiusMeters: (config: PluginConfig) =>
-    positiveFiniteNumber(config.uscgLightListDedupeRadiusMeters),
+    cappedDedupeRadius(config.uscgLightListDedupeRadiusMeters),
   createSource: (context: InputContext) => {
     const { app, config, status, dataDir, getCurrentPosition } = context
     const client = createLightListClient()

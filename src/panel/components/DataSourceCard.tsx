@@ -86,7 +86,7 @@ export default function DataSourceCard ({
   // unchecked checkbox alone is too subtle a signal).
   const summaryText = enabled ? summary : `Disabled. ${summary}`
   return (
-    <div style={S.sourceCard}>
+    <div id={sourceCardDomId(cardId)} style={S.sourceCard}>
       <div style={S.sourceCardHeader}>
         {onToggleEnabled !== undefined
           ? (
@@ -148,6 +148,14 @@ export default function DataSourceCard ({
 /** Build a stable id for the card's body region (used by aria-controls). */
 function bodyId (cardId: string): string {
   return `ac-source-card-body-${cardId}`
+}
+
+/**
+ * Stable DOM id of a source card's outer element, exported so the status
+ * bar's jump-to-error shortcut can scroll the offending card into view.
+ */
+export function sourceCardDomId (cardId: string): string {
+  return `ac-source-card-${cardId}`
 }
 
 /**

@@ -26,3 +26,9 @@ export const SECONDS_PER_HOUR = SECONDS_PER_MINUTE * 60
 
 /** Number of seconds in one day. */
 export const SECONDS_PER_DAY = SECONDS_PER_HOUR * 24
+
+/** Number of minutes in one hour. */
+export const MINUTES_PER_HOUR = 60
+
+/** Number of minutes in one day. */
+export const MINUTES_PER_DAY = MINUTES_PER_HOUR * 24

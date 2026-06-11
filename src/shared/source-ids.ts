@@ -27,12 +27,20 @@ export const USCG_LIGHT_LIST_SOURCE_ID = 'usclightlist'
 export const NOAA_ENC_SOURCE_ID = 'noaaenc'
 
 /**
- * The union of source slugs the plugin recognizes. The panel keys its
- * disclosure-state map on this; a typo in any slug literal produces a
- * compile error here AND in the panel.
+ * Every source slug the plugin recognizes, as a runtime list. The panel's
+ * jump-to-error shortcut narrows raw status slugs against it, so a fifth
+ * source added here is picked up everywhere at once.
  */
-export type SourceSlug =
-  | typeof ACTIVE_CAPTAIN_SOURCE_ID
-  | typeof OPENSEAMAP_SOURCE_ID
-  | typeof USCG_LIGHT_LIST_SOURCE_ID
-  | typeof NOAA_ENC_SOURCE_ID
+export const SOURCE_SLUGS = [
+  ACTIVE_CAPTAIN_SOURCE_ID,
+  OPENSEAMAP_SOURCE_ID,
+  USCG_LIGHT_LIST_SOURCE_ID,
+  NOAA_ENC_SOURCE_ID
+] as const
+
+/**
+ * The union of source slugs the plugin recognizes, derived from the runtime
+ * list. The panel keys its disclosure-state map on this; a typo in any slug
+ * literal produces a compile error here AND in the panel.
+ */
+export type SourceSlug = typeof SOURCE_SLUGS[number]

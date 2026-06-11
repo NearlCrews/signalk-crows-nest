@@ -11,7 +11,8 @@
 import type * as React from 'react'
 import type { Dispatch } from 'react'
 import type { ConfigAction } from '../config-reducer.js'
-import { DEFAULT_MINIMUM_RATING, DEFAULT_REFRESH_SECONDS } from '../normalize-config.js'
+import { DEFAULT_MINIMUM_RATING } from '../../shared/rating.js'
+import { DEFAULT_ACTIVE_CAPTAIN_DEBOUNCE_SECONDS } from '../../shared/bbox-debounce.js'
 import { S } from '../styles.js'
 import type { PluginConfig } from '../../shared/types.js'
 import ActiveCaptainPoiTypes from './ActiveCaptainPoiTypes.js'
@@ -38,12 +39,9 @@ export default function ActiveCaptainSource ({ state, dispatch }: Props): React.
         <RefreshSecondsField
           id='ac-activecaptain-refresh-seconds'
           label='Refresh period (seconds)'
-          hint={'How long to reuse the most recent ActiveCaptain result for the ' +
-            'same chart viewport before re-querying. A Freeboard refresh burst ' +
-            'on a stationary view stays inside the cache; a user who pans to a ' +
-            'fresh view re-queries immediately. Leave at 0 to query Garmin on ' +
-            'every list call.'}
-          value={state.activeCaptainRefreshSeconds ?? DEFAULT_REFRESH_SECONDS}
+          upstreamHint={'ActiveCaptain is the most dynamic source (reviews and ' +
+            'hazard reports arrive continuously), so its default stays short.'}
+          value={state.activeCaptainRefreshSeconds ?? DEFAULT_ACTIVE_CAPTAIN_DEBOUNCE_SECONDS}
           onChange={(seconds) => dispatch({ type: 'setActiveCaptainRefreshSeconds', seconds })}
         />
         <CacheDurationField

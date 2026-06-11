@@ -15,7 +15,6 @@
  */
 
 import { createBridgeClearanceAlarms, BRIDGE_POI_TYPES } from './bridge-clearance-alarms.js'
-import { createBridgeClearanceResolver } from './bridge-clearance-resolver.js'
 import {
   clampClearanceMargin,
   readVesselAirDraft,
@@ -23,8 +22,7 @@ import {
   vesselAirDraftSchema,
   clearanceMarginSchema
 } from '../../shared/bridge-clearance.js'
-import { positiveFiniteNumber } from '../../shared/numbers.js'
-import { DEFAULT_PROXIMITY_ALARM_RADIUS_METERS, vesselScanRadiusMeters } from '../../shared/proximity-radius.js'
+import { clampProximityAlarmRadius, vesselScanRadiusMeters } from '../../shared/proximity-radius.js'
 import { positionToBbox } from '../../geo/position-utilities.js'
 import type { OutputContext, OutputHandle, OutputModule, PositionScanContributor } from '../output.js'
 
@@ -48,18 +46,16 @@ export const bridgeAirDraftOutput: OutputModule = {
   configSchema: CONFIG_SCHEMA,
   isEnabled: (config) => config.enableBridgeAirDraftCheck === true,
   start: (context: OutputContext): OutputHandle => {
-    const { app, config, pois } = context
+    const { app, config } = context
     const marginMeters = clampClearanceMargin(config.bridgeClearanceMarginMeters)
     const fallbackAirDraftMeters = config.vesselAirDraftMeters
-    const radiusMeters = positiveFiniteNumber(config.proximityAlarmRadiusMeters) ?? DEFAULT_PROXIMITY_ALARM_RADIUS_METERS
+    const radiusMeters = clampProximityAlarmRadius(config.proximityAlarmRadiusMeters)
     // The scan box is wider than the alarm radius so a bridge (and its
     // ActiveCaptain clearance) is fetched well before it crosses the radius.
     const scanRadiusMeters = vesselScanRadiusMeters(radiusMeters)
 
-    const resolver = createBridgeClearanceResolver({
-      getDetails: (id) => pois.getDetails(id),
-      debug: (message) => { app.debug(message) }
-    })
+    // Shared with the route-hazard output so the same bridge resolves once.
+    const resolver = context.bridgeClearanceResolver
     const getAirDraft = (): number | null => readVesselAirDraft(app, fallbackAirDraftMeters)
     const alarms = createBridgeClearanceAlarms(app, { resolver, radiusMeters, marginMeters, getAirDraft })
 

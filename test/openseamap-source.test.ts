@@ -172,8 +172,20 @@ test('getDetails rejects when the element no longer exists', async () => {
   const { client } = fakeClient({
     getById: async (): Promise<OverpassElement | undefined> => undefined
   })
-  const source = createOpenSeaMapSource({ client, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 0, status: silentStatus() })
+  // An absent element is a not-found on a healthy upstream: the Overpass
+  // query answered normally, so the source must record a detail success,
+  // never an error that would flip the status row to unreachable.
+  const successes: string[] = []
+  const errors: string[] = []
+  const status: PluginStatus = {
+    ...silentStatus(),
+    recordDetailSuccess: (source) => successes.push(source),
+    recordError: (_source, message) => errors.push(message)
+  }
+  const source = createOpenSeaMapSource({ client, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 0, status })
   await assert.rejects(() => source.getDetails('node_999'), /No OpenSeaMap element found/)
+  assert.deepEqual(successes, ['openseamap'], 'the normal upstream answer records a detail success')
+  assert.deepEqual(errors, [], 'a not-found must not record a reachability error')
   source.close()
 })
 
@@ -281,17 +293,22 @@ test('an undated OSM element always survives the year filter', async () => {
 })
 
 test('listPointsOfInterest reuses the bbox-cached result within refreshSeconds', async () => {
-  let calls = 0
+  // Fetches are counted per requested tile: the warm second call may also
+  // prefetch neighbor tiles in the background (the edge-proximity warmup),
+  // and those must not be mistaken for a re-fetch of the viewport itself.
+  const fetchedTiles: string[] = []
   const { client } = fakeClient({
-    listPointsOfInterest: async (): Promise<OverpassElement[]> => {
-      calls++
+    listPointsOfInterest: async (bbox: Bbox): Promise<OverpassElement[]> => {
+      fetchedTiles.push(`${bbox.south}_${bbox.west}_${bbox.north}_${bbox.east}`)
       return [rockNode]
     }
   })
   const source = createOpenSeaMapSource({ client, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 60, status: silentStatus() })
   await source.listPointsOfInterest(sampleBbox, '')
   await source.listPointsOfInterest(sampleBbox, '')
-  assert.equal(calls, 1, 'the second call within the TTL hits the bbox cache')
+  // sampleBbox is tile-aligned, so its snapped tile is itself.
+  const viewportFetches = fetchedTiles.filter((tile) => tile === '0_0_1_1')
+  assert.equal(viewportFetches.length, 1, 'the second call within the TTL hits the bbox cache')
   source.close()
 })
 

@@ -14,7 +14,8 @@ import assert from 'node:assert/strict'
 import {
   clampBboxDebounceSeconds,
   createBboxDebounceCache,
-  DEFAULT_BBOX_DEBOUNCE_SECONDS,
+  DEFAULT_ACTIVE_CAPTAIN_DEBOUNCE_SECONDS,
+  DEFAULT_NOAA_ENC_DEBOUNCE_SECONDS,
   MAX_BBOX_DEBOUNCE_SECONDS,
   MIN_BBOX_DEBOUNCE_SECONDS
 } from '../src/shared/bbox-debounce.js'
@@ -113,7 +114,7 @@ test('a stale entry is served immediately and revalidated in the background', as
   // next read sees the fresh value. An injected clock keeps it deterministic.
   let clock = 1000
   let calls = 0
-  const cache = createBboxDebounceCache<number>(30, 16, () => clock)
+  const cache = createBboxDebounceCache<number>(30, 16, { now: () => clock })
   assert.equal(await cache.get(SAMPLE, async () => { calls++; return calls }), 1)
   assert.equal(await cache.get(SAMPLE, async () => { calls++; return calls }), 1, 'fresh hit')
   assert.equal(calls, 1)
@@ -206,12 +207,91 @@ test('omitting the extraKey shares the cache slot with another omitted call', as
 })
 
 test('clampBboxDebounceSeconds honors the range, falls back on garbage, and truncates', () => {
-  assert.equal(clampBboxDebounceSeconds(0), MIN_BBOX_DEBOUNCE_SECONDS)
-  assert.equal(clampBboxDebounceSeconds(45), 45)
-  assert.equal(clampBboxDebounceSeconds(MAX_BBOX_DEBOUNCE_SECONDS + 100), MAX_BBOX_DEBOUNCE_SECONDS)
-  assert.equal(clampBboxDebounceSeconds(-5), MIN_BBOX_DEBOUNCE_SECONDS)
-  assert.equal(clampBboxDebounceSeconds(7.9), 7, 'truncates fractional seconds')
-  assert.equal(clampBboxDebounceSeconds('30'), DEFAULT_BBOX_DEBOUNCE_SECONDS)
-  assert.equal(clampBboxDebounceSeconds(Number.NaN), DEFAULT_BBOX_DEBOUNCE_SECONDS)
-  assert.equal(clampBboxDebounceSeconds(undefined), DEFAULT_BBOX_DEBOUNCE_SECONDS)
+  // The fallback is the caller-supplied per-source default; the explicit
+  // argument is required so no layer can silently inherit another source's
+  // cadence.
+  const fallback = DEFAULT_ACTIVE_CAPTAIN_DEBOUNCE_SECONDS
+  assert.equal(clampBboxDebounceSeconds(0, fallback), MIN_BBOX_DEBOUNCE_SECONDS)
+  assert.equal(clampBboxDebounceSeconds(45, fallback), 45)
+  assert.equal(clampBboxDebounceSeconds(MAX_BBOX_DEBOUNCE_SECONDS + 100, fallback), MAX_BBOX_DEBOUNCE_SECONDS)
+  assert.equal(clampBboxDebounceSeconds(-5, fallback), MIN_BBOX_DEBOUNCE_SECONDS)
+  assert.equal(clampBboxDebounceSeconds(7.9, fallback), 7, 'truncates fractional seconds')
+  assert.equal(clampBboxDebounceSeconds('30', fallback), fallback)
+  assert.equal(clampBboxDebounceSeconds(Number.NaN, fallback), fallback)
+  assert.equal(clampBboxDebounceSeconds(undefined, fallback), fallback)
+  assert.equal(
+    clampBboxDebounceSeconds(undefined, DEFAULT_NOAA_ENC_DEBOUNCE_SECONDS),
+    DEFAULT_NOAA_ENC_DEBOUNCE_SECONDS,
+    'each source falls back to its own default'
+  )
+})
+
+test('a warm hit near a tile edge prefetches the neighbor tile in the background', async () => {
+  const fetched: Bbox[] = []
+  const cache = createBboxDebounceCache<number>(30, 16)
+  const fetcher = async (bbox: Bbox): Promise<number> => {
+    fetched.push(bbox)
+    return fetched.length
+  }
+  // The viewport hugs the east edge of its 0.1-degree tile (0.01 degrees
+  // away, inside the 0.02-degree prefetch margin) and sits clear of the
+  // other three edges.
+  const nearEastEdge: Bbox = { south: 0.04, west: 0.04, north: 0.06, east: 0.09 }
+  await cache.get(nearEastEdge, fetcher)
+  assert.equal(fetched.length, 1, 'the cold miss does not prefetch')
+  await cache.get(nearEastEdge, fetcher)
+  assert.equal(fetched.length, 2, 'the warm hit prefetches exactly one neighbor')
+  // The neighbor is the same viewport shifted one cell east, snapped.
+  assert.deepEqual(fetched[1], { south: 0, west: 0.1, north: 0.1, east: 0.2 })
+  // The prefetched tile then serves the crossing without a blocking fetch
+  // of its own tile; the warm crossing chains one prefetch further east, so
+  // a vessel underway always has the next tile warming ahead of it.
+  await cache.get({ south: 0.04, west: 0.14, north: 0.06, east: 0.19 }, fetcher)
+  assert.equal(fetched.length, 3, 'the crossing fetches nothing for its own tile')
+  assert.deepEqual(fetched[2], { south: 0, west: 0.2, north: 0.1, east: 0.3 })
+})
+
+test('a centered viewport does not prefetch', async () => {
+  let calls = 0
+  const cache = createBboxDebounceCache<number>(30, 16)
+  const fetcher = async (): Promise<number> => ++calls
+  const centered: Bbox = { south: 0.03, west: 0.03, north: 0.07, east: 0.07 }
+  await cache.get(centered, fetcher)
+  await cache.get(centered, fetcher)
+  assert.equal(calls, 1, 'no edge is near, so nothing is prefetched')
+})
+
+test('a tile-aligned viewport does not prefetch: zero distance carries no direction', async () => {
+  let calls = 0
+  const cache = createBboxDebounceCache<number>(30, 16)
+  const fetcher = async (): Promise<number> => ++calls
+  // Every edge sits exactly on the snapped tile boundary, which says nothing
+  // about which way the viewport is moving, so nothing is warmed.
+  const aligned: Bbox = { south: 0, west: 0, north: 0.1, east: 0.1 }
+  await cache.get(aligned, fetcher)
+  await cache.get(aligned, fetcher)
+  assert.equal(calls, 1, 'aligned edges trigger no prefetch')
+})
+
+test('a wide viewport near an edge does not prefetch', async () => {
+  let calls = 0
+  const cache = createBboxDebounceCache<number>(30, 16)
+  const fetcher = async (): Promise<number> => ++calls
+  // Spans more than two cells: translating the whole box one cell would
+  // re-download nearly everything on screen for one thin strip, so the
+  // warmup is skipped for zoomed-out views.
+  const wide: Bbox = { south: 0.01, west: 0.01, north: 0.29, east: 0.29 }
+  await cache.get(wide, fetcher)
+  await cache.get(wide, fetcher)
+  assert.equal(calls, 1, 'wide viewports skip the prefetch')
+})
+
+test('prefetch can be disabled through the option', async () => {
+  let calls = 0
+  const cache = createBboxDebounceCache<number>(30, 16, { prefetchNeighbors: false })
+  const fetcher = async (): Promise<number> => ++calls
+  const nearEastEdge: Bbox = { south: 0.04, west: 0.04, north: 0.06, east: 0.09 }
+  await cache.get(nearEastEdge, fetcher)
+  await cache.get(nearEastEdge, fetcher)
+  assert.equal(calls, 1, 'an opted-out cache never prefetches')
 })

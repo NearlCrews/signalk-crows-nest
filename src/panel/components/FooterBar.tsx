@@ -4,6 +4,8 @@
  */
 
 import type * as React from 'react'
+import { memo } from 'react'
+import SaveStatus from './SaveStatus.js'
 import { S } from '../styles.js'
 
 interface Props {
@@ -14,8 +16,12 @@ interface Props {
   onDiscard: () => void
 }
 
-/** The configuration panel's footer bar. */
-export default function FooterBar ({ dirty, justSavedAt, onSave, onDiscard }: Props): React.ReactElement {
+/**
+ * The configuration panel's footer bar. Memoized: the panel root keeps the
+ * two callbacks identity-stable, so a keystroke in a field re-renders the
+ * footer only when the dirty flag actually flips.
+ */
+export default memo(function FooterBar ({ dirty, justSavedAt, onSave, onDiscard }: Props): React.ReactElement {
   return (
     <div style={S.footer}>
       <button type='button' style={S.btnPrimary} onClick={onSave} disabled={!dirty}>
@@ -24,11 +30,7 @@ export default function FooterBar ({ dirty, justSavedAt, onSave, onDiscard }: Pr
       <button type='button' style={S.btnSecondary} onClick={onDiscard} disabled={!dirty}>
         Discard
       </button>
-      {dirty
-        ? <span style={S.dirty}>Unsaved changes</span>
-        : justSavedAt !== null
-          ? <span role='status' style={S.savedPill}>Saved</span>
-          : null}
+      <SaveStatus dirty={dirty} justSavedAt={justSavedAt} />
     </div>
   )
-}
+})

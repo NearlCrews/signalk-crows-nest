@@ -12,8 +12,7 @@ import { createProximityAlarms } from './proximity-alarms.js'
 import { PROXIMITY_ALARM_POI_TYPES } from './poi-types.js'
 import type { OutputContext, OutputHandle, OutputModule, PositionScanContributor } from '../output.js'
 import { positionToBbox } from '../../geo/position-utilities.js'
-import { DEFAULT_PROXIMITY_ALARM_RADIUS_METERS, vesselScanRadiusMeters } from '../../shared/proximity-radius.js'
-import { positiveFiniteNumber } from '../../shared/numbers.js'
+import { clampProximityAlarmRadius, proximityRadiusSchema, vesselScanRadiusMeters } from '../../shared/proximity-radius.js'
 
 /** The proximity-alarm config fragment. */
 const CONFIG_SCHEMA: Record<string, unknown> = {
@@ -22,12 +21,7 @@ const CONFIG_SCHEMA: Record<string, unknown> = {
     title: 'Emit a notification when the vessel nears a hazard (subscribes to the vessel position)',
     default: false
   },
-  proximityAlarmRadiusMeters: {
-    type: 'number',
-    title: 'Proximity alarm radius in meters',
-    default: DEFAULT_PROXIMITY_ALARM_RADIUS_METERS,
-    minimum: 1
-  }
+  proximityAlarmRadiusMeters: proximityRadiusSchema('Proximity alarm radius in meters')
 }
 
 /** The proximity-alarm output module. */
@@ -37,7 +31,7 @@ export const proximityAlarmOutput: OutputModule = {
   configSchema: CONFIG_SCHEMA,
   isEnabled: (config) => config.enableProximityAlarms === true,
   start: (context: OutputContext): OutputHandle => {
-    const radiusMeters = positiveFiniteNumber(context.config.proximityAlarmRadiusMeters) ?? DEFAULT_PROXIMITY_ALARM_RADIUS_METERS
+    const radiusMeters = clampProximityAlarmRadius(context.config.proximityAlarmRadiusMeters)
     // The scan box is wider than the alarm radius so a hazard is fetched well
     // before it crosses the radius. This mirrors the legacy monitor sizing.
     const scanRadiusMeters = vesselScanRadiusMeters(radiusMeters)

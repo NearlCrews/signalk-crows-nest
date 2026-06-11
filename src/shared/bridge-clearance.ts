@@ -36,6 +36,15 @@ export const MAX_CLEARANCE_MARGIN_METERS = 30
 export const DEFAULT_CLEARANCE_MARGIN_METERS = 1
 
 /**
+ * The "no configured fallback" sentinel for the vessel-air-draft config key.
+ * Zero is a meaningful value, not an arbitrary default: it means "rely on the
+ * `design.airHeight` data-model value alone", so {@link readVesselAirDraft}
+ * ignores it as a fallback. Named so the panel's normalize-config and the
+ * Alerts card read the intent rather than a bare `0`.
+ */
+export const NO_FALLBACK_AIR_DRAFT_METERS = 0
+
+/**
  * Clamp a raw clearance-margin value to `[MIN, MAX]`. A non-numeric or
  * non-finite value falls back to {@link DEFAULT_CLEARANCE_MARGIN_METERS}. The
  * margin is fractional (meters with a decimal), so the value is not truncated.

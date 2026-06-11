@@ -104,18 +104,20 @@ export function createBridgeClearanceAlarms (
 ): BridgeClearanceAlarms {
   const { resolver, radiusMeters, marginMeters, getAirDraft } = options
 
-  // The tracker owns the active set and the clear half: a bridge is added on
-  // entry and removed on exit, so an alarm is raised and cleared exactly once
-  // per crossing of the radius boundary.
+  // The tracker owns the active set, the clear half, and the episode clock:
+  // a bridge is added on entry and removed on exit, so an alarm is raised and
+  // cleared exactly once per crossing of the radius boundary, and the
+  // tracker-stamped `raisedAt` keeps `createdAt` at the episode start on the
+  // clear delta rather than resetting to the clear time.
   const tracker = createNotificationTracker<{ name: string }>({
     app,
     pathPrefix: NOTIFICATION_PATH_PREFIX,
     sourceSuffix: SOURCE_SUFFIX,
-    buildClearValue: ({ name }) => ({
+    buildClearValue: ({ name }, raisedAt) => ({
       state: 'normal',
       method: [],
       message: `Bridge "${name}" clearance alarm cleared`,
-      createdAt: new Date().toISOString()
+      createdAt: raisedAt
     }),
     describeClear: (poiId, { name }) => `Bridge clearance alarm cleared for bridge ${poiId} ("${name}")`
   })
@@ -127,6 +129,7 @@ export function createBridgeClearanceAlarms (
 
   function raise (poiId: string, entry: InAlarmEntry): void {
     const { name, clearanceMeters, airDraftMeters, distanceMeters: distance } = entry
+    const raisedAt = tracker.set(poiId, { name })
     const value: NotificationValue = {
       state: 'alarm',
       method: ['visual', 'sound'],
@@ -134,10 +137,9 @@ export function createBridgeClearanceAlarms (
         `Bridge "${name}" clearance ${formatMeters(clearanceMeters)} m is at or below ` +
         `your air draft ${formatMeters(airDraftMeters)} m (+${formatMeters(marginMeters)} m margin), ` +
         `${Math.round(distance)} m away`,
-      createdAt: new Date().toISOString()
+      createdAt: raisedAt
     }
     emitNotification(app, NOTIFICATION_PATH_PREFIX, poiId, value, SOURCE_SUFFIX)
-    tracker.set(poiId, { name })
     app.debug(
       `Bridge clearance alarm raised for bridge ${poiId} ("${name}"): ` +
       `clearance ${formatMeters(clearanceMeters)} m vs air draft ${formatMeters(airDraftMeters)} m ` +

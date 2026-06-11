@@ -5,6 +5,13 @@
  * data directory so the in-memory cache (see `poi-cache.ts`) can be hydrated on
  * a cold start, giving the plugin offline data without a network round-trip.
  *
+ * Retention is deliberately long (30 days by default) and INDEPENDENT of the
+ * in-memory freshness TTL: POI details are nearly static (a marina does not
+ * move), so an entry past its freshness window is still the best available
+ * answer when the vessel is offline. The cache hydrates old entries as
+ * stale-but-usable and serves them when a refetch fails; retention only bounds
+ * how long the file keeps growing with places the vessel has left behind.
+ *
  * Every read and write is resilient: a missing, unreadable, or corrupt store
  * file never throws to the caller, the store simply behaves as if it were
  * empty. A failed write is swallowed, the entry survives in memory and is
@@ -19,11 +26,19 @@
 
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { MS_PER_MINUTE } from '../../shared/time.js'
+import { MAX_POI_CACHE_ENTRIES } from '../../shared/cache.js'
+import { MINUTES_PER_DAY, MS_PER_MINUTE } from '../../shared/time.js'
 import type { PoiDetails } from './active-captain-types.js'
 
 /** Name of the JSON file the store persists to inside the data directory. */
 const STORE_FILE_NAME = 'poi-cache.json'
+
+/**
+ * Default on-disk retention, in minutes: 30 days. Entries older than this are
+ * dropped on `load`. The window bounds file growth, not data freshness; the
+ * in-memory cache's own TTL decides when an entry is refetched while online.
+ */
+export const DEFAULT_STORE_RETENTION_MINUTES = 30 * MINUTES_PER_DAY
 
 /**
  * How long, in milliseconds, a `persist` waits before the file write runs. A
@@ -51,8 +66,10 @@ interface StoreFile {
 /** Public surface of the persistent point-of-interest detail store. */
 export interface PoiStore {
   /**
-   * Read the non-expired entries from disk, keyed by point-of-interest id.
-   * Entries older than the configured TTL window are dropped. A missing or
+   * Read the retained entries from disk, keyed by point-of-interest id.
+   * Entries older than the retention window are dropped; entries past the
+   * in-memory freshness TTL but within retention are returned (the cache
+   * hydrates them as stale-but-usable for offline reads). A missing or
    * corrupt store file yields an empty map rather than an error.
    */
   load: () => Map<string, StoredPoi>
@@ -114,14 +131,19 @@ function isStoreFile (value: unknown): value is StoreFile {
 /**
  * Create a persistent point-of-interest detail store.
  *
- * @param directoryPath Directory the store file lives in, typically the value
- *                      of the SignalK app's `getDataDirPath()`.
- * @param ttlMinutes    How long, in minutes, a persisted entry stays fresh.
- *                      Entries older than this are dropped on `load`.
+ * @param directoryPath    Directory the store file lives in, typically the
+ *                         value of the SignalK app's `getDataDirPath()`.
+ * @param retentionMinutes How long, in minutes, a persisted entry is retained.
+ *                         Entries older than this are dropped on `load`.
+ *                         Defaults to {@link DEFAULT_STORE_RETENTION_MINUTES};
+ *                         injectable for tests.
  */
-export function createPoiStore (directoryPath: string, ttlMinutes: number): PoiStore {
+export function createPoiStore (
+  directoryPath: string,
+  retentionMinutes: number = DEFAULT_STORE_RETENTION_MINUTES
+): PoiStore {
   const filePath = join(directoryPath, STORE_FILE_NAME)
-  const ttlMs = ttlMinutes * MS_PER_MINUTE
+  const retentionMs = retentionMinutes * MS_PER_MINUTE
 
   // In-memory mirror of the on-disk store, kept current so each persist can
   // rewrite the whole file without re-reading it. Populated by load().
@@ -136,7 +158,25 @@ export function createPoiStore (directoryPath: string, ttlMinutes: number): PoiS
   // exist; the next write truncates and reuses it. A failed rename unlinks the
   // temp file so a write error does not leave debris behind.
   const tempPath = `${filePath}.tmp`
+
+  // Bound the mirror at the in-memory cache's own ceiling by dropping the
+  // oldest entries past the cap. With the 30-day retention this is what
+  // keeps a month-long cruise from growing the file, the startup parse, and
+  // the hydration loop without limit; pruning happens on each write, so a
+  // long-running process is bounded too, not only the next restart.
+  const pruneToCap = (): void => {
+    const ids = Object.keys(entries)
+    if (ids.length <= MAX_POI_CACHE_ENTRIES) {
+      return
+    }
+    ids.sort((a, b) => entries[a].timestamp - entries[b].timestamp)
+    for (const id of ids.slice(0, ids.length - MAX_POI_CACHE_ENTRIES)) {
+      delete entries[id]
+    }
+  }
+
   const writeFile = (): void => {
+    pruneToCap()
     const payload: StoreFile = { version: STORE_VERSION, entries }
     mkdirSync(directoryPath, { recursive: true })
     writeFileSync(tempPath, JSON.stringify(payload))
@@ -190,10 +230,11 @@ export function createPoiStore (directoryPath: string, ttlMinutes: number): PoiS
         return result
       }
 
-      const cutoff = Date.now() - ttlMs
+      const cutoff = Date.now() - retentionMs
       for (const [id, entry] of Object.entries(parsed.entries)) {
         if (!isStoredPoi(entry) || entry.timestamp < cutoff) {
-          // Malformed or stale entry: drop it from both the map and the mirror.
+          // Malformed, or older than the retention window: drop it from both
+          // the map and the mirror.
           continue
         }
         entries[id] = entry

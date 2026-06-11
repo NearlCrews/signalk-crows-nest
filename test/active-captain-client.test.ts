@@ -360,11 +360,9 @@ test('pointOfInterestDetails rejects a detail body missing required fields', asy
   )
 })
 
-test('close() aborts a new request and stops the retry loop', async () => {
+test('close() rejects a new request without touching the network', async () => {
   await withMockFetch(
     (_callIndex, init) => {
-      // The client closes before the request runs, so the composed signal is
-      // already aborted; mimic the real fetch by rejecting on it.
       if (init?.signal?.aborted === true) {
         throw new DOMException('The operation was aborted', 'AbortError')
       }
@@ -373,10 +371,9 @@ test('close() aborts a new request and stops the retry loop', async () => {
     async calls => {
       const client = createActiveCaptainClient(silentLog, fastLimits)
       client.close()
-      await assert.rejects(() => client.listPointsOfInterest(sampleBbox, 'Marina'))
-      // The aborted close signal stops the retry loop at once: exactly one
-      // fetch, no retries despite the rejection.
-      assert.equal(calls.count, 1, 'expected no retry once the client is closed')
+      // The closed queue rejects at enqueue, before any fetch or retry runs.
+      await assert.rejects(() => client.listPointsOfInterest(sampleBbox, 'Marina'), /client closed/)
+      assert.equal(calls.count, 0, 'expected no fetch once the client is closed')
     }
   )
 })

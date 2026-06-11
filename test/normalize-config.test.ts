@@ -1,23 +1,30 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import {
-  DEFAULT_CACHE_DURATION_MINUTES,
-  DEFAULT_MINIMUM_RATING,
-  DEFAULT_NOAA_ENC_SCALE_BAND,
-  DEFAULT_DEDUPE_RADIUS_METERS,
-  DEFAULT_OPENSEAMAP_ENDPOINT,
-  DEFAULT_PROXIMITY_ALARM_RADIUS_METERS,
-  DEFAULT_ROUTE_CORRIDOR_WIDTH_METERS,
-  DEFAULT_USCG_LIGHT_LIST_REFRESH_HOURS,
-  normalizeConfig
-} from '../src/panel/normalize-config.js'
+import { normalizeConfig } from '../src/panel/normalize-config.js'
 import { SEAMARK_GROUP_IDS } from '../src/shared/seamark-groups.js'
 import { POI_TYPE_FLAGS } from '../src/shared/poi-type-selection.js'
 import {
   DEFAULT_CLEARANCE_MARGIN_METERS,
   MAX_CLEARANCE_MARGIN_METERS
 } from '../src/shared/bridge-clearance.js'
+import {
+  DEFAULT_PROXIMITY_ALARM_RADIUS_METERS,
+  MAX_PROXIMITY_ALARM_RADIUS_METERS
+} from '../src/shared/proximity-radius.js'
+import {
+  DEFAULT_ROUTE_CORRIDOR_WIDTH_METERS,
+  MAX_ROUTE_CORRIDOR_WIDTH_METERS
+} from '../src/shared/route-corridor.js'
+import { DEFAULT_DEDUPE_RADIUS_METERS, MAX_DEDUPE_RADIUS_METERS } from '../src/shared/dedupe-radius.js'
+import {
+  DEFAULT_CACHE_DURATION_MINUTES,
+  MAX_CACHE_DURATION_MINUTES
+} from '../src/shared/cache-duration.js'
+import { DEFAULT_MINIMUM_RATING } from '../src/shared/rating.js'
+import { DEFAULT_SCALE_BAND } from '../src/shared/scale-band.js'
+import { DEFAULT_OVERPASS_ENDPOINT } from '../src/shared/overpass-endpoints.js'
+import { DEFAULT_REFRESH_HOURS, MAX_REFRESH_HOURS, MIN_REFRESH_HOURS } from '../src/shared/refresh-hours.js'
 
 test('normalizeConfig fills every POI flag true and the default duration for an empty config', () => {
   const config = normalizeConfig({})
@@ -106,7 +113,7 @@ test('normalizeConfig falls back to the default for a zero alarm radius', () => 
 test('normalizeConfig defaults the OpenSeaMap options for an empty config', () => {
   const config = normalizeConfig({})
   assert.equal(config.openSeaMapEnabled, false)
-  assert.equal(config.openSeaMapEndpoint, DEFAULT_OPENSEAMAP_ENDPOINT)
+  assert.equal(config.openSeaMapEndpoint, DEFAULT_OVERPASS_ENDPOINT)
   assert.deepEqual(config.openSeaMapSeamarkGroups, [...SEAMARK_GROUP_IDS])
   assert.deepEqual(config.openSeaMapFallbackEndpoints, [],
     'fallback endpoints default to an empty list')
@@ -144,8 +151,8 @@ test('normalizeConfig treats a non-true openSeaMapEnabled as false', () => {
 })
 
 test('normalizeConfig falls back to the default for a blank OpenSeaMap endpoint', () => {
-  assert.equal(normalizeConfig({ openSeaMapEndpoint: '   ' }).openSeaMapEndpoint, DEFAULT_OPENSEAMAP_ENDPOINT)
-  assert.equal(normalizeConfig({ openSeaMapEndpoint: 42 }).openSeaMapEndpoint, DEFAULT_OPENSEAMAP_ENDPOINT)
+  assert.equal(normalizeConfig({ openSeaMapEndpoint: '   ' }).openSeaMapEndpoint, DEFAULT_OVERPASS_ENDPOINT)
+  assert.equal(normalizeConfig({ openSeaMapEndpoint: 42 }).openSeaMapEndpoint, DEFAULT_OVERPASS_ENDPOINT)
 })
 
 test('normalizeConfig drops unknown seamark groups and keeps an explicit empty selection', () => {
@@ -271,18 +278,23 @@ test('normalizeConfig defaults the USCG Light List options for an empty config',
   const config = normalizeConfig({})
   assert.equal(config.uscgLightListEnabled, false)
   assert.equal(config.uscgLightListDedupe, true)
-  assert.equal(config.uscgLightListRefreshHours, DEFAULT_USCG_LIGHT_LIST_REFRESH_HOURS)
+  assert.equal(config.uscgLightListRefreshHours, DEFAULT_REFRESH_HOURS)
 })
 
 test('normalizeConfig keeps a valid USCG Light List refresh period', () => {
   assert.equal(normalizeConfig({ uscgLightListRefreshHours: 24 }).uscgLightListRefreshHours, 24)
 })
 
-test('normalizeConfig falls back to the default for an out-of-range USCG Light List refresh period', () => {
-  for (const input of [0, -1, 200, 'soon', Number.NaN]) {
+test('normalizeConfig clamps an out-of-range USCG Light List refresh period', () => {
+  // The panel applies the same shared clamp the input module does, so the
+  // displayed value matches what the runtime scheduler will actually use.
+  assert.equal(normalizeConfig({ uscgLightListRefreshHours: 0 }).uscgLightListRefreshHours, MIN_REFRESH_HOURS)
+  assert.equal(normalizeConfig({ uscgLightListRefreshHours: -1 }).uscgLightListRefreshHours, MIN_REFRESH_HOURS)
+  assert.equal(normalizeConfig({ uscgLightListRefreshHours: 200 }).uscgLightListRefreshHours, MAX_REFRESH_HOURS)
+  for (const input of ['soon', Number.NaN]) {
     assert.equal(
       normalizeConfig({ uscgLightListRefreshHours: input }).uscgLightListRefreshHours,
-      DEFAULT_USCG_LIGHT_LIST_REFRESH_HOURS
+      DEFAULT_REFRESH_HOURS
     )
   }
 })
@@ -295,7 +307,7 @@ test('normalizeConfig defaults the NOAA ENC options for an empty config', () => 
   const config = normalizeConfig({})
   assert.equal(config.noaaEncEnabled, false)
   assert.equal(config.noaaEncDedupe, true)
-  assert.equal(config.noaaEncScaleBand, DEFAULT_NOAA_ENC_SCALE_BAND)
+  assert.equal(config.noaaEncScaleBand, DEFAULT_SCALE_BAND)
   assert.equal(config.noaaEncIncludeWrecks, true)
   assert.equal(config.noaaEncIncludeObstructions, true)
   // Rocks default off so a coastal-band query does not flood the chart plotter.
@@ -310,7 +322,7 @@ test('normalizeConfig falls back to the default for an unknown NOAA ENC scale ba
   for (const input of ['unknown', '', 42, null]) {
     assert.equal(
       normalizeConfig({ noaaEncScaleBand: input }).noaaEncScaleBand,
-      DEFAULT_NOAA_ENC_SCALE_BAND
+      DEFAULT_SCALE_BAND
     )
   }
 })
@@ -360,4 +372,20 @@ test('normalizeConfig falls back to 0 for non-numeric or non-finite minimum-year
   assert.equal(config.openSeaMapMinimumYear, 0)
   assert.equal(config.uscgLightListMinimumUpdateYear, 0)
   assert.equal(config.noaaEncMinimumSurveyYear, 0)
+})
+
+test('normalizeConfig caps an absurd hand-edited numeric at its shared upper bound', () => {
+  // The radius, width, dedupe, and cache-duration keys all gained generous
+  // upper bounds so a hand-edited config cannot blow up a scan box or pin a
+  // cache forever; the panel applies the same shared clamps the modules use.
+  const config = normalizeConfig({
+    proximityAlarmRadiusMeters: 9e9,
+    routeCorridorWidthMeters: 9e9,
+    openSeaMapDedupeRadiusMeters: 9e9,
+    cachingDurationMinutes: 9e9
+  })
+  assert.equal(config.proximityAlarmRadiusMeters, MAX_PROXIMITY_ALARM_RADIUS_METERS)
+  assert.equal(config.routeCorridorWidthMeters, MAX_ROUTE_CORRIDOR_WIDTH_METERS)
+  assert.equal(config.openSeaMapDedupeRadiusMeters, MAX_DEDUPE_RADIUS_METERS)
+  assert.equal(config.cachingDurationMinutes, MAX_CACHE_DURATION_MINUTES)
 })

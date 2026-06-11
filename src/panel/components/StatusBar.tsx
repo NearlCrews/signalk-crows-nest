@@ -12,6 +12,7 @@
  */
 
 import type * as React from 'react'
+import { memo } from 'react'
 import type { SourceStatus, StatusSnapshot } from '../../status/status-types.js'
 import { relativeTime } from '../relative-time.js'
 import { S } from '../styles.js'
@@ -21,6 +22,36 @@ import { S } from '../styles.js'
 const DOT_OK: React.CSSProperties = { ...S.dot, ...S.dotOk }
 const DOT_OFF: React.CSSProperties = { ...S.dot, ...S.dotOff }
 const DOT_ERROR: React.CSSProperties = { ...S.dot, ...S.dotError }
+
+// The freshness note in the title row: muted, small, right-aligned.
+const CHECKED_AT: React.CSSProperties = {
+  fontSize: 'var(--ac-font-small)',
+  fontWeight: 400,
+  color: 'var(--ac-text-faint)',
+  marginLeft: 'auto'
+}
+
+// Title row wrapper so the freshness note sits on the same line as the title.
+const TITLE_ROW: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'baseline',
+  gap: 8
+}
+
+// A recent-error entry rendered as a jump-to-card button: inherits the
+// error-item palette, drops the button chrome, and keeps the row clickable
+// without reading as a primary control.
+const ERROR_JUMP_BUTTON: React.CSSProperties = {
+  background: 'none',
+  border: 'none',
+  padding: 0,
+  margin: 0,
+  font: 'inherit',
+  color: 'inherit',
+  cursor: 'pointer',
+  textAlign: 'left',
+  textDecoration: 'underline'
+}
 
 /** Map the tri-state apiReachable flag to a status dot style and label. */
 function apiState (reachable: boolean | null): { dot: React.CSSProperties, label: string } {
@@ -56,10 +87,27 @@ function SourceRow ({ source }: { source: SourceStatus }): React.ReactElement {
 
 interface Props {
   status: StatusSnapshot | null
+  /**
+   * Epoch milliseconds of the most recent successful status poll, or null.
+   * Renders as a "checked Ns ago" note so the operator can tell a live
+   * readout from a stalled one.
+   */
+  lastUpdatedMs: number | null
+  /**
+   * Expand and scroll to the source card an error belongs to. When given,
+   * a recent error recorded against a known source renders as a clickable
+   * shortcut.
+   */
+  onJumpToSource?: (slug: string) => void
 }
 
-/** The status bar shown at the top of the configuration panel. */
-export default function StatusBar ({ status }: Props): React.ReactElement {
+/**
+ * The status bar shown at the top of the configuration panel. Memoized: the
+ * `status` prop is referentially stable between polls and `lastUpdatedMs`
+ * changes only on the 5 s poll tick, so a keystroke elsewhere on the panel
+ * does not re-run the per-source relative-time (Intl) formatting.
+ */
+export default memo(function StatusBar ({ status, lastUpdatedMs, onJumpToSource }: Props): React.ReactElement {
   // The loading state and the populated state both render the title
   // plus a fixed-height body region. The body reserves a min-height so
   // the bar does not visibly grow when the first poll resolves and
@@ -87,7 +135,16 @@ export default function StatusBar ({ status }: Props): React.ReactElement {
 
   return (
     <div style={S.statusBar}>
-      <span style={S.statusBarTitle}>Plugin status</span>
+      <div style={TITLE_ROW}>
+        <span style={S.statusBarTitle}>Plugin status</span>
+        {lastUpdatedMs !== null
+          ? (
+            <span style={CHECKED_AT}>
+              checked {relativeTime(lastUpdatedMs)}
+            </span>
+            )
+          : null}
+      </div>
       <div style={S.statusBarBody}>
         {sources.length === 0
           ? <span style={S.statusBarEmpty}>No data source enabled yet. Open a card below and toggle one on.</span>
@@ -100,10 +157,21 @@ export default function StatusBar ({ status }: Props): React.ReactElement {
       {recentErrors.length > 0
         ? (
           <ul style={S.statusErrors} aria-label='Recent errors'>
-            {recentErrors.map((err) => (
-              <li key={`${err.at}-${err.message}`} style={S.statusErrorItem}>
-                <span style={S.statusErrorTime}>{relativeTime(err.at)}</span>
-                <span>{err.message}</span>
+            {recentErrors.map(({ at, message, source }) => (
+              <li key={`${at}-${message}`} style={S.statusErrorItem}>
+                <span style={S.statusErrorTime}>{relativeTime(at)}</span>
+                {source !== undefined && onJumpToSource !== undefined
+                  ? (
+                    <button
+                      type='button'
+                      style={ERROR_JUMP_BUTTON}
+                      title='Show the source this error belongs to'
+                      onClick={() => onJumpToSource(source)}
+                    >
+                      {message}
+                    </button>
+                    )
+                  : <span>{message}</span>}
               </li>
             ))}
           </ul>
@@ -111,4 +179,4 @@ export default function StatusBar ({ status }: Props): React.ReactElement {
         : null}
     </div>
   )
-}
+})

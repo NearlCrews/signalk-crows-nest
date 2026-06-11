@@ -11,6 +11,7 @@
  */
 
 import { clampNumber } from './numbers.js'
+import { boundedNumberSchema } from './config-schema.js'
 
 /** Lowest minimum rating: 0 disables the rating filter and shows every point. */
 export const MIN_RATING = 0
@@ -30,4 +31,13 @@ export const DEFAULT_MINIMUM_RATING = MIN_RATING
  */
 export function clampMinimumRating (raw: unknown): number {
   return clampNumber(raw, MIN_RATING, MAX_RATING, DEFAULT_MINIMUM_RATING)
+}
+
+/**
+ * Config-schema fragment for the minimum-rating filter field, colocated with
+ * the bounds it carries, matching the `minimumYearSchema` and
+ * `refreshSecondsSchema` siblings.
+ */
+export function minimumRatingSchema (title: string): Record<string, unknown> {
+  return boundedNumberSchema(title, DEFAULT_MINIMUM_RATING, MIN_RATING, MAX_RATING)
 }

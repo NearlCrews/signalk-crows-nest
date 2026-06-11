@@ -203,6 +203,11 @@ export function createActiveCaptainClient (
       if (
         poi?.poiType == null ||
         poi.mapLocation == null ||
+        // The detail position is spread straight into the published note, so
+        // it gets the same coordinate validation the list path applies: a
+        // NaN or out-of-range value must not place a marker.
+        !isValidLatitude(poi.mapLocation.latitude) ||
+        !isValidLongitude(poi.mapLocation.longitude) ||
         typeof poi.name !== 'string' ||
         poi.name.length === 0
       ) {

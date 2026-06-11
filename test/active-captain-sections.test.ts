@@ -150,7 +150,8 @@ test('builds normalized sections for a fully populated POI, mirroring the render
 
   assert.deepEqual(section(sections, 'contact')?.items, [
     { label: 'VHF', value: '16', kind: 'text' },
-    { label: 'Phone', value: '+1-555-0100', kind: 'text' },
+    // Phone rides as a tel: link, matching the HTML template's tel: anchor.
+    { label: 'Phone', value: 'tel:+1-555-0100', kind: 'link' },
     { label: 'After hours', value: 'Night dockmaster', kind: 'text' },
     { label: 'Email', value: 'mailto:dock@example.com', kind: 'link' },
     { label: 'Website', value: 'https://example.com', kind: 'link' }

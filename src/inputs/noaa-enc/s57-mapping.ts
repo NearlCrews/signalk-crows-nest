@@ -29,7 +29,8 @@
 
 import type { EncLayerKey } from './enc-direct-types.js'
 import type { PoiType } from '../../shared/types.js'
-import { toFiniteNumber } from '../../shared/numbers.js'
+import { finiteOrUndefined, toFiniteNumber } from '../../shared/numbers.js'
+import { presentString } from '../../shared/strings.js'
 
 /**
  * IHO S-57 water-level (WATLEV) codes the wire publishes as JSON numbers.
@@ -187,13 +188,7 @@ export function classifyDangerous (category: string | undefined): boolean | unde
  * its general non-empty free-text reader for OBJNAM, INFORM, and DSNM, which
  * need the same trim-and-reject-blank handling.
  */
-export function humanizeCategory (raw: unknown): string | undefined {
-  if (typeof raw !== 'string') {
-    return undefined
-  }
-  const trimmed = raw.trim()
-  return trimmed.length > 0 ? trimmed : undefined
-}
+export const humanizeCategory = presentString
 
 /**
  * Resolve the humanized category label for a hazard feature: CATWRK for a
@@ -210,9 +205,7 @@ export function categoryLabel (
 }
 
 /** Read a finite numeric property, treating null and non-numbers as absent. */
-export function readNumber (raw: unknown): number | undefined {
-  return toFiniteNumber(raw) ?? undefined
-}
+export const readNumber = finiteOrUndefined
 
 /**
  * Layer-derived fallback label for a hazard feature, used as the popup header

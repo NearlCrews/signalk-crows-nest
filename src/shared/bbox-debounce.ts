@@ -31,9 +31,10 @@
  * instantiate their own. They share the `MAX_BBOX_CACHE_ENTRIES` ceiling
  * from `src/shared/cache.ts` so a runaway zoom-pan never exhausts memory.
  *
- * This module also owns the canonical refresh-period bounds, default, and
- * clamp helper (`MIN_BBOX_DEBOUNCE_SECONDS`,
- * `MAX_BBOX_DEBOUNCE_SECONDS`, `DEFAULT_BBOX_DEBOUNCE_SECONDS`,
+ * This module also owns the canonical refresh-period bounds, the per-source
+ * defaults, and the clamp helper (`MIN_BBOX_DEBOUNCE_SECONDS`,
+ * `MAX_BBOX_DEBOUNCE_SECONDS`, `DEFAULT_ACTIVE_CAPTAIN_DEBOUNCE_SECONDS`,
+ * `DEFAULT_OPENSEAMAP_DEBOUNCE_SECONDS`, `DEFAULT_NOAA_ENC_DEBOUNCE_SECONDS`,
  * `clampBboxDebounceSeconds`). Each input module's config-schema fragment
  * and the panel's normalize-config use them, so a change to the bounds is
  * one edit, not four.
@@ -41,11 +42,35 @@
 
 import { LRUCache } from 'lru-cache'
 import { clampNumber } from './numbers.js'
+import { boundedNumberSchema } from './config-schema.js'
 import { MS_PER_SECOND } from './time.js'
 import type { Bbox } from './types.js'
 
-/** Default per-bbox debounce window, in seconds. */
-export const DEFAULT_BBOX_DEBOUNCE_SECONDS = 30
+/**
+ * Default per-bbox debounce window for the ActiveCaptain source, in seconds.
+ * ActiveCaptain is the most dynamic upstream (reviews and hazard reports
+ * arrive continuously), so its window stays short; the per-source defaults
+ * below stretch with each upstream's real data volatility. The
+ * stale-while-revalidate design means a longer window has no latency cost: a
+ * stale tile is served instantly either way, and the window only governs how
+ * often the background revalidation re-queries upstream.
+ */
+export const DEFAULT_ACTIVE_CAPTAIN_DEBOUNCE_SECONDS = 30
+
+/**
+ * Default debounce window for the OpenSeaMap source: 10 minutes. OSM seamark
+ * edits trickle in at a rate where a sub-minute revalidation buys nothing,
+ * and the Overpass mirrors are shared community infrastructure worth
+ * sparing.
+ */
+export const DEFAULT_OPENSEAMAP_DEBOUNCE_SECONDS = 600
+
+/**
+ * Default debounce window for the NOAA ENC Direct source: 30 minutes. NOAA
+ * refreshes ENC data weekly, so revalidating a viewport more often than this
+ * only re-downloads identical wrecks and rocks from the ArcGIS service.
+ */
+export const DEFAULT_NOAA_ENC_DEBOUNCE_SECONDS = 1800
 
 /**
  * Smallest configurable value. `0` is the off sentinel (no caching), so the
@@ -54,35 +79,34 @@ export const DEFAULT_BBOX_DEBOUNCE_SECONDS = 30
 export const MIN_BBOX_DEBOUNCE_SECONDS = 0
 
 /**
- * Largest configurable value. A 10 min cap is plenty for the chart-plotter
- * cadence (sub-minute typical) and protects against a hand-edited config
- * value that would otherwise effectively disable upstream querying.
+ * Largest configurable value: one hour. POI data is nearly static, so a long
+ * window is legitimate; the cap only protects against a hand-edited config
+ * value that would effectively disable upstream querying for a whole voyage.
  */
-export const MAX_BBOX_DEBOUNCE_SECONDS = 600
+export const MAX_BBOX_DEBOUNCE_SECONDS = 3600
 
 /**
  * Clamp a raw refresh-seconds value into the supported range, falling back
- * to {@link DEFAULT_BBOX_DEBOUNCE_SECONDS} on any non-numeric or
- * non-finite input.
+ * to the given per-source default on any non-numeric or non-finite input.
+ * The fallback is required so a new call site must say which source's
+ * default it means; a silent shared default let one layer inherit 30 s
+ * while another resolved 600 s with no compile error.
  */
-export function clampBboxDebounceSeconds (raw: unknown): number {
-  return clampNumber(raw, MIN_BBOX_DEBOUNCE_SECONDS, MAX_BBOX_DEBOUNCE_SECONDS, DEFAULT_BBOX_DEBOUNCE_SECONDS, true)
+export function clampBboxDebounceSeconds (raw: unknown, fallback: number): number {
+  return clampNumber(raw, MIN_BBOX_DEBOUNCE_SECONDS, MAX_BBOX_DEBOUNCE_SECONDS, fallback, true)
 }
 
 /**
  * Config-schema fragment for a source's bbox-debounce window field, in seconds.
  * The at-runtime sources (ActiveCaptain, OpenSeaMap, NOAA ENC) each declare an
- * identical number field over the debounce bounds differing only in its title,
- * so the shape lives here next to the bounds it carries.
+ * identical number field over the debounce bounds, differing only in its title
+ * and per-source default, so the shape lives here next to the bounds it
+ * carries.
  */
-export function refreshSecondsSchema (title: string): Record<string, unknown> {
-  return {
-    type: 'number',
-    title,
-    default: DEFAULT_BBOX_DEBOUNCE_SECONDS,
-    minimum: MIN_BBOX_DEBOUNCE_SECONDS,
-    maximum: MAX_BBOX_DEBOUNCE_SECONDS
-  }
+export function refreshSecondsSchema (title: string, defaultSeconds: number): Record<string, unknown> {
+  return boundedNumberSchema(
+    title, defaultSeconds, MIN_BBOX_DEBOUNCE_SECONDS, MAX_BBOX_DEBOUNCE_SECONDS
+  )
 }
 
 /**
@@ -177,6 +201,41 @@ function snapBbox (bbox: Bbox): Bbox {
   }
 }
 
+/**
+ * How close (in degrees) a requested edge must sit to its snapped tile edge
+ * before the neighbor tile in that direction is prefetched. 0.02 degrees is
+ * 0.2 cells, about 2.2 km: far enough out that a vessel underway (or a
+ * steady pan) warms the next tile before crossing the grid line, close
+ * enough that a centered viewport prefetches nothing. The distance must be
+ * strictly positive: an exactly grid-aligned edge carries no direction
+ * information, so a stationary aligned viewport prefetches nothing.
+ */
+const PREFETCH_MARGIN_DEGREES = 0.02
+
+/** One grid cell, in degrees. */
+const CELL_DEGREES = 1 / SNAP_CELLS_PER_DEGREE
+
+/**
+ * Largest snapped span (per axis, in cells) that still prefetches. The
+ * prefetch fetches the whole viewport translated one cell, so for a wide
+ * zoomed-out chart view it would re-download nearly everything on screen to
+ * gain one thin strip; the warming only pays for the small vessel-centered
+ * scan boxes and close-zoom views the cliff actually hurts.
+ */
+const PREFETCH_MAX_SPAN_CELLS = 2
+
+/** Translate a bbox by the given cell offsets (east-positive, north-positive). */
+function translateBbox (bbox: Bbox, eastCells: number, northCells: number): Bbox {
+  const east = eastCells * CELL_DEGREES
+  const north = northCells * CELL_DEGREES
+  return {
+    south: bbox.south + north,
+    west: bbox.west + east,
+    north: bbox.north + north,
+    east: bbox.east + east
+  }
+}
+
 /** A cached tile: the in-flight or settled fetch plus its freshness state. */
 interface GeoEntry<T> {
   /** The fetch promise; awaited by concurrent callers during a cold miss. */
@@ -191,10 +250,23 @@ interface GeoEntry<T> {
   revalidating: boolean
 }
 
+/** Optional knobs for {@link createBboxDebounceCache}. */
+export interface BboxDebounceCacheOptions {
+  /** Clock source, injectable for tests. Defaults to `Date.now`. */
+  now?: () => number
+  /**
+   * Warm the neighbor tile in the background when a request approaches a
+   * snapped tile edge (see the prefetch note on `get`). On by default so a
+   * vessel underway crosses the grid cliff onto an already-warm tile; tests
+   * that assert exact fetch counts opt out.
+   */
+  prefetchNeighbors?: boolean
+}
+
 /**
  * Create a geographic stale-while-revalidate cache with the given freshness
  * window (in seconds) and entry limit. `ttlSeconds <= 0` disables the cache:
- * `get` always fetches the raw viewport. `now` is injectable for tests.
+ * `get` always fetches the raw viewport.
  *
  * The LRU bounds size only (no library `ttl`): a stale tile must remain
  * readable so it can be served while it revalidates, so freshness is tracked
@@ -203,8 +275,10 @@ interface GeoEntry<T> {
 export function createBboxDebounceCache<T extends NonNullable<unknown>> (
   ttlSeconds: number,
   maxEntries: number,
-  now: () => number = Date.now
+  options: BboxDebounceCacheOptions = {}
 ): BboxDebounceCache<T> {
+  const now = options.now ?? Date.now
+  const prefetchEnabled = options.prefetchNeighbors !== false
   const ttlMs = Math.max(0, ttlSeconds) * MS_PER_SECOND
   const cache = ttlMs > 0
     ? new LRUCache<string, GeoEntry<T>>({ max: maxEntries })
@@ -272,6 +346,60 @@ export function createBboxDebounceCache<T extends NonNullable<unknown>> (
       .finally(() => { entry.revalidating = false })
   }
 
+  // Edge-proximity prefetch: when the requested box sits within the margin
+  // of a snapped tile edge, warm the neighbor tile in that direction in the
+  // background. A vessel underway (or a steady pan) pushes its viewport
+  // toward an edge before crossing it, so the grid-cliff cold fetch on the
+  // far side, which would otherwise block exactly the proximity-alarm scan
+  // path, lands on an already-warm tile instead. Runs only when serving a
+  // warm tile (never on a cold miss), so a rate-limited upstream sees at
+  // most one neighbor fetch per approach, not a burst.
+  function prefetchNeighbors (
+    bbox: Bbox,
+    fetchBbox: Bbox,
+    fetch: (fetchBbox: Bbox) => Promise<T>,
+    extraKey?: string,
+    shouldCache?: (value: T) => boolean
+  ): void {
+    // Wide viewports skip the warmup entirely (see PREFETCH_MAX_SPAN_CELLS).
+    const maxSpan = PREFETCH_MAX_SPAN_CELLS * CELL_DEGREES
+    if (fetchBbox.east - fetchBbox.west > maxSpan || fetchBbox.north - fetchBbox.south > maxSpan) {
+      return
+    }
+    // Scalar edge distances, checked before any allocation: the common case
+    // (no edge in range) costs arithmetic only, on a path that runs on every
+    // warm chart refresh and monitor tick.
+    const eastDistance = fetchBbox.east - bbox.east
+    const westDistance = bbox.west - fetchBbox.west
+    const northDistance = fetchBbox.north - bbox.north
+    const southDistance = bbox.south - fetchBbox.south
+    const nearEast = eastDistance > 0 && eastDistance < PREFETCH_MARGIN_DEGREES
+    const nearWest = westDistance > 0 && westDistance < PREFETCH_MARGIN_DEGREES
+    const nearNorth = northDistance > 0 && northDistance < PREFETCH_MARGIN_DEGREES
+    const nearSouth = southDistance > 0 && southDistance < PREFETCH_MARGIN_DEGREES
+    if (!nearEast && !nearWest && !nearNorth && !nearSouth) {
+      return
+    }
+    // Rare path: build the qualifying candidates and warm the two nearest (a
+    // vessel approaches one edge, or a corner).
+    const near: Array<{ eastCells: number, northCells: number, distance: number }> = []
+    if (nearEast) near.push({ eastCells: 1, northCells: 0, distance: eastDistance })
+    if (nearWest) near.push({ eastCells: -1, northCells: 0, distance: westDistance })
+    if (nearNorth) near.push({ eastCells: 0, northCells: 1, distance: northDistance })
+    if (nearSouth) near.push({ eastCells: 0, northCells: -1, distance: southDistance })
+    near.sort((a, b) => a.distance - b.distance)
+    for (const { eastCells, northCells } of near.slice(0, 2)) {
+      const neighbor = snapBbox(translateBbox(bbox, eastCells, northCells))
+      const key = bboxKey(neighbor, extraKey)
+      // `peek` rather than `get`: a mere proximity check must not bump the
+      // neighbor's LRU recency and shield an idle tile from eviction.
+      if (cache?.peek(key) !== undefined) continue
+      // Fire and forget; fetchInto already evicts the entry on rejection so
+      // a failed prefetch costs nothing and the real crossing just fetches.
+      fetchInto(key, neighbor, fetch, shouldCache).promise.catch(() => {})
+    }
+  }
+
   return {
     get: async (bbox, fetch, extraKey, shouldCache) => {
       if (cache === null) {
@@ -284,6 +412,9 @@ export function createBboxDebounceCache<T extends NonNullable<unknown>> (
         if (!existing.ok) {
           // A cold fetch is still in flight: share it (collapse the burst).
           return await existing.promise
+        }
+        if (prefetchEnabled) {
+          prefetchNeighbors(bbox, fetchBbox, fetch, extraKey, shouldCache)
         }
         if (now() - existing.freshAt < ttlMs) {
           return existing.value as T

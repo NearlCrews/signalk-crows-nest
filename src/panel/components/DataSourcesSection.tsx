@@ -12,7 +12,7 @@
  */
 
 import type * as React from 'react'
-import { useMemo, type Dispatch } from 'react'
+import { memo, useMemo, type Dispatch } from 'react'
 import type { ConfigAction } from '../config-reducer.js'
 import { POI_TYPE_FLAGS } from '../../shared/poi-type-selection.js'
 import { SEAMARK_GROUP_REFS } from '../../shared/seamark-groups.js'
@@ -23,22 +23,19 @@ import {
   USCG_LIGHT_LIST_SOURCE_ID,
   type SourceSlug
 } from '../../shared/source-ids.js'
-import {
-  DEFAULT_NOAA_ENC_SCALE_BAND,
-  DEFAULT_USCG_LIGHT_LIST_REFRESH_HOURS
-} from '../normalize-config.js'
+import { DEFAULT_REFRESH_HOURS } from '../../shared/refresh-hours.js'
+import { resolveScaleBand, SCALE_BAND_LABELS } from '../../shared/scale-band.js'
+import { S } from '../styles.js'
 import type { PluginConfig } from '../../shared/types.js'
 import type { SourceStatus, StatusSnapshot } from '../../status/status-types.js'
 import ActiveCaptainSource from './ActiveCaptainSource.js'
 import DataSourceCard from './DataSourceCard.js'
-import NoaaEncSource, { BAND_LABELS } from './NoaaEncSource.js'
+import NoaaEncSource from './NoaaEncSource.js'
 import OpenSeaMapSource from './OpenSeaMapSource.js'
 import SectionBox from './SectionBox.js'
 import UscgLightListSource from './UscgLightListSource.js'
 
 export type { SourceSlug }
-
-type ScaleBand = keyof typeof BAND_LABELS
 
 interface Props {
   state: PluginConfig
@@ -80,17 +77,17 @@ function openSeaMapSummary (state: PluginConfig): string {
 
 /** Build the USCG Light List card's collapsed one-line summary. */
 function uscgLightListSummary (state: PluginConfig): string {
-  const hours = state.uscgLightListRefreshHours ?? DEFAULT_USCG_LIGHT_LIST_REFRESH_HOURS
+  const hours = state.uscgLightListRefreshHours ?? DEFAULT_REFRESH_HOURS
   return appendSinceYear(`${hours} h refresh`, state.uscgLightListMinimumUpdateYear)
 }
 
 /** Build the NOAA ENC card's collapsed one-line summary. */
 function noaaEncSummary (state: PluginConfig): string {
-  const rawBand = state.noaaEncScaleBand ?? DEFAULT_NOAA_ENC_SCALE_BAND
   // Use the same friendly label the expanded card shows ("Harbor" not
   // "harbour", "Coastal" not "coastal"), so collapsing the card never
-  // surfaces the raw NOAA wire value.
-  const label = BAND_LABELS[rawBand as ScaleBand] ?? rawBand
+  // surfaces the raw NOAA wire value. resolveScaleBand maps an unknown
+  // stored value to the default, the same coercion normalize-config applies.
+  const label = SCALE_BAND_LABELS[resolveScaleBand(state.noaaEncScaleBand)]
   // Wrecks and obstructions default on; rocks default off.
   const layers: string[] = []
   if (state.noaaEncIncludeWrecks !== false) layers.push('wrecks')
@@ -118,13 +115,34 @@ function useStatusBySource (
   }, [snapshot])
 }
 
-/** The per-source accordion shown in the configuration panel. */
-export default function DataSourcesSection (
+/**
+ * The per-source accordion shown in the configuration panel. Memoized so the
+ * 5 s status-poll tick (which re-renders the panel root for the freshness
+ * note) does not cascade into the four cards: every prop here keeps its
+ * identity across a tick.
+ */
+export default memo(function DataSourcesSection (
   { state, dispatch, status, expanded, onToggleExpanded }: Props
 ): React.ReactElement {
   const statusBySource = useStatusBySource(status)
+  // Off-by-default sources the getting-started callout points at: shown only
+  // while none of them is enabled, so an established install never sees it.
+  const noOptionalSourceEnabled =
+    state.openSeaMapEnabled !== true &&
+    state.uscgLightListEnabled !== true &&
+    state.noaaEncEnabled !== true
   return (
     <SectionBox cardId='data-sources' title='Data sources' defaultExpanded>
+      {noOptionalSourceEnabled
+        ? (
+          <p style={S.infoCallout}>
+            Getting started: Garmin ActiveCaptain is always on. The other
+            sources below are off by default; expand a card and toggle one on
+            to layer OpenSeaMap, USCG Light List, or NOAA ENC Direct data onto
+            the chart.
+          </p>
+          )
+        : null}
       <DataSourceCard
         cardId={ACTIVE_CAPTAIN_SOURCE_ID}
         name='Garmin ActiveCaptain'
@@ -174,4 +192,4 @@ export default function DataSourcesSection (
       </DataSourceCard>
     </SectionBox>
   )
-}
+})

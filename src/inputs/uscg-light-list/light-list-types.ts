@@ -13,6 +13,7 @@
  */
 
 import type { Position } from '../../shared/types.js'
+import type { USCG_LIGHT_LIST_SOURCE_ID } from '../../shared/source-ids.js'
 
 /** A single USCG Light List feature off the wire. */
 export interface LightListFeature {
@@ -72,7 +73,7 @@ export interface LightListRecord {
   remark?: string
   district: string
   volume: number
-  source: 'usclightlist'
+  source: typeof USCG_LIGHT_LIST_SOURCE_ID
   modifiedDate?: string
   inactive: boolean
 }

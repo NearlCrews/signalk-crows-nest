@@ -12,17 +12,27 @@
  * default.
  */
 
+import { positiveCappedNumber } from './numbers.js'
+import { boundedNumberSchema } from './config-schema.js'
+
 /** Default vessel-proximity alarm radius, in meters; mirrors the schema default. */
 export const DEFAULT_PROXIMITY_ALARM_RADIUS_METERS = 500
 
+/**
+ * Upper bound on the alarm radius. Generous (100 km is far beyond any real
+ * proximity-alarm use), but it caps the per-tick fetch box a hand-edited
+ * config could otherwise blow up to an absurd size.
+ */
+export const MAX_PROXIMITY_ALARM_RADIUS_METERS = 100_000
+
 /** Lower bound on the per-tick fetch radius, so the alarm check always has data. */
-export const MIN_SCAN_RADIUS_METERS = 2000
+const MIN_SCAN_RADIUS_METERS = 2000
 
 /**
  * Multiple of the alarm radius the fetch box is widened to, so a point of
  * interest is fetched well before it crosses the alarm radius.
  */
-export const SCAN_RADIUS_FACTOR = 3
+const SCAN_RADIUS_FACTOR = 3
 
 /**
  * Hysteresis margin: an active alarm clears only once the point of interest is
@@ -30,7 +40,23 @@ export const SCAN_RADIUS_FACTOR = 3
  * and the clear distance stops an alarm chattering when a point of interest
  * sits right on the boundary.
  */
-export const EXIT_RADIUS_FACTOR = 1.2
+const EXIT_RADIUS_FACTOR = 1.2
+
+/**
+ * Resolve a raw alarm-radius config value: a non-positive or non-numeric value
+ * falls back to {@link DEFAULT_PROXIMITY_ALARM_RADIUS_METERS} (matching the
+ * other optional numeric config keys), and the result is capped at
+ * {@link MAX_PROXIMITY_ALARM_RADIUS_METERS}. Shared by the proximity output
+ * and the panel's normalize-config so the two cannot drift.
+ */
+export function clampProximityAlarmRadius (raw: unknown): number {
+  return positiveCappedNumber(raw, MAX_PROXIMITY_ALARM_RADIUS_METERS, DEFAULT_PROXIMITY_ALARM_RADIUS_METERS)
+}
+
+/** Config-schema fragment for the proximity alarm radius field. */
+export function proximityRadiusSchema (title: string): Record<string, unknown> {
+  return boundedNumberSchema(title, DEFAULT_PROXIMITY_ALARM_RADIUS_METERS, 1, MAX_PROXIMITY_ALARM_RADIUS_METERS)
+}
 
 /**
  * The distance threshold for an alarm, applying hysteresis: an alarm not yet

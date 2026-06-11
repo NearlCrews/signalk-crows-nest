@@ -10,11 +10,9 @@
 import type * as React from 'react'
 import type { Dispatch } from 'react'
 import type { ConfigAction } from '../config-reducer.js'
-import {
-  DEFAULT_MINIMUM_YEAR,
-  DEFAULT_OPENSEAMAP_ENDPOINT,
-  DEFAULT_REFRESH_SECONDS
-} from '../normalize-config.js'
+import { DEFAULT_MINIMUM_YEAR } from '../../shared/year-filter.js'
+import { DEFAULT_OVERPASS_ENDPOINT } from '../../shared/overpass-endpoints.js'
+import { DEFAULT_OPENSEAMAP_DEBOUNCE_SECONDS } from '../../shared/bbox-debounce.js'
 import { SEAMARK_GROUP_IDS } from '../../shared/seamark-groups.js'
 import { S } from '../styles.js'
 import type { PluginConfig } from '../../shared/types.js'
@@ -39,7 +37,7 @@ export default function OpenSeaMapSource ({ state, dispatch }: Props): React.Rea
   return (
     <>
       <EndpointUrlField
-        value={state.openSeaMapEndpoint ?? DEFAULT_OPENSEAMAP_ENDPOINT}
+        value={state.openSeaMapEndpoint ?? DEFAULT_OVERPASS_ENDPOINT}
         onChange={(endpoint) => dispatch({ type: 'setOpenSeaMapEndpoint', endpoint })}
       />
       <FallbackEndpointsField
@@ -61,12 +59,10 @@ export default function OpenSeaMapSource ({ state, dispatch }: Props): React.Rea
         <RefreshSecondsField
           id='ac-openseamap-refresh-seconds'
           label='Refresh period (seconds)'
-          hint={'How long to reuse the most recent Overpass result for the ' +
-            'same chart viewport before re-querying. A Freeboard refresh ' +
-            'burst on a stationary view stays inside the cache; a user who ' +
-            'pans to a fresh view re-queries immediately. Leave at 0 to ' +
-            'query Overpass on every list call.'}
-          value={state.openSeaMapRefreshSeconds ?? DEFAULT_REFRESH_SECONDS}
+          upstreamHint={'OSM seamark edits trickle in slowly, and the Overpass ' +
+            'mirrors are shared community infrastructure, so the 10 minute ' +
+            'default is friendly to both; raise it freely.'}
+          value={state.openSeaMapRefreshSeconds ?? DEFAULT_OPENSEAMAP_DEBOUNCE_SECONDS}
           onChange={(seconds) => dispatch({ type: 'setOpenSeaMapRefreshSeconds', seconds })}
         />
         <MinimumYearField

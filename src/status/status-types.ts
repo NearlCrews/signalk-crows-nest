@@ -13,6 +13,11 @@ export interface StatusError {
   at: string
   /** Human-readable error message. */
   message: string
+  /**
+   * Slug of the source the error was recorded against, when known. The
+   * panel uses it to make the listed error a jump-to-card shortcut.
+   */
+  source?: string
 }
 
 /** The most recent successful list fetch from a POI source. */

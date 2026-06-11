@@ -69,31 +69,33 @@ export interface ProximityAlarms {
  * @param radiusMeters Hazards within this distance of the vessel raise an alarm.
  */
 export function createProximityAlarms (app: AlarmApp, radiusMeters: number): ProximityAlarms {
-  // The tracker owns the active set and the clear half: a hazard is added on
-  // entry and removed on exit, so an alarm is raised and cleared exactly once
-  // per crossing of the radius boundary.
+  // The tracker owns the active set, the clear half, and the episode clock:
+  // a hazard is added on entry and removed on exit, so an alarm is raised and
+  // cleared exactly once per crossing of the radius boundary, and the
+  // tracker-stamped `raisedAt` keeps `createdAt` at the episode start on the
+  // clear delta rather than resetting to the clear time.
   const tracker = createNotificationTracker<{ name: string }>({
     app,
     pathPrefix: NOTIFICATION_PATH_PREFIX,
     sourceSuffix: SOURCE_SUFFIX,
-    buildClearValue: ({ name }) => ({
+    buildClearValue: ({ name }, raisedAt) => ({
       state: 'normal',
       method: [],
       message: `Hazard "${name}" is no longer nearby`,
-      createdAt: new Date().toISOString()
+      createdAt: raisedAt
     }),
     describeClear: (poiId, { name }) => `Proximity alarm cleared for hazard ${poiId} ("${name}")`
   })
 
   function raise (poiId: string, name: string, distance: number): void {
+    const raisedAt = tracker.set(poiId, { name })
     const value: NotificationValue = {
       state: 'alarm',
       method: ['visual', 'sound'],
       message: `Hazard "${name}" is ${Math.round(distance)} m away`,
-      createdAt: new Date().toISOString()
+      createdAt: raisedAt
     }
     emitNotification(app, NOTIFICATION_PATH_PREFIX, poiId, value, SOURCE_SUFFIX)
-    tracker.set(poiId, { name })
     app.debug(`Proximity alarm raised for hazard ${poiId} ("${name}") at ${Math.round(distance)} m`)
   }
 

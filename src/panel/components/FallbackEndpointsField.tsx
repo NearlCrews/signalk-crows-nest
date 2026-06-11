@@ -7,11 +7,18 @@
  */
 
 import type * as React from 'react'
+import LabeledField from './LabeledField.js'
 import { S } from '../styles.js'
-import { RECOMMENDED_OVERPASS_FALLBACK_ENDPOINTS } from '../normalize-config.js'
+import { RECOMMENDED_OVERPASS_FALLBACK_ENDPOINTS } from '../../shared/overpass-endpoints.js'
 
 /** Stable id linking the visible label to its input. */
 const FIELD_ID = 'ac-openseamap-fallback-endpoints'
+
+/** Hoisted so the textarea style object is not rebuilt on every render. */
+const TEXTAREA_STYLE: React.CSSProperties = { ...S.inputWide, minHeight: 56, fontFamily: 'monospace' }
+
+/** Hoisted so the placeholder string is not re-joined on every render. */
+const PLACEHOLDER = RECOMMENDED_OVERPASS_FALLBACK_ENDPOINTS.join('\n')
 
 interface Props {
   value: string[]
@@ -21,23 +28,27 @@ interface Props {
 /** The Overpass fallback-endpoints field shown in the OpenSeaMap card body. */
 export default function FallbackEndpointsField ({ value, onChange }: Props): React.ReactElement {
   return (
-    <>
-      <div style={S.fieldRow}>
-        <label htmlFor={FIELD_ID} style={S.label}>Fallback endpoints</label>
+    <LabeledField
+      id={FIELD_ID}
+      label='Fallback endpoints'
+      hint={
+        <>
+          Optional Overpass mirrors, one per line, tried in order when the primary
+          endpoint is unreachable. Leave empty to use only the primary. The
+          placeholder shows suggested full-planet mirrors. Avoid regional extracts
+          such as overpass.osm.ch, which return no data outside their region.
+        </>
+      }
+    >
+      {(controlProps) => (
         <textarea
-          id={FIELD_ID}
-          style={{ ...S.inputWide, minHeight: 56, fontFamily: 'monospace' }}
+          {...controlProps}
+          style={TEXTAREA_STYLE}
           value={value.join('\n')}
-          placeholder={RECOMMENDED_OVERPASS_FALLBACK_ENDPOINTS.join('\n')}
+          placeholder={PLACEHOLDER}
           onChange={(e) => onChange(e.target.value.split('\n'))}
         />
-      </div>
-      <p style={S.hintBelow}>
-        Optional Overpass mirrors, one per line, tried in order when the primary
-        endpoint is unreachable. Leave empty to use only the primary. The
-        placeholder shows suggested full-planet mirrors. Avoid regional extracts
-        such as overpass.osm.ch, which return no data outside their region.
-      </p>
-    </>
+      )}
+    </LabeledField>
   )
 }

@@ -1,14 +1,21 @@
 /**
- * Time-bounded cache for point-of-interest detail responses.
+ * Time-bounded cache for point-of-interest detail responses, with
+ * stale-on-error: POI details are nearly static (a marina does not move), so
+ * when an entry's freshness window has lapsed and the refetch FAILS (the
+ * vessel is offline, the API is down), the expired entry is served rather
+ * than rejecting; the freshness TTL governs how eagerly a reachable upstream
+ * is re-queried, not whether known data is usable.
  *
- * On a cache miss the configured fetchMethod loads the entry from the
- * ActiveCaptain client; a rejected load propagates to the caller and is not
- * stored.
+ * On a true miss (no entry, fresh or stale) the configured fetchMethod loads
+ * the entry from the ActiveCaptain client; a rejected load propagates to the
+ * caller and is not stored.
  *
  * When a persistent {@link PoiStore} is supplied, the cache hydrates from it
- * on creation so a cold start has offline data without a network round-trip,
- * and persists every real load back to it. The persistent layer is always on;
- * it has no configuration toggle.
+ * on creation so a cold start has offline data without a network round-trip:
+ * entries still inside the freshness window keep their remaining freshness,
+ * and older retained entries hydrate as stale-but-usable, so the offline
+ * fallback survives a restart. Every real load is persisted back. The
+ * persistent layer is always on; it has no configuration toggle.
  */
 
 import { LRUCache } from 'lru-cache'
@@ -32,6 +39,15 @@ export interface PoiCacheListener {
   onLoadSuccess?: () => void
   /** A load from the source failed. */
   onLoadError?: (error: unknown) => void
+}
+
+/**
+ * Per-call fetch context: carries a failed load's error out of the cache,
+ * whose stale-on-error options otherwise swallow the rejection into an
+ * `undefined` result.
+ */
+interface FetchContext {
+  error?: unknown
 }
 
 /** Public surface of the point-of-interest detail cache. */
@@ -68,10 +84,17 @@ export function createPoiCache (
   store?: PoiStore
 ): PoiCache {
   const ttlMs = ttlMinutes * MS_PER_MINUTE
-  const cache = new LRUCache<string, PoiDetails>({
+  const cache = new LRUCache<string, PoiDetails, FetchContext>({
     max: MAX_POI_CACHE_ENTRIES,
     ttl: ttlMs,
-    fetchMethod: async (id: string): Promise<PoiDetails> => {
+    // Stale-on-error: when a stale entry's refetch rejects (offline, API
+    // down), serve the stale details instead of rejecting, and keep the
+    // entry so the next read can try again. POI details are nearly static,
+    // so a lapsed entry beats no answer at the helm. With no stale value to
+    // fall back on, the rejection surfaces through the fetch context below.
+    allowStaleOnFetchRejection: true,
+    noDeleteOnFetchRejection: true,
+    fetchMethod: async (id, _stale, { context }): Promise<PoiDetails> => {
       try {
         const details = await client.pointOfInterestDetails(id)
         listener.onLoadSuccess?.()
@@ -80,33 +103,41 @@ export function createPoiCache (
         store?.persist(id, details)
         return details
       } catch (error) {
+        // The stale-on-error options make the cache swallow this rejection,
+        // so the real error rides the per-call context for `get` to rethrow
+        // when there is no stale value to serve instead.
+        context.error = error
         listener.onLoadError?.(error)
         throw error
       }
     }
   })
 
-  // Hydrate the in-memory cache from the persistent store. Each entry keeps
-  // only its true remaining freshness, so a restart never extends an entry's
-  // lifetime beyond the configured TTL window.
+  // Hydrate the in-memory cache from the persistent store, aging each entry
+  // from its persist time via the library's own `start` option: an entry
+  // inside the freshness window keeps its true remaining freshness, and an
+  // older retained entry lands already stale, never served while a fetch can
+  // succeed but available as the stale-on-error fallback when the vessel is
+  // offline, which is the point of the on-disk store. The `Math.min` clamp
+  // keeps a future timestamp (backward clock skew, or a store file copied
+  // off another machine) from extending an entry beyond the TTL window.
   if (store !== undefined) {
     const now = Date.now()
     for (const [id, entry] of store.load()) {
-      // Clamp to at most ttlMs: a timestamp in the future (backward clock
-      // skew, or a store file copied from another machine) would otherwise
-      // make the entry outlive the configured TTL window.
-      const remainingTtl = Math.min(ttlMs, ttlMs - (now - entry.timestamp))
-      if (remainingTtl > 0) {
-        cache.set(id, entry.details, { ttl: remainingTtl })
-      }
+      cache.set(id, entry.details, { start: Math.min(now, entry.timestamp) })
     }
   }
 
   return {
     get: async (id: string): Promise<PoiDetails> => {
-      const details = await cache.fetch(id)
+      const context: FetchContext = {}
+      const details = await cache.fetch(id, { context })
       if (details === undefined) {
-        throw new Error(`No point of interest details available for ${id}`)
+        // A miss whose load failed with nothing stale to serve: rethrow the
+        // load's own error (captured by fetchMethod) so the caller sees the
+        // real failure. The fallback covers a concurrent caller coalesced
+        // onto another call's in-flight load, whose context stays empty.
+        throw context.error ?? new Error(`No point of interest details available for ${id}`)
       }
       return details
     },

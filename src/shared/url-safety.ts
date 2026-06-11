@@ -10,8 +10,12 @@
  * and the structured output cannot diverge on which schemes are allowed.
  */
 
-/** Schemes a link value may use. Anything else (notably `javascript:`) is rejected. */
-const DEFAULT_ALLOWED_SCHEMES: readonly string[] = ['http:', 'https:', 'mailto:']
+/**
+ * Schemes a link value may use. Anything else (notably `javascript:`) is
+ * rejected. `tel:` rides along for the ActiveCaptain phone link, matching the
+ * HTML contact template's `tel:` anchor.
+ */
+const DEFAULT_ALLOWED_SCHEMES: readonly string[] = ['http:', 'https:', 'mailto:', 'tel:']
 
 /**
  * Return `value` when it parses as an absolute URL whose scheme is in

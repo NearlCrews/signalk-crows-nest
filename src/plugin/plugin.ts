@@ -13,6 +13,7 @@ import type { OutputRegistry } from '../outputs/output-registry.js'
 import type { OutputContext, OutputHandle, PositionScanContributor } from '../outputs/output.js'
 import type { PoiSource } from '../inputs/poi-source.js'
 import { assemblePluginSchema } from './plugin-config.js'
+import { createBridgeClearanceResolver } from '../outputs/bridge-air-draft/bridge-clearance-resolver.js'
 import { createPositionMonitor } from '../monitoring/position-monitor.js'
 import type { PositionMonitor } from '../monitoring/position-monitor.js'
 import { createPluginStatus } from '../status/plugin-status.js'
@@ -127,6 +128,8 @@ export function createPlugin (
       // Guard against a start() without a matching stop().
       teardown()
 
+      app.setPluginStatus('Starting')
+
       const config = rawConfig as PluginConfig
       // A fresh recorder per run, built with this run's enabled sources so the
       // status snapshot carries one row per source; it reports this run's own
@@ -157,7 +160,35 @@ export function createPlugin (
         getCurrentPosition: () => runtime?.monitor?.getCurrentPosition()
       })
 
-      const outputContext: OutputContext = { app, config, pois: source, status }
+      // The server shares one plugin-status slot, last writer wins. A
+      // start-time failure below (dead monitor or failed output) latches a
+      // plugin error that must stay visible until the next start, so the
+      // outputs get a guarded app whose healthy-status writes are suppressed
+      // while the latch is set; everything else, errors included, delegates
+      // to the real app through the prototype chain.
+      let startErrorLatched = false
+      const guardedApp: ServerAPI = Object.assign(Object.create(app), {
+        setPluginStatus: (message: string): void => {
+          if (!startErrorLatched) {
+            app.setPluginStatus(message)
+          }
+        }
+      })
+
+      const outputContext: OutputContext = {
+        app: guardedApp,
+        config,
+        pois: source,
+        status,
+        // One clearance resolver per run, shared by the bridge air-draft and
+        // route-hazard outputs so the same bridge resolves once. Cheap to
+        // build (an LRU and a Set, no timers), so it is always supplied even
+        // when neither consumer is enabled.
+        bridgeClearanceResolver: createBridgeClearanceResolver({
+          getDetails: (id) => source.getDetails(id),
+          debug: (message) => { app.debug(message) }
+        })
+      }
       const { handles, startedIds, failedIds: failedOutputIds } = outputs.startEnabled(outputContext)
       runtime = { source, handles }
 
@@ -198,6 +229,7 @@ export function createPlugin (
         // A monitor-startup failure is not a data-source outage, so it is
         // surfaced as a plugin error rather than recorded against a source
         // row in the per-source status snapshot.
+        startErrorLatched = true
         app.setPluginError(
           'Position monitor failed to start; proximity and route-hazard alarms are not running'
         )
@@ -208,12 +240,15 @@ export function createPlugin (
       // enabled output is dead. A monitor failure takes precedence; its error
       // message is the more specific one.
       if (!monitorFailed && failedOutputIds.length > 0) {
+        startErrorLatched = true
         app.setPluginError(
           `Outputs failed to start: ${failedOutputIds.join(', ')} (see server log for details)`
         )
       } else if (!monitorFailed) {
         // Only report a healthy status when nothing failed.
-        app.setPluginStatus('Ready, waiting for resource requests')
+        app.setPluginStatus(
+          `Ready, ${enabledSources.length} source(s) and ${startedIds.length} output(s) enabled`
+        )
       }
     },
 

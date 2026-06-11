@@ -7,7 +7,7 @@
  */
 
 import type * as React from 'react'
-import { MAX_YEAR, MIN_YEAR } from '../normalize-config.js'
+import { MAX_YEAR, MIN_YEAR } from '../../shared/year-filter.js'
 import NumberField from './NumberField.js'
 
 interface Props {

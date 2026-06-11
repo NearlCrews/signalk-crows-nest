@@ -37,8 +37,13 @@ export interface NotificationTrackerConfig<T> {
    * delta shares the per-output `$source` brand the raise carries.
    */
   sourceSuffix?: string
-  /** Build the `state: 'normal'` notification value for an entry being cleared. */
-  buildClearValue: (entry: T) => NotificationValue
+  /**
+   * Build the `state: 'normal'` notification value for an entry being
+   * cleared. `raisedAt` is the alarm episode's start time (stamped by the
+   * tracker on the first `set`), so a clear delta's `createdAt` reports when
+   * the episode began rather than resetting to the clear time.
+   */
+  buildClearValue: (entry: T, raisedAt: string) => NotificationValue
   /** Optional debug log emitted on each clear, given the POI id and entry. */
   describeClear?: (poiId: string, entry: T) => string
 }
@@ -49,15 +54,15 @@ export interface NotificationTracker<T> {
   has: (poiId: string) => boolean
   /** The active entry for `poiId`, or `undefined` when none. */
   get: (poiId: string) => T | undefined
-  /** Mark `poiId` as currently alarming and store its entry. */
-  set: (poiId: string, entry: T) => void
-  /** Iterate the currently-active entries. */
-  entries: () => IterableIterator<[string, T]>
   /**
-   * Clear a single alarming entry: emit its clear notification, drop it from
-   * the active set, and optionally log. A no-op when `poiId` is not active.
+   * Mark `poiId` as currently alarming and store its entry. Returns the
+   * alarm episode's `raisedAt` ISO timestamp: stamped on the first `set` of
+   * an episode and preserved across overwrites (a message refresh), so the
+   * caller puts the same `createdAt` on every delta of the episode. Episode
+   * time is a tracker invariant, not a per-caller convention, so a new alarm
+   * output cannot accidentally reset it.
    */
-  clear: (poiId: string) => void
+  set: (poiId: string, entry: T) => string
   /**
    * Clear every active entry whose POI id is not in `activeIds`. The ids are
    * sanitized into the tracker's key space before the comparison, so a caller
@@ -84,18 +89,25 @@ export function createNotificationTracker<T> (
   config: NotificationTrackerConfig<T>
 ): NotificationTracker<T> {
   const { app, pathPrefix, sourceSuffix, buildClearValue, describeClear } = config
-  const active = new Map<string, T>()
+  const active = new Map<string, { entry: T, raisedAt: string }>()
 
+  // Clear one alarming entry: emit its `normal` notification, drop it from
+  // the active set, and optionally log. A no-op when `poiId` is not active.
+  // Internal only; the callers drive clears through clearStale and clearAll.
   function clear (poiId: string): void {
     const safeId = sanitizePoiId(poiId)
-    const entry = active.get(safeId)
-    if (entry === undefined) {
+    const record = active.get(safeId)
+    if (record === undefined) {
       return
     }
-    emitNotification(app, pathPrefix, safeId, buildClearValue(entry), sourceSuffix)
+    // emitNotification re-sanitizes the id it is given; that second pass is
+    // deliberately redundant (sanitizing is idempotent) because each side
+    // guards an independent invariant: the map key space here, the on-wire
+    // path safety there.
+    emitNotification(app, pathPrefix, safeId, buildClearValue(record.entry, record.raisedAt), sourceSuffix)
     active.delete(safeId)
     if (describeClear !== undefined) {
-      app.debug(describeClear(safeId, entry))
+      app.debug(describeClear(safeId, record.entry))
     }
   }
 
@@ -121,10 +133,15 @@ export function createNotificationTracker<T> (
 
   return {
     has: (poiId) => active.has(sanitizePoiId(poiId)),
-    get: (poiId) => active.get(sanitizePoiId(poiId)),
-    set: (poiId, entry) => { active.set(sanitizePoiId(poiId), entry) },
-    entries: () => active.entries(),
-    clear,
+    get: (poiId) => active.get(sanitizePoiId(poiId))?.entry,
+    set: (poiId, entry) => {
+      const safeId = sanitizePoiId(poiId)
+      // Preserve the episode start across an overwrite (a message refresh);
+      // stamp it only when the id enters the alarm state.
+      const raisedAt = active.get(safeId)?.raisedAt ?? new Date().toISOString()
+      active.set(safeId, { entry, raisedAt })
+      return raisedAt
+    },
     clearStale,
     clearAll
   }

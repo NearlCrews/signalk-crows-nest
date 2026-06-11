@@ -26,7 +26,7 @@ import { emitNotification, type NotificationValue } from '../../shared/notificat
 import { createNotificationTracker, type NotificationTrackerApp } from '../../shared/notification-tracker.js'
 import { formatMeters } from '../../shared/bridge-clearance.js'
 import { toFiniteNumber } from '../../shared/numbers.js'
-import { SECONDS_PER_MINUTE } from '../../shared/time.js'
+import { MINUTES_PER_HOUR, SECONDS_PER_MINUTE } from '../../shared/time.js'
 import type { CorridorPoi } from '../../shared/types.js'
 
 /** Path prefix for the per-point route notification, completed with the POI id. */
@@ -41,9 +41,6 @@ const SOURCE_SUFFIX = 'route'
 
 /** Meters in a kilometer, the threshold above which a distance is shown in km. */
 const METERS_PER_KM = 1000
-
-/** Minutes in an hour, used to format an ETA that runs past the hour. */
-const MINUTES_PER_HOUR = 60
 
 /**
  * The clearance verdict for a corridor bridge the bridge air-draft check found
@@ -127,19 +124,21 @@ export interface RouteHazardAlarms {
  * @param app The SignalK app, used to emit notification deltas.
  */
 export function createRouteHazardAlarms (app: RouteAlarmApp): RouteHazardAlarms {
-  // The tracker owns the active set and the clear half. Each entry keeps the
-  // display name (for the clear message) and the last message emitted, so the
-  // notification can be refreshed when the distance or ETA changes without
-  // raising a fresh alarm.
+  // The tracker owns the active set, the clear half, and the episode clock.
+  // Each entry keeps the display name (for the clear message) and the last
+  // message emitted (so the notification can be refreshed when the distance
+  // or ETA changes without raising a fresh alarm); the tracker-stamped
+  // `raisedAt` keeps `createdAt` at the episode start across refreshes and
+  // the clear rather than resetting on every update.
   const tracker = createNotificationTracker<{ name: string, message: string }>({
     app,
     pathPrefix: NOTIFICATION_PATH_PREFIX,
     sourceSuffix: SOURCE_SUFFIX,
-    buildClearValue: ({ name }) => ({
+    buildClearValue: ({ name }, raisedAt) => ({
       state: 'normal',
       method: [],
       message: `"${name}" is no longer on the route ahead`,
-      createdAt: new Date().toISOString()
+      createdAt: raisedAt
     }),
     describeClear: (poiId, { name }) => `Route hazard alarm cleared for ${poiId} ("${name}")`
   })
@@ -164,13 +163,17 @@ export function createRouteHazardAlarms (app: RouteAlarmApp): RouteHazardAlarms 
     return `${base}: clearance ${clearance} m is at or below your air draft ${airDraft} m (+${margin} m margin)`
   }
 
-  /** Emit a `warn` notification for a flagged point with the given message. */
-  function emitWarn (poiId: string, message: string): void {
+  /**
+   * Emit a `warn` notification for a flagged point with the given message.
+   * `raisedAt` is the episode's first raise time, so a refresh keeps the
+   * original `createdAt` rather than restarting the clock.
+   */
+  function emitWarn (poiId: string, message: string, raisedAt: string): void {
     const value: NotificationValue = {
       state: 'warn',
       method: ['visual'],
       message,
-      createdAt: new Date().toISOString()
+      createdAt: raisedAt
     }
     emitNotification(app, NOTIFICATION_PATH_PREFIX, poiId, value, SOURCE_SUFFIX)
   }
@@ -195,13 +198,15 @@ export function createRouteHazardAlarms (app: RouteAlarmApp): RouteHazardAlarms 
     for (const poi of flagged.values()) {
       const message = buildMessage(poi, tooLow.get(poi.id))
       const existing = tracker.get(poi.id)
-      if (existing === undefined) {
-        emitWarn(poi.id, message)
-        tracker.set(poi.id, { name: poi.name, message })
-        app.debug(`Route hazard alarm raised for ${poi.type} ${poi.id} ("${poi.name}")`)
-      } else if (existing.message !== message) {
-        emitWarn(poi.id, message)
-        tracker.set(poi.id, { name: poi.name, message })
+      if (existing === undefined || existing.message !== message) {
+        // The tracker stamps `raisedAt` on the first set of the episode and
+        // preserves it across this refresh overwrite, so the refreshed delta
+        // keeps the original `createdAt`.
+        const raisedAt = tracker.set(poi.id, { name: poi.name, message })
+        emitWarn(poi.id, message, raisedAt)
+        if (existing === undefined) {
+          app.debug(`Route hazard alarm raised for ${poi.type} ${poi.id} ("${poi.name}")`)
+        }
       }
     }
 
