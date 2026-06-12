@@ -38,9 +38,10 @@ body:
   - type: textarea
     id: poi-types
     attributes:
-      label: POI types / resources
-      description: If the request involves specific ActiveCaptain POI types or Signal K resource paths, list them here.
+      label: Data sources, POI types, and resources
+      description: If the request involves a specific data source (ActiveCaptain, OpenSeaMap, USCG Light List, or NOAA ENC Direct), specific POI types, or Signal K resource paths, list them here.
       placeholder: |
+        Data source: OpenSeaMap
         POI types: LocalKnowledge, Navigational
         Signal K resource: resources/notes
 

@@ -8,15 +8,15 @@
   project-specific colour with a 2-3 shape glyph. This badge is the only
   region that varies between sibling plugins.
 
-  This variant's badge: crimson red (#C62828) with a crow's-nest
-  silhouette: a thick mast, a horizontal yardarm cross-tree, and a
-  rounded barrel sitting on top of the yardarm. Reads as "lookout"
-  at thumbnail size, matching the project name and the plugin's
-  hazard-alarm role.
+  This variant's badge: crimson red (#C62828) with a lighthouse
+  silhouette: a tapered tower with a white window stripe, a lantern room
+  with a white light dot, a peaked roof, and two beam strokes sweeping
+  out from the lantern. Reads as "lookout / hazard warning" at thumbnail
+  size, matching the plugin's POI and hazard-alarm role.
 
   Sibling badges already in use: yellow (Virtual Weather thundercloud),
   orange (NMEA 2000 Emitter radiating arcs), violet (OpenRouter
-  Companion routing graph). Red keeps the family visually separable
+  Companion chat bubble). Red keeps the family visually separable
   at thumbnail size.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Crow's Nest plugin icon">
@@ -41,22 +41,22 @@
   <circle cx="388" cy="388" r="84" fill="#C62828" stroke="#FFFFFF" stroke-width="8"/>
 
   <!--
-    Badge glyph: crow's-nest silhouette. Four shapes for read at
-    thumbnail size:
-      - mast (thick vertical bar) running below the yardarm
-      - yardarm (horizontal cross-tree) at mast height
-      - barrel / nest (dome-topped rectangle) sitting on the yardarm
-      - lookout's head (small white disc) poking out the top of the
-        barrel: gives the barrel its "container with someone inside"
-        read instead of letting it flatten into a sign or microphone
-        silhouette
-    Centered on the badge centre (388, 388). Drawn in the family glyph
-    dark (#1B3A4B) so it reads as a single silhouette against the red.
+    Badge glyph: lighthouse silhouette. Four parts for read at thumbnail
+    size: a tapered tower, a lantern room, a peaked roof, and two light
+    beams sweeping out from the lantern. White accents (the lantern dot
+    and the tower window stripe) keep the silhouette from flattening
+    into a plain obelisk. Centered on the badge centre (388, 388),
+    drawn in the family glyph dark (#1B3A4B).
   -->
   <g fill="#1B3A4B">
-    <rect x="384" y="380" width="8" height="54" rx="2"/>
-    <rect x="350" y="378" width="76" height="8" rx="3"/>
-    <path d="M 358 378 L 358 358 Q 358 338 378 338 L 398 338 Q 418 338 418 358 L 418 378 Z"/>
+    <path d="M 374 434 L 380 370 L 396 370 L 402 434 Z"/>
+    <rect x="374" y="352" width="28" height="18" rx="3"/>
+    <path d="M 372 352 L 388 336 L 404 352 Z"/>
   </g>
-  <circle cx="388" cy="346" r="7" fill="#FFFFFF"/>
+  <g stroke="#1B3A4B" stroke-width="9" stroke-linecap="round">
+    <line x1="360" y1="358" x2="338" y2="350"/>
+    <line x1="416" y1="358" x2="438" y2="350"/>
+  </g>
+  <circle cx="388" cy="361" r="6" fill="#FFFFFF"/>
+  <rect x="377" y="394" width="22" height="9" rx="4" fill="#FFFFFF"/>
 </svg>

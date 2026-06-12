@@ -6,8 +6,8 @@ We actively support the following versions with security updates:
 
 | Version | Supported |
 | ------- | --------- |
-| 0.5.x   | Yes       |
-| < 0.5   | No        |
+| 0.8.x   | Yes       |
+| < 0.8   | No        |
 
 ## Reporting a Vulnerability
 
@@ -65,12 +65,13 @@ npm audit
 
 ## Data Handling
 
-This plugin talks to two unauthenticated read-only APIs: the Garmin
-ActiveCaptain community API, and the OpenStreetMap Overpass API the
-OpenSeaMap source queries. Both calls send only bounding-box coordinates
-and point-of-interest ids; the plugin sends no personal data, no
-credentials, no Garmin account login, and no OSM account login. It does not
-store or transmit user identifiers. See
+This plugin talks to four unauthenticated read-only APIs: the Garmin
+ActiveCaptain community API, the OpenStreetMap Overpass API the OpenSeaMap
+source queries, the USCG NAVCEN Maritime Safety Information feed, and the
+NOAA ENC Direct ArcGIS service. The requests carry only chart coordinates
+(bounding boxes), point-of-interest ids, and standard HTTP cache headers;
+the plugin sends no personal data, no credentials, and no account login of
+any kind. It does not store or transmit user identifiers. See
 [docs/garmin-api.md](../docs/garmin-api.md) for the full ActiveCaptain API
 research notes.
 
@@ -88,8 +89,9 @@ security and reliability:
 - **Not for Safety-Critical Use**: this software should not be relied upon as
   the sole means of navigation.
 - **Professional Equipment**: always maintain certified navigation equipment.
-- **Regular Verification**: ActiveCaptain content is community-contributed and
-  provided "as is"; verify all navigation data against official sources.
+- **Regular Verification**: the imported content is community-contributed or
+  periodically published government data, provided "as is"; verify all
+  navigation data against official charts and notices to mariners.
 - **Test Thoroughly**: test in non-critical conditions before relying on this
   plugin.
 

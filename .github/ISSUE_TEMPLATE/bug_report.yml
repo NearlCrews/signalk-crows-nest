@@ -49,7 +49,7 @@ body:
     id: plugin-version
     attributes:
       label: Plugin version
-      placeholder: 1.2.0
+      placeholder: 0.8.2
     validations:
       required: true
 
@@ -92,9 +92,9 @@ body:
   - type: textarea
     id: poi-types
     attributes:
-      label: Affected POI types
-      description: Optional. If the bug is tied to specific ActiveCaptain POI types, list them.
-      placeholder: Marina, Anchorage
+      label: Affected data sources and POI types
+      description: Optional. If the bug is tied to a specific data source (ActiveCaptain, OpenSeaMap, USCG Light List, or NOAA ENC Direct) or to specific POI types, list them.
+      placeholder: ActiveCaptain; Marina, Anchorage
 
   - type: textarea
     id: config

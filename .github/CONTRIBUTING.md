@@ -72,11 +72,11 @@ chore: update dependencies
 ## License and attribution
 
 By contributing, you agree your contributions are licensed under the MIT
-License that covers this project. The plugin imports community-contributed
-data from the Garmin ActiveCaptain API and from OpenStreetMap via the
-Overpass API; keep the "Data sourced from Garmin Active Captain"
-attribution on every ActiveCaptain-rendered note and the
-"© OpenStreetMap contributors (ODbL)" attribution on every
-OpenSeaMap-rendered note. The OpenStreetMap data is published under the
+License that covers this project. The plugin imports data from four
+upstreams: the Garmin ActiveCaptain community API, OpenStreetMap via the
+Overpass API (the OpenSeaMap source), the USCG Light List, and NOAA ENC
+Direct. Every published note carries its source credit on the structured
+`properties.attribution` field; keep that attribution intact for every
+source. The OpenStreetMap data is published under the
 [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/),
 which requires visible attribution wherever the data is shown.
