@@ -9,7 +9,14 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 > development milestones that preceded this publication. Their content is
 > incorporated into the 0.4.2 release.
 
-## [Unreleased]
+<a id="v090"></a>
+
+## [0.9.0] - 2026-06-12
+
+The configuration panel now follows the server's unit preferences, the
+default merge radius is rethought in feet, and a consolidation pass
+hardens the USCG store, pins the ENC layer table, and dedupes shared
+helpers across the plugin, the panel, and the test suite.
 
 ### Added
 

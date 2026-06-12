@@ -21,31 +21,28 @@ proximity, route-corridor, and bridge air-draft alarms.
 > safety-of-life navigation: always cross-check against official charts and
 > your primary instruments.
 
-## What's new in 0.8.2
+## What's new in 0.9.0
 
-A modernized configuration panel and a caching overhaul built on the
-observation that POI data is nearly static: a buoy does not move, and a
-harbor rarely changes.
+The panel speaks your units, and the dedupe default is rethought in feet.
 
-- **Panel theme system.** A theme toggle adds light, dark, and a
-  red-preserving night mode for night vision at the helm, controls grow to
-  marine touch sizes, unsaved edits warn before a tab close, the footer
-  stays reachable on a long panel, and status errors are clickable
-  shortcuts to the card they belong to.
-- **Offline-first ActiveCaptain details.** The on-disk store keeps a
-  30-day retention independent of the freshness TTL, and a lapsed entry
-  whose refetch fails (offline, API down) is served instead of rejected,
-  so a restart at anchor still hydrates the chart.
-- **Refresh windows sized to each upstream.** OpenSeaMap defaults to
-  10 minutes and NOAA ENC Direct to 30, the USCG background refresh
-  stretched to daily, and the viewport cache prefetches the neighbor tile
-  ahead of a moving vessel so the proximity-alarm scan never blocks on a
-  tile boundary.
-- **Safety fixes.** A start-time failure now latches the plugin error in
-  the admin UI instead of being overwritten seconds later, and a feature
-  that vanished upstream reads as a normal miss rather than an outage.
+- **Feet or meters, automatically.** The configuration panel follows the
+  Signal K server's unit preferences: with an Imperial preset active,
+  every length field (alarm radius, corridor width, vessel air draft,
+  clearance margin, and the merge radii) displays and accepts feet,
+  including any per-user preset chosen on the admin UI's Units page. The
+  saved configuration stays in meters, and a server without the
+  unit-preferences API simply stays metric.
+- **150-foot merge default.** The radius for merging a feature reported by
+  several sources defaults to 150 feet (45.72 m, was 150 m), so two
+  genuinely distinct neighbors are less likely to collapse into one
+  marker. Widen it per source if cross-source duplicates reappear.
+- **Hardening.** The USCG Light List store validates every required field
+  when loading from disk, the NOAA ENC layer-id table is pinned by a test
+  so an upstream renumbering is caught before it ships, and the panel's
+  numeric floors now come from the same shared constants the config
+  schema enforces.
 
-See the [changelog](CHANGELOG.md#v082) for the full list.
+See the [changelog](CHANGELOG.md#v090) for the full list.
 
 ## What it does
 
