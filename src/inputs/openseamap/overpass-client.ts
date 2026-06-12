@@ -362,7 +362,7 @@ export function createOverpassClient (
         'Overpass list request failed'
       )
     } catch (error) {
-      log.debug(`ERROR fetching Overpass elements ${JSON.stringify(bbox)} - ${String(error)}`)
+      log.debug(`Overpass list failed for ${JSON.stringify(bbox)}: ${String(error)}`)
       throw error
     }
   }
@@ -378,7 +378,7 @@ export function createOverpassClient (
       // deleted from OpenStreetMap. The source turns this into a "not found".
       return elements[0]
     } catch (error) {
-      log.debug(`ERROR fetching Overpass element ${typedId} - ${String(error)}`)
+      log.debug(`Overpass detail failed for ${typedId}: ${String(error)}`)
       throw error
     }
   }

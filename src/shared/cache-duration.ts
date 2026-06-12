@@ -27,6 +27,12 @@ export const DEFAULT_CACHE_DURATION_MINUTES = MINUTES_PER_DAY
 export const MAX_CACHE_DURATION_MINUTES = 31 * MINUTES_PER_DAY
 
 /**
+ * Lower bound on the cache duration, shared by the schema fragment and the
+ * panel field so the form floor cannot drift from the schema floor.
+ */
+export const MIN_CACHE_DURATION_MINUTES = 1
+
+/**
  * Resolve a raw cache-duration config value: a non-positive or non-numeric
  * value falls back to {@link DEFAULT_CACHE_DURATION_MINUTES}, and the result
  * is capped at {@link MAX_CACHE_DURATION_MINUTES}. Shared by the ActiveCaptain
@@ -38,10 +44,10 @@ export function clampCacheDurationMinutes (raw: unknown): number {
 
 /** Config-schema fragment for the ActiveCaptain cache-duration field. */
 export function cacheDurationSchema (title: string): Record<string, unknown> {
-  // Minimum 1 so the admin UI clamps the field and AJV rejects a 0 or
+  // The minimum makes the admin UI clamp the field and AJV reject a 0 or
   // negative submit, matching every other numeric in the plugin schema. The
   // runtime clamp already falls back on a non-positive value, but accepting
   // one in the form and silently overriding it is a confusing UX
   // inconsistency with the bounded sibling fields.
-  return boundedNumberSchema(title, DEFAULT_CACHE_DURATION_MINUTES, 1, MAX_CACHE_DURATION_MINUTES)
+  return boundedNumberSchema(title, DEFAULT_CACHE_DURATION_MINUTES, MIN_CACHE_DURATION_MINUTES, MAX_CACHE_DURATION_MINUTES)
 }

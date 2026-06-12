@@ -22,7 +22,11 @@
 
 import { distanceMeters } from '../geo/position-utilities.js'
 import { ACTIVE_CAPTAIN_SOURCE_ID } from '../shared/source-ids.js'
-import { DEFAULT_DEDUPE_RADIUS_METERS, MAX_DEDUPE_RADIUS_METERS } from '../shared/dedupe-radius.js'
+import {
+  DEFAULT_DEDUPE_RADIUS_METERS,
+  MAX_DEDUPE_RADIUS_METERS,
+  MIN_DEDUPE_RADIUS_METERS
+} from '../shared/dedupe-radius.js'
 import { boundedNumberSchema } from '../shared/config-schema.js'
 import type { PoiSummary, PoiType, Position } from '../shared/types.js'
 
@@ -33,20 +37,14 @@ import type { PoiSummary, PoiType, Position } from '../shared/types.js'
  */
 const BASE_SOURCE_ID = ACTIVE_CAPTAIN_SOURCE_ID
 
-// The default merge radius (150 m, wide enough to catch the routine 80-to-250 m
-// gap between two sources' placement of the same feature without merging
-// genuine neighbors) is owned by src/shared/dedupe-radius.ts. Re-exported so the
-// input registry and the schema builder below keep importing it from here.
-export { DEFAULT_DEDUPE_RADIUS_METERS }
-
-/**
- * Smallest radius the cell packing supports without collision. Used both as the
- * merge-radius schema's `minimum` and as a defensive clamp in
- * `dedupeAgainstBase`, since the dedupe function is also called directly by the
- * registry with the raw config value, not only through the schema-validated
- * panel.
- */
-const MIN_SAFE_RADIUS_METERS = 1
+// The default merge radius (150 feet, about 46 m, tight enough that two
+// genuine neighbors are never merged away by default; widen it per source to
+// catch larger cross-source placement gaps) and the one-meter minimum the
+// cell packing needs to stay collision-free are owned by
+// src/shared/dedupe-radius.ts. The minimum doubles as a defensive clamp in
+// `dedupeAgainstBase`, since the dedupe function is also called directly by
+// the registry with the raw config value, not only through the
+// schema-validated panel.
 
 /**
  * Config-schema fragment for a non-base source's "merge duplicates of an
@@ -64,7 +62,7 @@ export function dedupeToggleSchema (title: string): Record<string, unknown> {
  */
 export function dedupeRadiusSchema (title: string): Record<string, unknown> {
   return boundedNumberSchema(
-    title, DEFAULT_DEDUPE_RADIUS_METERS, MIN_SAFE_RADIUS_METERS, MAX_DEDUPE_RADIUS_METERS
+    title, DEFAULT_DEDUPE_RADIUS_METERS, MIN_DEDUPE_RADIUS_METERS, MAX_DEDUPE_RADIUS_METERS
   )
 }
 
@@ -80,7 +78,7 @@ const METERS_PER_DEGREE = 111320
  * nine allocations per 3x3 neighbor probe per POI on the dedupe hot path.
  *
  * The stride assumes |yCell| < STRIDE / 2 and |xCell| < STRIDE / 2: at radius
- * below {@link MIN_SAFE_RADIUS_METERS} that bound can be violated, so
+ * below {@link MIN_DEDUPE_RADIUS_METERS} that bound can be violated, so
  * `dedupeAgainstBase` clamps the input radius to the safe minimum.
  */
 const CELL_KEY_STRIDE = 100_000_000
@@ -177,7 +175,7 @@ export type DedupeRadiusSpec = number | ReadonlyMap<string, number>
 /** Resolve the radius for one source from the (number or map) spec. */
 function radiusFor (source: string, spec: DedupeRadiusSpec): number {
   const raw = typeof spec === 'number' ? spec : (spec.get(source) ?? DEFAULT_DEDUPE_RADIUS_METERS)
-  return raw < MIN_SAFE_RADIUS_METERS ? MIN_SAFE_RADIUS_METERS : raw
+  return raw < MIN_DEDUPE_RADIUS_METERS ? MIN_DEDUPE_RADIUS_METERS : raw
 }
 
 /**
@@ -188,13 +186,13 @@ function radiusFor (source: string, spec: DedupeRadiusSpec): number {
  */
 function gridRadius (spec: DedupeRadiusSpec): number {
   if (typeof spec === 'number') {
-    return spec < MIN_SAFE_RADIUS_METERS ? MIN_SAFE_RADIUS_METERS : spec
+    return spec < MIN_DEDUPE_RADIUS_METERS ? MIN_DEDUPE_RADIUS_METERS : spec
   }
   let max = DEFAULT_DEDUPE_RADIUS_METERS
   for (const value of spec.values()) {
     if (value > max) max = value
   }
-  return max < MIN_SAFE_RADIUS_METERS ? MIN_SAFE_RADIUS_METERS : max
+  return max < MIN_DEDUPE_RADIUS_METERS ? MIN_DEDUPE_RADIUS_METERS : max
 }
 
 /**

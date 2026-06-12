@@ -73,7 +73,7 @@ src/                      # TypeScript source
 │   │                      #   queue, throttle, retry, Retry-After
 │   ├── http-one-shot.ts   # One-shot GET shared by the USCG and NOAA raw clients
 │   ├── dedupe-pois.ts     # Merges duplicates against the ActiveCaptain base layer,
-│   │                      #   then a same-source pass; radius configurable, default 150 m
+│   │                      #   then a same-source pass; radius configurable, default 150 ft
 │   ├── active-captain/    # The ActiveCaptain input: module, source adapter, client,
 │   │                      #   wire types, cache, store, detail renderer, templates,
 │   │                      #   rating filter
@@ -137,7 +137,8 @@ src/                      # TypeScript source
                            #   per-field input
                            #   components, including the shared NumberField,
                            #   MinimumYearField (the per-source earliest-year
-                           #   filter), and AlarmFieldset layouts
+                           #   filter), ProximityAlarmFields, and
+                           #   RouteHazardScanFields
 test/                     # node:test suites, run through tsx
 dist/                     # Compiled plugin output (generated, not committed)
 public/                   # Webpack Module Federation output for the panel (generated, not committed)

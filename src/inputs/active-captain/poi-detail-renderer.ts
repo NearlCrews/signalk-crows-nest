@@ -103,7 +103,6 @@ export function parseApiDate (value: unknown): Date {
  * 12 of those months, so the two thresholds stay consistent: a delta just under
  * a year never rounds to "12 months".
  */
-const SECONDS_PER_SECOND = 1
 const SECONDS_PER_MONTH = SECONDS_PER_DAY * 30
 const RELATIVE_UNITS: ReadonlyArray<readonly [Intl.RelativeTimeFormatUnit, number]> = [
   ['year', SECONDS_PER_MONTH * 12],
@@ -111,7 +110,7 @@ const RELATIVE_UNITS: ReadonlyArray<readonly [Intl.RelativeTimeFormatUnit, numbe
   ['day', SECONDS_PER_DAY],
   ['hour', SECONDS_PER_HOUR],
   ['minute', SECONDS_PER_MINUTE],
-  ['second', SECONDS_PER_SECOND]
+  ['second', 1]
 ]
 
 const relativeTimeFormat = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })

@@ -36,10 +36,8 @@ export function isIsolatedDanger (record: LightListRecord): boolean {
   return false
 }
 
-/** Resolve the PoiType for a Light List record. Always `Navigational`. */
-export function recordPoiType (_record: LightListRecord): PoiType {
-  return 'Navigational'
-}
+/** The PoiType for every Light List record, matching the NOAA sibling's `LAYER_POI_TYPE` shape. */
+export const LIGHT_LIST_POI_TYPE: PoiType = 'Navigational'
 
 /** Resolve the Freeboard skIcon glyph for a Light List record. */
 export function recordSkIcon (record: LightListRecord): string {

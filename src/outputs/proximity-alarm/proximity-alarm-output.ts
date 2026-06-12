@@ -40,7 +40,9 @@ export const proximityAlarmOutput: OutputModule = {
     const positionScan: PositionScanContributor = {
       poiTypes: PROXIMITY_ALARM_POI_TYPES,
       buildFetchBox: (tickPosition) => positionToBbox(tickPosition, scanRadiusMeters),
-      evaluate: (vesselPosition, pois) => { alarms.evaluate(vesselPosition, pois) }
+      // alarms.evaluate is a closure, not a method, so it passes through
+      // directly with no binding.
+      evaluate: alarms.evaluate
     }
     return {
       stop: () => { alarms.clearAll() },

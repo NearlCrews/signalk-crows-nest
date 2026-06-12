@@ -38,12 +38,7 @@ test('isEnabled tracks the config flag', () => {
 
 test('start contributes a Hazard scan and raises an alarm on evaluate', () => {
   const messages: unknown[] = []
-  const context = {
-    app: { handleMessage: (_id: string, d: unknown) => messages.push(d), debug: () => {} },
-    config: { enableProximityAlarms: true, proximityAlarmRadiusMeters: 500 },
-    pois: {} as never,
-    status: {} as never
-  } as unknown as OutputContext
+  const context = createContext(messages)
   const handle = proximityAlarmOutput.start(context)
   assert.ok(handle.positionScan)
   assert.ok(handle.positionScan.poiTypes.includes('Hazard'))

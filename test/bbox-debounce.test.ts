@@ -20,11 +20,7 @@ import {
   MIN_BBOX_DEBOUNCE_SECONDS
 } from '../src/shared/bbox-debounce.js'
 import type { Bbox } from '../src/shared/types.js'
-
-/** Flush pending microtasks so a fire-and-forget background refresh settles. */
-function flush (): Promise<void> {
-  return new Promise((resolve) => { setImmediate(resolve) })
-}
+import { flush } from './helpers.js'
 
 // Grid-aligned at 0.1 degrees, so it snaps to itself.
 const SAMPLE: Bbox = { south: 42.0, west: -71.0, north: 42.5, east: -70.5 }

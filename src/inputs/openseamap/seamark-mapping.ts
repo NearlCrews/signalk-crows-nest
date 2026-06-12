@@ -36,6 +36,9 @@ const SEAMARK_MAPPING: Readonly<Record<string, { type: PoiType, icon: string, la
   wreck: { type: 'Hazard', icon: 'hazard', label: 'Wreck' },
   obstruction: { type: 'Hazard', icon: 'hazard', label: 'Obstruction' },
   harbour: { type: 'Marina', icon: 'marina', label: 'Harbour' },
+  // Deliberately absent from SEAMARK_TYPES_BY_GROUP: OSM tags marinas with
+  // leisure=marina as the primary key, and the list query fetches those
+  // separately. This row maps elements that also carry seamark:type=marina.
   marina: { type: 'Marina', icon: 'marina', label: 'Marina' },
   lock_basin: { type: 'Lock', icon: 'lock', label: 'Lock' },
   bridge: { type: 'Bridge', icon: 'bridge', label: 'Bridge' },

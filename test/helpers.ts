@@ -1,17 +1,76 @@
 /**
  * Shared test helpers.
  *
- * Several test files in this suite built their own variants of the same three
+ * Several test files in this suite built their own variants of the same
  * helpers: a stub SignalK app that captures every notification delta, a north
  * offset on the equator that places a fixture at a known distance from the
- * origin, and a `PoiSummary` builder with the ActiveCaptain url/attribution
- * defaults. They are consolidated here so a tweak to the captured shape, the
- * meters-per-degree constant, or the default summary attribution lands in one
- * place rather than three.
+ * origin, a `PoiSummary` builder with the ActiveCaptain url/attribution
+ * defaults, a microtask flush, a minimal `PoiDetails` builder, a silent
+ * logger plus JSON `Response` builder for the HTTP client tests, and the
+ * Course API stubs. They are consolidated here so a tweak to any one shape
+ * lands in one place rather than in per-file copies.
  */
 
+import type { CourseInfo } from '@signalk/server-api'
+import type { PoiDetails } from '../src/inputs/active-captain/active-captain-types.js'
 import type { NotificationTrackerApp } from '../src/shared/notification-tracker.js'
 import type { PoiSummary, PoiType, Position } from '../src/shared/types.js'
+
+/**
+ * Resolve once the pending microtasks have drained, so a fire-and-forget
+ * background step (a cache revalidation, a route resolution, an awaited scan)
+ * has settled before the test reads its effect.
+ */
+export function flush (): Promise<void> {
+  return new Promise((resolve) => { setImmediate(resolve) })
+}
+
+/** A logger that discards output, keeping test runs quiet. */
+export const silentLog = { debug: (): void => {}, error: (): void => {} }
+
+/** Build a JSON Response with the given status and optional headers. */
+export function jsonResponse (body: unknown, status = 200, headers: Record<string, string> = {}): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...headers }
+  })
+}
+
+/** Build a minimal but valid PoiDetails record for the given id. */
+export function makeDetails (id: string): PoiDetails {
+  return {
+    pointOfInterest: {
+      id: Number(id),
+      name: `POI ${id}`,
+      poiType: 'Marina',
+      mapLocation: { latitude: 0, longitude: 0 },
+      dateLastModified: '2024-01-01T00:00:00Z'
+    }
+  }
+}
+
+/** Build a course with no active route (a point destination, or nothing). */
+export function courseWithoutRoute (): CourseInfo {
+  return {
+    startTime: null,
+    targetArrivalTime: null,
+    arrivalCircle: 0,
+    activeRoute: null,
+    nextPoint: null,
+    previousPoint: null
+  } as CourseInfo
+}
+
+/** Wrap GeoJSON coordinates (longitude first) in a minimal route resource. */
+export function routeResource (coordinates: unknown): object {
+  return {
+    name: 'Test route',
+    feature: {
+      type: 'Feature',
+      geometry: { type: 'LineString', coordinates }
+    }
+  }
+}
 
 /** Shape of the notification value recorded by {@link createCapturingApp}. */
 export interface CapturedNotification {

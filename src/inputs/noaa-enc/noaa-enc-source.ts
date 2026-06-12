@@ -20,7 +20,7 @@
 import { LRUCache } from 'lru-cache'
 import type { EncDirectClient } from './enc-direct-client.js'
 import type { EncFeature, EncLayerKey, ScaleBand } from './enc-direct-types.js'
-import { LAYER_LABEL, LAYER_POI_TYPE, LAYER_SK_ICON, sordatToIsoTimestamp } from './s57-mapping.js'
+import { humanizeCategory, LAYER_LABEL, LAYER_POI_TYPE, LAYER_SK_ICON, sordatToIsoTimestamp } from './s57-mapping.js'
 import { renderEncDirectDetail } from './enc-direct-detail.js'
 import { buildNoaaEncSections } from './noaa-enc-sections.js'
 import { fetchDetailRecorded, type PoiSource } from '../poi-source.js'
@@ -110,12 +110,7 @@ function parseSummaryId (id: string): { layerKey: EncLayerKey, objectId: number 
 
 /** Name for the popup: the OBJNAM string when present, layer label otherwise. */
 function featureName (layerKey: EncLayerKey, feature: EncFeature): string {
-  const objnam = feature.properties.OBJNAM
-  if (typeof objnam === 'string') {
-    const trimmed = objnam.trim()
-    if (trimmed.length > 0) return trimmed
-  }
-  return LAYER_LABEL[layerKey]
+  return humanizeCategory(feature.properties.OBJNAM) ?? LAYER_LABEL[layerKey]
 }
 
 /**
@@ -189,6 +184,9 @@ function toDetailView (cached: CachedFeature): PoiDetailView | null {
   return view
 }
 
+/** The bbox-debounce cache's payload: the raw upstream features per enabled layer. */
+type LayerFeatures = Array<{ layerKey: EncLayerKey, features: EncFeature[] }>
+
 /** Create the NOAA ENC Direct POI source. */
 export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
   const { client, band, minimumYear, refreshSeconds, status, getCurrentPosition } = config
@@ -199,7 +197,6 @@ export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
   // tagging, detail-LRU repopulation, and year filter run outside the
   // cache. The detail cache above (LRU by feature id) is unrelated; this
   // one keys on the bounding-box string.
-  type LayerFeatures = Array<{ layerKey: EncLayerKey, features: EncFeature[] }>
   const bboxCache = createBboxDebounceCache<LayerFeatures>(refreshSeconds, MAX_BBOX_CACHE_ENTRIES)
   // The set of enabled hazard layers is fixed for the life of the source,
   // so the array is built once at construction rather than on every list

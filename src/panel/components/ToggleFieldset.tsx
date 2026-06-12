@@ -4,10 +4,10 @@
  * hint paragraph below the toggle, and a `children` slot for the field or
  * fields the section controls.
  *
- * `AlarmFieldset`, `MergeWithActiveCaptain`, and `BridgeAirDraftFields` each
- * compose this shell and slot their own field(s) as `children`, so the
- * fieldset, legend, checkbox row, and hint markup live in one place rather than
- * being reimplemented per control group. The fieldset is itself the section: it
+ * `ProximityAlarmFields`, `RouteHazardScanFields`, `MergeWithActiveCaptain`,
+ * and `BridgeAirDraftFields` each compose this shell and slot their own
+ * field(s) as `children`, so the fieldset, legend, checkbox row, and hint
+ * markup live in one place rather than being reimplemented per control group. The fieldset is itself the section: it
  * deliberately has no nested `<section>` wrapper, since the parent (the alerts
  * section or a data-source card) already provides the landmark and a nested one
  * only makes screen-reader landmark navigation noisier.

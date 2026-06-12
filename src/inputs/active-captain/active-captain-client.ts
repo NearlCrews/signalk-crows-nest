@@ -193,7 +193,7 @@ export function createActiveCaptainClient (
     try {
       const response = await http.fetch(url, {
         method: 'GET',
-        headers: { ...BASE_HEADERS }
+        headers: BASE_HEADERS
       })
 
       await assertResponseOk(response, `ActiveCaptain details request failed for ${id}`)

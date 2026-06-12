@@ -161,8 +161,9 @@ export function renderLightListDetail (record: LightListRecord): string {
     blocks.push(labeledParagraph('RACON', record.racon))
   }
   // Remarks deliberately omit the trailing period: the wire text often
-  // already ends with its own punctuation, so this line stays bespoke.
-  if (record.remark !== undefined && record.remark.length > 0) {
+  // already ends with its own punctuation, so this line stays bespoke. A
+  // present remark is never blank: the parser stores it via presentString.
+  if (record.remark !== undefined) {
     blocks.push(`<p><strong>Remarks:</strong> ${escapeHtml(record.remark)}</p>`)
   }
   blocks.push(`<p><strong>Source:</strong> ${sourceLine(record)}.</p>`)

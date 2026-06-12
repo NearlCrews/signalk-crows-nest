@@ -9,10 +9,18 @@
  * of the sources that uses it.
  */
 
+import { metersFromFeet } from './length.js'
 import { positiveCappedNumber, positiveFiniteNumber } from './numbers.js'
 
-/** Default merge radius, in meters. */
-export const DEFAULT_DEDUPE_RADIUS_METERS = 150
+/** Default merge radius: 150 feet, stored in meters like every config length. */
+export const DEFAULT_DEDUPE_RADIUS_METERS = metersFromFeet(150)
+
+/**
+ * Smallest merge radius the plugin accepts: the dedupe grid's cell packing
+ * needs at least one meter to stay collision-free, and every merge-radius
+ * schema and panel field uses the same floor.
+ */
+export const MIN_DEDUPE_RADIUS_METERS = 1
 
 /**
  * Upper bound on the merge radius: beyond 10 km, two reports can no longer

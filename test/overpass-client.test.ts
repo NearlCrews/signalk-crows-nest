@@ -2,9 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createOverpassClient, type RateLimitOptions } from '../src/inputs/openseamap/overpass-client.js'
 import type { Bbox } from '../src/shared/types.js'
-
-/** A logger that discards output, keeping test runs quiet. */
-const silentLog = { debug: (): void => {}, error: (): void => {} }
+import { jsonResponse, silentLog } from './helpers.js'
 
 /** Fast rate-limit settings so the retry tests do not sleep for whole seconds. */
 const fastLimits: Partial<RateLimitOptions> = {
@@ -16,14 +14,6 @@ const fastLimits: Partial<RateLimitOptions> = {
 
 const endpoint = 'https://overpass.test/api/interpreter'
 const sampleBbox: Bbox = { north: 1, south: 0, east: 1, west: 0 }
-
-/** Build a JSON Response with the given status and optional headers. */
-function jsonResponse (body: unknown, status = 200, headers: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json', ...headers }
-  })
-}
 
 /**
  * Swap in a stubbed global fetch for the duration of fn, then restore it. The

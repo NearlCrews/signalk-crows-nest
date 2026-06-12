@@ -10,7 +10,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  recordPoiType,
+  LIGHT_LIST_POI_TYPE,
   recordSkIcon,
   isIsolatedDanger
 } from '../src/inputs/uscg-light-list/light-list-mapping.js'
@@ -30,9 +30,7 @@ function record (overrides: Partial<LightListRecord>): LightListRecord {
 }
 
 test('every Light List record maps to PoiType Navigational', () => {
-  assert.equal(recordPoiType(record({ aidType: 'FD/FX' })), 'Navigational')
-  assert.equal(recordPoiType(record({ aidType: 'PA/FL' })), 'Navigational')
-  assert.equal(recordPoiType(record({ aidType: undefined })), 'Navigational')
+  assert.equal(LIGHT_LIST_POI_TYPE, 'Navigational')
 })
 
 test('default skIcon is navigation-structure', () => {
@@ -40,11 +38,10 @@ test('default skIcon is navigation-structure', () => {
   assert.equal(recordSkIcon(record({})), 'navigation-structure')
 })
 
-test('isolated-danger aids resolve to the hazard skIcon while PoiType stays Navigational', () => {
+test('isolated-danger aids resolve to the hazard skIcon', () => {
   const r = record({ aidSubtype: 'ISO/DG' })
   assert.equal(isIsolatedDanger(r), true)
   assert.equal(recordSkIcon(r), 'hazard')
-  assert.equal(recordPoiType(r), 'Navigational')
 })
 
 test('isolated-danger from REMARK text also resolves to the hazard skIcon', () => {

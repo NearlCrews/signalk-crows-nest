@@ -9,10 +9,7 @@ import {
 } from '../src/monitoring/position-monitor.js'
 import type { PositionScanContributor } from '../src/outputs/output.js'
 import type { Bbox, PoiSummary, Position } from '../src/shared/types.js'
-
-/** Resolve once the pending microtasks (an awaited scan) have drained. */
-const flush = (): Promise<void> =>
-  new Promise<void>(resolve => { setImmediate(resolve) })
+import { flush } from './helpers.js'
 
 /** A controllable monotonic clock, so the throttle is tested without waiting. */
 function createClock (): { now: () => number, advance: (ms: number) => void } {

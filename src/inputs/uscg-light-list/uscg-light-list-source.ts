@@ -15,7 +15,7 @@
 
 import type { LightListClient } from './light-list-client.js'
 import type { LightListStore } from './light-list-store.js'
-import { recordPoiType, recordSkIcon } from './light-list-mapping.js'
+import { LIGHT_LIST_POI_TYPE, recordSkIcon } from './light-list-mapping.js'
 import { renderLightListDetail } from './light-list-detail.js'
 import { buildLightListSections } from './light-list-sections.js'
 import type { PoiSource } from '../poi-source.js'
@@ -165,7 +165,7 @@ export function createUscgLightListSource (
       for (const record of records) {
         const summary: PoiSummary = {
           id: String(record.llnr),
-          type: recordPoiType(record),
+          type: LIGHT_LIST_POI_TYPE,
           position: { ...record.position },
           name: record.name,
           source: USCG_LIGHT_LIST_SOURCE_ID,
@@ -197,7 +197,7 @@ export function createUscgLightListSource (
       const view: PoiDetailView = {
         name: record.name,
         position: { ...record.position },
-        type: recordPoiType(record),
+        type: LIGHT_LIST_POI_TYPE,
         url: openSeaMapMarkerUrl(record.position.latitude, record.position.longitude),
         source: USCG_LIGHT_LIST_SOURCE_ID,
         attribution: ATTRIBUTION,

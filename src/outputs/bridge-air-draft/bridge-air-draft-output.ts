@@ -62,7 +62,9 @@ export const bridgeAirDraftOutput: OutputModule = {
     const positionScan: PositionScanContributor = {
       poiTypes: BRIDGE_POI_TYPES,
       buildFetchBox: (tickPosition) => positionToBbox(tickPosition, scanRadiusMeters),
-      evaluate: (vesselPosition, pois) => { alarms.evaluate(vesselPosition, pois) }
+      // alarms.evaluate is a closure, not a method, so it passes through
+      // directly with no binding.
+      evaluate: alarms.evaluate
     }
     return {
       stop: () => { alarms.clearAll() },

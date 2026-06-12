@@ -23,36 +23,6 @@ const DOT_OK: React.CSSProperties = { ...S.dot, ...S.dotOk }
 const DOT_OFF: React.CSSProperties = { ...S.dot, ...S.dotOff }
 const DOT_ERROR: React.CSSProperties = { ...S.dot, ...S.dotError }
 
-// The freshness note in the title row: muted, small, right-aligned.
-const CHECKED_AT: React.CSSProperties = {
-  fontSize: 'var(--ac-font-small)',
-  fontWeight: 400,
-  color: 'var(--ac-text-faint)',
-  marginLeft: 'auto'
-}
-
-// Title row wrapper so the freshness note sits on the same line as the title.
-const TITLE_ROW: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'baseline',
-  gap: 8
-}
-
-// A recent-error entry rendered as a jump-to-card button: inherits the
-// error-item palette, drops the button chrome, and keeps the row clickable
-// without reading as a primary control.
-const ERROR_JUMP_BUTTON: React.CSSProperties = {
-  background: 'none',
-  border: 'none',
-  padding: 0,
-  margin: 0,
-  font: 'inherit',
-  color: 'inherit',
-  cursor: 'pointer',
-  textAlign: 'left',
-  textDecoration: 'underline'
-}
-
 /** Map the tri-state apiReachable flag to a status dot style and label. */
 function apiState (reachable: boolean | null): { dot: React.CSSProperties, label: string } {
   if (reachable === true) return { dot: DOT_OK, label: 'reachable' }
@@ -135,11 +105,11 @@ export default memo(function StatusBar ({ status, lastUpdatedMs, onJumpToSource 
 
   return (
     <div style={S.statusBar}>
-      <div style={TITLE_ROW}>
+      <div style={S.statusTitleRow}>
         <span style={S.statusBarTitle}>Plugin status</span>
         {lastUpdatedMs !== null
           ? (
-            <span style={CHECKED_AT}>
+            <span style={S.statusCheckedAt}>
               checked {relativeTime(lastUpdatedMs)}
             </span>
             )
@@ -158,13 +128,13 @@ export default memo(function StatusBar ({ status, lastUpdatedMs, onJumpToSource 
         ? (
           <ul style={S.statusErrors} aria-label='Recent errors'>
             {recentErrors.map(({ at, message, source }) => (
-              <li key={`${at}-${message}`} style={S.statusErrorItem}>
+              <li key={`${at}-${source ?? ''}-${message}`} style={S.statusErrorItem}>
                 <span style={S.statusErrorTime}>{relativeTime(at)}</span>
                 {source !== undefined && onJumpToSource !== undefined
                   ? (
                     <button
                       type='button'
-                      style={ERROR_JUMP_BUTTON}
+                      style={S.statusErrorJump}
                       title='Show the source this error belongs to'
                       onClick={() => onJumpToSource(source)}
                     >

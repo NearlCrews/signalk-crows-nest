@@ -15,7 +15,7 @@
  */
 
 import type { OverpassElement } from './overpass-client.js'
-import { tagValue, humanizeEnum } from './openseamap-detail.js'
+import { tagValue, humanizeEnum, readFamilyTags, readLightTags } from './openseamap-detail.js'
 import { humanizeLightCharacter } from '../../shared/light-character.js'
 import { pushSection } from '../../shared/normalized-detail.js'
 import type { NormalizedItem, NormalizedSection } from '../../shared/normalized-detail.js'
@@ -50,21 +50,17 @@ function pushMeasure (
  * `buildFamilyLine`: the family key follows from the `seamark:type` value.
  */
 function familyItems (tags: Readonly<Record<string, string>>): NormalizedItem[] {
-  const type = tagValue(tags, 'seamark:type')?.toLowerCase()
-  if (type === undefined) return []
-  const prefix = `seamark:${type}:`
+  const family = readFamilyTags(tags)
+  if (family === null) return []
   const items: NormalizedItem[] = []
-  const category = tagValue(tags, `${prefix}category`)
-  if (category !== undefined) {
-    items.push({ label: 'Category', value: humanizeEnum(category), kind: 'text' })
+  if (family.category !== undefined) {
+    items.push({ label: 'Category', value: humanizeEnum(family.category), kind: 'text' })
   }
-  const colour = tagValue(tags, `${prefix}colour`)
-  if (colour !== undefined) {
-    items.push({ label: 'Colour', value: humanizeEnum(colour), kind: 'text' })
+  if (family.colour !== undefined) {
+    items.push({ label: 'Colour', value: humanizeEnum(family.colour), kind: 'text' })
   }
-  const shape = tagValue(tags, `${prefix}shape`)
-  if (shape !== undefined) {
-    items.push({ label: 'Shape', value: humanizeEnum(shape), kind: 'text' })
+  if (family.shape !== undefined) {
+    items.push({ label: 'Shape', value: humanizeEnum(family.shape), kind: 'text' })
   }
   return items
 }
@@ -75,21 +71,19 @@ function familyItems (tags: Readonly<Record<string, string>>): NormalizedItem[] 
  * normalized, and the period (s), range (NM), and height (m) are measures.
  */
 function lightItems (tags: Readonly<Record<string, string>>): NormalizedItem[] {
+  const light = readLightTags(tags)
   const items: NormalizedItem[] = []
-  const character = tagValue(tags, 'seamark:light:character')
-  if (character !== undefined) {
-    items.push({ label: 'Character', value: humanizeLightCharacter(character), kind: 'text' })
+  if (light.character !== undefined) {
+    items.push({ label: 'Character', value: humanizeLightCharacter(light.character), kind: 'text' })
   }
-  const colour = tagValue(tags, 'seamark:light:colour')
-  if (colour !== undefined) {
-    items.push({ label: 'Colour', value: humanizeEnum(colour), kind: 'text' })
+  if (light.colour !== undefined) {
+    items.push({ label: 'Colour', value: humanizeEnum(light.colour), kind: 'text' })
   }
-  pushMeasure(items, 'Period', tagValue(tags, 'seamark:light:period'), 's')
-  pushMeasure(items, 'Range', tagValue(tags, 'seamark:light:range'), 'NM')
-  pushMeasure(items, 'Height', tagValue(tags, 'seamark:light:height'), 'm')
-  const exhibition = tagValue(tags, 'seamark:light:exhibition')
-  if (exhibition !== undefined) {
-    items.push({ label: 'Exhibition', value: humanizeEnum(exhibition), kind: 'text' })
+  pushMeasure(items, 'Period', light.period, 's')
+  pushMeasure(items, 'Range', light.range, 'NM')
+  pushMeasure(items, 'Height', light.height, 'm')
+  if (light.exhibition !== undefined) {
+    items.push({ label: 'Exhibition', value: humanizeEnum(light.exhibition), kind: 'text' })
   }
   return items
 }

@@ -63,6 +63,16 @@ export function clampNumber (
 }
 
 /**
+ * Round a value to a fixed number of decimals. Shared by the bridge-clearance
+ * message formatter and the panel's display-unit conversions, so the
+ * power-of-ten dance lives once.
+ */
+export function roundTo (value: number, decimals: number): number {
+  const factor = 10 ** decimals
+  return Math.round(value * factor) / factor
+}
+
+/**
  * Resolve an optional positive numeric config value: a non-positive or
  * non-numeric value falls back to `fallback` (matching the
  * {@link positiveFiniteNumber} optional-default idiom), and a usable value is

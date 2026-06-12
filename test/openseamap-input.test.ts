@@ -4,6 +4,7 @@ import { openSeaMapInput, resolveEndpoints } from '../src/inputs/openseamap/open
 import type { InputContext } from '../src/inputs/poi-source.js'
 import type { PluginConfig } from '../src/shared/types.js'
 import { DEFAULT_OVERPASS_ENDPOINT } from '../src/shared/overpass-endpoints.js'
+import { DEFAULT_DEDUPE_RADIUS_METERS } from '../src/shared/dedupe-radius.js'
 
 test('isEnabled tracks the openSeaMapEnabled toggle', () => {
   assert.equal(openSeaMapInput.isEnabled({} as PluginConfig), false)
@@ -65,14 +66,16 @@ test('the seamark-groups schema enum and default are derived from the shared id 
   assert.deepEqual(field.default, ['hazards', 'navaids', 'harbours', 'infrastructure'])
 })
 
-test('the dedupe-radius schema field defaults to 150 m and enforces a positive minimum', () => {
+test('the dedupe-radius schema field defaults to 150 feet and enforces a positive minimum', () => {
   const field = openSeaMapInput.configSchema.openSeaMapDedupeRadiusMeters as {
     type: string
     default: number
     minimum: number
   }
   assert.equal(field.type, 'number')
-  assert.equal(field.default, 150)
+  // The exact 45.72 value is pinned once, in the dedupe-pois tests; this
+  // test's claim is that the schema default is the shared constant.
+  assert.equal(field.default, DEFAULT_DEDUPE_RADIUS_METERS)
   assert.equal(field.minimum, 1)
 })
 

@@ -25,6 +25,13 @@ export const DEFAULT_PROXIMITY_ALARM_RADIUS_METERS = 500
  */
 export const MAX_PROXIMITY_ALARM_RADIUS_METERS = 100_000
 
+/**
+ * Lower bound on the alarm radius: a zero radius would leave the alarm
+ * enabled but never able to fire. Shared by the schema fragment and the
+ * panel field so the form floor cannot drift from the schema floor.
+ */
+export const MIN_PROXIMITY_ALARM_RADIUS_METERS = 1
+
 /** Lower bound on the per-tick fetch radius, so the alarm check always has data. */
 const MIN_SCAN_RADIUS_METERS = 2000
 
@@ -55,7 +62,7 @@ export function clampProximityAlarmRadius (raw: unknown): number {
 
 /** Config-schema fragment for the proximity alarm radius field. */
 export function proximityRadiusSchema (title: string): Record<string, unknown> {
-  return boundedNumberSchema(title, DEFAULT_PROXIMITY_ALARM_RADIUS_METERS, 1, MAX_PROXIMITY_ALARM_RADIUS_METERS)
+  return boundedNumberSchema(title, DEFAULT_PROXIMITY_ALARM_RADIUS_METERS, MIN_PROXIMITY_ALARM_RADIUS_METERS, MAX_PROXIMITY_ALARM_RADIUS_METERS)
 }
 
 /**

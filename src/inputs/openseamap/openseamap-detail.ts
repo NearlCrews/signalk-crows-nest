@@ -14,6 +14,7 @@ import type { OverpassElement } from './overpass-client.js'
 import { seamarkLabel } from './seamark-mapping.js'
 import { escapeHtml, labeledParagraph } from '../../shared/html-escape.js'
 import { humanizeLightCharacter } from '../../shared/light-character.js'
+import { presentString } from '../../shared/strings.js'
 
 /** Underscore separator in raw OSM enum values, replaced with a space for display. */
 const UNDERSCORE_PATTERN = /_/g
@@ -37,10 +38,55 @@ export function humanizeEnum (value: string): string {
  * source's name resolver shares the same trim-and-reject-empty behaviour.
  */
 export function tagValue (tags: Readonly<Record<string, string>>, key: string): string | undefined {
-  const raw = tags[key]
-  if (raw === undefined) return undefined
-  const trimmed = raw.trim()
-  return trimmed.length > 0 ? trimmed : undefined
+  return presentString(tags[key])
+}
+
+/**
+ * The curated `seamark:<type>:*` family attributes, read once for both the
+ * HTML family line and the structured family items so a new family attribute
+ * is added in one place. Null when the element carries no `seamark:type`.
+ */
+export interface FamilyTags {
+  category: string | undefined
+  colour: string | undefined
+  shape: string | undefined
+}
+
+/** Read the family-keyed attributes for the element's `seamark:type`. */
+export function readFamilyTags (tags: Readonly<Record<string, string>>): FamilyTags | null {
+  const type = tagValue(tags, 'seamark:type')?.toLowerCase()
+  if (type === undefined) return null
+  const prefix = `seamark:${type}:`
+  return {
+    category: tagValue(tags, `${prefix}category`),
+    colour: tagValue(tags, `${prefix}colour`),
+    shape: tagValue(tags, `${prefix}shape`)
+  }
+}
+
+/**
+ * The curated `seamark:light:*` tags, read once for both the HTML light line
+ * and the structured light items so a new light tag is added in one place.
+ */
+export interface LightTags {
+  character: string | undefined
+  colour: string | undefined
+  period: string | undefined
+  range: string | undefined
+  height: string | undefined
+  exhibition: string | undefined
+}
+
+/** Read the light-family tags off an element. */
+export function readLightTags (tags: Readonly<Record<string, string>>): LightTags {
+  return {
+    character: tagValue(tags, 'seamark:light:character'),
+    colour: tagValue(tags, 'seamark:light:colour'),
+    period: tagValue(tags, 'seamark:light:period'),
+    range: tagValue(tags, 'seamark:light:range'),
+    height: tagValue(tags, 'seamark:light:height'),
+    exhibition: tagValue(tags, 'seamark:light:exhibition')
+  }
 }
 
 /**
@@ -48,30 +94,25 @@ export function tagValue (tags: Readonly<Record<string, string>>, key: string): 
  * tags, or null when the element carries no light tags at all.
  */
 function buildLightLine (tags: Readonly<Record<string, string>>): string | null {
+  const light = readLightTags(tags)
   const parts: string[] = []
-  const character = tagValue(tags, 'seamark:light:character')
-  if (character !== undefined) {
-    parts.push(humanizeLightCharacter(character))
+  if (light.character !== undefined) {
+    parts.push(humanizeLightCharacter(light.character))
   }
-  const colour = tagValue(tags, 'seamark:light:colour')
-  if (colour !== undefined) {
-    parts.push(humanizeEnum(colour))
+  if (light.colour !== undefined) {
+    parts.push(humanizeEnum(light.colour))
   }
-  const period = tagValue(tags, 'seamark:light:period')
-  if (period !== undefined) {
-    parts.push(`${period} s period`)
+  if (light.period !== undefined) {
+    parts.push(`${light.period} s period`)
   }
-  const range = tagValue(tags, 'seamark:light:range')
-  if (range !== undefined) {
-    parts.push(`${range} NM range`)
+  if (light.range !== undefined) {
+    parts.push(`${light.range} NM range`)
   }
-  const height = tagValue(tags, 'seamark:light:height')
-  if (height !== undefined) {
-    parts.push(`${height} m high`)
+  if (light.height !== undefined) {
+    parts.push(`${light.height} m high`)
   }
-  const exhibition = tagValue(tags, 'seamark:light:exhibition')
-  if (exhibition !== undefined) {
-    parts.push(`shown at ${humanizeEnum(exhibition)}`)
+  if (light.exhibition !== undefined) {
+    parts.push(`shown at ${humanizeEnum(light.exhibition)}`)
   }
   return parts.length > 0 ? parts.join(', ') : null
 }
@@ -96,23 +137,19 @@ function buildHeader (tags: Readonly<Record<string, string>>): string {
  * family that follows the standard tagging convention.
  */
 function buildFamilyLine (tags: Readonly<Record<string, string>>): string | null {
-  const type = tagValue(tags, 'seamark:type')?.toLowerCase()
-  if (type === undefined) {
+  const family = readFamilyTags(tags)
+  if (family === null) {
     return null
   }
-  const prefix = `seamark:${type}:`
   const parts: string[] = []
-  const category = tagValue(tags, `${prefix}category`)
-  if (category !== undefined) {
-    parts.push(humanizeEnum(category))
+  if (family.category !== undefined) {
+    parts.push(humanizeEnum(family.category))
   }
-  const colour = tagValue(tags, `${prefix}colour`)
-  if (colour !== undefined) {
-    parts.push(humanizeEnum(colour))
+  if (family.colour !== undefined) {
+    parts.push(humanizeEnum(family.colour))
   }
-  const shape = tagValue(tags, `${prefix}shape`)
-  if (shape !== undefined) {
-    parts.push(`${humanizeEnum(shape)} shape`)
+  if (family.shape !== undefined) {
+    parts.push(`${humanizeEnum(family.shape)} shape`)
   }
   if (parts.length === 0) {
     return null

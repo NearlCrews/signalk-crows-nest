@@ -7,15 +7,10 @@ import {
   type CourseStream
 } from '../src/outputs/route-hazard/course-reader.js'
 
+import { courseWithoutRoute, flush, routeResource } from './helpers.js'
+
 /** A GeoJSON LineString coordinate, `[longitude, latitude]`. */
 type Coordinate = [number, number] | [number, number, number]
-
-/**
- * Resolve once the pending microtasks have drained, so a background route
- * resolution (two awaited steps) has completed before the test reads the cache.
- */
-const flush = (): Promise<void> =>
-  new Promise<void>((resolve) => { setImmediate(resolve) })
 
 /** Build a course with an active route referencing the supplied href. */
 function courseWithRoute (
@@ -32,29 +27,6 @@ function courseWithRoute (
     nextPoint: null,
     previousPoint: null
   } as CourseInfo
-}
-
-/** Build a course with no active route (a point destination, or nothing). */
-function courseWithoutRoute (): CourseInfo {
-  return {
-    startTime: null,
-    targetArrivalTime: null,
-    arrivalCircle: 0,
-    activeRoute: null,
-    nextPoint: null,
-    previousPoint: null
-  } as CourseInfo
-}
-
-/** Wrap GeoJSON coordinates in a minimal route resource object. */
-function routeResource (coordinates: unknown): object {
-  return {
-    name: 'Test route',
-    feature: {
-      type: 'Feature',
-      geometry: { type: 'LineString', coordinates }
-    }
-  }
 }
 
 interface MockOptions {

@@ -22,6 +22,7 @@ import ThemeToggle from './components/ThemeToggle.js'
 import { useConfig } from './hooks/use-config.js'
 import { useStatus } from './hooks/use-status.js'
 import { useTheme } from './hooks/use-theme.js'
+import { UnitSystemContext, useUnitSystem } from './hooks/use-unit-system.js'
 import { SOURCE_SLUGS } from '../shared/source-ids.js'
 import { S, THEME_STYLE } from './styles.js'
 
@@ -43,6 +44,10 @@ export default function PluginConfigurationPanel ({ configuration, save }: Props
   const { status, error, lastUpdatedMs } = useStatus()
   const { state, savedState, dispatch, markSaved } = useConfig(configuration)
   const [theme, setTheme] = useTheme()
+  // The display system the server's unit preferences select; the LengthFields
+  // read it through context so the meters-backed config renders in feet when
+  // the active preset is imperial.
+  const unitSystem = useUnitSystem()
   const [justSavedAt, setJustSavedAt] = useState<number | null>(null)
   // Per-source disclosure state lives at the panel root so it survives
   // saves, so the four DataSourceCards can iterate it with a stable map,
@@ -109,37 +114,39 @@ export default function PluginConfigurationPanel ({ configuration, save }: Props
   }, [dispatch, savedState])
 
   return (
-    <div
-      className='ac-config-panel'
-      data-ac-theme={theme === 'auto' ? undefined : theme}
-      style={S.root}
-    >
-      <style>{THEME_STYLE}</style>
-      <div style={S.controlBar}>
-        <ThemeToggle value={theme} onChange={setTheme} />
+    <UnitSystemContext.Provider value={unitSystem}>
+      <div
+        className='ac-config-panel'
+        data-ac-theme={theme === 'auto' ? undefined : theme}
+        style={S.root}
+      >
+        <style>{THEME_STYLE}</style>
+        <div style={S.controlBar}>
+          <ThemeToggle value={theme} onChange={setTheme} />
+        </div>
+        <StatusBar status={status} lastUpdatedMs={lastUpdatedMs} onJumpToSource={jumpToSource} />
+        {error !== null
+          ? (
+            <div role='alert' style={S.errorBanner}>
+              Status unavailable: {error}. The next poll will retry automatically.
+            </div>
+            )
+          : null}
+        <DataSourcesSection
+          state={state}
+          dispatch={dispatch}
+          status={status}
+          expanded={expandedCards}
+          onToggleExpanded={toggleCard}
+        />
+        <AlertsSection state={state} dispatch={dispatch} />
+        <FooterBar
+          dirty={dirty}
+          justSavedAt={justSavedAt}
+          onSave={handleSave}
+          onDiscard={handleDiscard}
+        />
       </div>
-      <StatusBar status={status} lastUpdatedMs={lastUpdatedMs} onJumpToSource={jumpToSource} />
-      {error !== null
-        ? (
-          <div role='alert' style={S.errorBanner}>
-            Status unavailable: {error}. The next poll will retry automatically.
-          </div>
-          )
-        : null}
-      <DataSourcesSection
-        state={state}
-        dispatch={dispatch}
-        status={status}
-        expanded={expandedCards}
-        onToggleExpanded={toggleCard}
-      />
-      <AlertsSection state={state} dispatch={dispatch} />
-      <FooterBar
-        dirty={dirty}
-        justSavedAt={justSavedAt}
-        onSave={handleSave}
-        onDiscard={handleDiscard}
-      />
-    </div>
+    </UnitSystemContext.Provider>
   )
 }

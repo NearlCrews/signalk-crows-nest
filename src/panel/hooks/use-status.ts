@@ -7,6 +7,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { PLUGIN_ID } from '../../shared/plugin-id.js'
+import { PANEL_REQUEST_TIMEOUT_MS } from '../request-timeout.js'
 import type { StatusSnapshot } from '../../status/status-types.js'
 
 /** The admin-gated status endpoint the plugin exposes through registerWithRouter. */
@@ -14,12 +15,6 @@ const STATUS_URL = `/plugins/${PLUGIN_ID}/api/status`
 
 /** How often, in milliseconds, to poll the status endpoint while visible. */
 const POLL_INTERVAL_MS = 5000
-
-/**
- * Per-request timeout. Kept below the poll interval so a hung request clears
- * before the next tick rather than letting requests pile up.
- */
-const REQUEST_TIMEOUT_MS = 4000
 
 /** The status surface the panel consumes. */
 export interface UseStatusResult {
@@ -70,7 +65,7 @@ export function useStatus (): UseStatusResult {
           credentials: 'same-origin',
           signal: AbortSignal.any([
             unmountController.signal,
-            AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+            AbortSignal.timeout(PANEL_REQUEST_TIMEOUT_MS)
           ])
         })
         if (!response.ok) throw new Error(`HTTP ${response.status}`)

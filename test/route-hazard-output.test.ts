@@ -4,13 +4,7 @@ import type { CourseInfo, NormalizedDelta } from '@signalk/server-api'
 import { routeHazardOutput } from '../src/outputs/route-hazard/route-hazard-output.js'
 import type { OutputContext } from '../src/outputs/output.js'
 import type { PoiSummary } from '../src/shared/types.js'
-
-/**
- * Resolve once the pending microtasks have drained, so a background route
- * resolution (two awaited steps) has completed before the test drives a tick.
- */
-const flush = (): Promise<void> =>
-  new Promise<void>((resolve) => { setImmediate(resolve) })
+import { courseWithoutRoute, flush, routeResource } from './helpers.js'
 
 /** Build a course with an active route referencing the supplied href. */
 function courseWithRoute (href: string): CourseInfo {
@@ -22,29 +16,6 @@ function courseWithRoute (href: string): CourseInfo {
     nextPoint: null,
     previousPoint: null
   } as CourseInfo
-}
-
-/** Build a course with no active route. */
-function courseWithoutRoute (): CourseInfo {
-  return {
-    startTime: null,
-    targetArrivalTime: null,
-    arrivalCircle: 0,
-    activeRoute: null,
-    nextPoint: null,
-    previousPoint: null
-  } as CourseInfo
-}
-
-/** Wrap GeoJSON coordinates (longitude first) in a minimal route resource. */
-function routeResource (coordinates: unknown): object {
-  return {
-    name: 'Test route',
-    feature: {
-      type: 'Feature',
-      geometry: { type: 'LineString', coordinates }
-    }
-  }
 }
 
 /** A two-waypoint route running due north along longitude 0. */

@@ -39,6 +39,7 @@ const SCALE_TOKENS = `
   --ac-radius-pill: 999px;
   --ac-font-body: 14px;
   --ac-font-small: 12px;
+  --ac-font-xsmall: 11px;
   --ac-font-title: 15px;
   --ac-space-1: 8px;
   --ac-space-2: 12px;
@@ -236,6 +237,13 @@ ${NIGHT_TOKENS}}
  * Base segment button, spread into the active variant below. Each segment
  * is a 36px touch target, sized for wet fingers on a moving boat.
  */
+/** Shared face of the hint paragraph; the two variants differ only in margin. */
+const HINT_BASE: CSSProperties = {
+  fontSize: 'var(--ac-font-small)',
+  color: 'var(--ac-text-muted)',
+  lineHeight: 1.45
+}
+
 const SEGMENTED_BTN: CSSProperties = {
   padding: '6px 12px',
   minHeight: 36,
@@ -332,6 +340,19 @@ export const S = {
     fontWeight: 600,
     color: 'var(--ac-text)'
   },
+  // Title row wrapper so the freshness note sits on the same line as the title.
+  statusTitleRow: {
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: 8
+  },
+  // The freshness note in the title row: muted, small, right-aligned.
+  statusCheckedAt: {
+    fontSize: 'var(--ac-font-small)',
+    fontWeight: 400,
+    color: 'var(--ac-text-faint)',
+    marginLeft: 'auto'
+  },
   /**
    * Wrapper for the variable body of the status bar (loading line OR
    * the per-source health grid OR the empty-state copy). The
@@ -411,6 +432,20 @@ export const S = {
     padding: '4px 8px'
   },
   statusErrorTime: { color: 'var(--ac-text-faint)', flexShrink: 0 },
+  // A recent-error entry rendered as a jump-to-card button: inherits the
+  // error-item palette, drops the button chrome, and keeps the row clickable
+  // without reading as a primary control.
+  statusErrorJump: {
+    background: 'none',
+    border: 'none',
+    padding: 0,
+    margin: 0,
+    font: 'inherit',
+    color: 'inherit',
+    cursor: 'pointer',
+    textAlign: 'left',
+    textDecoration: 'underline'
+  },
 
   // Generic field row: a label-input pair laid out as one row, with the
   // hint rendered as a sibling block below (LabeledField composes the two
@@ -443,16 +478,14 @@ export const S = {
   },
   /**
    * Default hint paragraph style. Used by callers that supply their own
-   * outer container spacing (toggle hints inside AlarmFieldset, the
+   * outer container spacing (toggle hints inside ToggleFieldset, the
    * rationale paragraph in MergeWithActiveCaptain, the empty-state hints
    * in fieldset bodies). Defaults to `margin: 0` so a hint nested inside
    * a labeled group inherits the group's vertical rhythm and does NOT
    * grow its own bottom margin.
    */
   hint: {
-    fontSize: 'var(--ac-font-small)',
-    color: 'var(--ac-text-muted)',
-    lineHeight: 1.45,
+    ...HINT_BASE,
     margin: 0
   },
   /**
@@ -463,9 +496,7 @@ export const S = {
    * spacing.
    */
   hintBelow: {
-    fontSize: 'var(--ac-font-small)',
-    color: 'var(--ac-text-muted)',
-    lineHeight: 1.45,
+    ...HINT_BASE,
     margin: '0 0 12px'
   },
 
@@ -512,7 +543,7 @@ export const S = {
     marginBottom: 8
   },
   subGroupTitle: {
-    fontSize: 11,
+    fontSize: 'var(--ac-font-xsmall)',
     fontWeight: 600,
     color: 'var(--ac-text-muted)',
     margin: '0 0 6px'
@@ -716,7 +747,7 @@ export const S = {
     display: 'inline-flex',
     alignItems: 'center',
     gap: 6,
-    fontSize: 11,
+    fontSize: 'var(--ac-font-xsmall)',
     color: 'var(--ac-text-muted)',
     background: 'var(--ac-surface-muted)',
     border: '1px solid var(--ac-border)',
@@ -818,6 +849,6 @@ export const S = {
     borderRadius: 'var(--ac-radius)',
     padding: '8px 12px',
     fontSize: 'var(--ac-font-body)',
-    margin: '0 0 16px'
+    margin: '0 0 var(--ac-space-3)'
   }
 } satisfies Record<string, CSSProperties>

@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { createPoiCache, type PoiDetailsSource } from '../src/inputs/active-captain/poi-cache.js'
 import { createPoiStore } from '../src/inputs/active-captain/poi-store.js'
 import type { PoiDetails } from '../src/inputs/active-captain/active-captain-types.js'
+import { makeDetails } from './helpers.js'
 
 /** Sleep for `ms`, letting a short cache TTL lapse mid-test. */
 const delayMs = async (ms: number): Promise<void> =>
@@ -13,19 +14,6 @@ const delayMs = async (ms: number): Promise<void> =>
 
 /** Generous cache lifetime so entries never expire mid-test. */
 const TTL_MINUTES = 60
-
-/** Build a minimal but valid PoiDetails record for the given id. */
-function makeDetails (id: string): PoiDetails {
-  return {
-    pointOfInterest: {
-      id: Number(id),
-      name: `POI ${id}`,
-      poiType: 'Marina',
-      mapLocation: { latitude: 0, longitude: 0 },
-      dateLastModified: '2024-01-01T00:00:00Z'
-    }
-  }
-}
 
 /** A PoiDetailsSource that counts calls and can be told to fail the next loads. */
 interface FakeSource extends PoiDetailsSource {

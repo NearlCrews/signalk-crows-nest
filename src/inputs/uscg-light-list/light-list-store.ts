@@ -271,12 +271,20 @@ export function createLightListStore (dataDir: string): LightListStore {
       const raw = await readFile(join(pagesDir, `${key}.json`), 'utf8')
       const parsed: unknown = JSON.parse(raw)
       if (!Array.isArray(parsed)) return []
-      return parsed.filter((value): value is LightListRecord =>
-        typeof value === 'object' && value !== null &&
-        typeof (value as LightListRecord).llnr === 'number' &&
-        typeof (value as LightListRecord).position === 'object' &&
-        (value as LightListRecord).position !== null
-      )
+      // Check every required LightListRecord field, not just the two the
+      // index needs: a corrupt or partially-written page file must not
+      // produce records that pass the filter and then fail in the renderer.
+      return parsed.filter((value): value is LightListRecord => {
+        const record = value as LightListRecord
+        return typeof value === 'object' && value !== null &&
+          typeof record.llnr === 'number' &&
+          typeof record.position === 'object' && record.position !== null &&
+          typeof record.name === 'string' &&
+          typeof record.district === 'string' &&
+          typeof record.volume === 'number' &&
+          typeof record.source === 'string' &&
+          typeof record.inactive === 'boolean'
+      })
     } catch {
       // A missing or unreadable page file leaves its district records absent
       // in memory; the next refresh re-fetches the page from NAVCEN.

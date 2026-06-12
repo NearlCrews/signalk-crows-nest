@@ -104,11 +104,9 @@ export function createBridgeClearanceAlarms (
 ): BridgeClearanceAlarms {
   const { resolver, radiusMeters, marginMeters, getAirDraft } = options
 
-  // The tracker owns the active set, the clear half, and the episode clock:
-  // a bridge is added on entry and removed on exit, so an alarm is raised and
-  // cleared exactly once per crossing of the radius boundary, and the
-  // tracker-stamped `raisedAt` keeps `createdAt` at the episode start on the
-  // clear delta rather than resetting to the clear time.
+  // Tracker-owned raise-once/clear-once hysteresis and episode clock, same
+  // shape as the proximity alarm (see proximity-alarms.ts), with a bridge as
+  // the tracked subject.
   const tracker = createNotificationTracker<{ name: string }>({
     app,
     pathPrefix: NOTIFICATION_PATH_PREFIX,

@@ -35,13 +35,8 @@
 import type { CourseInfo, NormalizedDelta, Path } from '@signalk/server-api'
 import { toPosition } from '../../geo/position-utilities.js'
 import { toFiniteNumber } from '../../shared/numbers.js'
+import { SELF_POSITION_PATH, SELF_SOG_PATH } from '../../shared/self-paths.js'
 import type { Position, RoutePolyline, VesselState } from '../../shared/types.js'
-
-/** The `vessels.self` path the reader uses for the vessel position. */
-const SELF_POSITION_PATH = 'navigation.position'
-
-/** The `vessels.self` path the reader uses for speed over ground. */
-const SELF_SOG_PATH = 'navigation.speedOverGround'
 
 /**
  * The v1 course path carrying the active route href. A delta here means a
@@ -102,10 +97,12 @@ export interface CourseReader {
    * The vessel's active route as a forward-looking polyline, read synchronously
    * from the reader's cache. `null` when no route is active, when no Resources
    * provider is registered, when the route data is malformed, or before the
-   * first background resolution has completed. The `vesselPosition` field is a
-   * live read taken at call time; the waypoints come from the cache.
+   * first background resolution has completed. The `vesselPosition` field is
+   * the caller's position when one is passed (the monitor's tick position),
+   * otherwise a live read taken at call time; the waypoints come from the
+   * cache.
    */
-  getRouteAhead: () => RoutePolyline | null
+  getRouteAhead: (vesselPosition?: Position | null) => RoutePolyline | null
   /**
    * The current vessel position and speed over ground, read synchronously from
    * the data model. Either field is `null` when its value is missing or
@@ -360,17 +357,19 @@ export function createCourseReader (config: CourseReaderConfig): CourseReader {
     })
   }
 
-  function getRouteAhead (): RoutePolyline | null {
+  function getRouteAhead (vesselPosition?: Position | null): RoutePolyline | null {
     if (currentRoute === null) {
       return null
     }
-    // The cached polyline is route geometry only. Pair it with a live position
-    // read so the corridor scan measures the current leg from where the vessel
-    // is now, not from where it was when the route was last resolved. The
-    // waypoints array is copied so a consumer cannot mutate the cached route.
+    // The cached polyline is route geometry only. Pair it with the caller's
+    // position when one is supplied (the monitor's fresh tickPosition), or a
+    // live data-model read otherwise, so the corridor scan measures the
+    // current leg from where the vessel is now, not from where it was when
+    // the route was last resolved. The waypoints array is copied so a
+    // consumer cannot mutate the cached route.
     return {
       ...currentRoute,
-      vesselPosition: readPosition(),
+      vesselPosition: vesselPosition !== undefined ? vesselPosition : readPosition(),
       waypoints: [...currentRoute.waypoints]
     }
   }

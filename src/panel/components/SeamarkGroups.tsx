@@ -18,7 +18,7 @@ interface Props {
 /** The seamark feature-group checkboxes shown in the OpenSeaMap card body. */
 export default function SeamarkGroups ({ selected, onToggle }: Props): React.ReactElement {
   return (
-    <section style={S.groupsSection}>
+    <div style={S.groupsSection}>
       <fieldset style={S.group}>
         <legend style={S.groupTitle}>Feature groups to import</legend>
         <div style={S.checkboxGrid}>
@@ -43,6 +43,6 @@ export default function SeamarkGroups ({ selected, onToggle }: Props): React.Rea
           </p>
           )
         : null}
-    </section>
+    </div>
   )
 }

@@ -6,9 +6,7 @@
 
 import type * as React from 'react'
 import NumberField from './NumberField.js'
-
-/** Smallest cache duration the plugin accepts: it requires a positive value. */
-const MIN_MINUTES = 1
+import { MIN_CACHE_DURATION_MINUTES } from '../../shared/cache-duration.js'
 
 interface Props {
   value: number
@@ -24,7 +22,7 @@ export default function CacheDurationField ({ value, onChange }: Props): React.R
       hint='How long imported ActiveCaptain data is cached. Longer means less data traffic, shorter means fresher data.'
       value={value}
       onChange={onChange}
-      min={MIN_MINUTES}
+      min={MIN_CACHE_DURATION_MINUTES}
       integer
     />
   )

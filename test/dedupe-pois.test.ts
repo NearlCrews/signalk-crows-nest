@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { dedupeAgainstBase } from '../src/inputs/dedupe-pois.js'
+import { DEFAULT_DEDUPE_RADIUS_METERS } from '../src/shared/dedupe-radius.js'
 import { ACTIVE_CAPTAIN_SOURCE_ID as BASE_SOURCE_ID } from '../src/shared/source-ids.js'
 import type { PoiSummary, PoiType } from '../src/shared/types.js'
 
@@ -107,13 +108,18 @@ test('with no base POI present same-source duplicates still collapse', () => {
   assert.equal(result[0].id, 'node/9', 'the first occurrence in input order wins')
 })
 
-test('dedupeAgainstBase defaults to a 150 m merge radius', () => {
+test('dedupeAgainstBase defaults to a 150-foot merge radius', () => {
+  // ~20 m is inside the 150-foot (45.72 m) default; ~110 m is outside it but
+  // inside the old 150 m default, so the pair proves the new default applies.
   const base = poi('1', BASE_SOURCE_ID, 'Marina', 10, 20)
-  // A ~110 m gap is inside the new 150 m default but outside the old 50 m one;
-  // a hit here proves the default bump took effect.
-  const osm = poi('node/9', 'openseamap', 'Marina', 10 + 0.001, 20)
-  const result = dedupeAgainstBase([base, osm], new Set(['openseamap']))
-  assert.equal(result.length, 1, 'a ~110 m gap is within the default 150 m radius')
+  const near = poi('node/9', 'openseamap', 'Marina', 10 + NEAR, 20)
+  const farBase = poi('2', BASE_SOURCE_ID, 'Hazard', 10 + 0.001, 20)
+  const far = poi('node/8', 'openseamap', 'Hazard', 10, 20)
+  const result = dedupeAgainstBase([base, near, farBase, far], new Set(['openseamap']))
+  const survivingIds = result.map(p => p.id)
+  assert.ok(!survivingIds.includes('node/9'), 'a ~20 m gap merges under the 150-foot default')
+  assert.ok(survivingIds.includes('node/8'), 'a ~110 m gap no longer merges')
+  assert.equal(result.length, 3)
 })
 
 test('a base POI with no co-located duplicate keeps just its own source', () => {
@@ -227,4 +233,8 @@ test('a per-source radius map applies each source\'s radius independently', () =
     ['activecaptain', 'usclightlist'],
     'OpenSeaMap merges into the base at 150 m; USCG stays separate at 5 m'
   )
+})
+
+test('the default merge radius is 150 feet, expressed in meters', () => {
+  assert.equal(DEFAULT_DEDUPE_RADIUS_METERS, 45.72)
 })

@@ -66,11 +66,11 @@ self-contained module registered on one line in `src/index.ts`.
       `http-client.ts`.
     - `dedupe-pois.ts` - merges non-base POIs that duplicate an ActiveCaptain
       base POI, then runs a same-source pass that collapses internal
-      duplicates within a configurable radius (default 150 meters), so a
-      feature reported by several sources becomes one corroborated note rather
-      than overlapping markers. It also owns `DEFAULT_DEDUPE_RADIUS_METERS` and
-      the `dedupeToggleSchema` / `dedupeRadiusSchema` config-fragment builders
-      every non-base input's schema reuses.
+      duplicates within a configurable radius (default 150 feet, 45.72 m), so
+      a feature reported by several sources becomes one corroborated note
+      rather than overlapping markers. It also owns the `dedupeToggleSchema` /
+      `dedupeRadiusSchema` config-fragment builders every non-base input's
+      schema reuses.
     - `active-captain/` - the ActiveCaptain input: `active-captain-input.ts`
       (the `InputModule`), `active-captain-source.ts` (the `PoiSource` adapter
       over the client, cache, and store), `active-captain-client.ts` (the
@@ -267,10 +267,10 @@ self-contained module registered on one line in `src/index.ts`.
     `refresh-hours.ts`, `scale-band.ts`, and `route-corridor.ts` (browser-safe
     single-source-of-truth homes for, respectively, the ActiveCaptain
     cache-duration bounds, `clampCacheDurationMinutes`, and
-    `cacheDurationSchema`; the dedupe merge-radius bounds with
-    `cappedDedupeRadius` (nullable, for the input modules) and
-    `clampDedupeRadius` (the panel form), named for the dedupe rather than
-    one source since all three non-base sources use it; the USCG
+    `cacheDurationSchema`; the dedupe merge-radius default (150 feet), the
+    min and max bounds, `cappedDedupeRadius` (nullable, for the input
+    modules), and `clampDedupeRadius` (the panel form), named for the dedupe
+    rather than one source since all three non-base sources use it; the USCG
     refresh-hours bounds plus
     `clampRefreshHours` and `refreshHoursSchema`; the NOAA `ScaleBand` type
     plus `SCALE_BANDS`, `SCALE_BAND_LABELS`, `DEFAULT_SCALE_BAND`, and
@@ -283,9 +283,12 @@ self-contained module registered on one line in `src/index.ts`.
     once), `numbers.ts` (the `toFiniteNumber`, `finiteOrUndefined`, and
     `positiveFiniteNumber` narrowing helpers, plus `isValidLatitude`,
     `isValidLongitude`, `isWireTruthy`, the `clampNumber` bound-and-fallback
-    helper, and the `positiveCappedNumber` fallback-then-cap helper the
+    helper, the `roundTo` fixed-decimals rounding the message formatter and
+    the panel's display-unit conversions share, and the
+    `positiveCappedNumber` fallback-then-cap helper the
     config-bounds modules delegate to), `strings.ts` (the `presentString`
-    trim-and-reject-blank reader the USCG and NOAA wire parsers share),
+    trim-and-reject-blank reader the USCG and NOAA wire parsers and the
+    panel's unit-preferences reader share),
     `debug.ts` (the `debugIsEnabled` guard that reads the npm `debug`
     logger's live `enabled` flag so hot paths skip building log arguments
     while debug is off), `cache.ts`
@@ -304,7 +307,9 @@ self-contained module registered on one line in `src/index.ts`.
     `MINUTES_PER_HOUR` / `MINUTES_PER_DAY` constants the minute-denominated
     cache windows derive from),
     `length.ts` (the `METERS_PER_FOOT` constant and the `metersFromFeet` /
-    `metersFromFeetInches` conversions the two bridge-clearance parsers share),
+    `metersFromFeetInches` conversions shared by the two bridge-clearance
+    parsers, the dedupe-radius default, and the panel's display-unit
+    conversions),
     `bridge-clearance.ts` (the bridge air-draft comparison: `readVesselAirDraft`
     reads `design.airHeight` then a config fallback, `bridgeBlocksVessel` plus
     the margin bounds and `clampClearanceMargin`, the `formatMeters` message
@@ -315,7 +320,10 @@ self-contained module registered on one line in `src/index.ts`.
     `hysteresisThreshold` (the shared raise/clear distance both alarm modules
     apply), and `vesselScanRadiusMeters`), `light-character.ts` (the IALA
     light-character humanizer the OpenSeaMap and USCG Light List detail
-    renderers share), and `normalized-detail.ts` (the source-agnostic
+    renderers share), `self-paths.ts` (the `SELF_POSITION_PATH` and
+    `SELF_SOG_PATH` constants shared by the position monitor and the course
+    reader, so both consumers reference the same path strings), and
+    `normalized-detail.ts` (the source-agnostic
     structured-notes schema: `NormalizedSection`, `NormalizedItem`, the
     item-`kind` union, the `schemaVersion`, and the shared `pushSection`
     builder every source's section builder produces onto a note's
@@ -329,17 +337,26 @@ self-contained module registered on one line in `src/index.ts`.
     blocks, each with `color-scheme`, and the `data-ac-theme` pinned
     overrides the theme toggle drives; the host-driven dark block is dormant
     because the current SignalK admin has no theme switcher),
-    `relative-time.ts`, and `source-status-pill.ts` (the pure `pillVariant`
+    `relative-time.ts`, `source-status-pill.ts` (the pure `pillVariant`
     + `pillContent` helpers used by the per-source live-status pill on each
     card header, in a non-tsx module so the unit tests import it without
-    JSX). `hooks/` holds `use-config`, `use-status` (which also exposes
-    `lastUpdatedMs`, the freshness note's clock), `use-theme` (the
+    JSX), `request-timeout.ts` (the panel-wide per-request timeout the
+    status poller and the unit-preferences fetch share), and
+    `unit-system.ts` (the React-free display-units module: the
+    `UnitSystem` resolver keyed off the server unit-preset's
+    `categories.length.targetUnit`, the meters-to-display conversions, and
+    the fetch ladder that mirrors the admin UI's Units page, per-user
+    `applicationData` preset first, then the server-wide active preset,
+    then metric). `hooks/` holds `use-config`, `use-status` (which also
+    exposes `lastUpdatedMs`, the freshness note's clock), `use-theme` (the
     localStorage-persisted `ac-theme` choice the root renders declaratively
-    as `data-ac-theme`), `use-number-draft` (the raw-text draft state for
-    clearable numeric inputs), and `use-collapse-focus-restore` (the shared
-    focus-restore-on-collapse hook both `SectionBox` and `DataSourceCard`
-    consume, so a keyboard user is not dropped to `document.body` when a
-    region collapses). `components/` holds the layout pieces: `SectionBox`
+    as `data-ac-theme`), `use-unit-system` (resolves the display system
+    from the server's unit preferences once on mount and provides it
+    through `UnitSystemContext`), `use-number-draft` (the raw-text draft
+    state for clearable numeric inputs), and `use-collapse-focus-restore`
+    (the shared focus-restore-on-collapse hook both `SectionBox` and
+    `DataSourceCard` consume, so a keyboard user is not dropped to
+    `document.body` when a region collapses). `components/` holds the layout pieces: `SectionBox`
     (the shared collapsible-section primitive: section heading, chevron, and
     focus-restore on collapse via the shared hook), and on top of it
     `StatusBar` (per-source health grid, the "checked Ns ago" freshness
@@ -356,18 +373,23 @@ self-contained module registered on one line in `src/index.ts`.
     `LabeledField` (the shared label-plus-control-plus-hint scaffold, which
     wires `aria-describedby` from the hint to the control), `NumberField`
     (the labeled numeric input with a draft-while-editing buffer, on top of
-    `LabeledField`), `CacheDurationField`, `EndpointUrlField`,
+    `LabeledField`), `LengthField` (the meters-backed NumberField wrapper
+    that renders in the unit system the server preference selects,
+    converting the value and bounds at the display edge while the config
+    stays in meters; every length field composes it),
+    `CacheDurationField`, `EndpointUrlField`,
     `FallbackEndpointsField` (the OpenSeaMap one-per-line Overpass
     fallback-mirror textarea), `ToggleFieldset` (the shared opt-in
-    toggle-plus-legend fieldset shell), `AlarmFieldset` (the toggle-plus-numeric
-    layout, composing `ToggleFieldset`, shared by both alarm controls),
+    toggle-plus-legend fieldset shell),
     `RatingFilterField`, `MinimumYearField` (the shared earliest-year
     NumberField wrapper used by each opting-in source card),
     `RefreshSecondsField` (the shared NumberField wrapper for the
     bbox-debounce period on at-runtime sources),
     `MergeWithActiveCaptain` (the shared dedupe-toggle + merge-radius
-    fieldset, also composing `ToggleFieldset`, used by every non-base card),
-    `ProximityAlarmFields`, `RouteHazardScanFields`, `BridgeAirDraftFields` (the
+    fieldset, composing `ToggleFieldset`, used by every non-base card),
+    `ProximityAlarmFields` and `RouteHazardScanFields` (the two alarm
+    controls, each a `ToggleFieldset` with one LengthField),
+    `BridgeAirDraftFields` (the
     bridge air-draft check controls), `ActiveCaptainPoiTypes`,
     `SeamarkGroups`, `SegmentedControl` (the bordered aria-pressed segment
     fieldset), `ThemeToggle` (the Auto / Light / Dark / Night control on

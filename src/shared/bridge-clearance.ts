@@ -17,7 +17,7 @@
  * tagged clearance is a static figure.
  */
 
-import { clampNumber, positiveFiniteNumber, toFiniteNumber } from './numbers.js'
+import { clampNumber, positiveFiniteNumber, roundTo, toFiniteNumber } from './numbers.js'
 
 /** SignalK self path carrying the vessel air draft (height above waterline), in meters. */
 const SELF_AIR_HEIGHT_PATH = 'design.airHeight'
@@ -120,13 +120,14 @@ export function bridgeBlocksVessel (
 
 /**
  * Format a meters value for a human-readable alarm message: rounded to one
- * decimal place, with a trailing `.0` dropped so a whole number reads `5 m`
- * rather than `5.0 m`, and a converted value (15 ft to 4.572 m) reads `4.6 m`.
- * Shared by the bridge clearance alarm and the route-hazard clearance clause so
- * the two messages format clearances identically.
+ * decimal place. `toString` renders a whole-number result without decimals,
+ * so 5 reads `5 m` rather than `5.0 m`, and a converted value (15 ft to
+ * 4.572 m) reads `4.6 m`. Shared by the bridge clearance alarm and the
+ * route-hazard clearance clause so the two messages format clearances
+ * identically.
  */
 export function formatMeters (meters: number): string {
-  return (Math.round(meters * 10) / 10).toString()
+  return roundTo(meters, 1).toString()
 }
 
 /** Config-schema fragment for the bridge air-draft check toggle. */

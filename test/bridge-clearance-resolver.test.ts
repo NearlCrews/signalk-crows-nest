@@ -3,11 +3,7 @@ import assert from 'node:assert/strict'
 import { createBridgeClearanceResolver } from '../src/outputs/bridge-air-draft/bridge-clearance-resolver.js'
 import { ACTIVE_CAPTAIN_SOURCE_ID, OPENSEAMAP_SOURCE_ID } from '../src/shared/source-ids.js'
 import type { PoiDetailView, PoiSummary, PoiType } from '../src/shared/types.js'
-
-/** Flush pending microtasks so a fire-and-forget getDetails settles. */
-function flush (): Promise<void> {
-  return new Promise((resolve) => { setImmediate(resolve) })
-}
+import { flush } from './helpers.js'
 
 interface BridgeOpts {
   id?: string

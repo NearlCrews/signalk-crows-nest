@@ -1,12 +1,11 @@
 /**
- * Length-unit conversions shared by the bridge-clearance parsers.
- *
- * Both the OpenSeaMap input (parsing OSM `maxheight` / clearance tags, which
- * may be tagged in feet or feet-and-inches) and the ActiveCaptain input
- * (converting `bridgeHeight` when its `distanceUnit` is feet) need the same
- * foot-to-meter factor. Defining it once here keeps the two parsers from
- * drifting and keeps the conversion out of the comparison module so the
- * browser-bundled panel never pulls it in.
+ * The canonical foot-to-meter conversions, shared wherever a length crosses
+ * between the two unit systems: the OpenSeaMap input (parsing OSM
+ * `maxheight` / clearance tags, which may be tagged in feet or
+ * feet-and-inches), the ActiveCaptain input (converting `bridgeHeight` when
+ * its `distanceUnit` is feet), the dedupe-radius default (150 feet), and the
+ * panel's display-unit conversions. Defining the factor once keeps every
+ * consumer from drifting. Dependency-free and browser-safe.
  */
 
 /** Meters in one international foot. Exact by definition. */

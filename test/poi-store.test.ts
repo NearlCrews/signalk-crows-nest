@@ -4,26 +4,13 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createPoiStore } from '../src/inputs/active-captain/poi-store.js'
-import type { PoiDetails } from '../src/inputs/active-captain/active-captain-types.js'
+import { makeDetails } from './helpers.js'
 
 /** Generous TTL so entries never expire mid-test unless a test forces it. */
 const TTL_MINUTES = 60
 
 /** File name the store persists to, matching the poiStore implementation. */
 const STORE_FILE_NAME = 'poi-cache.json'
-
-/** Build a minimal but valid PoiDetails record for the given id. */
-function makeDetails (id: string): PoiDetails {
-  return {
-    pointOfInterest: {
-      id: Number(id),
-      name: `POI ${id}`,
-      poiType: 'Marina',
-      mapLocation: { latitude: 0, longitude: 0 },
-      dateLastModified: '2024-01-01T00:00:00Z'
-    }
-  }
-}
 
 /** Run a test body with a fresh temporary directory, removed afterwards. */
 function withTempDir (body: (dir: string) => void): void {

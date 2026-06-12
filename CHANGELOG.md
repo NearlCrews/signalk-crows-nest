@@ -1,21 +1,79 @@
-## Change Log
+# Changelog
 
-> **Note on version numbering.** `v0.4.2` is the first release published to
-> npm. The version entries below it (`v0.5.0` through `v0.2.0`) describe
+All notable changes to Crow's Nest are documented here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
+aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+> **Note on version numbering.** 0.4.2 is the first release published to
+> npm. The version entries below it (0.5.0 through 0.2.0) describe
 > development milestones that preceded this publication. Their content is
-> incorporated into the `v0.4.2` release.
+> incorporated into the 0.4.2 release.
+
+## [Unreleased]
+
+### Added
+
+- The configuration panel now follows the Signal K server's unit
+  preferences: when the active preset targets feet (any Imperial preset),
+  every length field (alarm radius, corridor width, vessel air draft,
+  clearance margin, and the three merge radii) displays and accepts feet,
+  converting at the display edge. The saved configuration stays in meters,
+  the per-user preset override from the admin UI's Units page is honored,
+  and a server without the unit-preferences API falls back to meters.
+
+### Changed
+
+- The default merge radius for deduplicating a feature reported by several
+  sources is now 150 feet (45.72 m, was 150 m), so two genuinely distinct
+  neighbors are less likely to collapse into one marker by default. Widen
+  the per-source "Merge radius" field to catch larger cross-source
+  placement gaps.
+- New plugin icon badge: the crow's-nest barrel glyph is replaced with a
+  lighthouse silhouette (tapered tower, lantern with light dot, peaked
+  roof, and two sweeping beams) on the crimson badge. The family base
+  (deep-ocean gradient and three wave lines) is unchanged, and all PNG
+  sizes are regenerated from the new SVG.
+- The USCG Light List on-disk store now validates every required record
+  field when loading from disk. Previously only the two fields used in the
+  list query were checked; a record with any missing required field is now
+  rejected rather than silently kept.
+- Panel fields for cache duration, alarm radius, and corridor width now
+  read their minimum bounds from the shared modules
+  (`MIN_CACHE_DURATION_MINUTES`, `MIN_PROXIMITY_ALARM_RADIUS_METERS`, and
+  `MIN_ROUTE_CORRIDOR_WIDTH_METERS`), keeping the form and the config
+  normalizer consistent.
+- The ENC ArcGIS REST layer-id table is now pinned by a dedicated test, so
+  a change in the upstream layer assignments is caught before it ships.
 
 <a id="v082"></a>
 
-### v0.8.2 (2026/06/11) - cleanup, panel modernization, and static-POI caching
+## [0.8.2] - 2026-06-11
 
-A six-agent whole-codebase cleanup (every finding applied, including nits), a
-configuration-panel modernization in the style of the
-signalk-nmea2000-emitter-cannon panel, and a caching overhaul built on the
-observation that POI data is nearly static: a buoy does not move, and a
-harbor rarely changes. All 743 tests pass.
+A whole-codebase cleanup, a configuration-panel modernization in the style
+of the signalk-nmea2000-emitter-cannon panel, and a caching overhaul built
+on the observation that POI data is nearly static: a buoy does not move,
+and a harbor rarely changes. All 743 tests pass.
 
-#### Caching
+### Added
+
+- Tile prefetch: when a small viewport (the vessel-centered alarm scan, or
+  a close-zoom chart view) approaches a tile edge, the neighbor tile warms
+  in the background, so a vessel underway crosses the grid cliff onto an
+  already-fetched tile instead of blocking the proximity-alarm scan path.
+- Theme system: light, dark, and a red-preserving night theme for night
+  vision at the helm, pinnable from a new theme toggle (persisted as
+  `ac-theme`) with scale tokens and `color-scheme` so native widgets follow.
+  The SignalK admin has no theme switcher of its own, so the toggle is how
+  dark and night mode are reached.
+- Unsaved edits now warn before a tab close or reload, the footer is sticky
+  so Save stays reachable, and the status bar shows a "checked Ns ago"
+  freshness note.
+- Recent errors in the status bar are clickable: they expand and scroll to
+  the source card the error belongs to.
+- A getting-started callout points at the off-by-default sources while none
+  is enabled.
+
+### Changed
 
 - Offline-first ActiveCaptain details: the on-disk store now keeps its own
   30-day, entry-capped retention independent of the freshness TTL, old
@@ -31,17 +89,32 @@ harbor rarely changes. All 743 tests pass.
   10 minutes, and NOAA ENC Direct (refreshed weekly by NOAA) to 30 minutes,
   with the configurable maximum raised to one hour. The
   stale-while-revalidate design means longer windows have no latency cost.
-- Tile prefetch: when a small viewport (the vessel-centered alarm scan, or
-  a close-zoom chart view) approaches a tile edge, the neighbor tile warms
-  in the background, so a vessel underway crosses the grid cliff onto an
-  already-fetched tile instead of blocking the proximity-alarm scan path.
 - The viewport cache keeps 64 tiles per source (up from 16), enough for a
   full day's coastal passage instead of evicting the morning's tiles.
 - The USCG Light List background refresh default stretched from 6 hours to
   daily (NAVCEN publishes weekly; conditional GET makes the check cheap),
   and resolved bridge clearances stay fresh for 24 hours instead of 6.
+- Marine touch sizing: 22px checkboxes with accent fill and 36px minimum
+  control heights.
+- Field hints are programmatically linked to their controls
+  (`aria-describedby`) through a new shared `LabeledField` scaffold.
+- Every bounded numeric config key now shares one clamp-plus-schema pattern,
+  with generous upper bounds so a hand-edited config cannot blow up a scan
+  box or pin a cache forever; the panel and the runtime resolve values
+  through the same shared helpers, including the USCG refresh period, which
+  the panel now clamps the way the scheduler does.
+- Duplicated wire readers consolidated (`presentString`,
+  `finiteOrUndefined`, `isKnown`), the USCG source-slug literals routed
+  through the shared constant, and the structured phone item now rides as a
+  `tel:` link matching the HTML popup.
+- The bridge air-draft and route-hazard outputs share one clearance resolver
+  per run, so the same bridge is never resolved and cached twice.
+- Per-request debug log arguments are built only while the admin debug
+  toggle is on, the NOAA list path caches only year-filter survivors, and
+  the panel memoizes its sections so a status poll re-renders only the
+  status bar and a keystroke no longer re-renders the whole panel.
 
-#### Fixes
+### Fixed
 
 - A start-time failure (dead position monitor or failed output) now latches
   the plugin error in the admin UI: the notes provider's per-request healthy
@@ -56,69 +129,26 @@ harbor rarely changes. All 743 tests pass.
   shared notification tracker.
 - ActiveCaptain detail responses now validate latitude and longitude the way
   the list path always has, so a malformed detail cannot place a bad marker.
+- The queued HTTP client's `close()` tears down immediately: pending
+  throttle timers are cleared and queued waiters rejected, instead of firing
+  one doomed request per throttle interval after stop.
 
-#### Configuration panel
+### Removed
 
-- Theme system: light, dark, and a red-preserving night theme for night
-  vision at the helm, pinnable from a new theme toggle (persisted as
-  `ac-theme`) with scale tokens and `color-scheme` so native widgets follow.
-  The SignalK admin has no theme switcher of its own, so the toggle is how
-  dark and night mode are reached.
-- Marine touch sizing: 22px checkboxes with accent fill and 36px minimum
-  control heights.
-- Unsaved edits now warn before a tab close or reload, the footer is sticky
-  so Save stays reachable, and the status bar shows a "checked Ns ago"
-  freshness note.
-- Recent errors in the status bar are clickable: they expand and scroll to
-  the source card the error belongs to.
-- Field hints are programmatically linked to their controls
-  (`aria-describedby`) through a new shared `LabeledField` scaffold.
-- A getting-started callout points at the off-by-default sources while none
-  is enabled.
-
-#### Refactors and hardening
-
-- Every bounded numeric config key now shares one clamp-plus-schema pattern,
-  with generous upper bounds so a hand-edited config cannot blow up a scan
-  box or pin a cache forever; the panel and the runtime resolve values
-  through the same shared helpers, including the USCG refresh period, which
-  the panel now clamps the way the scheduler does.
 - Dead code removed: the unused `seamarkToPoiType` and `seamarkSkIcon`
   wrappers (tests now exercise `elementMarking`, the shipped reader), the
   notification tracker's unused `entries()` and public `clear()`, and three
   internal proximity-radius constants are no longer exported.
-- Duplicated wire readers consolidated (`presentString`,
-  `finiteOrUndefined`, `isKnown`), the USCG source-slug literals routed
-  through the shared constant, and the structured phone item now rides as a
-  `tel:` link matching the HTML popup.
-- The queued HTTP client's `close()` tears down immediately: pending
-  throttle timers are cleared and queued waiters rejected, instead of firing
-  one doomed request per throttle interval after stop.
-- The bridge air-draft and route-hazard outputs share one clearance resolver
-  per run, so the same bridge is never resolved and cached twice.
-- Per-request debug log arguments are built only while the admin debug
-  toggle is on, the NOAA list path caches only year-filter survivors, and
-  the panel memoizes its sections so a status poll re-renders only the
-  status bar and a keystroke no longer re-renders the whole panel.
 
 <a id="v081"></a>
 
-### v0.8.1 (2026/06/04) - endpoint resilience, safety fixes, and cleanup
+## [0.8.1] - 2026-06-04
 
 Endpoint and data-source maintenance, two safety-relevant fixes, a new Overpass
-resilience option, plus a full-codebase cleanup pass. All 733 tests pass.
+resilience option, plus a full-codebase cleanup. All 733 tests pass.
 
-#### Data sources and endpoints
+### Added
 
-- USCG Light List: the pinned district coverage expanded from 37 to 62
-  (district, page) pairs to match the current NAVCEN MSI index, which had grown
-  several pages per district. The plugin was silently under-fetching aids in
-  districts 1, 5, and 8 among others. A test now locks the coverage so future
-  NAVCEN growth is a deliberate table edit, not silent drift.
-- NOAA ENC Direct: the default ArcGIS host moved to `encdirect.noaa.gov`, the
-  hostname NOAA's own documentation and the data.gov catalog publish. It is a
-  byte-identical alias of the previous `gis.charttools.noaa.gov`, so there is no
-  behavioral change, just alignment with the documented access point.
 - OpenSeaMap: the Overpass endpoint is now backed by an optional,
   admin-configurable fallback-mirror list. When the primary endpoint fails, the
   client fails over to the next mirror in order, so a single Overpass instance
@@ -126,12 +156,29 @@ resilience option, plus a full-codebase cleanup pass. All 733 tests pass.
   are surfaced as suggestions; a regional extract (overpass.osm.ch) is
   deliberately excluded because it serves no data outside its region.
 
-#### Fixes
+### Changed
 
-- Security: the structured `properties.crowsNest` output now gates the
-  ActiveCaptain website and email link values through the same URL-scheme
-  allowlist the HTML popup already applied, so a `javascript:` value can no
-  longer reach a structured client as a click-to-execute anchor.
+- NOAA ENC Direct: the default ArcGIS host moved to `encdirect.noaa.gov`, the
+  hostname NOAA's own documentation and the data.gov catalog publish. It is a
+  byte-identical alias of the previous `gis.charttools.noaa.gov`, so there is no
+  behavioral change, just alignment with the documented access point.
+- Full-codebase cleanup. A shared URL-safety helper; a single merged seamark
+  mapping table replacing three parallel tables; one source of truth for the
+  cache-duration, dedupe-radius, refresh-hours, scale-band, and
+  route-corridor-width defaults (browser-safe shared modules the panel and the
+  plugin both import, completing the pattern the rating and year-filter bounds
+  already use); a reducer field-setter helper; an alarm-tracker `clearStale`
+  helper and a shared hysteresis-threshold helper; shared millisecond and
+  earth-radius constants in place of inline magic numbers; and assorted comment
+  and dead-code corrections.
+
+### Fixed
+
+- USCG Light List: the pinned district coverage expanded from 37 to 62
+  (district, page) pairs to match the current NAVCEN MSI index, which had grown
+  several pages per district. The plugin was silently under-fetching aids in
+  districts 1, 5, and 8 among others. A test now locks the coverage so future
+  NAVCEN growth is a deliberate table edit, not silent drift.
 - A BoatRamp now obeys the minimum-rating filter, matching the fact that it
   already shows a star rating; the review-bearing set and the ratable set are
   now one source of truth.
@@ -147,29 +194,23 @@ resilience option, plus a full-codebase cleanup pass. All 733 tests pass.
   would have chattered a safety alarm for any id containing a character outside
   the sanitized set (latent: no current source id triggers it).
 
-#### Internal
+### Security
 
-- Full-codebase cleanup. A shared URL-safety helper; a single merged seamark
-  mapping table replacing three parallel tables; one source of truth for the
-  cache-duration, dedupe-radius, refresh-hours, scale-band, and
-  route-corridor-width defaults (browser-safe shared modules the panel and the
-  plugin both import, completing the pattern the rating and year-filter bounds
-  already use); a reducer field-setter helper; an alarm-tracker `clearStale`
-  helper and a shared hysteresis-threshold helper; shared millisecond and
-  earth-radius constants in place of inline magic numbers; and assorted comment
-  and dead-code corrections.
+- The structured `properties.crowsNest` output now gates the
+  ActiveCaptain website and email link values through the same URL-scheme
+  allowlist the HTML popup already applied, so a `javascript:` value can no
+  longer reach a structured client as a click-to-execute anchor.
 
 <a id="v080"></a>
 
-### v0.8.0 (2026/06/02) - structured notes detail for chart plotters
+## [0.8.0] - 2026-06-02
 
 A feature release. Each POI note now carries a source-agnostic, structured
 detail payload a chart-plotter client can render natively, POIs reach the chart
-faster through a geographic stale-while-revalidate cache, and a UX and
-marine-domain review tightened the safety framing and the content of that
-detail. All 715 tests pass.
+faster through a geographic stale-while-revalidate cache, and the safety
+framing and the content of that detail are tightened. All 715 tests pass.
 
-#### Normalized notes detail (structured clients)
+### Added
 
 - Every note now carries a presentation-neutral detail view on
   `properties.crowsNest`, ALONGSIDE the existing HTML `description` (never
@@ -187,8 +228,12 @@ detail. All 715 tests pass.
   detail responses. `schemaVersion` lets a consumer detect the shape and fall
   back to the HTML on an unrecognized version.
 - New integration guide for consumers: `docs/notes-resource-format.md`.
+- Marina decision facts now surface: maximum LOA and beam (from the dockage
+  payload) and the fuel-dock depth (from the fuel payload). An approach,
+  dockside, or other go/no-go depth is emitted even when the wire carried no
+  unit, rather than being silently dropped.
 
-#### Faster POI loading (geographic stale-while-revalidate cache)
+### Changed
 
 - The per-source bounding-box cache is now a geographic stale-while-revalidate
   cache. Each viewport snaps outward to a coarse tile and keys on it, so a small
@@ -196,15 +241,8 @@ detail. All 715 tests pass.
   fresh upstream round-trip. A tile past its freshness window is served at once
   and refreshed in the background, so only a genuinely new tile blocks, and
   concurrent same-tile bursts collapse onto one upstream request.
-- Caching-review correctness fixes: a cache hit no longer masks an upstream
-  outage as a recorded success, a per-source skip flag no longer freezes a
-  source's status for the rest of a run, the USCG on-disk index self-heals on a
-  corrupt read, and the bridge-clearance resolver cache gained a freshness TTL
-  so an upstream correction is picked up without a restart.
-
-#### Hazard safety framing (NOAA ENC)
-
-- A wreck or obstruction now leads its feature section with a `Dangerous`
+- NOAA ENC hazard safety framing: a wreck or obstruction now leads its feature
+  section with a `Dangerous`
   boolean flag (from CATWRK/CATOBS) a consumer can surface prominently, instead
   of burying the danger status in a mid-list "Category" text item. A descriptive
   category with no danger word (for example "foul ground" or "wreck showing
@@ -214,10 +252,8 @@ detail. All 715 tests pass.
   "Charted depth". Both depth labels are datum-tagged "(MLLW)", the chart datum
   for US ENCs. The water level is kept adjacent to the depth, and a water level
   is no longer dropped when the feature carries no numeric sounding.
-
-#### ActiveCaptain
-
-- Reviews and star ratings are emitted only for review-bearing POI types
+- ActiveCaptain reviews and star ratings are emitted only for review-bearing
+  POI types
   (marinas, anchorages, businesses, and boat ramps): a hazard, navigational
   mark, bridge, lock, or similar feature no longer gets a star rating or
   featured review. The free-text notes are always kept, since that is where
@@ -226,27 +262,25 @@ detail. All 715 tests pass.
   aggregate rating), the review title rides under a stable label instead of in
   the item label slot, and the catch-all `PoiNotes` field reads as a plain
   "Notes".
-- Marina decision facts now surface: maximum LOA and beam (from the dockage
-  payload) and the fuel-dock depth (from the fuel payload). An approach,
-  dockside, or other go/no-go depth is emitted even when the wire carried no
-  unit, rather than being silently dropped.
-
-#### USCG Light List
-
-- LLNR and Volume are emitted as `text` rather than `count`: they are
-  identifiers, not tallies.
-
-#### Maintenance
-
 - Dependencies refreshed (React and React DOM 19.2.7, `@types/react` 19.2.16,
   `tsx` 4.22.4, and the transitive tree), with `npm audit` clean of runtime
   vulnerabilities. ESLint stays on 9 because neostandard peers to `eslint ^9`.
 - The living docs (README, `docs/development.md`, `docs/roadmap.md`, and
   CLAUDE.md) were brought back in line with the shipped code.
 
+### Fixed
+
+- Caching correctness fixes: a cache hit no longer masks an upstream
+  outage as a recorded success, a per-source skip flag no longer freezes a
+  source's status for the rest of a run, the USCG on-disk index self-heals on a
+  corrupt read, and the bridge-clearance resolver cache gained a freshness TTL
+  so an upstream correction is picked up without a restart.
+- USCG Light List LLNR and Volume are emitted as `text` rather than `count`:
+  they are identifiers, not tallies.
+
 <a id="v070"></a>
 
-### v0.7.0 (2026/05/30) - bridge air-draft check
+## [0.7.0] - 2026-05-30
 
 A feature release. The new bridge air-draft check warns when a bridge would not
 clear the vessel: it compares each bridge's vertical clearance against the
@@ -254,7 +288,7 @@ vessel air draft plus a configurable safety margin, raising a proximity alarm
 as the vessel nears a too-low bridge and a route-ahead warning when one lies on
 the active Course API route. All 663 tests pass.
 
-#### Bridge air-draft check
+### Added
 
 - New `bridge-air-draft` output raises a Signal K alarm on
   `notifications.navigation.crowsNest.bridgeClearance.<id>` when the vessel
@@ -277,11 +311,10 @@ the active Course API route. All 663 tests pass.
   meters, `0` means use `design.airHeight` only), and the clearance margin
   (default 1 m).
 
-#### Code quality
+### Changed
 
-- Two `/cleanup` passes (a diff audit, then an eight-lane whole-codebase audit)
-  applied roughly forty reuse and quality findings with no behavior change
-  beyond the new feature: a shared `proximity-radius` module for the
+- Roughly forty reuse and quality cleanups, with no behavior change beyond
+  the new feature: a shared `proximity-radius` module for the
   vessel-proximity geometry, a shared `clampNumber`, a shared `light-character`
   humanizer hoisted out of the OpenSeaMap module, a panel `ToggleFieldset`
   shell composed by three cards, gating bridge clearance to bridge POIs, a
@@ -290,17 +323,17 @@ the active Course API route. All 663 tests pass.
 
 <a id="v061"></a>
 
-### v0.6.1 (2026/05/30) - whole-codebase cleanup, accessibility, and registry compliance
+## [0.6.1] - 2026-05-30
 
-A quality, accessibility, and compliance release driven by a four-lens review
-of the whole codebase (Signal K compliance, performance, code quality, and the
-admin UI). There are no runtime behavior changes for the chart user: every POI
+A quality, accessibility, and compliance release covering Signal K
+compliance, performance, code quality, and the admin UI across the whole
+codebase. There are no runtime behavior changes for the chart user: every POI
 source, note, and alarm works exactly as before, and all 587 tests pass. This
 release is also cut from a commit that carries the Signal K plugin-ci workflow,
 so the community plugin-registry's plugin-ci run now lands on the published
 commit.
 
-#### Plugin-registry compliance
+### Added
 
 - Declare `signalk.recommends` (the registry's "Works well with" list),
   cross-linking the two published, genuinely-paired companion plugins:
@@ -311,22 +344,7 @@ commit.
   field so the admin UI clamps it and AJV rejects a zero or negative submit,
   matching every other bounded numeric in the schema.
 
-#### Admin panel accessibility
-
-- Restore focus to the disclosure button before a data-source card collapses,
-  so a keyboard user is no longer dropped to the top of the panel. The
-  focus-restore logic that previously lived only in the section headers is now
-  a shared `useCollapseFocusRestore` hook both the cards and the sections use.
-- Mark collapsed card and section bodies `inert`, so the hidden subtree stays
-  out of the tab order and the accessibility tree.
-- Drop the malformed ARIA table roles from the status bar (rows with no cells),
-  rendering it as a plain read-only health readout instead.
-- Stop the per-source pills and the whole status bar from each being a live
-  region: the relative "N minutes ago" text re-rendered on every poll, so the
-  redundant regions only produced screen-reader noise. The pill now exposes a
-  concise ok / idle / error label, with the longer context in the hover title.
-
-#### Code quality and reuse
+### Changed
 
 - Add shared `SECONDS_PER_MINUTE` / `SECONDS_PER_HOUR` / `SECONDS_PER_DAY`
   constants and route the three relative-time formatters through them, removing
@@ -341,25 +359,40 @@ commit.
   selected-POI-types string out of the per-request notes path, and reuse the
   shared `positiveFiniteNumber` / `toFiniteNumber` narrowers and the
   `refreshSecondsSchema` builder where they had been re-implemented inline.
+
+### Fixed
+
+- Restore focus to the disclosure button before a data-source card collapses,
+  so a keyboard user is no longer dropped to the top of the panel. The
+  focus-restore logic that previously lived only in the section headers is now
+  a shared `useCollapseFocusRestore` hook both the cards and the sections use.
+- Mark collapsed card and section bodies `inert`, so the hidden subtree stays
+  out of the tab order and the accessibility tree.
+- Drop the malformed ARIA table roles from the status bar (rows with no cells),
+  rendering it as a plain read-only health readout instead.
+- Stop the per-source pills and the whole status bar from each being a live
+  region: the relative "N minutes ago" text re-rendered on every poll, so the
+  redundant regions only produced screen-reader noise. The pill now exposes a
+  concise ok / idle / error label, with the longer context in the hover title.
 - Guard the note `url` field against the empty string, matching the existing
   `description` and `timestamp` guards.
 
 <a id="v060"></a>
 
-### v0.6.0 (2026/05/29) - version realignment (same content as v0.4.7)
+## [0.6.0] - 2026-05-29
 
 A version-only release: the code is identical to v0.4.7, so there are no
 functional changes. The bump realigns the published version line to 0.6.0.
 `v0.5.0` is skipped because that identifier already names a pre-publication
 development milestone above. The release content, carried over from v0.4.7, is
-the whole-tree `/simplify` cleanup, the plugin-registry screenshots declared
+the whole-tree code cleanup, the plugin-registry screenshots declared
 under `signalk.screenshots`, and the hardened npm publish workflow (a
 tag-versus-version guard, `typecheck` and `lint` in the gating job, and
 provenance). See the v0.4.7 entry below for the detailed change list.
 
 <a id="v047"></a>
 
-### v0.4.7 (2026/05/29) - codebase cleanup, registry screenshots, publish-workflow hardening
+## [0.4.7] - 2026-05-29
 
 An internal-quality, packaging, and release-pipeline release. There are no
 runtime behavior changes for the chart user: the POI sources, the notes, and
@@ -367,7 +400,7 @@ the alarms all work exactly as before, and all 587 tests pass. The published
 package now carries screenshots for the Signal K plugin registry, and the npm
 publish workflow is hardened.
 
-#### Plugin-registry compliance
+### Added
 
 - Add three screenshots under `assets/screenshots/` (an ActiveCaptain hazard
   popup, a USCG Light List aid popup, and the configuration panel) and declare
@@ -377,21 +410,16 @@ publish workflow is hardened.
 - Add a Screenshots section to the README so the images render on GitHub and
   on npm.
 
-#### Publish-workflow hardening
+### Changed
 
 - `npm-publish.yml` now verifies that the release tag matches the
   `package.json` version before building, runs `typecheck` and `lint`
   alongside `build` and `test` in the gating job, and publishes with
   `--provenance` (granting the `id-token: write` and `contents: read`
   permissions provenance requires).
-- Resync `package-lock.json`, whose version field had drifted to `0.4.4`
-  while `package.json` advanced. The dependency graph was already consistent,
-  so `npm ci` was unaffected, but the metadata is now correct.
 
-#### Code cleanup (/simplify pass)
-
-A four-lens review (reuse, simplification, efficiency, and altitude) of the
-whole `src/` tree. Behavior is preserved throughout.
+**Code cleanup.** A cleanup of the whole `src/` tree for reuse,
+simplification, and efficiency. Behavior is preserved throughout.
 
 - Make `PoiSummary.skIcon` and `PoiDetailView.skIcon` required, so every
   source must pick a Freeboard-registered icon at construction. Remove the
@@ -411,18 +439,24 @@ whole `src/` tree. Behavior is preserved throughout.
 - Efficiency: hoist per-call regexes to module constants in the detail
   renderers, and collapse a concurrent same-bbox burst into one upstream
   request by caching the in-flight promise in the bbox-debounce cache.
-- Remove dead state (`lastSkipReason`) and a redundant escape-helper alias,
-  and reuse `toFiniteNumber` at three open-coded wire-parse sites.
-
-#### Docs
-
 - Refresh `CLAUDE.md`, the README, and the development and maintainer docs to
   reflect the new shared modules, the required `skIcon`, the screenshots, and
   the hardened publish workflow.
 
+### Fixed
+
+- Resync `package-lock.json`, whose version field had drifted to `0.4.4`
+  while `package.json` advanced. The dependency graph was already consistent,
+  so `npm ci` was unaffected, but the metadata is now correct.
+
+### Removed
+
+- Remove dead state (`lastSkipReason`) and a redundant escape-helper alias,
+  and reuse `toFiniteNumber` at three open-coded wire-parse sites.
+
 <a id="v046"></a>
 
-### v0.4.6 (2026/05/27) - data-formatting audit, attribution on structured properties
+## [0.4.6] - 2026-05-27
 
 A presentation cleanup. The boilerplate attribution footer (the "Data
 sourced from..." sup/sub block on ActiveCaptain notes and the
@@ -431,9 +465,10 @@ appended to its rendered description) is gone; the same information now
 rides on structured `properties.{source,attribution,plugin,pluginRepo}`
 fields published on every note, so a SignalK client UI can render the
 source link cleanly in chrome instead of inline alongside the POI
-detail.
+detail. The release also lands roughly fifty data-formatting cleanups
+across the codebase.
 
-#### Attribution
+### Changed
 
 - Move attribution from inline description boilerplate to structured
   `properties.{source,attribution,plugin,pluginRepo}` fields on every
@@ -441,25 +476,6 @@ detail.
   `attribution` were already published on the note; `plugin` and
   `pluginRepo` are new and identify this plugin and its canonical
   GitHub repository.
-- Remove the ActiveCaptain footer partial that rendered the "Data
-  sourced from Garmin Active Captain via the signalk-crows-nest
-  plugin" sup/sub block plus the per-POI "encouraged to contribute"
-  link, and stop wrapping the rendered description of every other
-  source (OpenSeaMap, USCG Light List, NOAA ENC Direct) with the
-  `crows-nest-attribution` paragraph.
-- Delete the now-unused `src/shared/attribution.ts` helper and its
-  test, since no source appends an inline attribution footer anymore.
-
-#### Data-formatting audit cleanup
-
-A four-agent review of data formatting across the codebase landed
-roughly fifty cleanups, every severity through nit:
-
-- **Security (med).** The ActiveCaptain `<a href="{{website}}">` link
-  is now gated by a `safeWebsite` Handlebars helper that rejects any
-  URL outside `http:`, `https:`, and `mailto:`, so a wire value of
-  `javascript:alert(1)` cannot ride the click-to-execute path. The
-  `rel="noopener noreferrer"` attribute is set on every external link.
 - **Plugin identity consolidated.** `PLUGIN_REPO_URL` and the new
   `PLUGIN_USER_AGENT` live alongside `PLUGIN_ID` in
   `src/shared/plugin-id.ts`. The four upstream clients (ActiveCaptain,
@@ -474,30 +490,6 @@ roughly fifty cleanups, every severity through nit:
   single-quoted attribute is safe by default. The USCG `llnr` and
   `volume` interpolation sites are now escaped consistently with the
   rest of that renderer.
-- **NOAA ENC robustness.** The source rejects features with no
-  `OBJECTID` or out-of-range coordinates rather than minting a
-  `<layer>_unknown` marker whose click-through 404s. Charted depths
-  and sounding-accuracy parentheticals render as `12.0 m`, not
-  `12.0000001 m`, via `toFixed(1)`. `sordatToIsoTimestamp` rejects
-  out-of-range months and days so a wire `"20240299"` no longer
-  silently rolls forward to `2024-04-08`.
-- **OpenSeaMap robustness.** The wire timestamp is normalized through
-  `Date.toISOString()` so the published `PoiSummary.timestamp` is
-  consistent in precision with the other three sources. The
-  `seamark:type` and `leisure` lookups are case-insensitive and
-  whitespace-trimming so an older OSM edit with a capitalized or
-  padded tag is recognized rather than falling through to `Unknown`.
-  The `humanizeWord`-then-lowercase round-trip in `buildFamilyLine`
-  is dropped.
-- **USCG robustness.** A null `NAME` falls back to
-  `Unnamed <aidType>` so the chart marker has a popup title.
-  `INACTIVE` reads through `isWireTruthy` so a schema bump that
-  ships the boolean as a number does not silently mark every record
-  active. `MODIFIED_DATE = 0` is treated as absent so the year filter
-  does not unconditionally drop the record. The `humanizeLightChar`
-  guard, the `(Morse)` parenthetical, the dangling `<hr/>` in the
-  ActiveCaptain header, and the `Wifi` -> `Wi-Fi` and `Patrolled` ->
-  `Security patrol` labels are all fixed.
 - **SignalK note shape.** The `properties.sourceCount` field is
   dropped (it duplicated `properties.sources.length`). The note's
   `position` is built field-by-field at the builder boundary so an
@@ -506,12 +498,6 @@ roughly fifty cleanups, every severity through nit:
   empty body. The `getResource` property-value branch no longer
   returns `timestamp: undefined` for sources whose record carries no
   date.
-- **Notification path safety.** The notification tracker keys by the
-  sanitized POI id (the same value that ends up on the wire), so two
-  ids that sanitize identically cannot live as two distinct tracker
-  entries that share one SignalK notification path. An empty
-  `sourceSuffix` string is treated the same as undefined, so the
-  `$source` brand never gains a trailing dot.
 - **Numeric helpers.** `toFiniteNumber` and `positiveFiniteNumber`
   both return `null` for the "not usable" sentinel, matching the
   `toPosition` and resource-query patterns. New helpers
@@ -538,35 +524,75 @@ roughly fifty cleanups, every severity through nit:
 - **Map-link URL precision.** `openSeaMapMarkerUrl` caps coordinates
   to five decimals (~1.1 m), so a marker URL is roughly 25% of its
   previous length.
+
+### Fixed
+
+- **NOAA ENC robustness.** The source rejects features with no
+  `OBJECTID` or out-of-range coordinates rather than minting a
+  `<layer>_unknown` marker whose click-through 404s. Charted depths
+  and sounding-accuracy parentheticals render as `12.0 m`, not
+  `12.0000001 m`, via `toFixed(1)`. `sordatToIsoTimestamp` rejects
+  out-of-range months and days so a wire `"20240299"` no longer
+  silently rolls forward to `2024-04-08`.
+- **OpenSeaMap robustness.** The wire timestamp is normalized through
+  `Date.toISOString()` so the published `PoiSummary.timestamp` is
+  consistent in precision with the other three sources. The
+  `seamark:type` and `leisure` lookups are case-insensitive and
+  whitespace-trimming so an older OSM edit with a capitalized or
+  padded tag is recognized rather than falling through to `Unknown`.
+  The `humanizeWord`-then-lowercase round-trip in `buildFamilyLine`
+  is dropped.
+- **USCG robustness.** A null `NAME` falls back to
+  `Unnamed <aidType>` so the chart marker has a popup title.
+  `INACTIVE` reads through `isWireTruthy` so a schema bump that
+  ships the boolean as a number does not silently mark every record
+  active. `MODIFIED_DATE = 0` is treated as absent so the year filter
+  does not unconditionally drop the record. The `humanizeLightChar`
+  guard, the `(Morse)` parenthetical, the dangling `<hr/>` in the
+  ActiveCaptain header, and the `Wifi` -> `Wi-Fi` and `Patrolled` ->
+  `Security patrol` labels are all fixed.
+- **Notification path safety.** The notification tracker keys by the
+  sanitized POI id (the same value that ends up on the wire), so two
+  ids that sanitize identically cannot live as two distinct tracker
+  entries that share one SignalK notification path. An empty
+  `sourceSuffix` string is treated the same as undefined, so the
+  `$source` brand never gains a trailing dot.
 - **Editorial.** Punctuation across the OpenSeaMap and NOAA ENC
   popups is now consistent (every fact line ends in a period); the
   ActiveCaptain `parseApiDate` regex tightens its time portion to
   reject malformed `HH:MM:SS` values before appending `Z`.
 
+### Removed
+
+- Remove the ActiveCaptain footer partial that rendered the "Data
+  sourced from Garmin Active Captain via the signalk-crows-nest
+  plugin" sup/sub block plus the per-POI "encouraged to contribute"
+  link, and stop wrapping the rendered description of every other
+  source (OpenSeaMap, USCG Light List, NOAA ENC Direct) with the
+  `crows-nest-attribution` paragraph.
+- Delete the now-unused `src/shared/attribution.ts` helper and its
+  test, since no source appends an inline attribution footer anymore.
+
+### Security
+
+- **Security (med).** The ActiveCaptain `<a href="{{website}}">` link
+  is now gated by a `safeWebsite` Handlebars helper that rejects any
+  URL outside `http:`, `https:`, and `mailto:`, so a wire value of
+  `javascript:alert(1)` cannot ride the click-to-execute path. The
+  `rel="noopener noreferrer"` attribute is set on every external link.
+
 <a id="v044"></a>
 
-### v0.4.4 (2026/05/26) - faster chart loads, plugin icon, audit cleanup
+## [0.4.4] - 2026-05-26
 
 A performance and polish release. The chart-load latency on a cold
 viewport dropped from 15-30 s to about 5 s by capping each POI source's
 list request at a per-source timeout: a slow Overpass or NOAA ENC query
 no longer holds up the chart while the other sources answer. The
-canonical plugin icon ships in the same release, and the v0.4.3
-three-agent code review's findings are folded in (SignalK conformance,
-correctness, and UI/docs/test cleanup, all severities through nit).
+canonical plugin icon ships in the same release, alongside a round of
+SignalK conformance, correctness, UI, docs, and test fixes.
 
-#### Performance
-
-- **Per-source list-request timeout in the aggregate registry.** Race
-  each source's `listPointsOfInterest` against a 5 s timeout (configurable
-  on the registry for tests). On timeout the source's POIs are skipped
-  for this call, but the underlying HTTP keeps running so the source's
-  bbox-debounce cache fills; the next chart-plotter refresh sees the
-  populated cache and the source's POIs appear without an extra
-  upstream round-trip. A slow Overpass or NOAA ENC tail-latency outlier
-  no longer blocks the fast sources behind it.
-
-#### Plugin icon
+### Added
 
 - Add the canonical plugin icon under `assets/icons/icon.svg` (master)
   with rasterized PNG sizes 72/96/192/512. The icon follows the
@@ -593,7 +619,67 @@ correctness, and UI/docs/test cleanup, all severities through nit).
 - Ship the canonical master under `assets/` in the npm tarball
   (`files` extended).
 
-#### SignalK conformance and correctness
+### Changed
+
+- **Per-source list-request timeout in the aggregate registry.** Race
+  each source's `listPointsOfInterest` against a 5 s timeout (configurable
+  on the registry for tests). On timeout the source's POIs are skipped
+  for this call, but the underlying HTTP keeps running so the source's
+  bbox-debounce cache fills; the next chart-plotter refresh sees the
+  populated cache and the source's POIs appear without an extra
+  upstream round-trip. A slow Overpass or NOAA ENC tail-latency outlier
+  no longer blocks the fast sources behind it.
+- **Rename `NotificationValue.timestamp` to `createdAt`** so the
+  notification value shape matches the SignalK `Notification` spec's
+  optional `createdAt` field. The wire `timestamp` on the outer
+  Update is still set from this value, so a consumer reading
+  `Update.timestamp` is unchanged.
+- **Short-circuit `app.getCourse()` on a null `activeRoute.href`
+  delta.** The Course API signals route clear with a null value;
+  the course reader now drops the cached polyline synchronously
+  without paying for a getCourse round-trip.
+- **`useNumberDraft` parser extracted** as a pure `commitNumberDraft`
+  helper, with a node:test suite covering empty / unparsable input,
+  fallback, integer truncation, min / max clamping, and Infinity /
+  NaN handling. The hook's React state-management bits are unchanged.
+- **Per-source status pill fixtures** carry `apiReachable: true` for
+  ok cases, matching what the runtime emits.
+- **Docs reflect the assets/ tarball entry and the build:icons
+  step:** `docs/maintainers/releasing.md`, `docs/development.md`,
+  and the architecture map in `CLAUDE.md`. The troubleshooting doc
+  drops the obsolete "cached POI count" line from the status-section
+  description (the panel pill shows health, not a per-fetch count).
+  CLAUDE.md picks up `SectionBox.tsx` in the panel layout list.
+
+### Fixed
+
+- **Clone each summary `position` object in the aggregate's merge.**
+  The per-source bbox-debounce caches share the same `PoiSummary[]`
+  (and `position` objects) across hits, so a downstream consumer
+  that mutates `note.position` would silently corrupt the cached
+  entry for the next caller. The merge now spreads the position
+  alongside the id rewrite.
+- **Tighten the USCG Light List dark-zone recovery.** A page file
+  that decoded to a different record count than the metadata claims
+  now drops its If-Modified-Since / ETag (forcing a 200 OK on next
+  refresh), not just a page file that decoded to zero records: the
+  partial-decode case is also covered.
+- **Escape the `|` separator in the bbox-debounce cache key** so a
+  future caller whose extra discriminator happens to contain a
+  literal `|` cannot collide with another caller's bbox + remainder.
+- **NOAA ENC empty-state hint** uses the `hintBelow` style variant so
+  the "Choose at least one layer" message and the "Underwater rocks
+  default off" follow-up no longer butt against each other with zero
+  vertical gap.
+- **ActiveCaptain client timing tests** use an injectable `Sleep`
+  spy: the three Retry-After tests now assert the requested wait
+  exactly (1000 ms, capped to maxRetryAfterMs, etc.) rather than
+  observed wall-clock floors, so the suite is no longer flaky on a
+  loaded CI runner.
+- **Bug report template** now points users to this repo's
+  Discussions, not the upstream fork's.
+
+### Removed
 
 - **Drop the `MethodNotAllowedError` class** from
   `notes-resource-output.ts`. The signalk-server resources REST layer
@@ -607,59 +693,10 @@ correctness, and UI/docs/test cleanup, all severities through nit).
   not a standard SignalK notes property and a strict server-side
   validator could strip it. The read-only contract is enforced by
   the resource provider's `setResource` / `deleteResource` methods.
-- **Rename `NotificationValue.timestamp` to `createdAt`** so the
-  notification value shape matches the SignalK `Notification` spec's
-  optional `createdAt` field. The wire `timestamp` on the outer
-  Update is still set from this value, so a consumer reading
-  `Update.timestamp` is unchanged.
-- **Clone each summary `position` object in the aggregate's merge.**
-  The per-source bbox-debounce caches share the same `PoiSummary[]`
-  (and `position` objects) across hits, so a downstream consumer
-  that mutates `note.position` would silently corrupt the cached
-  entry for the next caller. The merge now spreads the position
-  alongside the id rewrite.
-- **Tighten the USCG Light List dark-zone recovery.** A page file
-  that decoded to a different record count than the metadata claims
-  now drops its If-Modified-Since / ETag (forcing a 200 OK on next
-  refresh), not just a page file that decoded to zero records: the
-  partial-decode case is also covered.
-- **Short-circuit `app.getCourse()` on a null `activeRoute.href`
-  delta.** The Course API signals route clear with a null value;
-  the course reader now drops the cached polyline synchronously
-  without paying for a getCourse round-trip.
-- **Escape the `|` separator in the bbox-debounce cache key** so a
-  future caller whose extra discriminator happens to contain a
-  literal `|` cannot collide with another caller's bbox + remainder.
-
-#### UI, tests, and docs
-
-- **NOAA ENC empty-state hint** uses the `hintBelow` style variant so
-  the "Choose at least one layer" message and the "Underwater rocks
-  default off" follow-up no longer butt against each other with zero
-  vertical gap.
-- **`useNumberDraft` parser extracted** as a pure `commitNumberDraft`
-  helper, with a node:test suite covering empty / unparsable input,
-  fallback, integer truncation, min / max clamping, and Infinity /
-  NaN handling. The hook's React state-management bits are unchanged.
-- **ActiveCaptain client timing tests** use an injectable `Sleep`
-  spy: the three Retry-After tests now assert the requested wait
-  exactly (1000 ms, capped to maxRetryAfterMs, etc.) rather than
-  observed wall-clock floors, so the suite is no longer flaky on a
-  loaded CI runner.
-- **Per-source status pill fixtures** carry `apiReachable: true` for
-  ok cases, matching what the runtime emits.
-- **Bug report template** now points users to this repo's
-  Discussions, not the upstream fork's.
-- **Docs reflect the assets/ tarball entry and the build:icons
-  step:** `docs/maintainers/releasing.md`, `docs/development.md`,
-  and the architecture map in `CLAUDE.md`. The troubleshooting doc
-  drops the obsolete "cached POI count" line from the status-section
-  description (the panel pill shows health, not a per-fetch count).
-  CLAUDE.md picks up `SectionBox.tsx` in the panel layout list.
 
 <a id="v043"></a>
 
-### v0.4.3 (2026/05/24) - rating-filter fix and Appstore classification
+## [0.4.3] - 2026-05-24
 
 A bug-fix release. The minimum-rating filter on the ActiveCaptain card
 treated a never-reviewed marina as a 0-star marina, so a user who
@@ -669,7 +706,30 @@ Appstore's Chart Plotters and Notifications categories instead of
 the catch-all Utility category, and bumps the GitHub Actions runner
 versions ahead of the Node.js 20 deprecation.
 
-#### Bug fixes
+### Added
+
+- Add discoverability keywords for npm search (`activecaptain`,
+  `openseamap`, `uscg`, `noaa`, `freeboard`, `points-of-interest`,
+  `notes`, `chart-overlay`, `proximity-alarm`, `route-corridor`,
+  `marina`, `anchorage`, `hazard`).
+
+### Changed
+
+- Replace the catch-all `signalk-category-utility` keyword with the
+  two categories the plugin actually belongs to:
+  `signalk-category-chart-plotters` (the notes resources feed
+  Freeboard-SK and other chart plotters) and
+  `signalk-category-notifications` (the proximity and route-corridor
+  hazard alarms). The plugin now appears under both Appstore
+  category filters.
+- Bump `actions/checkout` and `actions/setup-node` from v4 to v6
+  across every workflow (`ci.yml`, `eslint.yml`,
+  `npm-publish.yml`). The v4 releases run on Node.js 20, which
+  GitHub flagged for deprecation in the v0.4.2 publish run; v6 runs
+  on Node.js 24 and clears the warning ahead of the June 2026 hard
+  cutover.
+
+### Fixed
 
 - **ActiveCaptain "0/5" rating bug.** The AC summary API sometimes
   returned `reviewSummary: { averageRating: 0, numberOfReviews: 0 }`
@@ -683,40 +743,17 @@ versions ahead of the Node.js 20 deprecation.
   `minimumRating: 0` and hides it at any positive threshold (the
   same as any unrated ratable POI), and the popup omits the rating
   section entirely.
-
-#### SignalK Appstore classification
-
-- Replace the catch-all `signalk-category-utility` keyword with the
-  two categories the plugin actually belongs to:
-  `signalk-category-chart-plotters` (the notes resources feed
-  Freeboard-SK and other chart plotters) and
-  `signalk-category-notifications` (the proximity and route-corridor
-  hazard alarms). The plugin now appears under both Appstore
-  category filters.
-- Add discoverability keywords for npm search (`activecaptain`,
-  `openseamap`, `uscg`, `noaa`, `freeboard`, `points-of-interest`,
-  `notes`, `chart-overlay`, `proximity-alarm`, `route-corridor`,
-  `marina`, `anchorage`, `hazard`).
 - Add the missing trailing period to the package.json `description`.
-
-#### CI
-
-- Bump `actions/checkout` and `actions/setup-node` from v4 to v6
-  across every workflow (`ci.yml`, `eslint.yml`,
-  `npm-publish.yml`). The v4 releases run on Node.js 20, which
-  GitHub flagged for deprecation in the v0.4.2 publish run; v6 runs
-  on Node.js 24 and clears the warning ahead of the June 2026 hard
-  cutover.
 
 <a id="v042"></a>
 
-### v0.4.2 (2026/05/23) - first published release
+## [0.4.2] - 2026-05-23
 
 **First release published to npm. Bundles the multi-source POI architecture
 (ActiveCaptain, OpenSeaMap, USCG Light List, and NOAA ENC Direct), the
 position-aware safety alarms, the route-corridor hazard scan, the React
 configuration panel, the per-source earliest-year filter, the per-bbox
-refresh-debounce cache, and a multi-agent code review cleanup pass.**
+refresh-debounce cache, and a codebase-wide cleanup.**
 
 The full development history of the changes that ship in this release is
 documented in the per-milestone entries below (`v0.5.0` for multi-source,
@@ -724,19 +761,9 @@ documented in the per-milestone entries below (`v0.5.0` for multi-source,
 alarms, `v0.2.0` for the TypeScript and panel rewrite). This entry summarizes
 what is new since the `v0.5.0` development milestone described below.
 
-#### Per-card layout consistency
+### Added
 
-Every data-source card now reads in the same vertical order: **layers,
-refresh period, update year, merge option**. ActiveCaptain (POI types,
-cache duration), USCG Light List (no layers, refresh hours, update year,
-dedupe), OpenSeaMap (Overpass endpoint above the buckets, seamark groups,
-refresh seconds, update year, dedupe + radius), and NOAA ENC (scale band
-with the layer toggles, refresh seconds, survey year, dedupe) all match.
-The expanded card body picks up a left-side accent rule (a 3 px border in
-`var(--ac-border)` plus a left padding bump) so the body fields read as
-obvious children of the source-name header above.
-
-#### Per-bbox refresh-debounce cache (NOAA ENC and OpenSeaMap)
+**Per-bbox refresh-debounce cache (NOAA ENC and OpenSeaMap)**
 
 The two at-runtime sources gained a small in-memory cache keyed on the
 bounding-box. A Freeboard refresh burst on a stationary viewport reuses
@@ -754,7 +781,7 @@ List card's refresh period stays a background-download cadence in hours;
 the NOAA ENC and OpenSeaMap fields are sub-minute upstream debounces.
 Each card's hint paragraph spells out the difference.
 
-#### Earliest-year filter, per source
+**Earliest-year filter, per source**
 
 Each opting-in source grows an optional "earliest year" knob on its
 configuration card. When set, the source hides POIs whose source-specific
@@ -786,7 +813,7 @@ The collapsed accordion summary on each source card appends `since YYYY`
 when the filter is set, so a non-zero cutoff is visible without expanding
 the card.
 
-#### USCG Light List input
+**USCG Light List input**
 
 - A new opt-in source imports the USCG Light List (US Aids to Navigation):
   ~57,000 lights, daymarks, buoys, racons, and sound signals across all 10
@@ -802,7 +829,7 @@ the card.
   `PoiType` stays `Navigational` so they do not falsely trigger the
   proximity alarm.
 
-#### NOAA ENC Direct input (AWOIS successor)
+**NOAA ENC Direct input (AWOIS successor)**
 
 - A new opt-in source imports US authoritative wrecks, obstructions, and
   underwater rocks from NOAA's ENC Direct ArcGIS REST FeatureServer. AWOIS
@@ -823,9 +850,28 @@ the card.
   survey date (often decades old for stable features), not the chart
   refresh date.
 
-#### Multi-agent code review cleanup
+### Changed
 
-A 5-agent code review of the entire codebase surfaced and fixed:
+**Per-card layout consistency**
+
+Every data-source card now reads in the same vertical order: **layers,
+refresh period, update year, merge option**. ActiveCaptain (POI types,
+cache duration), USCG Light List (no layers, refresh hours, update year,
+dedupe), OpenSeaMap (Overpass endpoint above the buckets, seamark groups,
+refresh seconds, update year, dedupe + radius), and NOAA ENC (scale band
+with the layer toggles, refresh seconds, survey year, dedupe) all match.
+The expanded card body picks up a left-side accent rule (a 3 px border in
+`var(--ac-border)` plus a left padding bump) so the body fields read as
+obvious children of the source-name header above.
+
+- CLAUDE.md, README.md, docs/roadmap.md, and docs/development.md gain
+  the two new source sections. The earlier `61 (district, page) pairs`
+  count is corrected to `37` across docs and code comments after live
+  verification on the boat Pi found the true pinned count.
+
+### Fixed
+
+A code review of the entire codebase surfaced and fixed:
 
 - **HIGH (safety):** position monitor wrapped each contributor's
   `buildFetchBox` and `evaluate` in its own try/catch. A throwing
@@ -888,22 +934,15 @@ A 5-agent code review of the entire codebase surfaced and fixed:
   restoring the saved snapshot), so the input no longer shows stale
   typed text until the user blurs.
 
-#### Documentation
-
-- CLAUDE.md, README.md, docs/roadmap.md, and docs/development.md gain
-  the two new source sections. The earlier `61 (district, page) pairs`
-  count is corrected to `37` across docs and code comments after live
-  verification on the boat Pi found the true pinned count.
-
 <a id="v050"></a>
 
-### v0.5.0 (2026/05/22) - multi-source points of interest
+## [0.5.0] - 2026-05-22
 
 **The plugin is now multi-source: it adds OpenSeaMap alongside Garmin
 ActiveCaptain, merges the two into one chart layer, and gives each source its
 own health and settings.**
 
-#### OpenSeaMap source
+### Added
 
 - A new opt-in source imports OpenSeaMap (OpenStreetMap marine data) through
   the OSM Overpass API: seamark hazards (rocks, wrecks, obstructions),
@@ -914,19 +953,10 @@ own health and settings.**
 - OpenStreetMap data is published under the Open Database License (ODbL),
   which requires visible attribution. Every OpenSeaMap point's rendered detail
   carries an `© OpenStreetMap contributors (ODbL)` footer.
-
-#### Multi-source aggregate
-
 - With more than one source enabled, the plugin fans each `notes` query out to
   every source, unions the results, and serves them as one layer. A failing
   source no longer blanks the chart: the layer is served from whichever
   sources answered.
-- Resource ids gain a source prefix (`activecaptain-123456`,
-  `openseamap-node_987654`). A single-ActiveCaptain install sees its note ids
-  change from `123456` to `activecaptain-123456`; `getResource` round-trips
-  the prefixed id. The OpenSeaMap source uses an underscore-separated
-  internal id form (`node_123`, not `node/123`) so a slash inside the raw OSM
-  id never splits the SignalK `/resources/notes/<id>` path.
 - Per-source dedupe: an OpenSeaMap point of interest that duplicates an
   ActiveCaptain marker of the same type, within a configurable radius
   (default 150 meters), is merged into it. A second pass collapses
@@ -952,40 +982,24 @@ own health and settings.**
   `notice-to-mariners` or `navigation-structure` rather than silently
   breaking.
 
-#### Per-source status and the accordion panel
+### Changed
 
+- Resource ids gain a source prefix (`activecaptain-123456`,
+  `openseamap-node_987654`). A single-ActiveCaptain install sees its note ids
+  change from `123456` to `activecaptain-123456`; `getResource` round-trips
+  the prefixed id. The OpenSeaMap source uses an underscore-separated
+  internal id form (`node_123`, not `node/123`) so a slash inside the raw OSM
+  id never splits the SignalK `/resources/notes/<id>` path.
 - The status snapshot is now per-source: each enabled source reports its own
   API reachability and last fetch. The configuration panel restructures into a
   per-source accordion (a collapsible card per data source) followed by an
   Alerts section.
-
-#### Notification path rename
-
 - The proximity and route-hazard alarms move from
   `notifications.navigation.activecaptain.{hazard,route}.*` to
   `notifications.navigation.crowsNest.{hazard,route}.*`, since a hazard from a
   non-ActiveCaptain source on an `activecaptain` path is wrong. A hot upgrade
   leaves any stale `activecaptain.*` notifications in place until the next
   Signal K server restart.
-
-#### Correctness fixes
-
-- The minimum-rating filter is now scoped to the ActiveCaptain source. It
-  was applied to the merged POI list, which silently dropped every
-  OpenSeaMap point of interest (the OSM data carries no average rating).
-- The ActiveCaptain attribution footer is appended once, not twice. The
-  shared `appendAttribution` helper now owns the footer, so the renderer no
-  longer adds a duplicate `Data sourced from Garmin Active Captain` line.
-- A failed output start is surfaced via `setPluginError` (matching how a
-  failed monitor start is surfaced) rather than left as a bland "Ready"
-  status that masked a dead output.
-- `assemblePluginSchema` now throws a clear message if a key in the schema's
-  `required` array is not actually declared by any module, so a renamed or
-  dropped owner-module is caught at assembly time rather than producing a
-  schema with a required slot that has no backing property.
-
-#### Refactors and shared plumbing
-
 - A single shared HTTP client (`src/inputs/http-client.ts`) underlies both
   the ActiveCaptain and the OpenSeaMap source: one concurrency-limited and
   throttled request queue, one retry-with-backoff that honors `Retry-After`,
@@ -1012,9 +1026,6 @@ own health and settings.**
 - The attribution footer's CSS class is now the source-agnostic
   `crows-nest-attribution` rather than the ActiveCaptain-flavoured
   `ac-attribution`.
-
-#### Configuration panel
-
 - The numeric fields share one `NumberField` row layout (label, input
   backed by `useNumberDraft` so the input can be cleared mid-edit, and hint
   text); the proximity and route-hazard alarm controls share one
@@ -1024,22 +1035,35 @@ own health and settings.**
   table is now key-typed, and the per-source card bodies were tightened
   for accessibility (matching `aria-*` attributes, stable callbacks, and
   a shared number formatter).
-
-#### Tests
-
 - The duplicated test stubs (a stub SignalK app and a POI-summary builder)
   are lifted into `test/helpers.ts` and reused across the suite. New
   coverage was added for previously untested branches of the panel
   reducer, the config normaliser, and the relative-time formatter.
 
+### Fixed
+
+- The minimum-rating filter is now scoped to the ActiveCaptain source. It
+  was applied to the merged POI list, which silently dropped every
+  OpenSeaMap point of interest (the OSM data carries no average rating).
+- The ActiveCaptain attribution footer is appended once, not twice. The
+  shared `appendAttribution` helper now owns the footer, so the renderer no
+  longer adds a duplicate `Data sourced from Garmin Active Captain` line.
+- A failed output start is surfaced via `setPluginError` (matching how a
+  failed monitor start is surfaced) rather than left as a bland "Ready"
+  status that masked a dead output.
+- `assemblePluginSchema` now throws a clear message if a key in the schema's
+  `required` array is not actually declared by any module, so a renamed or
+  dropped owner-module is caught at assembly time rather than producing a
+  schema with a required slot that has no backing property.
+
 <a id="v040"></a>
 
-### v0.4.0 (2026/05/22) - route-corridor hazard scan
+## [0.4.0] - 2026-05-22
 
 **The plugin can now scan the active route ahead and warn about hazards,
 bridges, and locks along it.**
 
-#### Route-corridor hazard scan
+### Added
 
 - A new opt-in option, "Scan the active route ahead for hazards, bridges, and
   locks", reads the vessel's active route from the Signal K Course API. As the
@@ -1062,11 +1086,11 @@ bridges, and locks along it.**
 
 <a id="v030"></a>
 
-### v0.3.0 (2026/05/22) - position-aware safety
+## [0.3.0] - 2026-05-22
 
 **The plugin gains a position-aware safety feature set: proximity hazard alarms, an offline cache, a rating filter, and stale-hazard warnings.**
 
-#### Proximity hazard alarms
+### Added
 
 - A new opt-in option, "Emit a notification when the vessel nears a hazard",
   subscribes to `navigation.position`. When the vessel comes within the
@@ -1078,60 +1102,27 @@ bridges, and locks along it.**
 - While the feature is on, the plugin scans for nearby hazards as the vessel
   moves, throttled by distance and time so it stays within the API limits.
 - The alarm radius is configurable; the feature is off by default.
-
-#### Persistent, offline cache
-
 - Point-of-interest detail is now cached on disk in the plugin data directory,
   so it survives a server restart and is readable with no connectivity. The
   cache still honours the configured caching duration.
-
-#### Rating filter
-
 - A new "Minimum rating" option hides points of interest rated below the
   chosen value (0 to 5; 0 shows everything), cutting clutter on dense charts.
-
-#### Hazard freshness
-
 - A Hazard point of interest whose report has not been confirmed in over two
   years now carries a prominent freshness warning in its description.
 
 <a id="v020"></a>
 
-### v0.2.0 (2026/05/21) - TypeScript rewrite, modern toolchain, and a React configuration panel
+## [0.2.0] - 2026-05-21
 
 **The plugin has been rewritten in TypeScript, its toolchain modernized, covered with an automated test suite, and given a dedicated React configuration panel.**
 
-#### TypeScript migration
+### Added
 
-- The plugin source moved from JavaScript under `plugin/` to modular
-  TypeScript under `src/`, compiled to `dist/` by `tsc` in strict mode.
-- The code is split into focused modules: the HTTP client, the detail cache,
-  the geometry helpers, the resource-query parser, the POI-type selection,
-  the Handlebars rendering, the inlined templates, and the shared type
-  contracts in `src/types.ts`.
-- The Handlebars templates and partials, previously separate files, are
-  inlined as string constants so no extra files need to be published.
-
-#### Dependency and toolchain modernization
-
-- The HTTP client uses the native `fetch` API, with rate limiting, exponential
-  backoff, and `Retry-After` support.
-- The detail cache is a TTL cache backed by `lru-cache`. `handlebars` and
-  `lru-cache` are the only runtime dependencies.
-- Linting moved to ESLint 9 with the neostandard flat config, replacing the
-  older `eslint-config-standard` setup.
-- The project targets TypeScript 6 and Node.js 20 or newer.
 - A CI workflow builds, type-checks, tests, and lints on Node.js 20 and 22.
-
-#### Automated test suite
-
 - A `node:test` suite, run through `tsx`, covers the HTTP client, the detail
   cache, the geometry helpers, the resource-query parser, the POI-type
   selection, the Handlebars rendering, the status recorder, and the panel
   config reducer.
-
-#### React configuration panel
-
 - The plugin ships its own configuration panel: a federated React app that the
   Signal K admin UI loads through Module Federation, bundled to `public/` by
   webpack.
@@ -1143,9 +1134,6 @@ bridges, and locks along it.**
   snapshot the panel polls.
 - The panel requires Signal K admin UI 2.26.0 or newer; on older servers the
   plugin still works and falls back to the standard generated settings form.
-
-#### Richer point-of-interest detail
-
 - Point-of-interest descriptions now render the `services`, `retail`,
   `mooring`, and `navigation` summary sections, and a featured user review.
   These were already in every cached API response but were not displayed.
@@ -1154,9 +1142,27 @@ bridges, and locks along it.**
 - Service and retail listings show only capabilities with a known answer, so a
   long section is not padded with crosses for every unrated field.
 
-#### Review hardening
+### Changed
 
-- A multi-angle code review drove a round of correctness fixes: the status
+- The plugin source moved from JavaScript under `plugin/` to modular
+  TypeScript under `src/`, compiled to `dist/` by `tsc` in strict mode.
+- The code is split into focused modules: the HTTP client, the detail cache,
+  the geometry helpers, the resource-query parser, the POI-type selection,
+  the Handlebars rendering, the inlined templates, and the shared type
+  contracts in `src/types.ts`.
+- The Handlebars templates and partials, previously separate files, are
+  inlined as string constants so no extra files need to be published.
+- The HTTP client uses the native `fetch` API, with rate limiting, exponential
+  backoff, and `Retry-After` support.
+- The detail cache is a TTL cache backed by `lru-cache`. `handlebars` and
+  `lru-cache` are the only runtime dependencies.
+- Linting moved to ESLint 9 with the neostandard flat config, replacing the
+  older `eslint-config-standard` setup.
+- The project targets TypeScript 6 and Node.js 20 or newer.
+
+### Fixed
+
+- A code review drove a round of correctness fixes: the status
   recorder is rebuilt on each plugin start so a restart no longer shows a stale
   start time or carried-over errors; a `Retry-After` header is now capped so a
   large value cannot stall a request for minutes; malformed elements in a
@@ -1173,7 +1179,7 @@ bridges, and locks along it.**
   mooring total is shown; `eslint-plugin-react` is a declared dependency; the
   test suite is now type-checked in CI; and the panel build clears stale
   artifacts.
-- A SignalK and Garmin API expert review drove a further round. The most
+- A SignalK and Garmin API review drove a further round. The most
   important fix: the resource provider is now registered on every plugin
   start, because the SignalK server unregisters it on every stop, so a
   configuration change previously left the `notes` type with no provider

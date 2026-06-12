@@ -185,20 +185,17 @@ export const routeHazardOutput: OutputModule = {
     const positionScan: PositionScanContributor = {
       poiTypes: CORRIDOR_POI_TYPES,
       buildFetchBox: (tickPosition) => {
-        // Override the route's vesselPosition with the monitor's fresh
-        // tickPosition, not the independent readPosition courseReader uses.
-        // If getSelfPath transiently returns null/undefined (subscription
-        // warmup, missed data-model write), the routeCorridorBbox would
-        // otherwise be sized only around wp0 onward and miss a hazard
-        // sitting between the vessel and the first waypoint. The bbox now
-        // always covers the vessel-to-wp0 segment the scan later projects
-        // onto.
-        const rawRoute = courseReader.getRouteAhead()
-        if (rawRoute === null) {
-          tickRoute = null
+        // Pass the monitor's fresh tickPosition, not the independent
+        // readPosition courseReader would otherwise take. If getSelfPath
+        // transiently returns null/undefined (subscription warmup, missed
+        // data-model write), the routeCorridorBbox would otherwise be sized
+        // only around wp0 onward and miss a hazard sitting between the
+        // vessel and the first waypoint. The bbox always covers the
+        // vessel-to-wp0 segment the scan later projects onto.
+        tickRoute = courseReader.getRouteAhead(tickPosition)
+        if (tickRoute === null) {
           return null
         }
-        tickRoute = { ...rawRoute, vesselPosition: tickPosition }
         return routeCorridorBbox(tickRoute, corridorWidthMeters)
       },
       evaluate: (vesselPosition, pois) => {

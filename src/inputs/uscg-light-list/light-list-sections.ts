@@ -61,7 +61,7 @@ export function buildLightListSections (record: LightListRecord): NormalizedSect
   }
   pushSection(sections, 'signals', 'Signals', signals)
 
-  if (record.remark !== undefined && record.remark.length > 0) {
+  if (record.remark !== undefined) {
     pushSection(sections, 'remarks', 'Remarks', [
       { label: 'Remark', value: record.remark, kind: 'note' }
     ])

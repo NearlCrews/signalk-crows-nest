@@ -113,7 +113,7 @@ caching duration, or restart the plugin, if you need fresher data.
 
 When more than one source reports the same physical feature, the plugin
 merges them into one note (see the per-source dedupe in `README.md`).
-The default merge radius is 150 meters; widen the "Merge radius" field on
+The default merge radius is 150 feet; widen the "Merge radius" field on
 the matching source card (OpenSeaMap, USCG Light List, or NOAA ENC) if
 duplicates still appear close together, or tighten it if genuinely
 separate neighbors are being merged. The radius is per-source, so a tight

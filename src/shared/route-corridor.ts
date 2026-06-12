@@ -20,6 +20,14 @@ export const DEFAULT_ROUTE_CORRIDOR_WIDTH_METERS = 500
 export const MAX_ROUTE_CORRIDOR_WIDTH_METERS = 50_000
 
 /**
+ * Lower bound on the corridor half-width: a zero width would leave the scan
+ * enabled but never able to flag a point of interest. Shared by the schema
+ * fragment and the panel field so the form floor cannot drift from the
+ * schema floor.
+ */
+export const MIN_ROUTE_CORRIDOR_WIDTH_METERS = 1
+
+/**
  * Resolve a raw corridor-width config value: a non-positive or non-numeric
  * value falls back to {@link DEFAULT_ROUTE_CORRIDOR_WIDTH_METERS} (matching
  * the other optional numeric config keys), and the result is capped at
@@ -32,5 +40,5 @@ export function clampRouteCorridorWidth (raw: unknown): number {
 
 /** Config-schema fragment for the route-corridor half-width field. */
 export function routeCorridorWidthSchema (title: string): Record<string, unknown> {
-  return boundedNumberSchema(title, DEFAULT_ROUTE_CORRIDOR_WIDTH_METERS, 1, MAX_ROUTE_CORRIDOR_WIDTH_METERS)
+  return boundedNumberSchema(title, DEFAULT_ROUTE_CORRIDOR_WIDTH_METERS, MIN_ROUTE_CORRIDOR_WIDTH_METERS, MAX_ROUTE_CORRIDOR_WIDTH_METERS)
 }

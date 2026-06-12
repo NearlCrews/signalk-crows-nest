@@ -1,23 +1,23 @@
 /**
  * The "Merge with ActiveCaptain" fieldset shared by every non-base source
  * card (OpenSeaMap, USCG Light List, NOAA ENC). Each non-base card had its
- * own near-identical copy of a toggle plus a merge-radius NumberField plus
- * a one-paragraph rationale; the duplication made the per-card files
+ * own near-identical copy of a toggle plus a merge-radius field plus a
+ * one-paragraph rationale; the duplication made the per-card files
  * harder to scan and was a real maintenance hazard whenever the copy
  * needed editing in one place. Centralizing the block here keeps every
  * card's merge UX in lockstep.
  *
  * The fieldset, legend, toggle, and hint shell come from `ToggleFieldset`;
- * this component slots its merge-radius NumberField as the children.
+ * this component slots its merge-radius LengthField as the children.
  */
 
 import type * as React from 'react'
-import { DEFAULT_DEDUPE_RADIUS_METERS } from '../../shared/dedupe-radius.js'
-import NumberField from './NumberField.js'
+import {
+  DEFAULT_DEDUPE_RADIUS_METERS,
+  MIN_DEDUPE_RADIUS_METERS
+} from '../../shared/dedupe-radius.js'
+import LengthField from './LengthField.js'
 import ToggleFieldset from './ToggleFieldset.js'
-
-/** Smallest dedupe radius the plugin accepts (matches every schema minimum). */
-const MIN_DEDUPE_RADIUS_METERS = 1
 
 interface Props {
   /** Human-readable source name, e.g. `OpenSeaMap`, used in the toggle label. */
@@ -58,13 +58,13 @@ export default function MergeWithActiveCaptain ({
       enabled={enabled}
       onToggleEnabled={onToggleEnabled}
     >
-      <NumberField
+      <LengthField
         id={radiusInputId}
-        label='Merge radius (meters)'
+        label='Merge radius'
         hint='How far apart two markers can be and still count as the same point.'
-        value={radiusMeters ?? DEFAULT_DEDUPE_RADIUS_METERS}
-        onChange={onChangeRadius}
-        min={MIN_DEDUPE_RADIUS_METERS}
+        valueMeters={radiusMeters ?? DEFAULT_DEDUPE_RADIUS_METERS}
+        onChangeMeters={onChangeRadius}
+        minMeters={MIN_DEDUPE_RADIUS_METERS}
         step={10}
         integer
         disabled={!enabled}

@@ -22,11 +22,9 @@
 import type { NormalizedDelta, Path } from '@signalk/server-api'
 import { distanceMeters, toPosition, unionBbox } from '../geo/position-utilities.js'
 import type { PositionScanContributor } from '../outputs/output.js'
+import { SELF_POSITION_PATH } from '../shared/self-paths.js'
 import { MS_PER_MINUTE } from '../shared/time.js'
 import type { Bbox, PoiSummary, Position } from '../shared/types.js'
-
-/** The `vessels.self` path the monitor subscribes to. */
-const SELF_POSITION_PATH = 'navigation.position'
 
 /** Default minimum distance, in meters, the vessel must move before a tick. */
 const DEFAULT_MIN_MOVE_METERS = 100
@@ -135,6 +133,21 @@ export function createPositionMonitor (config: PositionMonitorConfig): PositionM
     return distanceMeters(lastTickPosition, position) >= minMoveMeters
   }
 
+  /**
+   * Run every contributor's evaluate against the newest fix. Each call runs
+   * in its own try/catch so a throwing contributor never short-circuits its
+   * siblings.
+   */
+  function evaluateAll (vesselPosition: Position, pois: PoiSummary[]): void {
+    for (const contributor of contributors) {
+      try {
+        contributor.evaluate(vesselPosition, pois)
+      } catch (error) {
+        app.debug(`Position monitor: contributor evaluate failed: ${String(error)}`)
+      }
+    }
+  }
+
   async function runTick (tickPosition: Position): Promise<void> {
     tickInFlight = true
     // Commit the throttle before the await: a tick that started consumes the
@@ -163,17 +176,9 @@ export function createPositionMonitor (config: PositionMonitorConfig): PositionM
 
       // No box means nothing to fetch this tick. Contributors are still
       // evaluated with an empty result so an output can clear stale alarms
-      // (for example a route that has just been finished or canceled). Each
-      // evaluate runs in its own try/catch for the same reason as above.
+      // (for example a route that has just been finished or canceled).
       if (bbox === undefined) {
-        const vesselPosition = latestPosition ?? tickPosition
-        for (const contributor of contributors) {
-          try {
-            contributor.evaluate(vesselPosition, [])
-          } catch (error) {
-            app.debug(`Position monitor: contributor evaluate failed: ${String(error)}`)
-          }
-        }
+        evaluateAll(latestPosition ?? tickPosition, [])
         return
       }
 
@@ -184,16 +189,8 @@ export function createPositionMonitor (config: PositionMonitorConfig): PositionM
       }
       // Evaluate against the newest fix, not the one the scan started from:
       // on a moving vessel the two differ by the distance traveled during the
-      // multi-second list request. Each evaluate runs in its own try/catch so
-      // a throwing contributor never short-circuits its siblings.
-      const vesselPosition = latestPosition ?? tickPosition
-      for (const contributor of contributors) {
-        try {
-          contributor.evaluate(vesselPosition, pois)
-        } catch (error) {
-          app.debug(`Position monitor: contributor evaluate failed: ${String(error)}`)
-        }
-      }
+      // multi-second list request.
+      evaluateAll(latestPosition ?? tickPosition, pois)
     } catch (error) {
       // A failed scan is non-fatal and expected while offline: this tick simply
       // has no fresh data. Logged at debug level so an offline passage does not
