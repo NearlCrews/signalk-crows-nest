@@ -12,6 +12,9 @@ import { MS_PER_SECOND } from '../../shared/time.js'
 import type { Position } from '../../shared/types.js'
 
 const BASE_URL = 'https://rest.emodnet-bathymetry.eu/depth_profile'
+// 15 s, shorter than the ENC and USCG clients' full minute: depth_profile
+// returns a single flat array, far less than a paginated ArcGIS bbox query, so
+// a tighter timeout still fits inside the route-draft deadline.
 const REQUEST_TIMEOUT_MS = 15 * MS_PER_SECOND
 
 /**
@@ -45,8 +48,8 @@ export function createEmodnetClient (deps: EmodnetClientDeps = {}): EmodnetClien
       const geom = encodeURIComponent(`LINESTRING(${lonLat(from)},${lonLat(to)})`)
       const url = `${BASE_URL}?geom=${geom}`
       const res = await get(url, { 'User-Agent': PLUGIN_USER_AGENT, Accept: 'application/json' }, REQUEST_TIMEOUT_MS, 'EMODnet', signal)
-      if (res.status === 204 || res.body.trim() === '') return { samples: [], hadGap: false }
       if (res.status < 200 || res.status >= 300) throw new Error(`EMODnet depth_profile failed: HTTP ${res.status}`)
+      if (res.status === 204 || res.body.trim() === '') return { samples: [], hadGap: false }
       let raw: unknown
       try {
         raw = JSON.parse(res.body)

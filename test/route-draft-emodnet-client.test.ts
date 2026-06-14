@@ -46,6 +46,16 @@ test('non-JSON rejects', async () => {
   await assert.rejects(() => client.depthProfile(FROM, TO))
 })
 
+test('a non-2xx with an empty body rejects (not no-data)', async () => {
+  const client = createEmodnetClient({ requestText: async () => ({ status: 503, body: '', headers: {} }) })
+  await assert.rejects(() => client.depthProfile(FROM, TO))
+})
+
+test('a non-array JSON value rejects with the did-not-return-an-array error', async () => {
+  const client = createEmodnetClient({ requestText: async () => ({ status: 200, body: '{}', headers: {} }) })
+  await assert.rejects(() => client.depthProfile(FROM, TO), /did not return an array/)
+})
+
 test('threads the abort signal to the transport', async () => {
   let received: AbortSignal | undefined
   const client = createEmodnetClient({
