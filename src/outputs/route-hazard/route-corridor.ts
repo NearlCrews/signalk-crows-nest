@@ -59,7 +59,7 @@ export interface RouteCorridorScanInput {
   /** The points of interest to test; non-corridor types are ignored. */
   pois: PoiSummary[]
   /** Half-width of the corridor, in meters, measured either side of the route. */
-  corridorWidthMeters: number
+  corridorHalfWidthMeters: number
   /**
    * Vessel speed over ground, in meters per second, used to estimate arrival
    * times. When null, undefined, zero, or non-finite, no `etaSeconds` is
@@ -77,17 +77,17 @@ export interface RouteCorridorScanInput {
  *   reported once, at its nearest projection.
  */
 export function scanRouteCorridor (input: RouteCorridorScanInput): CorridorPoi[] {
-  const { route, pois, corridorWidthMeters, speedOverGround } = input
+  const { route, pois, corridorHalfWidthMeters, speedOverGround } = input
 
   // The legs run vessel to first waypoint to second waypoint, and so on. With
   // no vessel fix the first leg starts at the next waypoint instead, so the
   // along-track distance is then measured from there.
   const legPoints = routeLegPoints(route)
-  // `!(corridorWidthMeters > 0)` rather than `<= 0` so a non-finite width (NaN)
+  // `!(corridorHalfWidthMeters > 0)` rather than `<= 0` so a non-finite width (NaN)
   // is rejected too: NaN fails every comparison, so a `<= 0` test would let it
   // through and then `abs(crossTrack) > NaN` would be false for every point,
   // silently flagging everything in the box regardless of the corridor.
-  if (legPoints.length < 2 || !(corridorWidthMeters > 0) || pois.length === 0) {
+  if (legPoints.length < 2 || !(corridorHalfWidthMeters > 0) || pois.length === 0) {
     return []
   }
 
@@ -129,7 +129,7 @@ export function scanRouteCorridor (input: RouteCorridorScanInput): CorridorPoi[]
         continue
       }
       // Outside the corridor, behind the leg start, or beyond the leg end.
-      if (Math.abs(projection.crossTrackMeters) > corridorWidthMeters) {
+      if (Math.abs(projection.crossTrackMeters) > corridorHalfWidthMeters) {
         continue
       }
       if (projection.alongTrackMeters < 0 || projection.alongTrackMeters > legLengthMeters) {

@@ -166,4 +166,6 @@ test('openRouterErrorCode maps unusable completions and transport faults to mode
   assert.deepEqual(openRouterErrorCode(new OpenRouterError(200, 'finish-length', 'truncated')), { status: 502, error: 'model-error' })
   assert.deepEqual(openRouterErrorCode(new OpenRouterError(200, 'empty-completion', 'blank')), { status: 502, error: 'model-error' })
   assert.deepEqual(openRouterErrorCode(new OpenRouterError(0, 'transport', 'network')), { status: 502, error: 'model-error' })
+  assert.deepEqual(openRouterErrorCode(new OpenRouterError(200, 'finish-content-filter', 'filtered')), { status: 502, error: 'model-error' })
+  assert.deepEqual(openRouterErrorCode(new OpenRouterError(200, 'finish-error', 'provider error')), { status: 502, error: 'model-error' })
 })

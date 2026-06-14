@@ -9,7 +9,6 @@
  */
 
 import type { NormalizedSection } from './normalized-detail.js'
-import type { RouteDraftPropulsion } from '../route-draft/config.js'
 
 /** A geographic point. Matches both SignalK and ActiveCaptain conventions. */
 export interface Position {
@@ -219,6 +218,9 @@ export interface PoiDetailView {
  */
 export type PoiTypeFlag = Extract<keyof PluginConfig, `include${string}`>
 
+/** Vessel propulsion kind, the primary source for the route-draft fuel and sailability math. */
+export type Propulsion = 'sail' | 'power' | 'motorsail'
+
 /** Plugin configuration as supplied by the SignalK admin UI. */
 export interface PluginConfig {
   cachingDurationMinutes: number
@@ -347,7 +349,7 @@ export interface PluginConfig {
   /** Daily OpenRouter call cap. Bounds calls per UTC day, not dollars. */
   routeDraftMaxCallsPerDay?: number
   /** Vessel propulsion kind, the primary source for the fuel and sailability math. */
-  routeDraftPropulsion?: RouteDraftPropulsion
+  routeDraftPropulsion?: Propulsion
   /** Vessel draft, in meters. Zero defers to `design.draft.value.maximum`. */
   routeDraftDraftMeters?: number
   /** Depth safety margin added to the draft, in meters. */

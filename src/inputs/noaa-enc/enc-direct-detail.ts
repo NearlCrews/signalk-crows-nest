@@ -28,6 +28,7 @@ import {
 } from './s57-mapping.js'
 import type { EncLayerKey } from './enc-direct-types.js'
 import { escapeHtml, labeledParagraph } from '../../shared/html-escape.js'
+import { formatMeters } from '../../shared/format-meters.js'
 
 /** NOAA's standard disclaimer for ENC data published through Coast Survey. */
 const DISCLAIMER = 'NOAA ENC data is not intended for primary navigation.'
@@ -60,14 +61,14 @@ export function renderEncDirectDetail (
   if (valsou !== undefined) {
     const souacc = readNumber(properties.SOUACC)
     const accuracy = souacc !== undefined
-      ? ` (sounding accuracy ±${souacc.toFixed(1)} m)`
+      ? ` (sounding accuracy ±${formatMeters(souacc)} m)`
       : ''
     // A least-depth sounding (QUASOU 6/7) reports the worst-case depth over the
     // feature, so the label says so; otherwise it is the charted depth. Both are
     // referenced to chart datum (MLLW on US ENCs). The section builder shares
     // this label via `encDepthLabel`, so the two cannot drift.
     const depthLabel = encDepthLabel(quasou)
-    blocks.push(`<p><strong>${depthLabel}:</strong> ${valsou.toFixed(1)} m${accuracy}.</p>`)
+    blocks.push(`<p><strong>${depthLabel}:</strong> ${formatMeters(valsou)} m${accuracy}.</p>`)
   }
 
   const quality = lookupParsedCode(QUASOU, quasou)

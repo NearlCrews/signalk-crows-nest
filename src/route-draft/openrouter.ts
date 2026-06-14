@@ -98,6 +98,12 @@ export interface CompleteArgs {
    * present, so existing callers keep the constant ceiling.
    */
   maxTokens?: number
+  /**
+   * Sampling temperature, threaded into the body only when present. The
+   * route-draft path sets a low value for repeatable coordinates; an absent
+   * value leaves the provider default.
+   */
+  temperature?: number
 }
 
 /** Token, cost, and cache accounting parsed from the response `usage` block. */
@@ -129,6 +135,8 @@ export interface CompleteResult {
  * - `empty-completion`: a status-200 response whose completion text was blank.
  * - `finish-length`: `choices[0].finish_reason === 'length'` (truncated).
  * - `finish-content-filter`: `choices[0].finish_reason === 'content_filter'`.
+ * - `finish-error`: `choices[0].finish_reason === 'error'`, a provider-side
+ *   failure surfaced on an otherwise status-200 completion.
  * - `transport`: a transport or body-read fault, after retries exhausted.
  */
 export type OpenRouterErrorKind =
@@ -136,6 +144,7 @@ export type OpenRouterErrorKind =
   | 'empty-completion'
   | 'finish-length'
   | 'finish-content-filter'
+  | 'finish-error'
   | 'transport'
 
 /**
@@ -298,6 +307,7 @@ export class OpenRouterClient {
     }
     if (args.responseFormat !== undefined) body.response_format = args.responseFormat
     if (args.provider !== undefined) body.provider = args.provider
+    if (args.temperature !== undefined) body.temperature = args.temperature
     return body
   }
 
@@ -316,6 +326,9 @@ export class OpenRouterClient {
       throw new OpenRouterError(
         200, 'finish-content-filter', 'completion blocked (finish_reason: content_filter)', body
       )
+    }
+    if (finishReason === 'error') {
+      throw new OpenRouterError(200, 'finish-error', 'provider failed the completion (finish_reason: error)', body)
     }
     const text = choice?.message?.content ?? ''
     if (text.trim() === '') {

@@ -149,6 +149,24 @@ test('finish_reason of content_filter is a terminal model error', async () => {
   )
 })
 
+test('finish_reason of error is a terminal model error with kind finish-error', async () => {
+  await withMockFetch(
+    () => jsonResponse(completion('', 'error')),
+    async () => {
+      const client = new OpenRouterClient(baseConfig, silentLog)
+      await assert.rejects(
+        () => client.complete({ system: 'sys', user: 'usr' }),
+        (err: unknown) => {
+          assert.ok(err instanceof OpenRouterError)
+          assert.equal(err.kind, 'finish-error')
+          assert.equal(err.status, 200)
+          return true
+        }
+      )
+    }
+  )
+})
+
 test('a status-200 empty completion is a terminal model error', async () => {
   await withMockFetch(
     () => jsonResponse(completion('   ', 'stop')),

@@ -9,8 +9,7 @@ import {
 } from '../src/route-draft/fuel.js'
 import { rhumbDistanceMeters } from '../src/geo/position-utilities.js'
 import type { Position } from '../src/shared/types.js'
-
-const METERS_PER_NAUTICAL_MILE = 1852
+import { METERS_PER_NAUTICAL_MILE } from '../src/shared/length.js'
 
 /** A power-vessel baseline: 100 nm at 10 kn burning 4 L/h. */
 function powerParams (overrides: Partial<FuelParams> = {}): FuelParams {
@@ -71,6 +70,15 @@ test('estimateFuel estimates a sail vessel only against a given motoring fractio
   const estimate = expectEstimate(estimateFuel(powerParams({ propulsion: 'sail', motoringFraction: 0.5 })))
 
   assert.equal(estimate.neededL, 25, 'half-motoring halves the base before the derate')
+})
+
+test('estimateFuel states the full-motoring assumption for a motorsailer without a fraction', () => {
+  const estimate = expectEstimate(estimateFuel(powerParams({ propulsion: 'motorsail' })))
+
+  // motorsail with no fraction motors fully, the same 50 L as the power case,
+  // but the note must say so rather than presenting a sail-aware figure.
+  assert.equal(estimate.neededL, 50, 'a motorsailer with no fraction is estimated as fully under power')
+  assert.match(estimate.derateNote, /assumes full motoring \(no motoring fraction set\)/, 'the motoring assumption is stated')
 })
 
 test('estimateFuel degrades to a reason when burn or cruise speed is missing or zero', () => {

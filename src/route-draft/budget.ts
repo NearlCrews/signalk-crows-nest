@@ -69,10 +69,11 @@ export class BudgetTracker {
       }
       state = { day: parsed.day, callsToday: parsed.callsToday }
     } catch (err) {
-      // ENOENT is the expected first-run case. Anything else means an existing
-      // budget file failed to load, which silently resets the daily call cap.
+      // ENOENT is the expected first-run case. Anything else is a corrupt or
+      // unreadable state file, which silently resets the daily cap, so it is
+      // worth surfacing at error level.
       if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-        opts.log?.debug(`budget state unreadable, resetting daily counter: ${String(err)}`)
+        opts.log?.error(`budget state unreadable, resetting daily counter: ${String(err)}`)
       }
       state = { day: utcDay(now()), callsToday: 0 }
     }
@@ -106,8 +107,6 @@ export class BudgetTracker {
    */
   async recordCall (): Promise<void> {
     this.rolloverIfNeeded()
-    // The class owns `state` exclusively, so increment in place rather than
-    // allocating a new object for a one-field change.
     this.state.callsToday += 1
     try {
       await writeFile(this.opts.statePath, JSON.stringify(this.state))

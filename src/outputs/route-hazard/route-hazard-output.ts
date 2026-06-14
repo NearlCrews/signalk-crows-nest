@@ -207,7 +207,7 @@ export const routeHazardOutput: OutputModule = {
             // sized to that earlier tickPosition.
             route: { ...tickRoute, vesselPosition },
             pois,
-            corridorWidthMeters,
+            corridorHalfWidthMeters: corridorWidthMeters,
             speedOverGround: vesselState.speedOverGround
           }).filter((poi) => poi.alongTrackDistanceMeters <= ROUTE_LOOK_AHEAD_METERS)
         }

@@ -44,6 +44,7 @@ import {
   readNumber
 } from '../inputs/noaa-enc/s57-mapping.js'
 import type { RouteCorridorScanInput } from '../outputs/route-hazard/route-corridor.js'
+import { formatMeters } from '../shared/format-meters.js'
 import { METERS_PER_NAUTICAL_MILE, metersFromNauticalMiles } from '../shared/length.js'
 import { SCALE_BAND_LABELS } from '../shared/scale-band.js'
 import type {
@@ -55,8 +56,10 @@ import type {
   RoutePolyline
 } from '../shared/types.js'
 
+const DEPTH_SAMPLE_SPACING_NM = 0.5
+
 /** Default internal sample spacing along a leg: 0.5 nm. Not user config. */
-const DEFAULT_SAMPLE_SPACING_METERS = 0.5 * METERS_PER_NAUTICAL_MILE
+const DEFAULT_SAMPLE_SPACING_METERS = DEPTH_SAMPLE_SPACING_NM * METERS_PER_NAUTICAL_MILE
 
 /** The ENC point-hazard layers the corridor scan reads. */
 const HAZARD_LAYERS: readonly EncLayerKey[] = ['wreck', 'obstruction', 'rock']
@@ -188,10 +191,10 @@ function segmentsCross (
 ): boolean {
   const d1 = orient2D(p3, p4, p1)
   const d2 = orient2D(p3, p4, p2)
+  if (!((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0))) return false
   const d3 = orient2D(p1, p2, p3)
   const d4 = orient2D(p1, p2, p4)
-  return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
-    ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))
+  return (d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0)
 }
 
 /** True when the segment `[a, b]` (each `[lon, lat]`) crosses any ring edge of the area. */
@@ -207,8 +210,10 @@ function segmentCrossesRings (a: number[], b: number[], rings: number[][][]): bo
 /** The ordered `[lon, lat]` points along a leg: the endpoints plus the interior samples. */
 function legPolyline (from: Position, to: Position, spacingMeters: number): number[][] {
   const interior = sampleRhumbLeg(from, to, spacingMeters)
-  const path = [from, ...interior, to]
-  return path.map((p) => [p.longitude, p.latitude])
+  const polyline: number[][] = [[from.longitude, from.latitude]]
+  for (const p of interior) polyline.push([p.longitude, p.latitude])
+  polyline.push([to.longitude, to.latitude])
+  return polyline
 }
 
 /**
@@ -233,6 +238,9 @@ function crossedAreas (
 }
 
 function legCrossesArea (legPath: number[][], rings: number[][][]): boolean {
+  // The vertex test runs first because the proper-crossing segment test below
+  // does not catch a leg lying exactly collinear with a ring edge; a densified
+  // vertex landing inside the ring is the backstop for that degenerate case.
   for (const [lon, lat] of legPath) {
     if (pointInRings(lon, lat, rings)) return true
   }
@@ -240,11 +248,6 @@ function legCrossesArea (legPath: number[][], rings: number[][][]): boolean {
     if (segmentCrossesRings(legPath[i], legPath[i + 1], rings)) return true
   }
   return false
-}
-
-/** Round a meter value to one decimal for a message, keeping the sign. */
-function oneDecimal (value: number): string {
-  return value.toFixed(1)
 }
 
 /**
@@ -350,6 +353,10 @@ function nearestLandApproachMeters (
         if (!Number.isFinite(along) || !Number.isFinite(cross)) continue
         // Off the ends of the leg the perpendicular distance is not the real
         // separation, so only the on-leg span contributes a standoff reading.
+        // The bound uses rhumb leg length while projectPointOntoLeg measures
+        // great-circle along-track; this is intentionally conservative because
+        // rhumb length is >= great-circle length, so no near-end land vertex is
+        // wrongly dropped.
         if (along < 0 || along > legLengthMeters) continue
         if (nearest === undefined || cross < nearest) nearest = cross
       }
@@ -385,20 +392,20 @@ function hazardSummary (layerKey: EncLayerKey, feature: EncFeature): PoiSummary 
   }
 }
 
-/** The hazard message: layer label, category, and any charted least-depth value. */
+/** The hazard message: feature type (category if known, else layer label), and any charted least-depth value. */
 function hazardMessage (
   layerKey: EncLayerKey,
   properties: Record<string, unknown>
 ): string {
-  const parts: string[] = [LAYER_LABEL[layerKey].toLowerCase()]
   const category = categoryLabel(layerKey, properties)
-  if (category !== undefined) parts.push(`(${category})`)
+  const featureType = category !== undefined ? category : LAYER_LABEL[layerKey].toLowerCase()
+  const parts: string[] = [featureType]
   const valsou = readNumber(properties.VALSOU)
   if (valsou !== undefined) {
     const label = encDepthLabel(parseS57Code(properties.QUASOU)).toLowerCase()
-    parts.push(`${label} ${oneDecimal(valsou)} m`)
+    parts.push(`${label} ${formatMeters(valsou)} m`)
   }
-  return `Charted ${parts.join(' ')} within the leg corridor`
+  return `Charted ${parts.join(', ')} within the leg corridor`
 }
 
 /**
@@ -430,9 +437,9 @@ async function queryHazards (
     for (const feature of response.features) {
       const summary = hazardSummary(layerKey, feature)
       if (summary === null) continue
-      const positionKey = `${layerKey}:${summary.position.latitude.toFixed(5)}:${summary.position.longitude.toFixed(5)}`
-      if (seen.has(positionKey)) continue
-      seen.add(positionKey)
+      const dedupeKey = `${layerKey}:${summary.position.latitude.toFixed(6)}:${summary.position.longitude.toFixed(6)}`
+      if (seen.has(dedupeKey)) continue
+      seen.add(dedupeKey)
       summaries.push(summary)
       features.set(summary.id, { layerKey, properties: feature.properties })
     }
@@ -553,12 +560,8 @@ async function checkOneLeg (
   const legPath = legPolyline(from, to, ctx.spacingMeters)
   const crossedDepth = crossedAreas(legPath, legBands.depth)
   const crossedLand = crossedAreas(legPath, legBands.land)
-  // Computed once per leg and shared: addLandFlags and addShallowOrNoCoverage
-  // both read it, and the flatMap is skipped on an open-water leg with no land.
   const drying = dryingArea(crossedDepth)
-  const allLandAreas = legBands.land.some((b) => b.areas.length > 0)
-    ? legBands.land.flatMap((b) => b.areas)
-    : []
+  const allLandAreas = legBands.land.flatMap((b) => b.areas)
 
   addLandFlags(flags, leg, crossedLand, drying)
   addShallowOrNoCoverageFlags(flags, leg, crossedDepth, crossedLand, drying, ctx.minimalSafetyContourMeters)
@@ -587,7 +590,7 @@ function addLandFlags (
     flags.push({
       leg,
       kind: 'land',
-      message: `Crosses an area charted as drying (dries to ${oneDecimal(drying.driesToMeters)} m above MLLW, ${SCALE_BAND_LABELS[drying.band]} band)`
+      message: `Crosses an area charted as drying (dries to ${formatMeters(drying.driesToMeters)} m above MLLW, ${SCALE_BAND_LABELS[drying.band]} band)`
     })
   }
 }
@@ -614,7 +617,7 @@ function addShallowOrNoCoverageFlags (
       flags.push({
         leg,
         kind: 'shallow',
-        message: `Charted depth area DRVAL1 is ${oneDecimal(shallowest.drval1)} m, ${encDepthLabel(undefined)}, ${SCALE_BAND_LABELS[shallowest.band]} band, under the ${oneDecimal(minimalSafetyContourMeters)} m draft-plus-margin contour`
+        message: `Charted depth area DRVAL1 is ${formatMeters(shallowest.drval1)} m, ${encDepthLabel(undefined)}, ${SCALE_BAND_LABELS[shallowest.band]} band, under the ${formatMeters(minimalSafetyContourMeters)} m draft-plus-margin contour`
       })
     }
     return
@@ -643,7 +646,7 @@ function addStandoffFlag (
   const nearest = nearestLandApproachMeters(from, to, landAreas)
   if (nearest === undefined || nearest >= standoffMeters) return
   const nearestNm = (nearest / METERS_PER_NAUTICAL_MILE).toFixed(2)
-  const standoffNm = standoffMeters / METERS_PER_NAUTICAL_MILE
+  const standoffNm = (standoffMeters / METERS_PER_NAUTICAL_MILE).toFixed(2)
   flags.push({
     leg,
     kind: 'other',
@@ -660,9 +663,10 @@ async function addHazardFlags (
   corridorHalfWidthMeters: number,
   signal?: AbortSignal
 ): Promise<void> {
-  const routeBbox = waypoints
-    .map((wp) => positionToBbox(wp, corridorHalfWidthMeters))
-    .reduce((acc, box) => unionBbox(acc, box))
+  let routeBbox = positionToBbox(waypoints[0], corridorHalfWidthMeters)
+  for (let i = 1; i < waypoints.length; i += 1) {
+    routeBbox = unionBbox(routeBbox, positionToBbox(waypoints[i], corridorHalfWidthMeters))
+  }
   let hazards: Awaited<ReturnType<typeof queryHazards>>
   try {
     hazards = await queryHazards(deps, bands, routeBbox, signal)
@@ -681,7 +685,7 @@ async function addHazardFlags (
   const corridorPois = deps.scanRouteCorridor({
     route,
     pois: hazards.summaries,
-    corridorWidthMeters: corridorHalfWidthMeters
+    corridorHalfWidthMeters
   })
   // Built once: the cumulative great-circle distance to each leg's start, the
   // same measure scanRouteCorridor uses for alongTrackDistanceMeters, so a

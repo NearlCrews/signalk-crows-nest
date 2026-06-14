@@ -64,6 +64,36 @@ const OPEN_API = {
           'Asks OpenRouter for a route, then checks it against NOAA ENC charted depth, land, and ' +
           'point hazards and computes the fuel. Optional and admin-scoped: it spends the OpenRouter ' +
           'budget, so it is gated to administrators and is disabled until a key is configured.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['prompt', 'from', 'bounds'],
+                properties: {
+                  prompt: { type: 'string', description: 'Plain-language passage request.' },
+                  from: {
+                    type: 'object',
+                    required: ['latitude', 'longitude'],
+                    properties: {
+                      latitude: { type: 'number' },
+                      longitude: { type: 'number' }
+                    }
+                  },
+                  bounds: {
+                    type: 'array',
+                    description: 'Visible chart window as [west, south, east, north].',
+                    items: { type: 'number' },
+                    minItems: 4,
+                    maxItems: 4
+                  },
+                  units: { type: 'string', enum: ['metric', 'imperial'] }
+                }
+              }
+            }
+          }
+        },
         responses: {
           200: {
             description: 'A drafted route, or an ok:false body with a stable error code.',
@@ -71,7 +101,9 @@ const OPEN_API = {
           },
           400: { description: 'The request body was invalid.' },
           401: { description: 'The caller is not authenticated, or drafting is not configured.' },
-          403: { description: 'The caller is authenticated but is not an administrator.' }
+          403: { description: 'The caller is authenticated but is not an administrator.' },
+          500: { description: 'The route-draft handler failed unexpectedly.' },
+          502: { description: 'The AI service or the safety check failed.' }
         }
       }
     }

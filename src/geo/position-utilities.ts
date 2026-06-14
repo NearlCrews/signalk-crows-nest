@@ -216,6 +216,18 @@ export function initialBearingRad (a: Position, b: Position): number {
 }
 
 /**
+ * Wrap an east-west delta, in radians, to the shortest signed path: take the
+ * route across the antimeridian when it is shorter than going the long way
+ * around, matching how a constant-bearing leg is drawn on a chart.
+ */
+function wrapDeltaLongitudeRad (deltaLongitude: number): number {
+  if (Math.abs(deltaLongitude) > Math.PI) {
+    return deltaLongitude > 0 ? deltaLongitude - 2 * Math.PI : deltaLongitude + 2 * Math.PI
+  }
+  return deltaLongitude
+}
+
+/**
  * Rhumb-line (loxodromic) distance between two positions, in meters.
  *
  * A rhumb line is a path of constant compass bearing. It is the line a chart
@@ -236,18 +248,6 @@ export function initialBearingRad (a: Position, b: Position): number {
  * @param to - The leg's end point.
  * @returns The rhumb-line distance in meters.
  */
-/**
- * Wrap an east-west delta, in radians, to the shortest signed path: take the
- * route across the antimeridian when it is shorter than going the long way
- * around, matching how a constant-bearing leg is drawn on a chart.
- */
-function wrapDeltaLongitudeRad (deltaLongitude: number): number {
-  if (Math.abs(deltaLongitude) > Math.PI) {
-    return deltaLongitude > 0 ? deltaLongitude - 2 * Math.PI : deltaLongitude + 2 * Math.PI
-  }
-  return deltaLongitude
-}
-
 export function rhumbDistanceMeters (from: Position, to: Position): number {
   const latitudeFrom = toRadians(from.latitude)
   const latitudeTo = toRadians(to.latitude)

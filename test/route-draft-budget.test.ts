@@ -104,7 +104,7 @@ test('an unreadable state file degrades to a fresh counter and logs once', async
       maxPerDay: 3,
       statePath,
       now: fixedNow('2026-06-14T08:00:00Z'),
-      log: { debug: (m) => logged.push(m), error: () => {} }
+      log: { debug: () => {}, error: (m) => logged.push(m) }
     })
     assert.equal(budget.callsToday(), 0, 'corrupt state resets the daily counter')
     assert.equal(budget.canSpend(), true)

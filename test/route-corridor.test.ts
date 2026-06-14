@@ -29,7 +29,7 @@ test('scanRouteCorridor flags a hazard inside the corridor on the current leg', 
   const result = scanRouteCorridor({
     route: routeAhead([{ latitude: 0, longitude: 1 }]),
     pois: [poi('1', 'Hazard', 'Shoal', { latitude: 0, longitude: 0.5 })],
-    corridorWidthMeters: 500
+    corridorHalfWidthMeters: 500
   })
 
   assert.equal(result.length, 1, 'the on-corridor hazard is flagged')
@@ -49,7 +49,7 @@ test('scanRouteCorridor flags Bridge and Lock points, not other types', () => {
       poi('marina', 'Marina', 'City Marina', { latitude: 0, longitude: 0.4 }),
       poi('anchorage', 'Anchorage', 'Quiet Bay', { latitude: 0, longitude: 0.7 })
     ],
-    corridorWidthMeters: 500
+    corridorHalfWidthMeters: 500
   })
 
   assert.deepEqual(result.map((entry) => entry.id), ['bridge', 'lock'], 'only Bridge and Lock are flagged')
@@ -59,7 +59,7 @@ test('scanRouteCorridor computes an ETA from the speed over ground', () => {
   const result = scanRouteCorridor({
     route: routeAhead([{ latitude: 0, longitude: 1 }]),
     pois: [poi('1', 'Hazard', 'Shoal', { latitude: 0, longitude: 0.5 })],
-    corridorWidthMeters: 500,
+    corridorHalfWidthMeters: 500,
     speedOverGround: 5
   })
 
@@ -78,7 +78,7 @@ test('scanRouteCorridor omits the ETA when the speed over ground is zero or null
     const result = scanRouteCorridor({
       route: routeAhead([{ latitude: 0, longitude: 1 }]),
       pois: [poi('1', 'Hazard', 'Shoal', { latitude: 0, longitude: 0.5 })],
-      corridorWidthMeters: 500,
+      corridorHalfWidthMeters: 500,
       speedOverGround
     })
 
@@ -92,7 +92,7 @@ test('scanRouteCorridor ignores a hazard outside the corridor width', () => {
     route: routeAhead([{ latitude: 0, longitude: 1 }]),
     // One degree of latitude north of the route: far outside a 500 m corridor.
     pois: [poi('1', 'Hazard', 'Distant Wreck', { latitude: 1, longitude: 0.5 })],
-    corridorWidthMeters: 500
+    corridorHalfWidthMeters: 500
   })
 
   assert.deepEqual(result, [], 'an off-corridor hazard is not flagged')
@@ -103,7 +103,7 @@ test('scanRouteCorridor ignores a hazard behind the vessel', () => {
     route: routeAhead([{ latitude: 0, longitude: 1 }]),
     // Half a degree west of the vessel: on the route line, but astern.
     pois: [poi('1', 'Hazard', 'Passed Shoal', { latitude: 0, longitude: -0.5 })],
-    corridorWidthMeters: 500
+    corridorHalfWidthMeters: 500
   })
 
   assert.deepEqual(result, [], 'a hazard astern of the vessel is not flagged')
@@ -114,7 +114,7 @@ test('scanRouteCorridor ignores a hazard beyond the end of the route', () => {
     route: routeAhead([{ latitude: 0, longitude: 1 }]),
     // Half a degree past the final waypoint: on the route line, but off route.
     pois: [poi('1', 'Hazard', 'Far Shoal', { latitude: 0, longitude: 1.5 })],
-    corridorWidthMeters: 500
+    corridorHalfWidthMeters: 500
   })
 
   assert.deepEqual(result, [], 'a hazard beyond the route end is not flagged')
@@ -132,7 +132,7 @@ test('scanRouteCorridor spans multiple legs and sorts nearest-first', () => {
       poi('far', 'Hazard', 'Second Leg Rock', { latitude: 0.25, longitude: 1 }),
       poi('near', 'Hazard', 'First Leg Rock', { latitude: 0, longitude: 0.5 })
     ],
-    corridorWidthMeters: 1000
+    corridorHalfWidthMeters: 1000
   })
 
   assert.deepEqual(result.map((entry) => entry.id), ['near', 'far'], 'flagged nearest-first by along-track')
@@ -154,7 +154,7 @@ test('scanRouteCorridor reports a hazard near a bend only once', () => {
       { latitude: 0, longitude: 2 }
     ]),
     pois: [poi('1', 'Hazard', 'Junction Rock', { latitude: 0, longitude: 1 })],
-    corridorWidthMeters: 500
+    corridorHalfWidthMeters: 500
   })
 
   assert.equal(result.length, 1, 'a hazard matching two legs is reported once')
@@ -170,7 +170,7 @@ test('scanRouteCorridor measures from the first waypoint when there is no vessel
       null
     ),
     pois: [poi('1', 'Hazard', 'Shoal', { latitude: 0, longitude: 0.5 })],
-    corridorWidthMeters: 500
+    corridorHalfWidthMeters: 500
   })
 
   assert.equal(result.length, 1, 'the hazard is flagged with no vessel fix')
@@ -187,7 +187,7 @@ test('scanRouteCorridor returns an empty list when the route has no leg', () => 
   const result = scanRouteCorridor({
     route: routeAhead([{ latitude: 0, longitude: 1 }], null),
     pois: [poi('1', 'Hazard', 'Shoal', { latitude: 0, longitude: 0.5 })],
-    corridorWidthMeters: 500
+    corridorHalfWidthMeters: 500
   })
 
   assert.deepEqual(result, [], 'no leg means nothing to scan')
@@ -197,7 +197,7 @@ test('scanRouteCorridor returns an empty list for a non-positive corridor width'
   const result = scanRouteCorridor({
     route: routeAhead([{ latitude: 0, longitude: 1 }]),
     pois: [poi('1', 'Hazard', 'Shoal', { latitude: 0, longitude: 0.5 })],
-    corridorWidthMeters: 0
+    corridorHalfWidthMeters: 0
   })
 
   assert.deepEqual(result, [], 'a zero-width corridor flags nothing')
@@ -210,7 +210,7 @@ test('scanRouteCorridor returns an empty list for a non-finite corridor width', 
   const result = scanRouteCorridor({
     route: routeAhead([{ latitude: 0, longitude: 1 }]),
     pois: [poi('far', 'Hazard', 'Distant rock', { latitude: 0.5, longitude: 0.5 })],
-    corridorWidthMeters: Number.NaN
+    corridorHalfWidthMeters: Number.NaN
   })
 
   assert.deepEqual(result, [], 'a non-finite corridor width flags nothing')

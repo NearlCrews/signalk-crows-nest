@@ -26,7 +26,7 @@
 import { rhumbDistanceMeters } from '../geo/position-utilities.js'
 import { METERS_PER_NAUTICAL_MILE } from '../shared/length.js'
 import { clampNumber, roundTo } from '../shared/numbers.js'
-import type { Position } from '../shared/types.js'
+import type { Position, Propulsion } from '../shared/types.js'
 
 /**
  * The flat head-sea derate applied to range. A vessel punching into a head sea
@@ -36,9 +36,6 @@ import type { Position } from '../shared/types.js'
  * estimate as `derateNote`.
  */
 export const DEFAULT_HEAD_SEA_DERATE = 0.25
-
-/** Propulsion kind, mirroring the vessel config's `propulsion` setting. */
-export type Propulsion = 'sail' | 'power' | 'motorsail'
 
 /** Inputs to {@link estimateFuel}. All volumes are liters; speed is knots. */
 export interface FuelParams {
@@ -173,9 +170,16 @@ export function estimateFuel (
   // The flat derate budgets extra fuel for the same ground in a head sea.
   const neededL = roundTo(baseNeeded * (1 + headSeaDerate), 1)
 
+  // A motorsailer with no configured motoring fraction is estimated as if fully
+  // under power. State that, so the figure is not misread as a sail-aware one.
+  // There is no motoring-fraction config field yet, so this rides on every
+  // motorsail estimate rather than a special case.
+  const motorsailAssumesFullMotoring = propulsion === 'motorsail' && motoringFraction === undefined
   const estimate: FuelEstimate = {
     neededL,
-    derateNote: derateNoteFor(headSeaDerate)
+    derateNote: motorsailAssumesFullMotoring
+      ? `${derateNoteFor(headSeaDerate)}, and assumes full motoring (no motoring fraction set)`
+      : derateNoteFor(headSeaDerate)
   }
 
   if (fuelAboardLiters !== undefined) {

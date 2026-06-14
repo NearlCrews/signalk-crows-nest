@@ -10,9 +10,9 @@
  * the other modules use.
  *
  * This module is dependency-free apart from the browser-safe `numbers` and
- * `config-schema` helpers and the `Propulsion` union from `fuel.ts` (itself
- * browser-safe), so the webpack-bundled panel imports the bounds and the
- * defaults directly rather than keeping a hand-synced copy.
+ * `config-schema` helpers and the `Propulsion` union from `shared/types.ts`, so
+ * the webpack-bundled panel imports the bounds and the defaults directly rather
+ * than keeping a hand-synced copy.
  *
  * Storage is SI: lengths in meters, volume in liters. The panel renders lengths
  * in the server's preferred display unit at the edge; the stored config never
@@ -21,15 +21,15 @@
 
 import { boundedNumberSchema } from '../shared/config-schema.js'
 import { clampNumber } from '../shared/numbers.js'
-import type { Propulsion } from './fuel.js'
+import type { Propulsion, PluginConfig } from '../shared/types.js'
 
-/** Propulsion kind, reusing the fuel module's union so the two cannot drift. */
+/** Propulsion kind, re-exported from shared types so config consumers keep one import. */
 export type RouteDraftPropulsion = Propulsion
 
 // --- OpenRouter ---------------------------------------------------------------
 
-/** Default model slug. Gemini Flash supports strict structured outputs. */
-export const DEFAULT_ROUTE_DRAFT_MODEL = 'google/gemini-2.5-flash'
+/** Default model slug. Gemini Flash-Lite supports strict structured outputs and is the cheapest, fastest verified route. */
+export const DEFAULT_ROUTE_DRAFT_MODEL = 'google/gemini-2.5-flash-lite'
 
 /** Default daily OpenRouter call cap. Bounds calls, not dollars (see budget.ts). */
 export const DEFAULT_MAX_CALLS_PER_DAY = 25
@@ -166,6 +166,12 @@ export interface RouteDraftConfig {
   routeDraftMaxLegNm: number
 }
 
+// Compile-time guard: every RouteDraftConfig field must exist as an optional wire field on
+// PluginConfig, so the runtime shape cannot gain a field the wire shape forgot. Exported so the
+// linter and noUnusedLocals treat it as used, the same witness idiom the panel POI-type groups use.
+type RouteDraftKeysOnWire = keyof RouteDraftConfig extends keyof PluginConfig ? true : never
+export const ROUTE_DRAFT_CONFIG_KEYS_WITNESS: RouteDraftKeysOnWire = true
+
 /** Resolve the stored propulsion value, falling back to the default on anything unknown. */
 export function resolvePropulsion (raw: unknown): RouteDraftPropulsion {
   return raw === 'sail' || raw === 'power' || raw === 'motorsail' ? raw : DEFAULT_PROPULSION
@@ -237,6 +243,7 @@ export function routeDraftConfigSchema (): Record<string, unknown> {
     routeDraftOpenRouterApiKey: {
       type: 'string',
       title: 'OpenRouter API key (stored unencrypted in the plugin config)',
+      format: 'password',
       default: ''
     },
     routeDraftModel: {
@@ -267,11 +274,11 @@ export function routeDraftConfigSchema (): Record<string, unknown> {
       DEFAULT_TACKING_ANGLE_DEG, MIN_TACKING_ANGLE_DEG, MAX_TACKING_ANGLE_DEG
     ),
     routeDraftCruiseSpeedKn: boundedNumberSchema(
-      'Cruise speed under power, in knots',
+      'Cruise speed under power, in knots (0 disables the fuel estimate)',
       DEFAULT_CRUISE_SPEED_KN, MIN_CRUISE_SPEED_KN, MAX_CRUISE_SPEED_KN
     ),
     routeDraftBurnLitersPerHour: boundedNumberSchema(
-      'Fuel burn at cruise, in liters per hour',
+      'Fuel burn at cruise, in liters per hour (0 disables the fuel estimate)',
       DEFAULT_BURN_LITERS_PER_HOUR, MIN_BURN_LITERS_PER_HOUR, MAX_BURN_LITERS_PER_HOUR
     ),
     routeDraftReservePercent: boundedNumberSchema(

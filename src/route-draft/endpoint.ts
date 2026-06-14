@@ -29,7 +29,7 @@ import { queryChartedAreas } from '../inputs/noaa-enc/depth-area-query.js'
 import { scanRouteCorridor } from '../outputs/route-hazard/route-corridor.js'
 import type { ScaleBand } from '../shared/scale-band.js'
 import { OpenRouterError } from './openrouter.js'
-import type { OpenRouterClient } from './openrouter.js'
+import type { CompleteResult, OpenRouterClient } from './openrouter.js'
 import type { BudgetTracker } from './budget.js'
 import type { RouteDraftConfig } from './config.js'
 import { checkLegs } from './safety-check.js'
@@ -55,13 +55,18 @@ const REQUEST_DEADLINE_MS = 22_000
 /** Output-token ceiling sized for a worst-case schema-conformant draft (waypoints, names, and a note). */
 const MAX_OUTPUT_TOKENS = 1500
 
+/** Low sampling temperature for repeatable coordinates: the draft wants determinism, not variety. */
+const ROUTE_DRAFT_TEMPERATURE = 0.2
+
 /**
- * Known-good fallback models, both confirmed to support strict structured
- * outputs. The configured model leads each request and these follow it (see
+ * Known-good models that support strict structured outputs, in preference
+ * order. The configured model leads each request and these follow it (see
  * {@link modelsForRequest}), so OpenRouter falls through to a capable model when
- * the configured one cannot honor the strict response_format.
+ * the configured one cannot honor the strict response_format. When the
+ * configured model already appears here (the default does), the duplicate is
+ * removed, so the list is the fallback chain regardless of which model leads.
  */
-const FALLBACK_MODELS = ['google/gemini-2.5-flash', 'google/gemini-2.5-flash-lite']
+const FALLBACK_MODELS = ['google/gemini-2.5-flash-lite', 'google/gemini-2.5-flash']
 
 /** Max turning waypoints kept from a draft. The schema and the parser share it. */
 const MAX_WAYPOINTS = 25
@@ -106,7 +111,7 @@ const ROUTE_SCHEMA = {
 
 /** The request's model list: the configured model first, then the known-good fallbacks, deduped. */
 function modelsForRequest (configuredModel: string): string[] {
-  return [configuredModel, ...FALLBACK_MODELS].filter((model, index, all) => all.indexOf(model) === index)
+  return [...new Set([configuredModel, ...FALLBACK_MODELS])]
 }
 
 /** The per-run state the handler reads, built at plugin start when the key is set. */
@@ -345,8 +350,8 @@ export function openRouterErrorCode (err: OpenRouterError): { status: number, er
     if (err.status === 401 || err.status === 403) return { status: err.status, error: 'unauthorized' }
     return { status: 502, error: 'model-error' }
   }
-  // finish-length, finish-content-filter, empty-completion, and transport are
-  // all unusable completions, not empty routes.
+  // finish-length, finish-content-filter, finish-error, empty-completion, and
+  // transport are all unusable completions, not empty routes.
   return { status: 502, error: 'model-error' }
 }
 
@@ -385,7 +390,7 @@ async function handleDraft (
   const deadlineMs = Date.now() + REQUEST_DEADLINE_MS
   const config = service.config
 
-  let completion
+  let completion: CompleteResult
   try {
     completion = await service.llm.complete({
       system: SYSTEM_PROMPT,
@@ -393,6 +398,7 @@ async function handleDraft (
       responseFormat: { type: 'json_schema', json_schema: { name: 'route_draft', strict: true, schema: ROUTE_SCHEMA } },
       models: modelsForRequest(config.routeDraftModel),
       provider: { require_parameters: true },
+      temperature: ROUTE_DRAFT_TEMPERATURE,
       maxTokens: MAX_OUTPUT_TOKENS,
       abortSignal: AbortSignal.timeout(Math.max(1000, deadlineMs - Date.now()))
     })
@@ -408,6 +414,12 @@ async function handleDraft (
     fail(res, 502, 'model-error', 'The AI request failed unexpectedly.')
     return
   }
+  // Log the model that actually served the draft and its cost, so a silent
+  // fallback to a different model in the list is visible in the server log.
+  app.debug(
+    `route-draft served by ${completion.model}, cost ${completion.usage.cost}, ` +
+    `cached tokens ${completion.usage.cachedTokens}`
+  )
 
   const route = parseDraftedRoute(completion.text, parsed.bounds)
   if (route === undefined) {
@@ -487,8 +499,6 @@ function computeFuel (
     fuelAboardLiters: readFuelAboardLiters(app)
   })
   if ('reason' in estimate) return undefined
-  // estimate is already the contract shape ({ neededL, aboardL?, marginPct?,
-  // derateNote }), so return it directly rather than rebuilding it field by field.
   return estimate
 }
 
