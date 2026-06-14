@@ -35,8 +35,6 @@ import OpenSeaMapSource from './OpenSeaMapSource.js'
 import SectionBox from './SectionBox.js'
 import UscgLightListSource from './UscgLightListSource.js'
 
-export type { SourceSlug }
-
 interface Props {
   state: PluginConfig
   dispatch: Dispatch<ConfigAction>

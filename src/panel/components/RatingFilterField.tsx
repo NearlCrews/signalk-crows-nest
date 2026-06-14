@@ -7,6 +7,7 @@
 import type * as React from 'react'
 import { MAX_RATING, MIN_RATING } from '../../shared/rating.js'
 import NumberField from './NumberField.js'
+import { HALF_UNIT_STEP } from '../step-sizes.js'
 
 interface Props {
   value: number
@@ -24,7 +25,7 @@ export default function RatingFilterField ({ value, onChange }: Props): React.Re
       onChange={onChange}
       min={MIN_RATING}
       max={MAX_RATING}
-      step={0.5}
+      step={HALF_UNIT_STEP}
     />
   )
 }

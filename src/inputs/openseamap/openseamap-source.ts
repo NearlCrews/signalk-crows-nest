@@ -185,8 +185,8 @@ export function createOpenSeaMapSource (config: OpenSeaMapSourceConfig): PoiSour
       // next list call rather than after the TTL, and so a click on a
       // marker whose detail entry has been LRU-evicted between two list
       // calls re-seeds rather than re-fetching upstream.
-      const elements = await bboxCache.get(bbox, async (fetchBbox) =>
-        await client.listPointsOfInterest(fetchBbox, regex))
+      const elements = await bboxCache.get(bbox, (fetchBbox) =>
+        client.listPointsOfInterest(fetchBbox, regex))
       const summaries: PoiSummary[] = []
       for (const element of elements) {
         const summary = toSummary(element)

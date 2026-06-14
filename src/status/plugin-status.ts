@@ -152,13 +152,8 @@ export function createPluginStatus (sources: ReadonlyArray<StatusSource>): Plugi
       if (state === undefined) {
         return false
       }
-      // Consume the flag on read: it marks only the skip that immediately
-      // preceded THIS read. The registry reads it once per source per list
-      // call to tell a real empty fetch from a skip; clearing it here means a
-      // later real fetch after a skip is recorded rather than suppressed for
-      // the rest of the run. The flag used to clear only via recordListFetch,
-      // which the registry gates behind this very flag, so once set it never
-      // cleared and the row froze.
+      // Consume on read so a real fetch after a skip is recorded rather than
+      // suppressed: without this the registry's gate would never re-open.
       const skipped = state.justSkipped
       state.justSkipped = false
       return skipped

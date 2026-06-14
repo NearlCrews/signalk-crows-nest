@@ -24,6 +24,8 @@ export const SCALE_BANDS: readonly ScaleBand[] = [
 /** Default scale band when the configuration omits or mis-sets one. */
 export const DEFAULT_SCALE_BAND: ScaleBand = 'coastal'
 
+const SCALE_BAND_SET: ReadonlySet<string> = new Set(SCALE_BANDS)
+
 /**
  * Human-readable label for each ENC chart scale band, kept next to the band
  * list so the two cannot drift. The panel's band selector and the collapsed
@@ -41,7 +43,7 @@ export const SCALE_BAND_LABELS: Readonly<Record<ScaleBand, string>> = {
 
 /** Coerce a raw config value to a known scale band, falling back to the default. */
 export function resolveScaleBand (raw: unknown): ScaleBand {
-  return typeof raw === 'string' && (SCALE_BANDS as readonly string[]).includes(raw)
+  return typeof raw === 'string' && SCALE_BAND_SET.has(raw)
     ? raw as ScaleBand
     : DEFAULT_SCALE_BAND
 }

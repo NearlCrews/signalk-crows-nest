@@ -160,6 +160,10 @@ export function createBridgeClearanceAlarms (
       tracker.clearAll()
       return
     }
+    if (pois.length === 0) {
+      tracker.clearStale([])
+      return
+    }
 
     // Bridges that should be alarming after this pass, with the figures kept for
     // the alarm message. A bridge not yet alarming must come inside the raise

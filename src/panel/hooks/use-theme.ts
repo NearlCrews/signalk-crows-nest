@@ -15,11 +15,12 @@ export type ThemeChoice = 'auto' | 'light' | 'dark' | 'night'
 const STORAGE_KEY = 'ac-theme'
 
 const VALID_CHOICES: ReadonlyArray<ThemeChoice> = ['auto', 'light', 'dark', 'night']
+const VALID_CHOICES_SET: ReadonlySet<string> = new Set(VALID_CHOICES)
 
 function readStoredChoice (): ThemeChoice {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
-    if ((VALID_CHOICES as readonly string[]).includes(raw ?? '')) return raw as ThemeChoice
+    if (raw !== null && VALID_CHOICES_SET.has(raw)) return raw as ThemeChoice
   } catch {
     // Storage can be unavailable (private mode, blocked third-party
     // storage); fall through to following the host.

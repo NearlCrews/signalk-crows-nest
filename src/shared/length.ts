@@ -12,6 +12,9 @@
 /** Meters in one international foot. Exact by definition. */
 export const METERS_PER_FOOT = 0.3048
 
+/** Meters in one kilometer. */
+export const METERS_PER_KM = 1000
+
 /** Meters in one international nautical mile. Exact by definition. */
 export const METERS_PER_NAUTICAL_MILE = 1852
 

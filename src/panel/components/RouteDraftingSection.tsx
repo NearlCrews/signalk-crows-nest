@@ -51,12 +51,10 @@ import SectionBox from './SectionBox.js'
 import SegmentedControl from './SegmentedControl.js'
 import ToggleFieldset from './ToggleFieldset.js'
 import { S } from '../styles.js'
+import { HALF_UNIT_STEP } from '../step-sizes.js'
 
 /** Stable id linking the masked key label to its input. */
 const API_KEY_FIELD_ID = 'ac-route-draft-api-key'
-
-/** Step for the fractional length and margin fields: half a display unit per arrow press. */
-const HALF_UNIT_STEP = 0.5
 
 interface Props {
   state: PluginConfig

@@ -100,6 +100,10 @@ export function createProximityAlarms (app: AlarmApp, radiusMeters: number): Pro
   }
 
   function evaluate (vesselPosition: Position, pois: PoiSummary[]): void {
+    if (pois.length === 0) {
+      tracker.clearStale([])
+      return
+    }
     // Hazards that should be alarming after this pass, with the distance kept
     // for the alarm message. A hazard not yet alarming must come inside the
     // raise radius; one already alarming stays until it passes the wider

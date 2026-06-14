@@ -25,6 +25,7 @@
 import { emitNotification, type NotificationValue } from '../../shared/notification-path.js'
 import { createNotificationTracker, type NotificationTrackerApp } from '../../shared/notification-tracker.js'
 import { formatMeters } from '../../shared/bridge-clearance.js'
+import { METERS_PER_KM } from '../../shared/length.js'
 import { toFiniteNumber } from '../../shared/numbers.js'
 import { MINUTES_PER_HOUR, SECONDS_PER_MINUTE } from '../../shared/time.js'
 import type { CorridorPoi } from '../../shared/types.js'
@@ -38,9 +39,6 @@ const NOTIFICATION_PATH_PREFIX = 'notifications.navigation.crowsNest.route.'
  * though both come from this plugin.
  */
 const SOURCE_SUFFIX = 'route'
-
-/** Meters in a kilometer, the threshold above which a distance is shown in km. */
-const METERS_PER_KM = 1000
 
 /**
  * The clearance verdict for a corridor bridge the bridge air-draft check found

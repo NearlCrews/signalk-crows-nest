@@ -157,7 +157,7 @@ export function createEncDirectClient (
         const url = buildBboxUrl(baseUrl, band, layerId, bbox, offset)
         const json = await fetchJson(url, headers, signal) as ArcGisFeatureCollection
         const features = json.features ?? []
-        for (const feature of features) all.push(feature)
+        all.push(...features)
         if (json.exceededTransferLimit !== true || features.length === 0) {
           return { features: all }
         }

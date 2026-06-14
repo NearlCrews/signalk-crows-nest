@@ -193,7 +193,6 @@ export function createUscgLightListSource (
         throw new Error(`No Light List record for "${id}"`)
       }
       const description = renderLightListDetail(record)
-      status.recordDetailSuccess(USCG_LIGHT_LIST_SOURCE_ID)
       const view: PoiDetailView = {
         name: record.name,
         position: { ...record.position },
@@ -210,6 +209,10 @@ export function createUscgLightListSource (
       if (record.modifiedDate !== undefined) {
         view.timestamp = record.modifiedDate
       }
+      // The light list is held in memory, so getDetails always serves locally. Record a detail
+      // success: the status surface reports it as detail-ok, distinct from the list and refresh
+      // calls that signal upstream API reachability.
+      status.recordDetailSuccess(USCG_LIGHT_LIST_SOURCE_ID)
       return view
     },
     // The store exposes its live record total in O(1) (per-record tile

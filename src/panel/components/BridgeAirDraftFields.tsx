@@ -13,18 +13,10 @@ import LengthField from './LengthField.js'
 import ToggleFieldset from './ToggleFieldset.js'
 import {
   MIN_CLEARANCE_MARGIN_METERS,
-  MAX_CLEARANCE_MARGIN_METERS
+  MAX_CLEARANCE_MARGIN_METERS,
+  NO_FALLBACK_AIR_DRAFT_METERS
 } from '../../shared/bridge-clearance.js'
-
-/**
- * Smallest fallback air draft the field accepts. Zero is valid and means rely
- * on `design.airHeight` alone, so the floor is zero, matching the
- * `vesselAirDraftMeters` schema minimum.
- */
-const MIN_AIR_DRAFT_METERS = 0
-
-/** Step for both fractional length fields: half a display unit per arrow press. */
-const HALF_UNIT_STEP = 0.5
+import { HALF_UNIT_STEP } from '../step-sizes.js'
 
 interface Props {
   enabled: boolean
@@ -66,7 +58,7 @@ export default function BridgeAirDraftFields ({
         hint="0 = use the vessel's design.airHeight from the Signal K data model. Set a value here only as a fallback for a vessel that does not report design.airHeight."
         valueMeters={airDraftMeters}
         onChangeMeters={onChangeAirDraft}
-        minMeters={MIN_AIR_DRAFT_METERS}
+        minMeters={NO_FALLBACK_AIR_DRAFT_METERS}
         step={HALF_UNIT_STEP}
         disabled={!enabled}
         dense
