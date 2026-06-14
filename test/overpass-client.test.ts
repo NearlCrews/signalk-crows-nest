@@ -101,6 +101,31 @@ test('an already-aborted caller signal aborts the request', async () => {
   )
 })
 
+test('a caller abort rejects after exactly one attempt, not the whole retry budget', async () => {
+  await withMockFetch(
+    (_callIndex, init) => {
+      if (init?.signal?.aborted === true) {
+        throw new DOMException('The operation was aborted', 'AbortError')
+      }
+      return jsonResponse({ elements: [] })
+    },
+    async (calls) => {
+      // maxRetries 3 with a multi-second backoff: were the caller abort not a
+      // retry short-circuit, this would make four attempts with backoff waits
+      // between them rather than rejecting at once.
+      const retrying: Partial<RateLimitOptions> = {
+        ...fastLimits, maxRetries: 3, backoffBaseMs: 5000, maxBackoffMs: 5000
+      }
+      const client = createOverpassClient(endpoint, silentLog, retrying)
+      await assert.rejects(
+        () => client.listCoastlineWays(sampleBbox, AbortSignal.abort()),
+        (error: unknown) => error instanceof DOMException && error.name === 'AbortError'
+      )
+      assert.equal(calls.count, 1, 'a caller abort must not retry')
+    }
+  )
+})
+
 test('every request sends a descriptive User-Agent header', async () => {
   await withMockFetch(
     () => jsonResponse({ elements: [] }),

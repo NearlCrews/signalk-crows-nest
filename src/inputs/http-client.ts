@@ -11,6 +11,7 @@
 
 import type { Logger } from '../shared/types.js'
 import { parseRetryAfterMs } from '../shared/retry-after.js'
+import { combineAbortSignals } from '../shared/abort.js'
 
 /** Tunable rate-limit knobs. All optional at the call site; defaults fill gaps. */
 export interface RateLimitOptions {
@@ -261,19 +262,16 @@ export function createHttpClient (
       try {
         // The per-request timeout and plugin-stop close-controller always abort
         // the request. A caller-supplied `init.signal` (a route-draft deadline,
-        // say) is combined in too when present, so all three can cancel an
+        // say) is folded in too when present, so all three can cancel an
         // in-flight fetch. When the caller passes none, the behavior is exactly
-        // the prior two-signal `AbortSignal.any`.
-        const abortSignals = [
-          AbortSignal.timeout(config.requestTimeoutMs),
-          closeController.signal
-        ]
-        if (init.signal != null) {
-          abortSignals.push(init.signal)
-        }
+        // the prior two-signal combine.
         const response = await fetch(url, {
           ...init,
-          signal: AbortSignal.any(abortSignals)
+          signal: combineAbortSignals([
+            AbortSignal.timeout(config.requestTimeoutMs),
+            closeController.signal,
+            init.signal ?? undefined
+          ])
         })
 
         if (!RETRYABLE_STATUSES.has(response.status) || attempt >= limits.maxRetries) {
@@ -305,9 +303,15 @@ export function createHttpClient (
         await sleep(wait)
         attempt++
       } catch (error) {
-        // Do not retry once the client is closed, and do not retry past the
-        // configured limit.
-        if (closeController.signal.aborted || attempt >= limits.maxRetries) {
+        // Do not retry once the client is closed, once the caller's own signal
+        // has aborted (a route-draft deadline must reject promptly, not burn
+        // the whole retry budget with backoff first), or past the configured
+        // limit.
+        if (
+          closeController.signal.aborted ||
+          init.signal?.aborted === true ||
+          attempt >= limits.maxRetries
+        ) {
           throw error
         }
         const wait = backoffDelay(attempt, limits.backoffBaseMs, limits.maxBackoffMs)

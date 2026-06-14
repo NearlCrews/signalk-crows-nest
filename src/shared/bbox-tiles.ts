@@ -7,6 +7,10 @@
 
 import type { Bbox } from './types.js'
 
+/**
+ * Assumes a normalized, non-antimeridian-crossing bbox (north >= south,
+ * east >= west), which is what `positionToBbox` and `unionBbox` produce.
+ */
 export function tileBbox (bbox: Bbox, maxSpanDegrees: number): Bbox[] {
   const tiles: Bbox[] = []
   const latCount = Math.max(1, Math.ceil((bbox.north - bbox.south) / maxSpanDegrees))

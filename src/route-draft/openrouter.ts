@@ -27,6 +27,7 @@
 
 import type { Logger } from '../shared/types.js'
 import { parseRetryAfterMs } from '../shared/retry-after.js'
+import { combineAbortSignals } from '../shared/abort.js'
 
 /** Static configuration for an {@link OpenRouterClient}. */
 export interface OpenRouterConfig {
@@ -254,7 +255,7 @@ export class OpenRouterClient {
           'X-Title': this.cfg.title
         },
         body: JSON.stringify(this.buildBody(args)),
-        signal: combineSignals(AbortSignal.timeout(this.cfg.requestTimeoutMs), args.abortSignal)
+        signal: combineAbortSignals([AbortSignal.timeout(this.cfg.requestTimeoutMs), args.abortSignal])
       })
     } catch (err) {
       return transportRetry(args, err)
@@ -348,15 +349,6 @@ export class OpenRouterClient {
       }
     }
   }
-}
-
-/**
- * Combine the per-request timeout signal with the caller's abort signal. When
- * the caller passes no signal the timeout signal is used directly, so the
- * common path does not allocate an `AbortSignal.any` wrapper.
- */
-function combineSignals (timeoutSignal: AbortSignal, callerSignal?: AbortSignal): AbortSignal {
-  return callerSignal === undefined ? timeoutSignal : AbortSignal.any([timeoutSignal, callerSignal])
 }
 
 /**
