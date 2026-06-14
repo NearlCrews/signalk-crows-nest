@@ -11,21 +11,37 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-The plugin gains an optional, admin-gated AI route-draft endpoint, and the
-charted-depth capability that backs its safety check.
+<a id="v0100"></a>
+
+## [0.10.0] - 2026-06-14
+
+The plugin gains an optional, admin-gated AI route-draft endpoint whose safety
+check covers routes worldwide, plus the charted-depth capability that backs it.
 
 ### Added
 
 - **AI route drafting (optional, admin only, off until an OpenRouter key is
   set).** A new `POST /api/route-draft` endpoint turns a plain-language passage
   request into a drafted route: OpenRouter proposes the turning waypoints, then
-  owned code checks every leg against the NOAA ENC charted depth-area contours,
-  charted land, and charted point hazards (wrecks, rocks, and obstructions), and
-  computes a deterministic fuel estimate. The route is always a draft the
-  navigator verifies on the chart before saving. US ENC coverage only, and the
-  depth check reads the charted depth-AREA contour, not the depth at every
-  point. A new Route drafting panel card configures the masked OpenRouter key,
-  the model, a daily call cap, and the vessel, fuel, and routing inputs.
+  owned code checks every leg, resolving data providers per leg by the union of
+  every provider whose coverage reaches the leg, and computes a deterministic
+  fuel estimate. The route is always a draft the navigator verifies on the chart
+  before saving, and the depth check reads the charted depth-AREA contour, not
+  the depth at every point. A new Route drafting panel card configures the masked
+  OpenRouter key, the model, a daily call cap, and the vessel, fuel, and routing
+  inputs.
+- **Worldwide route-draft safety check.** The check now covers routes worldwide,
+  not US ENC waters alone. Per leg it runs the union of every applicable
+  provider: NOAA ENC charted depth-area contours, charted land, and charted
+  point hazards in US waters; OpenSeaMap rock, wreck, and obstruction point
+  hazards and an OpenStreetMap coastline land check worldwide; and EMODnet
+  modeled depth, awareness-grade and referenced to Lowest Astronomical Tide
+  (LAT), explicitly not charted, in European seas. Every dimension is either
+  checked with its value and datum stated or flagged explicitly as not checked,
+  never silently passed, and where providers overlap, ENC charted depth and land
+  win and hazards charted by more than one source are flagged once. The check is
+  fully automatic, with no new panel configuration. EMODnet bathymetry is used
+  under CC-BY 4.0 attribution, and the OpenStreetMap coastline under ODbL.
 - The NOAA ENC input gained a charted `Depth_Area` and `Land_Area` polygon
   query that the route-draft depth check reads as an internal capability. The
   check spans the harbour through general usage bands, so harbour and river

@@ -21,28 +21,30 @@ proximity, route-corridor, and bridge air-draft alarms.
 > safety-of-life navigation: always cross-check against official charts and
 > your primary instruments.
 
-## What's new in 0.9.0
+## What's new in 0.10.0
 
-The panel speaks your units, and the dedupe default is rethought in feet.
+AI route drafting arrives, and its safety check covers routes worldwide.
 
-- **Feet or meters, automatically.** The configuration panel follows the
-  Signal K server's unit preferences: with an Imperial preset active,
-  every length field (alarm radius, corridor width, vessel air draft,
-  clearance margin, and the merge radii) displays and accepts feet,
-  including any per-user preset chosen on the admin UI's Units page. The
-  saved configuration stays in meters, and a server without the
-  unit-preferences API simply stays metric.
-- **150-foot merge default.** The radius for merging a feature reported by
-  several sources defaults to 150 feet (45.72 m, was 150 m), so two
-  genuinely distinct neighbors are less likely to collapse into one
-  marker. Widen it per source if cross-source duplicates reappear.
-- **Hardening.** The USCG Light List store validates every required field
-  when loading from disk, the NOAA ENC layer-id table is pinned by a test
-  so an upstream renumbering is caught before it ships, and the panel's
-  numeric floors now come from the same shared constants the config
-  schema enforces.
+- **AI route drafting (optional, admin only, off until you set a key).** A
+  new `POST /api/route-draft` endpoint turns a plain-language passage
+  request into a drafted route: the model proposes the turning waypoints,
+  then owned code checks every leg and adds a deterministic fuel estimate.
+  A new Route drafting panel card holds the masked OpenRouter key, the
+  model, a daily call cap, and the vessel, fuel, and routing inputs.
+- **Worldwide safety check.** The route-draft check now covers routes
+  worldwide, resolving data providers per leg: NOAA ENC charted depth,
+  land, and point hazards in US waters, OpenSeaMap point hazards and an
+  OpenStreetMap coastline land check worldwide, and EMODnet modeled depth
+  (awareness-grade, referenced to Lowest Astronomical Tide) in European
+  seas. Every dimension is either checked with its value and datum stated
+  or flagged explicitly as not checked, never silently passed. The route is
+  always a draft you verify on the chart before saving.
+- **Operator-actionable failures.** Each OpenRouter failure now points at
+  the fix: an invalid or missing key at the plugin key, an empty balance at
+  the OpenRouter dashboard, and a moderation or permission block as a
+  refused request to rephrase.
 
-See the [changelog](CHANGELOG.md#v090) for the full list.
+See the [changelog](CHANGELOG.md#v0100) for the full list.
 
 ## What it does
 
@@ -85,12 +87,16 @@ air-draft check).
 - **AI route drafting (optional, admin only, off until you set a key)**:
   turn a plain-language passage request into a drafted route. With an
   OpenRouter key configured, the plugin asks the model for the turning
-  waypoints, then checks every leg in owned code against the NOAA ENC
-  charted depth-area contours, charted land, and charted point hazards, and
-  adds a deterministic fuel estimate. The route is always a draft you verify
-  on the chart before saving, it covers US ENC waters only, and the depth
-  check reads the charted depth-area contour, not the depth at every point. A
-  daily call cap bounds the OpenRouter spend.
+  waypoints, then checks every leg in owned code and adds a deterministic
+  fuel estimate. The safety check covers routes worldwide, resolving data
+  providers per leg: NOAA ENC charted depth, land, and point hazards in US
+  waters, OpenSeaMap point hazards and an OpenStreetMap coastline land check
+  worldwide, and EMODnet modeled depth (awareness-grade, referenced to Lowest
+  Astronomical Tide) in European seas. Every dimension is either checked with
+  its value and datum stated or flagged explicitly as not checked, never
+  silently passed. The route is always a draft you verify on the chart before
+  saving, the depth check reads the charted depth-area contour rather than the
+  depth at every point, and a daily call cap bounds the OpenRouter spend.
 - **Rich point detail** rendered as plain-English HTML, with the
   source-specific attribution credit (ODbL for OSM, CC0 for NOAA, US
   Government public domain for USCG, Garmin ActiveCaptain for the base)
@@ -280,6 +286,10 @@ and maintained by [Nearl Crews](https://github.com/NearlCrews).
 - The [NOAA Office of Coast Survey](https://nauticalcharts.noaa.gov)
   for [ENC Direct](https://encdirect.noaa.gov) authoritative US chart
   hazard data, published under CC0
+- EMODnet Digital Bathymetry (DTM 2024), EMODnet Bathymetry Consortium,
+  for the European modeled depth used in the route-draft safety check, under
+  the [Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/)
+  license
 
 Crow's Nest pairs well with sibling plugins such as
 [`signalk-nmea2000-emitter-cannon`](https://github.com/NearlCrews/signalk-nmea2000-emitter-cannon)

@@ -115,8 +115,15 @@ self-contained module registered on one line in `src/index.ts`.
       hazards; exposes `seamarkLabel` to the detail renderer and defines the
       seamark feature groups), `openseamap-detail.ts` (the plain-English HTML
       detail renderer), `clearance.ts` (parses the OSM vertical-clearance tags for the
-      bridge air-draft check), and `openseamap-sections.ts` (the
-      normalized-detail section builder).
+      bridge air-draft check), `openseamap-sections.ts` (the
+      normalized-detail section builder), `element-summary.ts` (the shared
+      element-to-`PoiSummary` mapper extracted from the source so the
+      route-draft OpenSeaMap provider reuses the same icon, type, and name
+      logic), and `coastline-query.ts` (the tiled `natural=coastline` Overpass
+      query the route-draft land check consumes as an internal capability; it
+      lives here because it reuses the Overpass client, mirroring how
+      `depth-area-query.ts` sits under `inputs/noaa-enc`, and tiles a wide bbox
+      so the client's center clamp never silently truncates coverage).
     - `uscg-light-list/` - the USCG Light List input (US Aids to Navigation,
       US-only, defaults off): `uscg-light-list-input.ts` (the `InputModule`
       with the periodic refresh scheduler), `uscg-light-list-source.ts` (the
@@ -165,20 +172,49 @@ self-contained module registered on one line in `src/index.ts`.
       on the same `EncDirectClient`; not published as POIs).
   - `route-draft/` - the optional, admin-gated AI route-draft feature (the
     server-side half of Binnacle's AI route drafting, opt-in and off until an
-    OpenRouter key is set). `config.ts` (the `RouteDraftConfig` type, the
-    bounds, defaults, clamps, and the config-schema fragment, following the
-    shared bounds-module pattern), `openrouter.ts` (the OpenRouter
-    chat-completions client with structured outputs, model fallback, retry with
-    backoff, and typed terminal errors), `budget.ts` (the per-UTC-day call cap,
-    persisted to the plugin data dir, that bounds calls not dollars),
-    `fuel.ts` (the deterministic rhumb-distance and fuel estimate, honest about
-    its flat head-sea derate and refusing to fabricate a sail burn),
-    `safety-check.ts` (the owned per-leg check against the NOAA ENC charted
-    depth-area contours, land areas, and point hazards, which states the charted
-    value and never a bare verdict), and `endpoint.ts` (the `POST
-    /api/route-draft` handler that asks the model for turning waypoints then
-    disposes every flag and number in owned code; the model proposes, this code
-    disposes).
+    OpenRouter key is set). The safety check is worldwide: it resolves data
+    providers per leg by the union of every provider whose coverage envelope
+    reaches the leg, then states each dimension's value and datum or flags it
+    explicitly as not checked, never silently passing. `config.ts` (the
+    `RouteDraftConfig` type, the bounds, defaults, clamps, and the
+    config-schema fragment, following the shared bounds-module pattern),
+    `openrouter.ts` (the OpenRouter chat-completions client with structured
+    outputs, model fallback, retry with backoff, and typed terminal errors),
+    `budget.ts` (the per-UTC-day call cap, persisted to the plugin data dir,
+    that bounds calls not dollars), `fuel.ts` (the deterministic rhumb-distance
+    and fuel estimate, honest about its flat head-sea derate and refusing to
+    fabricate a sail burn), `safety-check.ts` (the ORCHESTRATOR over the
+    leg-safety providers: it resolves each leg's provider set as the union of
+    intersecting coverage envelopes, runs the bounded-concurrency leg pool,
+    applies a precedence-based depth authority so the highest-precedence depth
+    provider that returned data owns the leg, sweeps hazards per provider over
+    each contiguous run of covered legs, dedupes hazards cross-provider by
+    rounded position and type, emits a capability-keyed "not checked" flag with
+    a collapsed depth note for any dimension no responsible provider verified,
+    and synthesizes the route-level EMODnet awareness note when EMODnet was the
+    effective depth provider on any leg; it states the charted value and never a
+    bare verdict), `leg-geometry.ts` (the planar ring and open-polyline
+    helpers shared by the providers: `pointInRings`, `segmentCrossesRings`, and
+    the open-polyline `polylineCrossesLeg` and `nearestPolylineApproachMeters`
+    coastline helpers, plus `legBbox`, `routeBbox`, `cumulativeLegStartMeters`,
+    and `legForAlongTrack`), and `endpoint.ts` (the `POST /api/route-draft`
+    handler that asks the model for turning waypoints then disposes every flag
+    and number in owned code; the model proposes, this code disposes).
+    - `providers/` - the per-leg data providers the orchestrator runs.
+      `provider.ts` (the `LegSafetyProvider` contract, the precedence
+      constants, the provider-id constants, the `resolveProviders` per-leg
+      region resolver, and the shared `hazardDedupeKey`), `enc-provider.ts`
+      (the NOAA ENC provider: charted depth-area contours, charted land, and
+      charted point hazards in US waters), `openseamap-provider.ts` (the
+      worldwide OpenSeaMap provider: rock, wreck, and obstruction seamark point
+      hazards and an OpenStreetMap coastline land check on every leg), and
+      `emodnet-provider.ts` (the European EMODnet provider: modeled depth,
+      awareness-grade and referenced to Lowest Astronomical Tide, never charted,
+      gated to the European envelope).
+    - `emodnet/` - `emodnet-client.ts` (the GET-only EMODnet depth-profile
+      client built on `http-one-shot.ts`; it lives here, not under `inputs/`,
+      because EMODnet has no POI-source counterpart, mirroring how
+      `depth-area-query.ts` sits under `inputs/noaa-enc`).
   - `outputs/` - SignalK consumers of POI data.
     - `output.ts` - the `OutputModule`, `OutputHandle`, `OutputContext`, and
       `PositionScanContributor` contracts an output implements.
@@ -250,7 +286,16 @@ self-contained module registered on one line in `src/index.ts`.
     Switzerland-only extract), `us-waters.ts` (the `isInUsWaters` gate plus the
     `shouldSkipOutsideUsWaters` helper the US-only inputs call to skip
     outbound HTTP, and record the skip, when the vessel is outside US
-    waters), `bbox-debounce.ts`
+    waters), `regions.ts` (the route-draft coverage-envelope predicates
+    `isInEncCoverage` and `isInEmodnetCoverage` the per-leg provider resolver
+    reads, kept out of `us-waters.ts` so the route-draft region concept does not
+    couple to that input gate), `bbox-tiles.ts` (the `tileBbox` splitter that
+    breaks a wide bbox into sub-boxes within a span so the route-draft Overpass
+    queries cover a box completely rather than letting the client clamp truncate
+    it), `abort.ts` (the `combineAbortSignals` helper, shared by the queued HTTP
+    client and the OpenRouter client, that folds an optional caller signal into
+    an `AbortSignal.any` and returns the lone signal when only one is defined),
+    `bbox-debounce.ts`
     (the per-source geographic stale-while-revalidate cache, which snaps each
     viewport to a coarse tile so a small pan reuses the previous fetch, serves
     a stale tile immediately while revalidating it in the background,
@@ -325,7 +370,9 @@ self-contained module registered on one line in `src/index.ts`.
     and the OpenRouter client, so the seconds-or-HTTP-date handling lives once),
     `strings.ts` (the `presentString`
     trim-and-reject-blank reader the USCG and NOAA wire parsers and the
-    panel's unit-preferences reader share),
+    panel's unit-preferences reader share, plus `capitalizeFirst`, the
+    sentence-case touch the OpenSeaMap detail renderer and the route-draft
+    not-checked message share),
     `debug.ts` (the `debugIsEnabled` guard that reads the npm `debug`
     logger's live `enabled` flag so hot paths skip building log arguments
     while debug is off), `cache.ts`
@@ -348,6 +395,9 @@ self-contained module registered on one line in `src/index.ts`.
     `metersFromNauticalMiles` conversions shared by the two bridge-clearance
     parsers, the dedupe-radius default, the panel's display-unit conversions,
     and the route-corridor and route-draft nautical-mile distances),
+    `format-meters.ts` (the `formatMeters` one-decimal meter formatter every
+    safety message uses, plus `formatNm`, the two-decimal nautical-mile
+    formatter the route-draft OpenSeaMap standoff message reads),
     `bridge-clearance.ts` (the bridge air-draft comparison: `readVesselAirDraft`
     reads `design.airHeight` then a config fallback, `bridgeBlocksVessel` plus
     the margin bounds and `clampClearanceMargin`, the `formatMeters` message
