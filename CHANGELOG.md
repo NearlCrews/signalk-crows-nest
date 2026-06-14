@@ -27,7 +27,9 @@ charted-depth capability that backs its safety check.
   point. A new Route drafting panel card configures the masked OpenRouter key,
   the model, a daily call cap, and the vessel, fuel, and routing inputs.
 - The NOAA ENC input gained a charted `Depth_Area` and `Land_Area` polygon
-  query that the route-draft depth check reads as an internal capability.
+  query that the route-draft depth check reads as an internal capability. The
+  check spans the harbour through general usage bands, so harbour and river
+  passages are covered, not only open-coast ones.
 
 ### Changed
 
