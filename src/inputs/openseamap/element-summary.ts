@@ -2,7 +2,11 @@
  * Maps a raw Overpass element to a `PoiSummary`.
  *
  * Extracted from `openseamap-source.ts` so the route-draft OpenSeaMap
- * provider can reuse the same mapping without a second copy.
+ * provider can reuse the same mapping without a second copy. Besides
+ * {@link toSummary}, the lower-level building blocks ({@link elementId},
+ * {@link elementOsmUrl}, {@link elementName}, {@link attachClearance}, and the
+ * {@link OPENSEAMAP_ATTRIBUTION} credit) are exported individually so the
+ * detail view and other consumers can reuse each piece.
  */
 
 import type { OverpassElement } from './overpass-client.js'

@@ -17,14 +17,6 @@ import type { OverpassClient, OverpassElement } from './overpass-client.js'
 import { renderOpenSeaMapDetail } from './openseamap-detail.js'
 import { buildOpenSeaMapSections } from './openseamap-sections.js'
 import { elementMarking, seamarkRegex } from './seamark-mapping.js'
-import { fetchDetailRecorded, type PoiSource } from '../poi-source.js'
-import { createBboxDebounceCache } from '../../shared/bbox-debounce.js'
-import { MAX_BBOX_CACHE_ENTRIES, MAX_POI_CACHE_ENTRIES } from '../../shared/cache.js'
-import { splitOnFirstUnderscore } from '../../shared/namespaced-id.js'
-import type { Bbox, PoiDetailView, PoiSummary } from '../../shared/types.js'
-import { filterByMinimumYear } from '../../shared/year-filter.js'
-import type { PluginStatus } from '../../status/plugin-status.js'
-import { OPENSEAMAP_SOURCE_ID } from '../../shared/source-ids.js'
 import {
   OPENSEAMAP_ATTRIBUTION,
   attachClearance,
@@ -32,6 +24,14 @@ import {
   elementOsmUrl,
   toSummary
 } from './element-summary.js'
+import { fetchDetailRecorded, type PoiSource } from '../poi-source.js'
+import { createBboxDebounceCache } from '../../shared/bbox-debounce.js'
+import { MAX_BBOX_CACHE_ENTRIES, MAX_POI_CACHE_ENTRIES } from '../../shared/cache.js'
+import { splitOnFirstUnderscore } from '../../shared/namespaced-id.js'
+import { OPENSEAMAP_SOURCE_ID } from '../../shared/source-ids.js'
+import type { Bbox, PoiDetailView, PoiSummary } from '../../shared/types.js'
+import { filterByMinimumYear } from '../../shared/year-filter.js'
+import type { PluginStatus } from '../../status/plugin-status.js'
 
 /** Dependencies for {@link createOpenSeaMapSource}. */
 export interface OpenSeaMapSourceConfig {
