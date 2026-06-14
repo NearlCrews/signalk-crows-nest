@@ -143,7 +143,7 @@ export function nearestPolylineApproachMeters (
   return nearest
 }
 
-/** Sample a coastline segment into at most ~20 interior points so a near pass is caught. */
+/** Sample a coastline segment into 21 equally-spaced points (including both endpoints). */
 function densifySegment (a: number[], b: number[]): number[][] {
   const steps = 20
   const out: number[][] = []

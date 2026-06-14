@@ -55,3 +55,10 @@ test('nearestPolylineApproachMeters finds a close pass to a sparse segment', () 
   const d = nearestPolylineApproachMeters(from, to, [[[-5, 0], [5, 0]]])
   assert.ok(d !== undefined && d < 2000, `expected a close pass, got ${String(d)}`)
 })
+
+test('nearestPolylineApproachMeters returns undefined when the coastline is off the leg span', () => {
+  const from: Position = { latitude: 0, longitude: 3 }
+  const to: Position = { latitude: 0, longitude: 4 }
+  const d = nearestPolylineApproachMeters(from, to, [[[-1, 0], [1, 0]]])
+  assert.equal(d, undefined)
+})
