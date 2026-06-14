@@ -12,7 +12,7 @@
  * coastal legs make a spherical correction unnecessary.
  */
 
-import { distanceMeters, sampleRhumbLeg } from '../geo/position-utilities.js'
+import { distanceMeters, initialBearingRad, projectPointOntoLeg, rhumbDistanceMeters, sampleRhumbLeg } from '../geo/position-utilities.js'
 import type { Position } from '../shared/types.js'
 
 /**
@@ -102,4 +102,54 @@ export function legForAlongTrack (legStartMeters: number[], alongTrackMeters: nu
     if (alongTrackMeters <= legStartMeters[leg + 1]) return leg
   }
   return legStartMeters.length - 1
+}
+
+/** True when the leg [from, to] crosses any segment of any open polyline. */
+export function polylineCrossesLeg (from: Position, to: Position, lines: number[][][]): boolean {
+  const a = [from.longitude, from.latitude]
+  const b = [to.longitude, to.latitude]
+  for (const line of lines) {
+    for (let i = 0; i + 1 < line.length; i += 1) {
+      if (segmentsCross(a, b, line[i], line[i + 1])) return true
+    }
+  }
+  return false
+}
+
+/**
+ * Nearest approach, in meters, from the leg to any open-polyline segment. Unlike
+ * the ring helper this samples each coastline segment (densified to bounded
+ * sub-points) so a long sparse segment passing close to the leg is not missed.
+ * Returns undefined when no segment sub-point projects onto the on-leg span.
+ */
+export function nearestPolylineApproachMeters (
+  from: Position, to: Position, lines: number[][][]
+): number | undefined {
+  const bearing = initialBearingRad(from, to)
+  const legLengthMeters = rhumbDistanceMeters(from, to)
+  let nearest: number | undefined
+  for (const line of lines) {
+    for (let i = 0; i + 1 < line.length; i += 1) {
+      for (const [lon, lat] of densifySegment(line[i], line[i + 1])) {
+        const projection = projectPointOntoLeg(from, to, { latitude: lat, longitude: lon }, bearing)
+        const along = projection.alongTrackMeters
+        const cross = Math.abs(projection.crossTrackMeters)
+        if (!Number.isFinite(along) || !Number.isFinite(cross)) continue
+        if (along < 0 || along > legLengthMeters) continue
+        if (nearest === undefined || cross < nearest) nearest = cross
+      }
+    }
+  }
+  return nearest
+}
+
+/** Sample a coastline segment into at most ~20 interior points so a near pass is caught. */
+function densifySegment (a: number[], b: number[]): number[][] {
+  const steps = 20
+  const out: number[][] = []
+  for (let i = 0; i <= steps; i += 1) {
+    const t = i / steps
+    out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t])
+  }
+  return out
 }
