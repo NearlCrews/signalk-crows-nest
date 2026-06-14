@@ -16,10 +16,11 @@
  * with the LAT and modeled wording, a positive sample flags land or drying and
  * never a negative depth and never a shallow flag, an empty profile reports
  * depth coverage 'nodata' with the no-data note, a hadGap profile adds the
- * incomplete-gaps caveat, every checked leg carries the awareness caveat, a query
- * rejection degrades to depth coverage 'nodata' with the query-failed note,
- * coversLeg gates to the European envelope, and the capabilities are exactly
- * {depth} with no checkHazards.
+ * incomplete-gaps caveat, a query rejection degrades to depth coverage 'nodata'
+ * with the query-failed note, coversLeg gates to the European envelope, and the
+ * capabilities are exactly {depth} with no checkHazards. The provider does NOT
+ * emit a per-leg awareness caveat: that is the orchestrator's job, synthesized
+ * once at route level, so these provider-level tests assert its absence.
  */
 
 import test from 'node:test'
@@ -96,14 +97,17 @@ test('shallowest is max() of the samples and flags shallow under draft-plus-marg
   assert.equal(result.coverage.depth, 'data')
 })
 
-test('a deep leg under no contour raises no shallow flag, only the awareness caveat', async () => {
-  // Shallowest is -10, so 10 m modeled depth, well over the 3 m contour.
+test('a deep leg under no contour raises no flag and no per-leg awareness caveat', async () => {
+  // Shallowest is -10, so 10 m modeled depth, well over the 3 m contour. The
+  // awareness caveat is the orchestrator's route-level job, not the provider's, so
+  // a clean deep leg here carries no flags at all, only the depth coverage signal.
   const p = provider({ samples: [-10, -12, -15] })
   const result = await p.checkLeg(0, FROM, TO, params)
   assert.equal(result.flags.some((f) => f.kind === 'shallow'), false)
   assert.equal(result.flags.some((f) => f.kind === 'land'), false)
-  // Awareness caveat is always present on a checked leg.
-  assert.equal(result.flags.some((f) => f.kind === 'other' && /awareness-grade/.test(f.message)), true)
+  // No per-leg awareness caveat: that is synthesized once at route level.
+  assert.equal(result.flags.some((f) => /awareness-grade/.test(f.message)), false)
+  assert.equal(result.flags.length, 0)
   assert.equal(result.coverage.depth, 'data')
 })
 
@@ -130,21 +134,23 @@ test('an empty profile reports depth coverage nodata with the no-data note', asy
   assert.equal(result.flags.some((f) => /awareness-grade/.test(f.message)), false)
 })
 
-test('a hadGap profile adds the incomplete-gaps caveat alongside the awareness caveat', async () => {
+test('a hadGap profile adds the incomplete-gaps caveat and no per-leg awareness caveat', async () => {
   const p = provider({ samples: [-10], hadGap: true })
   const result = await p.checkLeg(0, FROM, TO, params)
   assert.equal(result.flags.some((f) => /incomplete on this leg/.test(f.message)), true)
-  assert.equal(result.flags.some((f) => /awareness-grade/.test(f.message)), true)
+  // No per-leg awareness caveat: that is the orchestrator's route-level job.
+  assert.equal(result.flags.some((f) => /awareness-grade/.test(f.message)), false)
   assert.equal(result.coverage.depth, 'data')
 })
 
-test('every checked leg carries the awareness caveat', async () => {
-  // A clean, deep leg with no shallow, land, or gap flag still carries the caveat,
-  // so a navigator never reads it as charted clearance.
+test('the provider does not emit a per-leg awareness caveat (the orchestrator owns it)', async () => {
+  // A clean, deep leg carries no awareness caveat at the provider level: the
+  // orchestrator synthesizes one route-level note instead, so a long European
+  // route gets one caveat rather than one per leg.
   const p = provider({ samples: [-20] })
   const result = await p.checkLeg(0, FROM, TO, params)
   const caveat = result.flags.filter((f) => f.kind === 'other' && /EMODnet modeled bathymetry referenced to LAT/.test(f.message))
-  assert.equal(caveat.length, 1)
+  assert.equal(caveat.length, 0)
 })
 
 test('a query rejection degrades to depth coverage nodata with the query-failed note', async () => {

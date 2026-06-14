@@ -30,6 +30,7 @@ import { resolvePrimaryEndpoint } from '../shared/overpass-endpoints.js'
 import { normalizeRouteDraftConfig, routeDraftConfigSchema } from '../route-draft/config.js'
 import { createRouteDraftRouter, modelsForRequest } from '../route-draft/endpoint.js'
 import type { RouteDraftService } from '../route-draft/endpoint.js'
+import { createEmodnetClient } from '../route-draft/emodnet/emodnet-client.js'
 import { OpenRouterClient } from '../route-draft/openrouter.js'
 import { BudgetTracker } from '../route-draft/budget.js'
 
@@ -224,6 +225,10 @@ export function createPlugin (
       title: PLUGIN_NAME
     })
     const enc = createEncDirectClient()
+    // The European modeled-depth leg check queries through this EMODnet client.
+    // Like the ENC client it is a stateless one-shot client holding no sockets
+    // between calls, so it needs no close on teardown.
+    const emodnet = createEmodnetClient()
     // One Logger adapter over app.debug/app.error, shared by the Overpass client
     // and the budget loader below.
     const log: Logger = { debug: (m) => { app.debug(m) }, error: (m) => { app.error(m) } }
@@ -239,7 +244,7 @@ export function createPlugin (
       log
     }).then((budget) => {
       if (mine === routeDraftGeneration) {
-        routeDraftService = { llm, budget, enc, overpass, config: rd, models: modelsForRequest(rd.routeDraftModel) }
+        routeDraftService = { llm, budget, enc, overpass, emodnet, config: rd, models: modelsForRequest(rd.routeDraftModel) }
         app.debug("Crow's Nest route drafting ready")
       }
     }).catch((err) => {

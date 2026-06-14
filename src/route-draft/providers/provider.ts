@@ -39,6 +39,17 @@ export const ENC_PRECEDENCE = 0
 export const EMODNET_PRECEDENCE = 10
 export const OPENSEAMAP_PRECEDENCE = 20
 
+/**
+ * Provider {@link LegSafetyProvider.id} values. Named here, alongside the
+ * precedence ranks, so the orchestrator can recognize a provider without a bare
+ * string literal: the EMODnet route-level awareness note keys off
+ * {@link EMODNET_PROVIDER_ID}, so a rename of the provider id is one edit, not a
+ * silent cross-module break.
+ */
+export const ENC_PROVIDER_ID = 'enc'
+export const EMODNET_PROVIDER_ID = 'emodnet'
+export const OPENSEAMAP_PROVIDER_ID = 'openseamap'
+
 /** A covered leg with its global index and endpoints, handed to checkHazards. */
 export interface LegRef {
   leg: number
@@ -61,9 +72,9 @@ export interface LegSafetyProvider {
    * provider list by this field, so it drives the merge order and the
    * cross-provider hazard dedupe (a higher-precedence provider's hazard reading
    * is kept over a lower one's at the same charted position). ENC, the
-   * authoritative chart source, is 0; OpenSeaMap is 20, leaving a gap (e.g. 10)
-   * for EMODnet between them. Precedence is this explicit field, never the order
-   * the provider list happens to be authored in.
+   * authoritative chart source, is 0; EMODnet's modeled bathymetry is 10;
+   * OpenSeaMap is 20. Precedence is this explicit field, never the order the
+   * provider list happens to be authored in.
    */
   precedence: number
   /** True when this provider's footprint reaches the leg. OSM is global. */
@@ -95,8 +106,8 @@ export interface LegSafetyProvider {
  * The active providers for one leg: every provider whose footprint reaches it.
  * The returned order preserves the input list order, which the orchestrator has
  * already sorted by the explicit {@link LegSafetyProvider.precedence} field
- * (ENC, then EMODnet later, then OpenSeaMap), so authority is the precedence
- * field, never the order the provider list was authored in.
+ * (ENC, then EMODnet, then OpenSeaMap), so authority is the precedence field,
+ * never the order the provider list was authored in.
  */
 export function resolveProviders (
   providers: readonly LegSafetyProvider[],

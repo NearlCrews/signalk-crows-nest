@@ -67,7 +67,7 @@ import type {
   QueryChartedAreas,
   ScanRouteCorridor
 } from '../safety-check.js'
-import { ENC_PRECEDENCE, hazardDedupeKey } from './provider.js'
+import { ENC_PRECEDENCE, ENC_PROVIDER_ID, hazardDedupeKey } from './provider.js'
 import type {
   Dimension,
   LegRef,
@@ -424,7 +424,7 @@ function addStandoffFlag (
  */
 export function createEncProvider (deps: EncProviderDeps): LegSafetyProvider {
   return {
-    id: 'enc',
+    id: ENC_PROVIDER_ID,
     capabilities: new Set<Dimension>(['depth', 'land', 'hazards']),
     precedence: ENC_PRECEDENCE,
     coversLeg: (from, to) => isInEncCoverage(from) || isInEncCoverage(to),

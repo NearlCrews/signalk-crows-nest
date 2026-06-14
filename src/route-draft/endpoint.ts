@@ -26,6 +26,7 @@ import { toPosition } from '../geo/position-utilities.js'
 import type { Position } from '../shared/types.js'
 import type { EncDirectClient } from '../inputs/noaa-enc/enc-direct-client.js'
 import type { OverpassClient } from '../inputs/openseamap/overpass-client.js'
+import type { EmodnetClient } from './emodnet/emodnet-client.js'
 import { queryChartedAreas } from '../inputs/noaa-enc/depth-area-query.js'
 import { scanRouteCorridor } from '../outputs/route-hazard/route-corridor.js'
 import type { ScaleBand } from '../shared/scale-band.js'
@@ -137,6 +138,8 @@ export interface RouteDraftService {
   enc: EncDirectClient
   /** The Overpass client the worldwide OpenSeaMap leg check queries through. */
   overpass: OverpassClient
+  /** The EMODnet client the European modeled-depth leg check queries through. */
+  emodnet: EmodnetClient
   /** The resolved route-draft configuration (vessel, fuel, and routing settings). */
   config: RouteDraftConfig
   /**
@@ -483,6 +486,7 @@ async function handleDraft (
         client: service.enc,
         queryChartedAreas,
         overpass: service.overpass,
+        emodnet: service.emodnet,
         scanRouteCorridor,
         logger: { debug: (m: string) => { app.debug(m) }, error: (m: string) => { app.error(m) } }
       },

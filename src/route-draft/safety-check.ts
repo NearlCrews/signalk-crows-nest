@@ -5,10 +5,18 @@
  * Given the draft's ordered TURNING waypoints, the vessel draft, and a safety
  * margin, this returns per-leg flags from the registered providers. The
  * providers run as a per-leg UNION: the NOAA ENC check (charted DEPTH AREA
- * contours, LAND AREAS, and POINT HAZARDS) over US waters, and the worldwide
+ * contours, LAND AREAS, and POINT HAZARDS) over US waters, the EMODnet check
+ * (European MODELED bathymetry depth) over the European seas, and the worldwide
  * OpenSeaMap check (OpenStreetMap coastline land and seamark hazards) on every
  * leg. The model proposes the waypoints; the providers' owned code disposes the
  * `land`, `shallow`, and `hazard` flags from the charted geometry.
+ *
+ * Depth authority follows precedence: on a leg where more than one depth provider
+ * covers it, the highest-precedence one that returned data owns depth (ENC's
+ * charted MLLW reading over EMODnet's modeled LAT reading), so a lower provider's
+ * depth flags are dropped there. With today's disjoint US and European envelopes
+ * no single leg has both depth providers active, so the rule is a no-op in
+ * production, but it is the rule the precedence field exists for.
  *
  * The single most important honesty point, encoded in behavior: a charted depth
  * AREA contour is NOT the depth at every point inside it. A `shallow` flag means
@@ -20,13 +28,14 @@
  * charted value, the MLLW datum, and the usage band, and never a bare verdict.
  *
  * The check is injectable and mostly pure: `deps` carries the ENC client, the
- * charted-area query, the Overpass client, and the corridor scan, so a test
- * stubs them without live HTTP. The orchestrator owns the bounded-concurrency
- * leg pool, the capability-keyed not-checked accounting, the per-provider
- * contiguous-run hazard sweep, and the cross-provider hazard dedupe; the
- * per-source query work lives in the providers under `providers/`. Each provider
- * gates itself geographically (the regions module), so the orchestrator no
- * longer carries a US-waters gate of its own.
+ * charted-area query, the Overpass client, the EMODnet client, and the corridor
+ * scan, so a test stubs them without live HTTP. The orchestrator owns the
+ * bounded-concurrency leg pool, the per-leg depth-authority pass, the
+ * capability-keyed not-checked accounting, the per-provider contiguous-run hazard
+ * sweep, and the cross-provider hazard dedupe; the per-source query work lives in
+ * the providers under `providers/`. Each provider gates itself geographically
+ * (the regions module), so the orchestrator no longer carries a US-waters gate of
+ * its own.
  */
 
 import type { EncDirectClient } from '../inputs/noaa-enc/enc-direct-client.js'
@@ -41,11 +50,15 @@ import type {
   Position
 } from '../shared/types.js'
 import { capitalizeFirst } from '../shared/strings.js'
+import type { EmodnetClient } from './emodnet/emodnet-client.js'
+import { createEmodnetProvider } from './providers/emodnet-provider.js'
 import { createEncProvider } from './providers/enc-provider.js'
 import { createOpenSeaMapProvider } from './providers/openseamap-provider.js'
 import {
+  EMODNET_PROVIDER_ID,
   resolveProviders,
   type Dimension,
+  type LegDimensionCoverage,
   type LegSafetyProvider
 } from './providers/provider.js'
 
@@ -63,6 +76,16 @@ const LEG_QUERY_CONCURRENCY = 3
  * for when no active provider supplies them.
  */
 const LEG_DIMENSIONS: readonly Dimension[] = ['depth', 'land']
+
+/**
+ * The flag kinds a depth check verdicts on: a `shallow` reading, and a `land`
+ * flag derived from a drying or above-datum depth reading (both ENC and EMODnet
+ * classify a drying area as land off the depth value, see their drying-as-land
+ * rule). The depth-authority pass drops these from a superseded depth provider so
+ * its reading cannot contradict the higher source's, regardless of how many
+ * dimensions the superseded provider declares.
+ */
+const DEPTH_VERDICT_KINDS: ReadonlySet<LegFlag['kind']> = new Set<LegFlag['kind']>(['shallow', 'land'])
 
 /** A single flag on one leg or waypoint of the drafted route. */
 export interface LegFlag {
@@ -117,6 +140,8 @@ export interface LegCheckDeps {
   queryChartedAreas: QueryChartedAreas
   /** The Overpass client the worldwide OpenSeaMap provider queries through. */
   overpass: OverpassClient
+  /** The EMODnet depth-profile client the European modeled-depth provider queries through. */
+  emodnet: EmodnetClient
   /** The route-corridor point-hazard scan. */
   scanRouteCorridor: ScanRouteCorridor
   /** Optional logger for the degrade paths. */
@@ -171,15 +196,20 @@ export async function checkLegs (
     return { flags: [], checked: false }
   }
 
-  // Build both providers, then sort by the explicit precedence field (lower is
-  // higher authority), so the merge order and the cross-provider hazard dedupe
-  // follow precedence, not the order the list was authored in. A future provider
-  // (EMODnet) slots in by its precedence rank alone.
+  // Build every provider, then sort by the explicit precedence field (lower is
+  // higher authority), so the merge order, the cross-provider hazard dedupe, and
+  // the per-leg depth-authority pass all follow precedence, not the order the
+  // list was authored in. EMODnet's rank (10) slots it between ENC (0) and
+  // OpenSeaMap (20) automatically.
   const providers: LegSafetyProvider[] = [
     createEncProvider({
       client: deps.client,
       queryChartedAreas: deps.queryChartedAreas,
       scanRouteCorridor: deps.scanRouteCorridor,
+      logger: deps.logger
+    }),
+    createEmodnetProvider({
+      client: deps.emodnet,
       logger: deps.logger
     }),
     createOpenSeaMapProvider({
@@ -191,24 +221,39 @@ export async function checkLegs (
   return runOrchestrator(providers, waypoints, params, deps.logger)
 }
 
-/** One leg's resolved providers and the flags each one produced. */
-interface LegOutcome {
+/** One active provider's contribution to a leg: its flags and the coverage it reported. */
+interface ProviderContribution {
+  provider: LegSafetyProvider
   flags: LegFlag[]
+  /** The dimensions this provider returned data for on this leg, or undefined when its query threw. */
+  coverage?: LegDimensionCoverage
+}
+
+/** One leg's resolved providers and each one's contribution. */
+interface LegOutcome {
+  contributions: ProviderContribution[]
   active: LegSafetyProvider[]
   anyRan: boolean
 }
 
 /**
  * Run the provider list over the route as a per-leg union: per-leg depth and
- * land checks under a bounded-concurrency pool, the capability-keyed
- * not-checked pass (with the depth note collapsed to one route-level flag),
- * then one contiguous-run hazard sweep per hazard-capable provider over the
- * legs it covers, deduped across providers by charted position and type with
- * the ENC reading preferred. Returns the flags in a deterministic order (leg
- * order for per-leg flags, then the route-level notes) and whether any
- * provider's leg query ran.
+ * land checks under a bounded-concurrency pool, the per-leg depth-authority pass
+ * (the highest-precedence depth provider that returned data owns depth on a leg,
+ * so a lower-precedence depth provider's depth flags are dropped there), one
+ * route-level EMODnet awareness note when EMODnet was the effective depth
+ * provider on any leg, the capability-keyed not-checked pass (with the depth note
+ * collapsed to one route-level flag), then one contiguous-run hazard sweep per
+ * hazard-capable provider over the legs it covers, deduped across providers by
+ * charted position and type with the ENC reading preferred. Returns the flags in
+ * a deterministic order (leg order for per-leg flags, then the route-level notes)
+ * and whether any provider's leg query ran.
+ *
+ * Exported so the orchestrator's own behavior (the depth-authority pass in
+ * particular) can be tested against SYNTHETIC providers, without contorting real
+ * coordinates to fake a coverage overlap the real envelopes do not have.
  */
-async function runOrchestrator (
+export async function runOrchestrator (
   providers: readonly LegSafetyProvider[],
   waypoints: Position[],
   params: LegCheckParams,
@@ -231,11 +276,66 @@ async function runOrchestrator (
     Array.from({ length: Math.min(LEG_QUERY_CONCURRENCY, legCount) }, runWorker)
   )
 
+  // Per-leg depth-authority pass, then flatten each leg's surviving contributions
+  // into the flag list in active (precedence) order. On a leg, the
+  // HIGHEST-precedence depth provider that returned depth data is authoritative
+  // for depth there, so a LOWER-precedence depth provider's depth-related flags
+  // are dropped (its modeled reading must not contradict a higher source's
+  // charted one). Tracked alongside: the legs where EMODnet was the EFFECTIVE
+  // depth provider, for the single route-level awareness note synthesized below.
   const flags: LegFlag[] = []
   let anyLegRan = false
+  let emodnetEffectiveLegs = 0
   for (const outcome of outcomes) {
-    flags.push(...outcome.flags)
     if (outcome.anyRan) anyLegRan = true
+    // The highest-precedence depth-capable provider that returned depth data on
+    // this leg, if any. `contributions` is in precedence order (active is), so
+    // the first such contribution is the authoritative one.
+    const depthAuthority = outcome.contributions.find(
+      (c) => c.provider.capabilities.has('depth') && c.coverage?.depth === 'data'
+    )?.provider
+    for (const contribution of outcome.contributions) {
+      const { provider } = contribution
+      const superseded =
+        depthAuthority !== undefined &&
+        provider !== depthAuthority &&
+        provider.capabilities.has('depth') &&
+        provider.precedence > depthAuthority.precedence
+      if (superseded) {
+        // Drop this provider's depth-related flags so its reading cannot
+        // contradict the higher source's. For a depth-ONLY provider (EMODnet)
+        // every flag is depth-derived (its shallow, drying-as-land, gap, and
+        // no-data notes all come from the modeled profile), so all are dropped.
+        // A multi-capability depth provider keeps its non-depth flags; only the
+        // depth verdicts (DEPTH_VERDICT_KINDS) go. ENC is highest precedence so
+        // it is never superseded, so this branch is exercised by EMODnet today.
+        const depthOnly = provider.capabilities.size === 1
+        for (const flag of contribution.flags) {
+          if (depthOnly || DEPTH_VERDICT_KINDS.has(flag.kind)) continue
+          flags.push(flag)
+        }
+        continue
+      }
+      flags.push(...contribution.flags)
+    }
+    // EMODnet was the effective depth provider on this leg when it returned depth
+    // data and was not superseded, i.e. it IS the depth authority for the leg.
+    if (depthAuthority?.id === EMODNET_PROVIDER_ID) {
+      emodnetEffectiveLegs += 1
+    }
+  }
+
+  // One route-level EMODnet awareness note, synthesized when EMODnet was the
+  // effective depth provider on at least one leg, parallel to the collapsed
+  // depth-not-checked note below: a long European route carries one caveat, not
+  // one per leg. The per-leg shallow, land, and gap flags stay leg-scoped.
+  if (emodnetEffectiveLegs > 0) {
+    flags.push({
+      kind: 'other',
+      message:
+        `Depth on ${emodnetEffectiveLegs} of ${legCount} legs is EMODnet modeled bathymetry referenced to LAT, ` +
+        'awareness-grade and not charted, verify on the chart.'
+    })
   }
 
   // Capability-keyed not-checked pass. For each checkLeg dimension, a dimension
@@ -343,12 +443,15 @@ function contiguousRuns (legCount: number, covers: (leg: number) => boolean): nu
 }
 
 /**
- * Run every active provider for one leg, collecting their depth-and-land flags.
- * A provider that throws degrades to a single `other` note for the leg and is
- * treated as not-run; a provider that succeeds contributes its flags. The active
- * providers run concurrently so their round trips overlap, but each one's flags
- * are gathered into its own slot and merged back in active order, so the flag
- * sequence stays deterministic regardless of completion order.
+ * Run every active provider for one leg, collecting each one's depth-and-land
+ * flags and the coverage it reported, kept per provider so the orchestrator's
+ * depth-authority pass can drop a superseded depth provider's flags. A provider
+ * that throws degrades to a single `other` note for the leg and is treated as
+ * not-run (coverage undefined); a provider that succeeds contributes its flags
+ * and coverage. The active providers run concurrently so their round trips
+ * overlap, but each one's contribution is gathered into its own slot and kept in
+ * active order, so the flag sequence stays deterministic regardless of completion
+ * order.
  */
 async function runLeg (
   providers: readonly LegSafetyProvider[],
@@ -359,26 +462,18 @@ async function runLeg (
   logger?: Logger
 ): Promise<LegOutcome> {
   const active = resolveProviders(providers, from, to)
-  const perProvider = await Promise.all(active.map(async (provider) => {
+  const contributions = await Promise.all(active.map(async (provider): Promise<ProviderContribution> => {
     try {
       const result = await provider.checkLeg(leg, from, to, params)
-      // The not-checked pass decides from capabilities, not from this returned
-      // coverage, so `result.coverage` is intentionally not read here. It is the
-      // seam reserved for cross-provider authority a later task hooks into.
-      return { flags: result.flags, ran: true }
+      return { provider, flags: result.flags, coverage: result.coverage }
     } catch (error) {
       logger?.debug(`leg ${leg} ${provider.id} charted-area query failed: ${String(error)}`)
       return {
-        flags: [{ leg, kind: 'other', message: 'depth and hazards not checked for this leg: charted query failed' } as LegFlag],
-        ran: false
+        provider,
+        flags: [{ leg, kind: 'other', message: 'depth and hazards not checked for this leg: charted query failed' } as LegFlag]
       }
     }
   }))
-  const flags: LegFlag[] = []
-  let anyRan = false
-  for (const result of perProvider) {
-    flags.push(...result.flags)
-    if (result.ran) anyRan = true
-  }
-  return { flags, active, anyRan }
+  const anyRan = contributions.some((c) => c.coverage !== undefined)
+  return { contributions, active, anyRan }
 }

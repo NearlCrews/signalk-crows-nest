@@ -53,7 +53,7 @@ import type {
   RoutePolyline
 } from '../../shared/types.js'
 import type { LegFlag, LegCheckParams, ScanRouteCorridor } from '../safety-check.js'
-import { hazardDedupeKey, OPENSEAMAP_PRECEDENCE } from './provider.js'
+import { hazardDedupeKey, OPENSEAMAP_PRECEDENCE, OPENSEAMAP_PROVIDER_ID } from './provider.js'
 import type {
   Dimension,
   LegRef,
@@ -171,7 +171,7 @@ async function queryHazards (
  */
 export function createOpenSeaMapProvider (deps: OpenSeaMapProviderDeps): LegSafetyProvider {
   return {
-    id: 'openseamap',
+    id: OPENSEAMAP_PROVIDER_ID,
     capabilities: OSM_CAPABILITIES,
     precedence: OPENSEAMAP_PRECEDENCE,
     // OpenStreetMap coastline and seamark coverage is worldwide, so the provider

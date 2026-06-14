@@ -15,9 +15,10 @@
  * `Math.max(...samples)` (the value closest to zero). A POSITIVE sample is an
  * above-datum elevation (drying or land), NOT a depth, so it is flagged as land
  * with the height above LAT and never printed as a negative depth, mirroring the
- * ENC drying-as-land rule. Every checked leg also carries an explicit
- * awareness-grade caveat, so a leg with no shallow flag is never read as charted
- * clearance.
+ * ENC drying-as-land rule. The awareness-grade caveat is NOT emitted per leg: the
+ * orchestrator synthesizes one route-level note when EMODnet was the effective
+ * depth provider on at least one leg, so a long European route carries one caveat
+ * rather than one per leg.
  *
  * Depth is the only capability: no land standoff, no point hazards. The provider
  * self-emits its own no-data flag (an empty profile or a failed query), so the
@@ -33,7 +34,7 @@ import { formatMeters } from '../../shared/format-meters.js'
 import type { EmodnetClient } from '../emodnet/emodnet-client.js'
 import type { Logger, Position } from '../../shared/types.js'
 import type { LegFlag, LegCheckParams } from '../safety-check.js'
-import { EMODNET_PRECEDENCE } from './provider.js'
+import { EMODNET_PRECEDENCE, EMODNET_PROVIDER_ID } from './provider.js'
 import type {
   Dimension,
   LegProviderResult,
@@ -58,7 +59,7 @@ export interface EmodnetProviderDeps {
  */
 export function createEmodnetProvider (deps: EmodnetProviderDeps): LegSafetyProvider {
   return {
-    id: 'emodnet',
+    id: EMODNET_PROVIDER_ID,
     capabilities: EMODNET_CAPABILITIES,
     precedence: EMODNET_PRECEDENCE,
     // EMODnet bathymetry covers the European seas only, so the provider reaches a
@@ -128,14 +129,11 @@ export function createEmodnetProvider (deps: EmodnetProviderDeps): LegSafetyProv
         })
       }
 
-      // Always, on a checked leg: the awareness caveat, so a clean leg (no shallow
-      // flag) is never read as charted clearance. EMODnet is modeled bathymetry
-      // referenced to LAT, awareness-grade and not the authoritative chart.
-      flags.push({
-        leg,
-        kind: 'other',
-        message: 'depth on this leg is EMODnet modeled bathymetry referenced to LAT, awareness-grade and not charted, verify on the chart'
-      })
+      // The awareness caveat is the orchestrator's job, not this provider's: it
+      // synthesizes ONE route-level note when EMODnet was the effective depth
+      // provider on at least one leg, so a long European route carries one caveat
+      // rather than one per leg. Returning depth coverage 'data' is the signal the
+      // orchestrator reads to decide that.
       return { flags, coverage: { depth: 'data' } }
     }
   }
