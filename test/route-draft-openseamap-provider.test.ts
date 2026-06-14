@@ -3,15 +3,17 @@
  *
  * This provider supplies worldwide point HAZARDS (OpenSeaMap rock, wreck, and
  * obstruction seamarks in the leg corridor) and worldwide LAND (OSM coastline
- * crossing and standoff), but NOT depth. It is global: coversLeg is always true,
- * and an OSM leg always emits an explicit depth-not-checked flag.
+ * crossing and standoff), but NOT depth. It is global: coversLeg is always true.
+ * Depth-not-checked emission is the orchestrator's job (its capability-keyed
+ * not-checked pass), so this provider carries no depth capability and does not
+ * self-emit a depth flag.
  *
  * Each test stubs the Overpass client directly, so there is no live HTTP. The
  * suite pins the honesty branches the spec requires: a coastline crossing flags
- * land, an OSM leg always flags depth as not checked and carries no depth
- * capability, the hazard query is hard-coded to rock/wreck/obstruction
- * regardless of any configured display group, and a hazard seamark in the
- * corridor maps to the correct GLOBAL leg index through checkHazards.
+ * land, the provider carries no depth capability and self-emits no depth flag,
+ * the hazard query is hard-coded to rock/wreck/obstruction regardless of any
+ * configured display group, and a hazard seamark in the corridor maps to the
+ * correct GLOBAL leg index through checkHazards.
  */
 
 import test from 'node:test'
@@ -91,22 +93,23 @@ test('flags land when the leg crosses an OSM coastline way', async () => {
   assert.match(land!.message, /verify on the chart/i)
 })
 
-test('always emits an explicit depth-not-checked flag on an OSM leg', async () => {
+test('does not self-emit a depth flag and carries no depth capability', async () => {
+  // The orchestrator owns the depth-not-checked note via its capability-keyed
+  // not-checked pass; this provider only reports what it verifies.
   const provider = createOpenSeaMapProvider({ client: client(), scanRouteCorridor: () => [] })
   const result = await provider.checkLeg(0, FROM, TO, params)
-  assert.ok(result.flags.some((f) => f.kind === 'other' && /depth not checked/i.test(f.message)))
   assert.equal(provider.capabilities.has('depth'), false)
+  assert.equal(result.flags.some((f) => /depth/i.test(f.message)), false)
 })
 
-test('emits the depth-not-checked flag even when the leg crosses a coastline', async () => {
-  // A crossing does not suppress the explicit depth-not-checked note.
+test('reports only land flags, no depth flag, when the leg crosses a coastline', async () => {
   const provider = createOpenSeaMapProvider({
     client: client({ listCoastlineWays: async () => [{ points: [[4.9, 43.1], [5.1, 43.1]] }] }),
     scanRouteCorridor
   })
   const result = await provider.checkLeg(0, FROM, TO, params)
   assert.ok(result.flags.some((f) => f.kind === 'land'))
-  assert.ok(result.flags.some((f) => f.kind === 'other' && /depth not checked/i.test(f.message)))
+  assert.equal(result.flags.some((f) => /depth/i.test(f.message)), false)
 })
 
 test('flags standoff when the nearest coastline is inside the offing', async () => {
@@ -131,8 +134,8 @@ test('degrades to a land-not-checked note when the coastline query rejects', asy
   const result = await provider.checkLeg(0, FROM, TO, params)
   assert.equal(result.coverage.land, 'nodata')
   assert.ok(result.flags.some((f) => f.kind === 'other' && /land not checked/i.test(f.message)))
-  // Even a failed land query still emits the explicit depth-not-checked note.
-  assert.ok(result.flags.some((f) => f.kind === 'other' && /depth not checked/i.test(f.message)))
+  // A failed land query does not turn into a depth claim either.
+  assert.equal(result.flags.some((f) => /depth/i.test(f.message)), false)
 })
 
 test('queries hazards with the hard-coded rock/wreck/obstruction regex regardless of config', async () => {
@@ -172,6 +175,21 @@ test('flags a hazard seamark in the corridor with the right global leg index', a
   assert.ok(hazard, 'expected a hazard flag for the wreck in the corridor')
   assert.equal(hazard?.leg, 1, 'the hazard maps to the global second-leg index')
   assert.match(hazard!.message, /wreck/i)
+})
+
+test('names a rock hazard "rock" in the corridor flag message', async () => {
+  // Mirrors the wreck assertion: the type word comes from the seamarkLabel map,
+  // so a second seamark type exercises more than one entry of that map.
+  const rock = seamarkOnLeg('rock', 9300, 43.1)
+  const provider = createOpenSeaMapProvider({
+    client: client({ listPointsOfInterest: async () => [rock] }),
+    scanRouteCorridor
+  })
+  const legs: LegRef[] = [{ leg: 0, from: FROM, to: TO }]
+  const flags = await provider.checkHazards!(legs, { ...params, corridorHalfWidthMeters: 800 })
+  const hazard = flags.find((f) => f.kind === 'hazard')
+  assert.ok(hazard, 'expected a hazard flag for the rock in the corridor')
+  assert.match(hazard!.message, /OpenStreetMap-charted rock within the leg corridor/)
 })
 
 test('maps a hazard on the first of a covered run that starts at a non-zero global index', async () => {

@@ -10,15 +10,16 @@
  *
  * It is GLOBAL: `coversLeg` is always true, since OpenStreetMap coastline and
  * seamark coverage is worldwide. Depth is deliberately NOT a capability: an OSM
- * coastline is a land boundary, not a charted sounding, so this provider always
- * pushes an explicit depth-not-checked flag on every leg and lets a chart-backed
- * provider (ENC, EMODnet) carry depth where one covers the leg.
+ * coastline is a land boundary, not a charted sounding, so this provider never
+ * verifies depth. It does not self-emit a depth-not-checked flag either: the
+ * orchestrator's capability-keyed not-checked pass owns that note for a leg no
+ * depth provider covers, and a self-emitted note would contradict a depth
+ * provider (ENC, EMODnet) that did check the same leg.
  *
  * The honesty point, encoded in behavior: the absence of a coastline crossing is
  * NOT proof of clear water. OSM coastline data is incomplete and a crossing test
  * only catches a leg cutting the digitized shoreline, so the land flag says
- * "verify on the chart" and the explicit depth-not-checked flag is never
- * suppressed by a crossing. The hazard seamark filter is the hard-coded
+ * "verify on the chart". The hazard seamark filter is the hard-coded
  * rock/wreck/obstruction alternation, NOT any configured display group, so
  * turning off the OpenSeaMap hazards group on the map never silently drops the
  * safety check.
@@ -28,14 +29,16 @@
  * without live HTTP.
  */
 
-import { positionToBbox, unionBbox } from '../../geo/position-utilities.js'
-import { metersFromNauticalMiles, METERS_PER_NAUTICAL_MILE } from '../../shared/length.js'
+import { metersFromNauticalMiles } from '../../shared/length.js'
+import { formatNm } from '../../shared/format-meters.js'
 import { tileBbox } from '../../shared/bbox-tiles.js'
 import {
   cumulativeLegStartMeters,
+  legBbox,
   legForAlongTrack,
   nearestPolylineApproachMeters,
-  polylineCrossesLeg
+  polylineCrossesLeg,
+  routeBbox
 } from '../leg-geometry.js'
 import { queryCoastline } from '../../inputs/openseamap/coastline-query.js'
 import { toSummary } from '../../inputs/openseamap/element-summary.js'
@@ -80,17 +83,6 @@ export interface OpenSeaMapProviderDeps {
   logger?: Logger
 }
 
-/** The leg's bounding box, expanded by the standoff so a near-miss coastline is in range. */
-function legBbox (from: Position, to: Position, standoffMeters: number): Bbox {
-  // positionToBbox encloses a circle of the given radius around a point; the
-  // union of the two endpoint boxes covers the whole leg plus the standoff
-  // margin either side, which is the area the coastline-proximity test reads.
-  return unionBbox(
-    positionToBbox(from, standoffMeters),
-    positionToBbox(to, standoffMeters)
-  )
-}
-
 /**
  * The land flags for one leg: a crossing flag, else a standoff flag when the
  * nearest coastline is inside the offing. Both are honest about OSM coverage:
@@ -115,13 +107,22 @@ function addLandFlags (
   }
   const nearest = nearestPolylineApproachMeters(from, to, lines)
   if (nearest === undefined || nearest >= standoffMeters) return
-  const nearestNm = (nearest / METERS_PER_NAUTICAL_MILE).toFixed(2)
-  const standoffNm = (standoffMeters / METERS_PER_NAUTICAL_MILE).toFixed(2)
+  const nearestNm = formatNm(nearest)
+  const standoffNm = formatNm(standoffMeters)
   flags.push({
     leg,
     kind: 'other',
     message: `Nearest OpenStreetMap coastline is ${nearestNm} nm off this leg, under the ${standoffNm} nm standoff`
   })
+}
+
+/**
+ * The result of {@link queryHazards}: the corridor-scan summaries plus a per-id
+ * lookup of each hazard's plain-English type word for the flag message.
+ */
+interface OsmHazardScan {
+  summaries: PoiSummary[]
+  typeWord: Map<string, string>
 }
 
 /**
@@ -139,10 +140,10 @@ function addLandFlags (
  */
 async function queryHazards (
   client: OverpassClient,
-  routeBbox: Bbox,
+  bbox: Bbox,
   signal?: AbortSignal
-): Promise<{ summaries: PoiSummary[], typeWord: Map<string, string> }> {
-  const tiles = tileBbox(routeBbox, MAX_BBOX_SPAN_DEGREES)
+): Promise<OsmHazardScan> {
+  const tiles = tileBbox(bbox, MAX_BBOX_SPAN_DEGREES)
   const perTile = await Promise.all(
     tiles.map((tile) => client.listPointsOfInterest(tile, HAZARD_SEAMARK_REGEX, signal))
   )
@@ -175,11 +176,16 @@ export function createOpenSeaMapProvider (deps: OpenSeaMapProviderDeps): LegSafe
     // reaches every leg.
     coversLeg: () => true,
     /**
-     * Run one leg's coastline land and standoff check, plus the always-on
-     * explicit depth-not-checked flag. A rejected coastline query degrades to a
-     * land-not-checked note (with land coverage nodata) rather than throwing,
-     * because this provider is global: if it threw, the orchestrator would mark
-     * the whole leg as not-run even though no depth source ever covers it here.
+     * Run one leg's coastline land and standoff check, reporting only what this
+     * provider verifies: the land flags and the land coverage. Depth is not a
+     * capability here, so the orchestrator's capability-keyed not-checked pass
+     * owns the depth-not-checked note for a leg no depth provider covers; this
+     * provider does not self-emit one, which would otherwise contradict a depth
+     * provider (ENC or EMODnet) that did check the same leg. A rejected coastline
+     * query degrades to a land-not-checked note (with land coverage nodata)
+     * rather than throwing, because this provider is global: if it threw, the
+     * orchestrator would mark the whole leg as not-run even though no depth source
+     * ever covers it here.
      */
     async checkLeg (
       leg: number,
@@ -204,14 +210,6 @@ export function createOpenSeaMapProvider (deps: OpenSeaMapProviderDeps): LegSafe
         })
         landCoverage = 'nodata'
       }
-      // The explicit depth-not-checked flag is ALWAYS pushed: OSM carries no
-      // charted depth, so this provider never verifies depth, and a coastline
-      // crossing does not suppress the note.
-      flags.push({
-        leg,
-        kind: 'other',
-        message: 'depth not checked here, no depth source covers this leg, verify on the chart'
-      })
       return { flags, coverage: { land: landCoverage } }
     },
     /**
@@ -229,13 +227,9 @@ export function createOpenSeaMapProvider (deps: OpenSeaMapProviderDeps): LegSafe
       // checkHazards guarantees this is a contiguous run.
       const waypoints: Position[] = [legs[0].from, ...legs.map((ref) => ref.to)]
 
-      let routeBbox = positionToBbox(waypoints[0], corridorHalfWidthMeters)
-      for (let i = 1; i < waypoints.length; i += 1) {
-        routeBbox = unionBbox(routeBbox, positionToBbox(waypoints[i], corridorHalfWidthMeters))
-      }
-      let hazards: Awaited<ReturnType<typeof queryHazards>>
+      let hazards: OsmHazardScan
       try {
-        hazards = await queryHazards(deps.client, routeBbox, params.signal)
+        hazards = await queryHazards(deps.client, routeBbox(waypoints, corridorHalfWidthMeters), params.signal)
       } catch (error) {
         deps.logger?.debug(`OpenSeaMap route hazard query failed: ${String(error)}`)
         flags.push({ kind: 'other', message: 'point hazards not checked: the OpenStreetMap query failed' })

@@ -27,16 +27,16 @@
 
 import {
   initialBearingRad,
-  positionToBbox,
   projectPointOntoLeg,
-  rhumbDistanceMeters,
-  unionBbox
+  rhumbDistanceMeters
 } from '../../geo/position-utilities.js'
 import {
   cumulativeLegStartMeters,
+  legBbox,
   legForAlongTrack,
   legPolyline,
   pointInRings,
+  routeBbox,
   segmentCrossesRings
 } from '../leg-geometry.js'
 import type { EncDirectClient } from '../../inputs/noaa-enc/enc-direct-client.js'
@@ -49,7 +49,7 @@ import {
   parseS57Code,
   readNumber
 } from '../../inputs/noaa-enc/s57-mapping.js'
-import { formatMeters } from '../../shared/format-meters.js'
+import { formatMeters, formatNm } from '../../shared/format-meters.js'
 import { METERS_PER_NAUTICAL_MILE, metersFromNauticalMiles } from '../../shared/length.js'
 import { isInEncCoverage } from '../../shared/regions.js'
 import { SCALE_BAND_LABELS } from '../../shared/scale-band.js'
@@ -209,17 +209,6 @@ async function queryLegBands (
   return { depth, land }
 }
 
-/** The leg's bounding box, expanded by the standoff so a near-miss land area is in range. */
-function legBbox (from: Position, to: Position, standoffMeters: number): Bbox {
-  // positionToBbox encloses a circle of the given radius around a point; the
-  // union of the two endpoint boxes covers the whole leg plus the standoff
-  // margin either side, which is the area the land-proximity test reads.
-  return unionBbox(
-    positionToBbox(from, standoffMeters),
-    positionToBbox(to, standoffMeters)
-  )
-}
-
 /** Nearest approach, in meters, from any land-area ring vertex to the leg. */
 function nearestLandApproachMeters (
   from: Position,
@@ -295,6 +284,15 @@ function hazardMessage (
 }
 
 /**
+ * The result of {@link queryHazards}: the corridor-scan summaries plus a per-id
+ * lookup of each hazard's layer and raw properties for the flag message.
+ */
+interface EncHazardScan {
+  summaries: PoiSummary[]
+  features: Map<string, { layerKey: EncLayerKey, properties: Record<string, unknown> }>
+}
+
+/**
  * Query the three point-hazard layers across every band over the route bbox,
  * mapped to PoiSummary. The same charted hazard appears in several scale bands
  * with distinct OBJECTIDs but the same position, so results are deduped on layer
@@ -307,13 +305,13 @@ function hazardMessage (
 async function queryHazards (
   deps: EncProviderDeps,
   bands: ScaleBand[],
-  routeBbox: Bbox,
+  bbox: Bbox,
   signal?: AbortSignal
-): Promise<{ summaries: PoiSummary[], features: Map<string, { layerKey: EncLayerKey, properties: Record<string, unknown> }> }> {
+): Promise<EncHazardScan> {
   const queries: Array<{ layerKey: EncLayerKey, response: { features: EncFeature[] } }> = await Promise.all(
     bands.flatMap((band) => HAZARD_LAYERS.map(async (layerKey) => ({
       layerKey,
-      response: await deps.client.queryLayer({ band, layerKey, bbox: routeBbox, signal })
+      response: await deps.client.queryLayer({ band, layerKey, bbox, signal })
     })))
   )
   const summaries: PoiSummary[] = []
@@ -409,8 +407,8 @@ function addStandoffFlag (
   if (landAreas.length === 0) return
   const nearest = nearestLandApproachMeters(from, to, landAreas)
   if (nearest === undefined || nearest >= standoffMeters) return
-  const nearestNm = (nearest / METERS_PER_NAUTICAL_MILE).toFixed(2)
-  const standoffNm = (standoffMeters / METERS_PER_NAUTICAL_MILE).toFixed(2)
+  const nearestNm = formatNm(nearest)
+  const standoffNm = formatNm(standoffMeters)
   flags.push({
     leg,
     kind: 'other',
@@ -481,13 +479,9 @@ export function createEncProvider (deps: EncProviderDeps): LegSafetyProvider {
       // each leg's start followed by the final leg's end.
       const waypoints: Position[] = [legs[0].from, ...legs.map((ref) => ref.to)]
 
-      let routeBbox = positionToBbox(waypoints[0], corridorHalfWidthMeters)
-      for (let i = 1; i < waypoints.length; i += 1) {
-        routeBbox = unionBbox(routeBbox, positionToBbox(waypoints[i], corridorHalfWidthMeters))
-      }
-      let hazards: Awaited<ReturnType<typeof queryHazards>>
+      let hazards: EncHazardScan
       try {
-        hazards = await queryHazards(deps, params.bands, routeBbox, params.signal)
+        hazards = await queryHazards(deps, params.bands, routeBbox(waypoints, corridorHalfWidthMeters), params.signal)
       } catch (error) {
         deps.logger?.debug(`route hazard query failed: ${String(error)}`)
         flags.push({ kind: 'other', message: 'point hazards not checked: charted query failed' })

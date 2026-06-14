@@ -12,8 +12,8 @@
  * coastal legs make a spherical correction unnecessary.
  */
 
-import { distanceMeters, initialBearingRad, projectPointOntoLeg, rhumbDistanceMeters, sampleRhumbLeg } from '../geo/position-utilities.js'
-import type { Position } from '../shared/types.js'
+import { distanceMeters, initialBearingRad, positionToBbox, projectPointOntoLeg, rhumbDistanceMeters, sampleRhumbLeg, unionBbox } from '../geo/position-utilities.js'
+import type { Bbox, Position } from '../shared/types.js'
 
 /**
  * True when `[lon, lat]` lies inside the polygon `rings` (outer ring with holes)
@@ -102,6 +102,34 @@ export function legForAlongTrack (legStartMeters: number[], alongTrackMeters: nu
     if (alongTrackMeters <= legStartMeters[leg + 1]) return leg
   }
   return legStartMeters.length - 1
+}
+
+/**
+ * The leg's bounding box, expanded by `standoffMeters` so a near-miss area or
+ * coastline either side of the leg is in range. positionToBbox encloses a circle
+ * of the given radius around a point; the union of the two endpoint boxes covers
+ * the whole leg plus the standoff margin either side. Shared by the route-draft
+ * safety providers' per-leg land checks.
+ */
+export function legBbox (from: Position, to: Position, standoffMeters: number): Bbox {
+  return unionBbox(
+    positionToBbox(from, standoffMeters),
+    positionToBbox(to, standoffMeters)
+  )
+}
+
+/**
+ * The bounding box enclosing a `halfWidthMeters` corridor around every waypoint
+ * of a route, the union of each waypoint's enclosing box. Shared by the
+ * route-draft safety providers' route-wide hazard scans. Throws on an empty
+ * waypoint list, since there is no box to seed.
+ */
+export function routeBbox (waypoints: Position[], halfWidthMeters: number): Bbox {
+  let bbox = positionToBbox(waypoints[0], halfWidthMeters)
+  for (let i = 1; i < waypoints.length; i += 1) {
+    bbox = unionBbox(bbox, positionToBbox(waypoints[i], halfWidthMeters))
+  }
+  return bbox
 }
 
 /** True when the leg [from, to] crosses any segment of any open polyline. */
