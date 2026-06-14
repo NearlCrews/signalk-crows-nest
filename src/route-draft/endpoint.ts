@@ -18,7 +18,6 @@
 import type { IRouter, Request, Response } from 'express'
 import type { ServerAPI } from '@signalk/server-api'
 import { ensureApiAdminGate } from '../status/admin-gate.js'
-import { isInUsWaters } from '../shared/us-waters.js'
 import { finiteOrUndefined, isFiniteNumber } from '../shared/numbers.js'
 import { presentString } from '../shared/strings.js'
 import { METERS_PER_NAUTICAL_MILE } from '../shared/length.js'
@@ -26,6 +25,7 @@ import { MS_PER_SECOND } from '../shared/time.js'
 import { toPosition } from '../geo/position-utilities.js'
 import type { Position } from '../shared/types.js'
 import type { EncDirectClient } from '../inputs/noaa-enc/enc-direct-client.js'
+import type { OverpassClient } from '../inputs/openseamap/overpass-client.js'
 import { queryChartedAreas } from '../inputs/noaa-enc/depth-area-query.js'
 import { scanRouteCorridor } from '../outputs/route-hazard/route-corridor.js'
 import type { ScaleBand } from '../shared/scale-band.js'
@@ -135,6 +135,8 @@ export interface RouteDraftService {
   budget: BudgetTracker
   /** The ENC Direct client the depth and hazard check queries through. */
   enc: EncDirectClient
+  /** The Overpass client the worldwide OpenSeaMap leg check queries through. */
+  overpass: OverpassClient
   /** The resolved route-draft configuration (vessel, fuel, and routing settings). */
   config: RouteDraftConfig
   /**
@@ -480,8 +482,8 @@ async function handleDraft (
       {
         client: service.enc,
         queryChartedAreas,
+        overpass: service.overpass,
         scanRouteCorridor,
-        isInUsWaters,
         logger: { debug: (m: string) => { app.debug(m) }, error: (m: string) => { app.error(m) } }
       },
       {

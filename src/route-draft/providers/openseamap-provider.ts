@@ -53,6 +53,7 @@ import type {
   RoutePolyline
 } from '../../shared/types.js'
 import type { LegFlag, LegCheckParams, ScanRouteCorridor } from '../safety-check.js'
+import { hazardDedupeKey } from './provider.js'
 import type {
   Dimension,
   LegRef,
@@ -258,7 +259,13 @@ export function createOpenSeaMapProvider (deps: OpenSeaMapProviderDeps): LegSafe
         flags.push({
           leg: legs[legForAlongTrack(legStartMeters, poi.alongTrackDistanceMeters)].leg,
           kind: 'hazard',
-          message: `OpenStreetMap-charted ${typeWord} within the leg corridor`
+          message: `OpenStreetMap-charted ${typeWord} within the leg corridor`,
+          // The shared cross-provider dedupe key, keyed on the seamark type word
+          // and the charted position, matching the ENC provider so the same
+          // hazard both report collapses to one flag (the ENC reading is kept,
+          // since ENC has precedence). The orchestrator strips this transient
+          // field before returning.
+          hazardKey: hazardDedupeKey(typeWord, poi.position)
         })
       }
       return flags

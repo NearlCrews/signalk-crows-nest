@@ -20,10 +20,13 @@ import { createPluginStatus } from '../status/plugin-status.js'
 import { createStatusRouter } from '../status/status-router.js'
 import { buildPoiTypesString, ensurePoiTypes } from '../shared/poi-type-selection.js'
 import { PLUGIN_ID, PLUGIN_REPO_URL } from '../shared/plugin-id.js'
-import type { PluginConfig } from '../shared/types.js'
+import type { Logger, PluginConfig } from '../shared/types.js'
 import { join } from 'node:path'
 import type { IRouter } from 'express'
 import { createEncDirectClient } from '../inputs/noaa-enc/enc-direct-client.js'
+import { createOverpassClient } from '../inputs/openseamap/overpass-client.js'
+import type { OverpassClient } from '../inputs/openseamap/overpass-client.js'
+import { resolvePrimaryEndpoint } from '../shared/overpass-endpoints.js'
 import { normalizeRouteDraftConfig, routeDraftConfigSchema } from '../route-draft/config.js'
 import { createRouteDraftRouter, modelsForRequest } from '../route-draft/endpoint.js'
 import type { RouteDraftService } from '../route-draft/endpoint.js'
@@ -133,6 +136,11 @@ export function createPlugin (
   // in-flight budget load if a teardown or a newer start beats it.
   let routeDraftService: RouteDraftService | undefined
   let routeDraftGeneration = 0
+  // The route-draft Overpass client is a queued client with in-flight work to
+  // abort, unlike the one-shot ENC client, so it is held alongside the service
+  // and closed on teardown even if the budget load (and thus the published
+  // service) never resolved. The one-shot ENC client needs no close.
+  let routeDraftOverpass: OverpassClient | undefined
 
   /**
    * Tear the current runtime down. Idempotent.
@@ -145,8 +153,19 @@ export function createPlugin (
   function teardown (): void {
     // Always orphan any in-flight route-draft build and drop the service, even
     // on the no-runtime path, so the endpoint cannot answer with a stale one.
+    // The Overpass client is closed (aborting any in-flight route-draft query)
+    // independently of the service, since it is built synchronously while the
+    // service is published only after the async budget load.
     routeDraftGeneration += 1
     routeDraftService = undefined
+    if (routeDraftOverpass !== undefined) {
+      try {
+        routeDraftOverpass.close()
+      } catch (error) {
+        app.error(`Cannot close the route-draft Overpass client: ${String(error)}`)
+      }
+      routeDraftOverpass = undefined
+    }
     if (runtime === undefined) {
       // Even with no runtime to tear down, reset the status recorder so a
       // snapshot during the gap between teardown and the next start does
@@ -205,14 +224,22 @@ export function createPlugin (
       title: PLUGIN_NAME
     })
     const enc = createEncDirectClient()
+    // One Logger adapter over app.debug/app.error, shared by the Overpass client
+    // and the budget loader below.
+    const log: Logger = { debug: (m) => { app.debug(m) }, error: (m) => { app.error(m) } }
+    // The worldwide OpenSeaMap leg check queries through this Overpass client.
+    // The default endpoint suffices (no per-source config here); the lighter
+    // minDelayMs keeps the bounded per-route burst inside the request deadline.
+    const overpass = createOverpassClient(resolvePrimaryEndpoint(undefined), log, { minDelayMs: 250 })
+    routeDraftOverpass = overpass
     const statePath = join(app.getDataDirPath(), 'route-draft-budget.json')
     BudgetTracker.load({
       maxPerDay: rd.routeDraftMaxCallsPerDay,
       statePath,
-      log: { debug: (m) => { app.debug(m) }, error: (m) => { app.error(m) } }
+      log
     }).then((budget) => {
       if (mine === routeDraftGeneration) {
-        routeDraftService = { llm, budget, enc, config: rd, models: modelsForRequest(rd.routeDraftModel) }
+        routeDraftService = { llm, budget, enc, overpass, config: rd, models: modelsForRequest(rd.routeDraftModel) }
         app.debug("Crow's Nest route drafting ready")
       }
     }).catch((err) => {

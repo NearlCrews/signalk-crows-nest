@@ -67,6 +67,7 @@ import type {
   QueryChartedAreas,
   ScanRouteCorridor
 } from '../safety-check.js'
+import { hazardDedupeKey } from './provider.js'
 import type {
   Dimension,
   LegRef,
@@ -511,7 +512,12 @@ export function createEncProvider (deps: EncProviderDeps): LegSafetyProvider {
         flags.push({
           leg: legs[legForAlongTrack(legStartMeters, poi.alongTrackDistanceMeters)].leg,
           kind: 'hazard',
-          message: hazardMessage(feature.layerKey, feature.properties)
+          message: hazardMessage(feature.layerKey, feature.properties),
+          // The shared cross-provider dedupe key, keyed on the layer type and the
+          // charted position, so the same hazard the OpenSeaMap provider reports
+          // collapses to one flag with the ENC reading kept. The orchestrator
+          // strips this transient field before returning.
+          hazardKey: hazardDedupeKey(feature.layerKey, poi.position)
         })
       }
       return flags

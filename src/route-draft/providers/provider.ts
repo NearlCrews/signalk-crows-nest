@@ -73,7 +73,7 @@ export interface LegSafetyProvider {
 /**
  * The active providers for one leg: every provider whose footprint reaches it.
  * Order follows the input provider list, which the orchestrator builds in
- * precedence order (ENC, then EMODnet, then OpenSeaMap).
+ * precedence order (ENC, then OpenSeaMap).
  */
 export function resolveProviders (
   providers: readonly LegSafetyProvider[],
@@ -81,4 +81,19 @@ export function resolveProviders (
   to: Position
 ): LegSafetyProvider[] {
   return providers.filter((p) => p.coversLeg(from, to))
+}
+
+/**
+ * The cross-provider hazard dedupe key: a lowercased hazard type word and the
+ * charted position to four decimals (about 11 m), colon-joined. Both the ENC and
+ * OpenSeaMap providers set this on their hazard flags, and the orchestrator
+ * collapses flags sharing a key into one, keeping the first in provider
+ * precedence (ENC). It lives here, called by both providers, so the precision,
+ * the separator, and the lowercasing cannot drift between the two sites and
+ * silently stop the same charted hazard from colliding. The ENC layer keys
+ * (wreck, obstruction, rock) already match the OpenSeaMap seamark labels
+ * lowercased, so the same feature reported by both yields the same key.
+ */
+export function hazardDedupeKey (typeWord: string, position: Position): string {
+  return `${typeWord.toLowerCase()}:${position.latitude.toFixed(4)}:${position.longitude.toFixed(4)}`
 }

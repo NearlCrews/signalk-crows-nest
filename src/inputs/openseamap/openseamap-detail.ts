@@ -14,7 +14,7 @@ import type { OverpassElement } from './overpass-client.js'
 import { seamarkLabel } from './seamark-mapping.js'
 import { escapeHtml, labeledParagraph } from '../../shared/html-escape.js'
 import { humanizeLightCharacter } from '../../shared/light-character.js'
-import { presentString } from '../../shared/strings.js'
+import { capitalizeFirst, presentString } from '../../shared/strings.js'
 
 /** Underscore separator in raw OSM enum values, replaced with a space for display. */
 const UNDERSCORE_PATTERN = /_/g
@@ -155,7 +155,7 @@ function buildFamilyLine (tags: Readonly<Record<string, string>>): string | null
     return null
   }
   const sentence = parts.join(', ')
-  return sentence.charAt(0).toUpperCase() + sentence.slice(1)
+  return capitalizeFirst(sentence)
 }
 
 /**
