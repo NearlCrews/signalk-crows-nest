@@ -32,7 +32,13 @@ import {
   rhumbDistanceMeters,
   unionBbox
 } from '../../geo/position-utilities.js'
-import { pointInRings, segmentCrossesRings, legPolyline } from '../leg-geometry.js'
+import {
+  cumulativeLegStartMeters,
+  legForAlongTrack,
+  legPolyline,
+  pointInRings,
+  segmentCrossesRings
+} from '../leg-geometry.js'
 import type { EncDirectClient } from '../../inputs/noaa-enc/enc-direct-client.js'
 import type { EncAreaPolygon } from '../../inputs/noaa-enc/depth-area-query.js'
 import type { EncFeature, EncLayerKey, ScaleBand } from '../../inputs/noaa-enc/enc-direct-types.js'
@@ -61,11 +67,8 @@ import type {
   QueryChartedAreas,
   ScanRouteCorridor
 } from '../safety-check.js'
-import {
-  cumulativeLegStartMeters,
-  legForAlongTrack
-} from '../safety-check.js'
 import type {
+  Dimension,
   LegRef,
   LegProviderResult,
   LegSafetyProvider
@@ -423,7 +426,7 @@ function addStandoffFlag (
 export function createEncProvider (deps: EncProviderDeps): LegSafetyProvider {
   return {
     id: 'enc',
-    capabilities: new Set<'depth' | 'land' | 'hazards'>(['depth', 'land', 'hazards']),
+    capabilities: new Set<Dimension>(['depth', 'land', 'hazards']),
     coversLeg: (from, to) => isInEncCoverage(from) || isInEncCoverage(to),
     /**
      * Run one leg's charted-depth, land, and standoff check, returning its flags
@@ -509,6 +512,8 @@ export function createEncProvider (deps: EncProviderDeps): LegSafetyProvider {
       for (const poi of corridorPois) {
         const feature = hazards.features.get(poi.id)
         if (feature === undefined) continue
+        // legForAlongTrack returns the LOCAL index into this covered-leg run;
+        // legs[local].leg maps it back to the global route leg index.
         flags.push({
           leg: legs[legForAlongTrack(legStartMeters, poi.alongTrackDistanceMeters)].leg,
           kind: 'hazard',

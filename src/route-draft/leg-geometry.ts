@@ -12,7 +12,7 @@
  * coastal legs make a spherical correction unnecessary.
  */
 
-import { sampleRhumbLeg } from '../geo/position-utilities.js'
+import { distanceMeters, sampleRhumbLeg } from '../geo/position-utilities.js'
 import type { Position } from '../shared/types.js'
 
 /**
@@ -73,4 +73,33 @@ export function legPolyline (from: Position, to: Position, spacingMeters: number
   for (const p of interior) polyline.push([p.longitude, p.latitude])
   polyline.push([to.longitude, to.latitude])
   return polyline
+}
+
+/**
+ * The cumulative great-circle distance to each leg's start, one entry per leg
+ * (index i is the distance from the route start to waypoint i). Great-circle,
+ * not rhumb, so it matches the along-track distance scanRouteCorridor reports.
+ * Shared by the route-draft safety providers' hazard scans.
+ */
+export function cumulativeLegStartMeters (waypoints: Position[]): number[] {
+  const starts: number[] = []
+  let accumulated = 0
+  for (let leg = 0; leg + 1 < waypoints.length; leg += 1) {
+    starts.push(accumulated)
+    accumulated += distanceMeters(waypoints[leg], waypoints[leg + 1])
+  }
+  return starts
+}
+
+/**
+ * The leg index a corridor hazard falls on, from its along-track distance and
+ * the prebuilt cumulative leg-start distances. A point on a leg boundary is
+ * attributed to the earlier leg, matching the original accumulation. Shared by
+ * the route-draft safety providers' hazard scans.
+ */
+export function legForAlongTrack (legStartMeters: number[], alongTrackMeters: number): number {
+  for (let leg = 0; leg + 1 < legStartMeters.length; leg += 1) {
+    if (alongTrackMeters <= legStartMeters[leg + 1]) return leg
+  }
+  return legStartMeters.length - 1
 }

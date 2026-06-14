@@ -25,7 +25,6 @@
  * providers under `providers/`.
  */
 
-import { distanceMeters } from '../geo/position-utilities.js'
 import type { EncDirectClient } from '../inputs/noaa-enc/enc-direct-client.js'
 import type { ChartedAreas } from '../inputs/noaa-enc/depth-area-query.js'
 import type { ScaleBand } from '../inputs/noaa-enc/enc-direct-types.js'
@@ -240,6 +239,12 @@ async function runOrchestrator (
   if (anyLegRan) {
     for (const provider of providers) {
       if (provider.checkHazards === undefined || !provider.capabilities.has('hazards')) continue
+      // checkHazards stitches its legs into one polyline, so it requires a
+      // CONTIGUOUS run (see the precondition on LegSafetyProvider.checkHazards).
+      // In phase 1 the ENC provider covers every leg, so this set is always one
+      // contiguous run; the union task must split a provider's covered legs into
+      // contiguous runs and call checkHazards once per run before a gapped
+      // provider can land here.
       const covered: LegRef[] = []
       for (let leg = 0; leg < legCount; leg += 1) {
         if (outcomes[leg].active.includes(provider)) {
@@ -257,7 +262,10 @@ async function runOrchestrator (
 /**
  * Run every active provider for one leg, collecting their depth-and-land flags.
  * A provider that throws degrades to a single `other` note for the leg and is
- * treated as not-run; a provider that succeeds contributes its flags.
+ * treated as not-run; a provider that succeeds contributes its flags. The active
+ * providers run concurrently so their round trips overlap, but each one's flags
+ * are gathered into its own slot and merged back in active order, so the flag
+ * sequence stays deterministic regardless of completion order.
  */
 async function runLeg (
   providers: readonly LegSafetyProvider[],
@@ -268,47 +276,26 @@ async function runLeg (
   logger?: Logger
 ): Promise<LegOutcome> {
   const active = resolveProviders(providers, from, to)
-  const flags: LegFlag[] = []
-  let anyRan = false
-  for (const provider of active) {
+  const perProvider = await Promise.all(active.map(async (provider) => {
     try {
       const result = await provider.checkLeg(leg, from, to, params)
-      flags.push(...result.flags)
       // The not-checked pass decides from capabilities, not from this returned
       // coverage, so `result.coverage` is intentionally not read in phase 1. It
       // is the seam a later provider with partial-coverage legs hooks into.
-      anyRan = true
+      return { flags: result.flags, ran: true }
     } catch (error) {
       logger?.debug(`leg ${leg} ${provider.id} charted-area query failed: ${String(error)}`)
-      flags.push({ leg, kind: 'other', message: 'depth and hazards not checked for this leg: charted query failed' })
+      return {
+        flags: [{ leg, kind: 'other', message: 'depth and hazards not checked for this leg: charted query failed' } as LegFlag],
+        ran: false
+      }
     }
+  }))
+  const flags: LegFlag[] = []
+  let anyRan = false
+  for (const result of perProvider) {
+    flags.push(...result.flags)
+    if (result.ran) anyRan = true
   }
   return { flags, active, anyRan }
-}
-
-/**
- * The cumulative great-circle distance to each leg's start, one entry per leg
- * (index i is the distance from the route start to waypoint i). Great-circle,
- * not rhumb, so it matches the along-track distance scanRouteCorridor reports.
- */
-export function cumulativeLegStartMeters (waypoints: Position[]): number[] {
-  const starts: number[] = []
-  let accumulated = 0
-  for (let leg = 0; leg + 1 < waypoints.length; leg += 1) {
-    starts.push(accumulated)
-    accumulated += distanceMeters(waypoints[leg], waypoints[leg + 1])
-  }
-  return starts
-}
-
-/**
- * The leg index a corridor hazard falls on, from its along-track distance and
- * the prebuilt cumulative leg-start distances. A point on a leg boundary is
- * attributed to the earlier leg, matching the original accumulation.
- */
-export function legForAlongTrack (legStartMeters: number[], alongTrackMeters: number): number {
-  for (let leg = 0; leg + 1 < legStartMeters.length; leg += 1) {
-    if (alongTrackMeters <= legStartMeters[leg + 1]) return leg
-  }
-  return legStartMeters.length - 1
 }

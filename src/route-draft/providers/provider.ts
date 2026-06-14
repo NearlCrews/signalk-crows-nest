@@ -59,6 +59,13 @@ export interface LegSafetyProvider {
    * sweep emits its own explicit "not checked" flag on a failed or unservable
    * query, the same way a per-leg depth or land query degrades, so the
    * orchestrator never needs a synthesized hazards-coverage signal.
+   *
+   * Precondition: `legs` must be a CONTIGUOUS run, consecutive global indices
+   * sharing endpoints, because the scan stitches them into one polyline and
+   * measures along-track distance over it. A non-contiguous set would fabricate
+   * a segment between two unconnected legs and misattribute hazards along it, so
+   * a provider covering a gapped subset of legs must call this once per
+   * contiguous run.
    */
   checkHazards?: (legs: LegRef[], params: LegCheckParams) => Promise<LegFlag[]>
 }
