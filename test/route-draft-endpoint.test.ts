@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  draftFailureMessage,
   openRouterErrorCode,
   parseDraftedRoute,
   parseRequest
@@ -152,9 +153,22 @@ test('parseDraftedRoute caps the waypoint count and slices an over-long name', (
 
 // --- openRouterErrorCode ------------------------------------------------------
 
-test('openRouterErrorCode maps an auth status to unauthorized', () => {
+test('openRouterErrorCode maps only 401 to unauthorized', () => {
   assert.deepEqual(openRouterErrorCode(new OpenRouterError(401, 'http', 'no key')), { status: 401, error: 'unauthorized' })
-  assert.deepEqual(openRouterErrorCode(new OpenRouterError(403, 'http', 'forbidden')), { status: 403, error: 'unauthorized' })
+})
+
+test('openRouterErrorCode maps a 403 moderation or permission block to model-error, not auth', () => {
+  // OpenRouter's 403 is a guardrail or moderation flag, not an auth failure, so it
+  // must not steer the operator toward fixing the API key.
+  assert.deepEqual(openRouterErrorCode(new OpenRouterError(403, 'http', 'flagged')), { status: 502, error: 'model-error' })
+})
+
+test('draftFailureMessage names the cause for 401, 402, and 403, and falls back otherwise', () => {
+  assert.match(draftFailureMessage(new OpenRouterError(401, 'http', 'no key')), /key/i)
+  assert.match(draftFailureMessage(new OpenRouterError(402, 'http', 'no credits')), /credits/i)
+  assert.match(draftFailureMessage(new OpenRouterError(403, 'http', 'flagged')), /moderation/i)
+  assert.equal(draftFailureMessage(new OpenRouterError(500, 'http', 'boom')), 'The AI service failed: boom')
+  assert.equal(draftFailureMessage(new OpenRouterError(0, 'transport', 'network down')), 'The AI service failed: network down')
 })
 
 test('openRouterErrorCode maps out-of-credits and other terminal statuses to model-error', () => {

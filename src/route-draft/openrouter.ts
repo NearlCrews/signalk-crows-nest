@@ -222,14 +222,14 @@ export class OpenRouterClient {
   }
 
   async complete (args: CompleteArgs): Promise<CompleteResult> {
-    for (let attempt = 0; ; attempt += 1) {
+    for (let attemptNumber = 0; ; attemptNumber += 1) {
       const outcome = await this.attempt(args)
       if (outcome.kind === 'result') return outcome.result
-      if (attempt >= MAX_RETRIES) throw outcome.error
-      const waitMs = backoffMs(attempt, outcome.retryAfterMs, this.random)
+      if (attemptNumber >= MAX_RETRIES) throw outcome.error
+      const waitMs = backoffMs(attemptNumber, outcome.retryAfterMs, this.random)
       this.log?.debug(
         `OpenRouter request returned ${outcome.error.status}, retrying in ${Math.round(waitMs)}ms ` +
-        `(attempt ${attempt + 1}/${MAX_RETRIES})`
+        `(attempt ${attemptNumber + 1}/${MAX_RETRIES})`
       )
       // delay() rejects with the caller's abort reason if the signal trips
       // mid-backoff, so a shutdown does not wait out the full delay first.
@@ -397,18 +397,22 @@ function backoffMs (attempt: number, retryAfterMs: number | null, random: () => 
  */
 function delay (ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (signal?.aborted === true) {
+    if (signal === undefined) {
+      setTimeout(resolve, ms)
+      return
+    }
+    if (signal.aborted) {
       reject(signal.reason)
       return
     }
     const onAbort = (): void => {
       clearTimeout(timer)
-      reject(signal?.reason)
+      reject(signal.reason)
     }
     const timer = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort)
+      signal.removeEventListener('abort', onAbort)
       resolve()
     }, ms)
-    signal?.addEventListener('abort', onAbort, { once: true })
+    signal.addEventListener('abort', onAbort, { once: true })
   })
 }

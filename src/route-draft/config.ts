@@ -21,6 +21,7 @@
 
 import { boundedNumberSchema } from '../shared/config-schema.js'
 import { clampNumber } from '../shared/numbers.js'
+import { presentString } from '../shared/strings.js'
 import type { Propulsion, PluginConfig } from '../shared/types.js'
 
 /** Propulsion kind, re-exported from shared types so config consumers keep one import. */
@@ -190,10 +191,8 @@ export function normalizeRouteDraftConfig (raw: unknown): RouteDraftConfig {
   const c = (typeof raw === 'object' && raw !== null) ? raw as Record<string, unknown> : {}
   return {
     routeDraftEnabled: c.routeDraftEnabled === true,
-    routeDraftOpenRouterApiKey: typeof c.routeDraftOpenRouterApiKey === 'string' ? c.routeDraftOpenRouterApiKey.trim() : '',
-    routeDraftModel: typeof c.routeDraftModel === 'string' && c.routeDraftModel.trim() !== ''
-      ? c.routeDraftModel
-      : DEFAULT_ROUTE_DRAFT_MODEL,
+    routeDraftOpenRouterApiKey: presentString(c.routeDraftOpenRouterApiKey) ?? '',
+    routeDraftModel: presentString(c.routeDraftModel) ?? DEFAULT_ROUTE_DRAFT_MODEL,
     routeDraftMaxCallsPerDay: clampNumber(
       c.routeDraftMaxCallsPerDay, MIN_MAX_CALLS_PER_DAY, MAX_MAX_CALLS_PER_DAY, DEFAULT_MAX_CALLS_PER_DAY, true
     ),

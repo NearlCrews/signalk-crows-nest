@@ -25,7 +25,7 @@ import { join } from 'node:path'
 import type { IRouter } from 'express'
 import { createEncDirectClient } from '../inputs/noaa-enc/enc-direct-client.js'
 import { normalizeRouteDraftConfig, routeDraftConfigSchema } from '../route-draft/config.js'
-import { createRouteDraftRouter } from '../route-draft/endpoint.js'
+import { createRouteDraftRouter, modelsForRequest } from '../route-draft/endpoint.js'
 import type { RouteDraftService } from '../route-draft/endpoint.js'
 import { OpenRouterClient } from '../route-draft/openrouter.js'
 import { BudgetTracker } from '../route-draft/budget.js'
@@ -212,7 +212,7 @@ export function createPlugin (
       log: { debug: (m) => { app.debug(m) }, error: (m) => { app.error(m) } }
     }).then((budget) => {
       if (mine === routeDraftGeneration) {
-        routeDraftService = { llm, budget, enc, config: rd }
+        routeDraftService = { llm, budget, enc, config: rd, models: modelsForRequest(rd.routeDraftModel) }
         app.debug("Crow's Nest route drafting ready")
       }
     }).catch((err) => {

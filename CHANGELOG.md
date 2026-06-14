@@ -30,6 +30,11 @@ charted-depth capability that backs its safety check.
   query that the route-draft depth check reads as an internal capability. The
   check spans the harbour through general usage bands, so harbour and river
   passages are covered, not only open-coast ones.
+- The route-draft endpoint reports each OpenRouter failure with guidance the
+  operator can act on: an invalid or missing key points at the plugin key, an
+  empty credit balance points at the OpenRouter dashboard, and a moderation or
+  permission block is reported as a refused request to rephrase. A moderation
+  block is no longer mislabeled as an authentication error.
 
 ### Changed
 

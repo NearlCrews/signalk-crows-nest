@@ -22,6 +22,7 @@ import { isInUsWaters } from '../shared/us-waters.js'
 import { finiteOrUndefined, isFiniteNumber } from '../shared/numbers.js'
 import { presentString } from '../shared/strings.js'
 import { METERS_PER_NAUTICAL_MILE } from '../shared/length.js'
+import { MS_PER_SECOND } from '../shared/time.js'
 import { toPosition } from '../geo/position-utilities.js'
 import type { Position } from '../shared/types.js'
 import type { EncDirectClient } from '../inputs/noaa-enc/enc-direct-client.js'
@@ -81,7 +82,15 @@ const MAX_NAME = 80
 /** Max length of the route note. The schema and the parser share it. */
 const MAX_NOTE = 600
 
-/** The structured-output schema. The model returns only turning waypoints; flags come from the check. */
+/**
+ * The structured-output schema. The model returns only turning waypoints; flags
+ * come from the check. The optional top-level fields, plus the range and length
+ * keywords, suit the Gemini default and fallbacks, which honor them under strict
+ * mode. An OpenAI-family model set as a custom routeDraftModel would reject this
+ * strict schema with a 400 (it requires every property to appear in `required`,
+ * and rejects those keywords). The parser re-clamps every bound, so nothing here
+ * relies on server-side enforcement.
+ */
 const ROUTE_SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -114,7 +123,7 @@ const ROUTE_SCHEMA = {
 }
 
 /** The request's model list: the configured model first, then the known-good fallbacks, deduped. */
-function modelsForRequest (configuredModel: string): string[] {
+export function modelsForRequest (configuredModel: string): string[] {
   return [...new Set([configuredModel, ...FALLBACK_MODELS])]
 }
 
@@ -128,6 +137,12 @@ export interface RouteDraftService {
   enc: EncDirectClient
   /** The resolved route-draft configuration (vessel, fuel, and routing settings). */
   config: RouteDraftConfig
+  /**
+   * The request's deduped model list (configured model first, then the
+   * known-good fallbacks), computed once at construction since the configured
+   * model is fixed for the service's lifetime.
+   */
+  models: string[]
 }
 
 /** The stable five-case error vocabulary the Binnacle client maps: budget, no-route, model-error, unauthorized, and bad-request. */
@@ -346,17 +361,34 @@ export function parseDraftedRoute (
   }
 }
 
-/** Map an OpenRouterError onto the contract code. Exported for the endpoint trust-boundary tests. */
+/**
+ * Map an OpenRouterError onto the contract code. Only HTTP 401, an invalid or
+ * missing key, is an auth failure. OpenRouter's 403 is a moderation or
+ * permission block and 402 is an empty credit balance, neither of which the
+ * navigator fixes by re-checking the key, so those, the transient-exhausted
+ * statuses, the unusable finish reasons (length, content_filter, error, empty),
+ * and transport faults all map to model-error. Exported for the endpoint
+ * trust-boundary tests.
+ */
 export function openRouterErrorCode (err: OpenRouterError): { status: number, error: DraftErrorCode } {
-  if (err.kind === 'http') {
-    // 401 and a permission 403 are auth; 402 (out of credits) and everything
-    // else terminal is a model error the navigator cannot fix by retrying soon.
-    if (err.status === 401 || err.status === 403) return { status: err.status, error: 'unauthorized' }
-    return { status: 502, error: 'model-error' }
-  }
-  // finish-length, finish-content-filter, finish-error, empty-completion, and
-  // transport are all unusable completions, not empty routes.
+  if (err.kind === 'http' && err.status === 401) return { status: 401, error: 'unauthorized' }
   return { status: 502, error: 'model-error' }
+}
+
+/**
+ * The user-facing message for a terminal OpenRouter failure, naming the cause an
+ * operator can act on. A 401 is a bad or missing key, a 402 is an empty credit
+ * balance, and a 403 is a moderation or permission block (not auth), so each
+ * gets a distinct message rather than the generic fallback. Exported for the
+ * endpoint trust-boundary tests.
+ */
+export function draftFailureMessage (err: OpenRouterError): string {
+  if (err.kind === 'http') {
+    if (err.status === 401) return 'OpenRouter rejected the configured API key. An administrator must check the key in the Crow\'s Nest plugin.'
+    if (err.status === 402) return 'The OpenRouter account is out of credits. Add credits in the OpenRouter dashboard, then try again.'
+    if (err.status === 403) return 'The AI request was refused, possibly blocked by content moderation. Try rephrasing the passage request.'
+  }
+  return `The AI service failed: ${err.message}`
 }
 
 /** Race a promise against a deadline, resolving to `onTimeout()` if the deadline wins. */
@@ -368,7 +400,9 @@ async function withDeadline<T> (work: Promise<T>, ms: number, onTimeout: () => T
   try {
     return await Promise.race([work, timeout])
   } finally {
-    if (timer !== undefined) clearTimeout(timer)
+    // The Promise executor runs synchronously, so timer is always set by here;
+    // clearTimeout also tolerates undefined, so the call needs no guard.
+    clearTimeout(timer)
   }
 }
 
@@ -400,21 +434,22 @@ async function handleDraft (
       system: SYSTEM_PROMPT,
       user: buildUserPrompt(parsed, config),
       responseFormat: { type: 'json_schema', json_schema: { name: 'route_draft', strict: true, schema: ROUTE_SCHEMA } },
-      models: modelsForRequest(config.routeDraftModel),
+      models: service.models,
       provider: { require_parameters: true },
       temperature: ROUTE_DRAFT_TEMPERATURE,
       maxTokens: MAX_OUTPUT_TOKENS,
-      abortSignal: AbortSignal.timeout(Math.max(1000, deadlineMs - Date.now()))
+      abortSignal: AbortSignal.timeout(Math.max(MS_PER_SECOND, deadlineMs - Date.now()))
     })
   } catch (err) {
     if (err instanceof OpenRouterError) {
       const mapped = openRouterErrorCode(err)
-      fail(res, mapped.status, mapped.error, `The AI service failed: ${err.message}`)
+      fail(res, mapped.status, mapped.error, draftFailureMessage(err))
       return
     }
     // An unexpected (non-OpenRouter) throw keeps its detail server-side rather
-    // than reflecting an internal string back to the caller.
-    app.error(`route-draft LLM call failed: ${String(err)}`)
+    // than reflecting an internal string back to the caller. Log the stack when
+    // present, since it is the only diagnostic for an unexpected failure path.
+    app.error(`route-draft LLM call failed: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`)
     fail(res, 502, 'model-error', 'The AI request failed unexpectedly.')
     return
   }
