@@ -53,6 +53,54 @@ test('listPointsOfInterest renders the bbox in south,west,north,east order', asy
   )
 })
 
+test('listCoastlineWays issues a coastline out-geom query and parses geometry into points', async () => {
+  await withMockFetch(
+    () => jsonResponse({
+      elements: [
+        {
+          type: 'way',
+          id: 10,
+          geometry: [{ lat: 50, lon: 1 }, { lat: 50.1, lon: 1.1 }, { lat: 50.2, lon: 1.2 }]
+        },
+        // A way with a single valid vertex is dropped: a coastline segment
+        // needs at least two points.
+        { type: 'way', id: 11, geometry: [{ lat: 51, lon: 2 }] }
+      ]
+    }),
+    async (calls) => {
+      const client = createOverpassClient(endpoint, silentLog, fastLimits)
+      const ways = await client.listCoastlineWays(sampleBbox)
+      const body = String(calls.lastInit?.body)
+      assert.ok(body.includes('"natural"="coastline"'), `expected a coastline query, got ${body}`)
+      assert.ok(body.includes('out geom;'), `expected an out geom query, got ${body}`)
+      // Points are ordered [lon, lat]; the single-vertex way is dropped.
+      assert.deepEqual(ways, [
+        { points: [[1, 50], [1.1, 50.1], [1.2, 50.2]] }
+      ])
+    }
+  )
+})
+
+test('an already-aborted caller signal aborts the request', async () => {
+  await withMockFetch(
+    (_callIndex, init) => {
+      if (init?.signal?.aborted === true) {
+        throw new DOMException('The operation was aborted', 'AbortError')
+      }
+      return jsonResponse({ elements: [] })
+    },
+    async (calls) => {
+      const client = createOverpassClient(endpoint, silentLog, { ...fastLimits, maxRetries: 0 })
+      await assert.rejects(
+        () => client.listCoastlineWays(sampleBbox, AbortSignal.abort()),
+        (error: unknown) => error instanceof DOMException && error.name === 'AbortError'
+      )
+      // The combined signal handed to fetch carried the caller's aborted state.
+      assert.equal(calls.lastInit?.signal?.aborted, true)
+    }
+  )
+})
+
 test('every request sends a descriptive User-Agent header', async () => {
   await withMockFetch(
     () => jsonResponse({ elements: [] }),

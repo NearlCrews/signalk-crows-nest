@@ -90,9 +90,11 @@ const REQUEST_TIMEOUT_MS = 70 * MS_PER_SECOND
  * Maximum span, in degrees, of either edge of a queried bounding box. A wider
  * box is clamped around its center: a single Overpass query stays small enough
  * to finish inside its runtime budget, and distant points of interest are
- * picked up on a later request once the vessel has moved.
+ * picked up on a later request once the vessel has moved. Exported so the
+ * coastline helper tiles a wide box to exactly this span, defeating the clamp
+ * rather than silently truncating coverage.
  */
-const MAX_BBOX_SPAN_DEGREES = 2
+export const MAX_BBOX_SPAN_DEGREES = 2
 
 /**
  * Rate-limiting defaults. The public Overpass endpoints publish a strict usage
@@ -111,20 +113,37 @@ const DEFAULTS: RateLimitOptions = {
   maxRetryAfterMs: 300_000
 }
 
+/** One coastline way (a `natural=coastline` line) as an ordered vertex list. */
+export interface CoastlineWay {
+  /** Ordered [lon, lat] vertices of one coastline way. */
+  points: number[][]
+}
+
 /** Public surface of the Overpass client. */
 export interface OverpassClient {
   /**
    * List elements within a bounding box whose `seamark:type` tag matches the
    * given alternation regex, plus every `leisure=marina`. Resolves with a
-   * normalized array (possibly empty). Rejects on any failure.
+   * normalized array (possibly empty). Rejects on any failure. An optional
+   * caller `signal` lets a deadline (the route-draft check) cancel an in-flight
+   * request.
    */
-  listPointsOfInterest: (bbox: Bbox, seamarkRegex: string) => Promise<OverpassElement[]>
+  listPointsOfInterest: (bbox: Bbox, seamarkRegex: string, signal?: AbortSignal) => Promise<OverpassElement[]>
   /**
    * Fetch one element by its typed id (`node/123`, `way/456`,
    * `relation/789`). Resolves with the element, or `undefined` when the query
-   * succeeds but the element no longer exists. Rejects on any failure.
+   * succeeds but the element no longer exists. Rejects on any failure. An
+   * optional caller `signal` lets a deadline cancel an in-flight request.
    */
-  getById: (typedId: string) => Promise<OverpassElement | undefined>
+  getById: (typedId: string, signal?: AbortSignal) => Promise<OverpassElement | undefined>
+  /**
+   * List the `natural=coastline` ways within a bounding box as ordered vertex
+   * lists, for the route-draft land check. Resolves with an array (possibly
+   * empty); ways with fewer than two valid vertices are dropped. Rejects on
+   * any failure. An optional caller `signal` lets a deadline cancel an
+   * in-flight request.
+   */
+  listCoastlineWays: (bbox: Bbox, signal?: AbortSignal) => Promise<CoastlineWay[]>
   /**
    * Abort any in-flight requests and stop retrying. Call this from
    * plugin.stop so a late response cannot record onto a later run's state.
@@ -182,6 +201,22 @@ function buildDetailQuery (type: OsmElementType, id: number): string {
 }
 
 /**
+ * Build the Overpass QL for a coastline-way query. `out geom` returns, per way,
+ * a `geometry` array of `{ lat, lon }` vertices, which the route-draft land
+ * check consumes as polylines. The bbox is clamped to {@link
+ * MAX_BBOX_SPAN_DEGREES}, the same clamp the list query applies; the coastline
+ * helper tiles a wide box so the clamp never silently truncates coverage.
+ */
+function buildCoastlineQuery (bbox: Bbox): string {
+  const { south, west, north, east } = clampBbox(bbox)
+  return (
+    `[out:json][timeout:${LIST_QUERY_TIMEOUT_SECONDS}][bbox:${south},${west},${north},${east}];` +
+    'way["natural"="coastline"];' +
+    'out geom;'
+  )
+}
+
+/**
  * Parse a typed OSM id (`node/123`) into its element type and numeric id.
  * Throws on a malformed id rather than issuing a guaranteed-empty query.
  */
@@ -208,6 +243,8 @@ interface OverpassWireElement {
   tags?: Record<string, string>
   /** Present only when the query requested `out ... meta;`. */
   timestamp?: string
+  /** Per-vertex geometry, present only when the query requested `out geom;`. */
+  geometry?: Array<{ lat?: number, lon?: number }>
 }
 
 /** Response body of an Overpass query. */
@@ -256,6 +293,30 @@ function parseElement (wire: OverpassWireElement): OverpassElement | null {
 }
 
 /**
+ * Parse one `out geom;` way element into a coastline way: the `geometry` array
+ * of `{ lat, lon }` vertices becomes ordered `[lon, lat]` points. Drops invalid
+ * vertices and returns null for a way left with fewer than two, so a degenerate
+ * way cannot pass as a coastline segment.
+ */
+function parseCoastlineWay (wire: OverpassWireElement): CoastlineWay | null {
+  if (wire == null || !Array.isArray(wire.geometry)) {
+    return null
+  }
+  const points: number[][] = []
+  for (const vertex of wire.geometry) {
+    const lat = vertex?.lat
+    const lon = vertex?.lon
+    if (isValidLatitude(lat) && isValidLongitude(lon)) {
+      points.push([lon, lat])
+    }
+  }
+  if (points.length < 2) {
+    return null
+  }
+  return { points }
+}
+
+/**
  * Normalize the endpoint argument into a non-empty, ordered, deduped list. A
  * single string becomes a one-element list (the long-standing single-endpoint
  * behavior). The trim, drop-blank, and dedupe pass is shared with the input
@@ -295,16 +356,20 @@ export function createOverpassClient (
   }, options)
 
   /**
-   * Run one query attempt against a single endpoint. Rejects on any HTTP,
-   * network, or parsing failure so the caller can fail over to the next.
+   * Run one raw query attempt against a single endpoint, returning the parsed
+   * `{ elements }` response body. Rejects on any HTTP, network, or parsing
+   * failure so the caller can fail over to the next endpoint. An optional
+   * caller `signal` is threaded to the HTTP client so a deadline can cancel an
+   * in-flight request.
    */
-  async function attemptQuery (
-    endpoint: string, query: string, errorPrefix: string
-  ): Promise<OverpassElement[]> {
+  async function attemptRawQuery (
+    endpoint: string, query: string, errorPrefix: string, signal?: AbortSignal
+  ): Promise<OverpassResponse> {
     const response = await http.fetch(endpoint, {
       method: 'POST',
       headers: BASE_HEADERS,
-      body: query
+      body: query,
+      signal
     })
 
     await assertResponseOk(response, errorPrefix)
@@ -313,33 +378,25 @@ export function createOverpassClient (
     if (!Array.isArray(data?.elements)) {
       throw new Error('Overpass response missing the elements array')
     }
-
-    const parsed: OverpassElement[] = []
-    for (const wire of data.elements) {
-      const element = parseElement(wire)
-      if (element !== null) {
-        parsed.push(element)
-      }
-    }
-    const skipped = data.elements.length - parsed.length
-    if (skipped > 0) {
-      log.debug(`Skipped ${skipped} malformed Overpass element(s)`)
-    }
-    return parsed
+    return data
   }
 
   /**
    * Run an Overpass QL query across the endpoint list, failing over to the next
    * mirror on any failure (a network error after the per-endpoint retries are
-   * exhausted, a non-ok HTTP status, or a malformed body). The first endpoint
-   * that answers wins; when every endpoint fails, the last error is rethrown.
+   * exhausted, a non-ok HTTP status, or a malformed body), and return the raw
+   * `{ elements }` body. The first endpoint that answers wins; when every
+   * endpoint fails, the last error is rethrown. This is the single HTTP plumbing
+   * path every public method builds on; each parses the elements its own way.
    */
-  async function runQuery (query: string, errorPrefix: string): Promise<OverpassElement[]> {
+  async function runRawQuery (
+    query: string, errorPrefix: string, signal?: AbortSignal
+  ): Promise<OverpassResponse> {
     let lastError: unknown
     for (let i = 0; i < endpointList.length; i++) {
       const endpoint = endpointList[i]
       try {
-        return await attemptQuery(endpoint, query, errorPrefix)
+        return await attemptRawQuery(endpoint, query, errorPrefix, signal)
       } catch (error) {
         lastError = error
         if (i < endpointList.length - 1) {
@@ -353,32 +410,84 @@ export function createOverpassClient (
     throw lastError
   }
 
+  /**
+   * Map a raw response's elements through `parse`, dropping the ones it rejects
+   * (returns null) and logging how many were skipped. The shared parse-and-count
+   * loop behind both list-shaped methods.
+   */
+  function collectElements<T> (
+    data: OverpassResponse, parse: (wire: OverpassWireElement) => T | null, skipLabel: string
+  ): T[] {
+    const elements = data.elements ?? []
+    const parsed: T[] = []
+    for (const wire of elements) {
+      const item = parse(wire)
+      if (item !== null) {
+        parsed.push(item)
+      }
+    }
+    const skipped = elements.length - parsed.length
+    if (skipped > 0) {
+      log.debug(`Skipped ${skipped} ${skipLabel}`)
+    }
+    return parsed
+  }
+
   async function listPointsOfInterest (
-    bbox: Bbox, seamarkRegex: string
+    bbox: Bbox, seamarkRegex: string, signal?: AbortSignal
   ): Promise<OverpassElement[]> {
     try {
-      return await runQuery(
+      const data = await runRawQuery(
         buildListQuery(bbox, seamarkRegex),
-        'Overpass list request failed'
+        'Overpass list request failed',
+        signal
       )
+      return collectElements(data, parseElement, 'malformed Overpass element(s)')
     } catch (error) {
       log.debug(`Overpass list failed for ${JSON.stringify(bbox)}: ${String(error)}`)
       throw error
     }
   }
 
-  async function getById (typedId: string): Promise<OverpassElement | undefined> {
+  async function getById (
+    typedId: string, signal?: AbortSignal
+  ): Promise<OverpassElement | undefined> {
     const { type, id } = parseTypedId(typedId)
     try {
-      const elements = await runQuery(
+      const data = await runRawQuery(
         buildDetailQuery(type, id),
-        `Overpass detail request failed for ${typedId}`
+        `Overpass detail request failed for ${typedId}`,
+        signal
       )
       // An empty result is the API answering normally: the element has been
       // deleted from OpenStreetMap. The source turns this into a "not found".
-      return elements[0]
+      // Take the first element that parses, matching the prior parse-then-pick
+      // semantics rather than parsing only the first wire element.
+      for (const wire of data.elements ?? []) {
+        const element = parseElement(wire)
+        if (element !== null) {
+          return element
+        }
+      }
+      return undefined
     } catch (error) {
       log.debug(`Overpass detail failed for ${typedId}: ${String(error)}`)
+      throw error
+    }
+  }
+
+  async function listCoastlineWays (
+    bbox: Bbox, signal?: AbortSignal
+  ): Promise<CoastlineWay[]> {
+    try {
+      const data = await runRawQuery(
+        buildCoastlineQuery(bbox),
+        'Overpass coastline request failed',
+        signal
+      )
+      return collectElements(data, parseCoastlineWay, 'coastline way(s) with too few valid vertices')
+    } catch (error) {
+      log.debug(`Overpass coastline failed for ${JSON.stringify(bbox)}: ${String(error)}`)
       throw error
     }
   }
@@ -386,6 +495,7 @@ export function createOverpassClient (
   return {
     listPointsOfInterest,
     getById,
+    listCoastlineWays,
     close: () => { http.close() }
   }
 }

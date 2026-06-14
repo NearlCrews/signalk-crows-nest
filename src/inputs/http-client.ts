@@ -203,7 +203,10 @@ export interface HttpClient {
    * Run one request through the queue, retrying with exponential backoff that
    * honors Retry-After on 429 and 503. Resolves with the final Response;
    * non-ok responses are returned to the caller, which typically routes them
-   * through {@link assertResponseOk}.
+   * through {@link assertResponseOk}. A caller-supplied `init.signal` is
+   * combined with the per-request timeout and the plugin-stop close controller,
+   * so the caller's deadline, the timeout, and plugin stop can each abort the
+   * request; omit it for the prior timeout-and-close behavior.
    */
   fetch: (url: string, init: RequestInit) => Promise<Response>
   /**
@@ -256,12 +259,21 @@ export function createHttpClient (
     let attempt = 0
     for (;;) {
       try {
+        // The per-request timeout and plugin-stop close-controller always abort
+        // the request. A caller-supplied `init.signal` (a route-draft deadline,
+        // say) is combined in too when present, so all three can cancel an
+        // in-flight fetch. When the caller passes none, the behavior is exactly
+        // the prior two-signal `AbortSignal.any`.
+        const abortSignals = [
+          AbortSignal.timeout(config.requestTimeoutMs),
+          closeController.signal
+        ]
+        if (init.signal != null) {
+          abortSignals.push(init.signal)
+        }
         const response = await fetch(url, {
           ...init,
-          signal: AbortSignal.any([
-            AbortSignal.timeout(config.requestTimeoutMs),
-            closeController.signal
-          ])
+          signal: AbortSignal.any(abortSignals)
         })
 
         if (!RETRYABLE_STATUSES.has(response.status) || attempt >= limits.maxRetries) {
