@@ -84,6 +84,12 @@ const LEG_DIMENSIONS: readonly Dimension[] = ['depth', 'land']
  * rule). The depth-authority pass drops these from a superseded depth provider so
  * its reading cannot contradict the higher source's, regardless of how many
  * dimensions the superseded provider declares.
+ *
+ * Including 'land' is sound only while every superseded depth provider emits land
+ * solely as drying-or-above-datum (EMODnet does). A `land` flag can also be a
+ * genuine land-area or coastline crossing, which is NOT depth-derived, so a future
+ * depth-capable provider that also emits genuine land crossings must distinguish
+ * drying-as-land from coastline land before relying on this set.
  */
 const DEPTH_VERDICT_KINDS: ReadonlySet<LegFlag['kind']> = new Set<LegFlag['kind']>(['shallow', 'land'])
 

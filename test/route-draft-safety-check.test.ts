@@ -629,6 +629,11 @@ test('depth-authority: a lower depth provider is NOT suppressed when the higher 
   const shallow = result.flags.filter((f) => f.kind === 'shallow')
   // The higher provider returned nodata but still emitted its own shallow flag
   // (a synthetic always does); it is not the authority, so it does not suppress
-  // the lower. The lower provider IS the authority and its flag survives.
+  // the lower. The lower provider IS the authority and its flag survives. Neither
+  // flag is dropped: a non-authoritative higher provider keeps its own readings
+  // (it is never superseded, being highest precedence), and the lower provider,
+  // as the authority, is not superseded either. Both survive, so the count is two.
+  assert.equal(shallow.length, 2, 'neither provider is suppressed: both depth flags survive')
   assert.ok(shallow.some((f) => /LOW shallow reading/.test(f.message)), 'the lower provider owns depth and its flag survives')
+  assert.ok(shallow.some((f) => /HIGH no-data reading/.test(f.message)), 'the non-authoritative higher provider keeps its own flag')
 })
