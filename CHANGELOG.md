@@ -45,6 +45,9 @@ charted-depth capability that backs its safety check.
   Advanced section. The Route drafting section gains the same treatment, and its
   field name now leads its hint visually. New shared `Fieldset` and `Disclosure`
   panel primitives back the grouping.
+- The Alerts and Route drafting sections now start collapsed, so the panel opens
+  compact and the operator expands a section when wanted. The Data sources
+  section still defaults open.
 - The route-draft endpoint and the status route now share one admin gate that
   fails closed: if the server admin middleware cannot be installed, neither
   route mounts, so the budget-spending endpoint is never left ungated.

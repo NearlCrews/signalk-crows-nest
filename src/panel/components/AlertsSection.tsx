@@ -4,11 +4,11 @@
  * section. These are source-agnostic: they alarm on hazards from every
  * enabled data source.
  *
- * Collapsed by default so the panel reads cleanly when no alarm is
- * configured (a vessel that just wants the chart overlay should not
- * scroll past two empty alarm fieldsets to get to the footer). The
- * fieldsets stay mounted while collapsed so an in-progress numeric
- * draft survives a collapse-and-expand round trip.
+ * Collapsed by default so the panel reads cleanly on open (a vessel
+ * that just wants the chart overlay should not scroll past the alarm
+ * fieldsets to get to the footer). The fieldsets stay mounted while
+ * collapsed so an in-progress numeric draft survives a
+ * collapse-and-expand round trip.
  */
 
 import type * as React from 'react'
@@ -35,17 +35,11 @@ interface Props {
  * `dispatch` both keep their identity across a tick.
  */
 export default memo(function AlertsSection ({ state, dispatch }: Props): React.ReactElement {
-  // Default-expanded only when the section has nothing to reveal: if
-  // either alarm is already enabled, open the section so the operator
-  // can see the live settings at a glance. SectionBox reads
-  // defaultExpanded once on mount, which matches the
-  // initial-state-from-saved-config semantic we want here.
-  const alertsConfigured =
-    state.enableProximityAlarms === true ||
-    state.enableRouteHazardScan === true ||
-    state.enableBridgeAirDraftCheck === true
+  // Collapsed by default so the panel reads cleanly on open. The
+  // operator expands Alerts when they want to configure an alarm; we no
+  // longer auto-open it from saved config.
   return (
-    <SectionBox cardId='alerts' title='Alerts' defaultExpanded={alertsConfigured}>
+    <SectionBox cardId='alerts' title='Alerts' defaultExpanded={false}>
       <ProximityAlarmFields
         enabled={state.enableProximityAlarms === true}
         radiusMeters={state.proximityAlarmRadiusMeters ?? DEFAULT_PROXIMITY_ALARM_RADIUS_METERS}

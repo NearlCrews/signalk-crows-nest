@@ -70,8 +70,11 @@ export default memo(function RouteDraftingSection ({ state, dispatch }: Props): 
   const config = normalizeRouteDraftConfig(state)
   const enabled = config.routeDraftEnabled
 
+  // Collapsed by default so the panel reads cleanly on open. The
+  // operator expands Route drafting when they want to set it up; we no
+  // longer auto-open it from the saved enable flag.
   return (
-    <SectionBox cardId='route-drafting' title='Route drafting' defaultExpanded={enabled}>
+    <SectionBox cardId='route-drafting' title='Route drafting' defaultExpanded={false}>
       <ToggleFieldset
         title='AI route drafting'
         toggleLabel='Draft passages from a plain-language request (admin only)'

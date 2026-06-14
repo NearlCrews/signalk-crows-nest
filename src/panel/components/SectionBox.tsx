@@ -8,16 +8,15 @@
  * The outer `<section>` carries `aria-labelledby` referencing the
  * heading so the landmark has an accessible name. Sections collapse
  * independently. The Data sources section defaults open (the
- * operator's primary work area); the Alerts section defaults closed
- * unless an alarm is configured. Children stay mounted (visibility
- * flips via CSS) so an in-progress NumberField draft inside a child
- * card survives a collapse.
+ * operator's primary work area); the Alerts and Route drafting
+ * sections default closed. Children stay mounted (visibility flips via
+ * CSS) so an in-progress NumberField draft inside a child card
+ * survives a collapse.
  *
  * `defaultExpanded` is read ONCE on mount (the standard `useState`
- * initial-value semantic), which is intentional: callers that want to
- * derive the initial state from saved config (e.g. AlertsSection
- * computing `enableProximityAlarms || enableRouteHazardScan`) compute
- * it at first render and the user controls the section thereafter.
+ * initial-value semantic), which is intentional: the prop sets the
+ * initial state at first render and the user controls the section
+ * thereafter.
  */
 
 import type * as React from 'react'
