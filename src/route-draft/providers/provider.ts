@@ -30,11 +30,13 @@ export type Dimension = 'depth' | 'land' | 'hazards'
 
 /**
  * Provider {@link LegSafetyProvider.precedence} ranks, LOWER is HIGHER
- * authority. ENC, the authoritative chart source, ranks above OpenSeaMap; the
- * gap between them is where EMODnet will sit (e.g. 10). Named here so the
- * ordering lives in one place rather than as magic numbers in each provider.
+ * authority. ENC, the authoritative chart source, ranks above EMODnet's modeled
+ * bathymetry, which ranks above OpenSeaMap. Named here so the ordering lives in
+ * one place rather than as magic numbers in each provider. EMODnet sits at 10,
+ * between ENC's authoritative MLLW charted depth and OpenSeaMap's coastline.
  */
 export const ENC_PRECEDENCE = 0
+export const EMODNET_PRECEDENCE = 10
 export const OPENSEAMAP_PRECEDENCE = 20
 
 /** A covered leg with its global index and endpoints, handed to checkHazards. */
