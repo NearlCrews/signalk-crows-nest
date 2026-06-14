@@ -36,8 +36,12 @@ import { checkLegs } from './safety-check.js'
 import type { LegFlag } from './safety-check.js'
 import { estimateFuel, routeDistanceMeters } from './fuel.js'
 
-/** Usage bands the depth check queries, finest first. Best-band picks the finest with coverage. */
-const DEPTH_BANDS: ScaleBand[] = ['approach', 'coastal', 'general']
+/**
+ * Usage bands the depth check queries, finest first. Best-band picks the finest with coverage and,
+ * where bands overlap, the shallower DRVAL1. Harbour is included so harbour and river passages get
+ * charted coverage; berthing is excluded because its dense polygons add seconds for no added reach.
+ */
+const DEPTH_BANDS: ScaleBand[] = ['harbour', 'approach', 'coastal', 'general']
 
 /** Half-width of the point-hazard corridor either side of a leg, about a quarter nautical mile. */
 const CORRIDOR_HALF_WIDTH_METERS = 0.25 * METERS_PER_NAUTICAL_MILE
