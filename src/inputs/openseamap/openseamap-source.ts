@@ -14,30 +14,24 @@
 
 import { LRUCache } from 'lru-cache'
 import type { OverpassClient, OverpassElement } from './overpass-client.js'
-import { renderOpenSeaMapDetail, tagValue } from './openseamap-detail.js'
+import { renderOpenSeaMapDetail } from './openseamap-detail.js'
 import { buildOpenSeaMapSections } from './openseamap-sections.js'
 import { elementMarking, seamarkRegex } from './seamark-mapping.js'
-import { parseOsmClearanceMeters } from './clearance.js'
 import { fetchDetailRecorded, type PoiSource } from '../poi-source.js'
 import { createBboxDebounceCache } from '../../shared/bbox-debounce.js'
 import { MAX_BBOX_CACHE_ENTRIES, MAX_POI_CACHE_ENTRIES } from '../../shared/cache.js'
 import { splitOnFirstUnderscore } from '../../shared/namespaced-id.js'
-import type { Bbox, PoiDetailView, PoiSummary, PoiType } from '../../shared/types.js'
+import type { Bbox, PoiDetailView, PoiSummary } from '../../shared/types.js'
 import { filterByMinimumYear } from '../../shared/year-filter.js'
 import type { PluginStatus } from '../../status/plugin-status.js'
-
 import { OPENSEAMAP_SOURCE_ID } from '../../shared/source-ids.js'
-
-/**
- * Attribution credit for OpenStreetMap data. The Open Database License (ODbL)
- * requires this to be visible wherever the data is shown; it is published on
- * every produced note as `properties.attribution` for the SignalK client to
- * render.
- */
-const OPENSEAMAP_ATTRIBUTION = '© OpenStreetMap contributors (ODbL)'
-
-/** Prefix of an OpenStreetMap element page, completed with `type/id`. */
-const OSM_ELEMENT_URL_PREFIX = 'https://www.openstreetmap.org/'
+import {
+  OPENSEAMAP_ATTRIBUTION,
+  attachClearance,
+  elementName,
+  elementOsmUrl,
+  toSummary
+} from './element-summary.js'
 
 /** Dependencies for {@link createOpenSeaMapSource}. */
 export interface OpenSeaMapSourceConfig {
@@ -67,21 +61,6 @@ export interface OpenSeaMapSourceConfig {
 }
 
 /**
- * Internal id for an element, e.g. `node_123`. The slash form (`node/123`)
- * cannot be used: SignalK serves resources at `/resources/notes/<id>`, so a
- * `/` inside the id silently splits the path and the resource 404s. The
- * underscore is URL-safe and the alarm path sanitizer already accepts it.
- */
-function elementId (element: OverpassElement): string {
-  return `${element.type}_${element.id}`
-}
-
-/** OSM element page URL, built from the original slash form OSM expects. */
-function elementOsmUrl (element: OverpassElement): string {
-  return `${OSM_ELEMENT_URL_PREFIX}${element.type}/${element.id}`
-}
-
-/**
  * Translate a registry-side id (`node_123`) back to the slash form
  * (`node/123`) the Overpass client's `getById` parses. A raw OSM numeric id
  * never contains an underscore, so splitting on the FIRST underscore is exact.
@@ -89,30 +68,6 @@ function elementOsmUrl (element: OverpassElement): string {
 function toOverpassTypedId (id: string): string {
   const split = splitOnFirstUnderscore(id)
   return split === null ? id : `${split.prefix}/${split.remainder}`
-}
-
-/**
- * A display name for an element: its `name` tag, then `seamark:name`, then a
- * type-derived fallback. Each tag is read through {@link tagValue} so a
- * whitespace-only value is rejected and falls through rather than yielding a
- * blank title, matching the detail renderer's header behaviour.
- */
-function elementName (element: OverpassElement, type: PoiType): string {
-  const name = tagValue(element.tags, 'name') ?? tagValue(element.tags, 'seamark:name')
-  return name ?? `Unnamed ${type.toLowerCase()}`
-}
-
-/**
- * Attach the OSM vertical clearance to a built POI when a clearance tag parses.
- * Called only for Bridge POIs, since the air-draft check reads
- * `verticalClearanceMeters` on bridges alone.
- */
-function attachClearance (
-  target: { verticalClearanceMeters?: number },
-  tags: Record<string, string>
-): void {
-  const clearance = parseOsmClearanceMeters(tags)
-  if (clearance !== undefined) target.verticalClearanceMeters = clearance
 }
 
 /** Build the source-agnostic detail view for an element. */
@@ -134,24 +89,6 @@ function toDetailView (element: OverpassElement): PoiDetailView {
   if (element.timestamp !== undefined) view.timestamp = element.timestamp
   if (type === 'Bridge') attachClearance(view, element.tags)
   return view
-}
-
-/** Build the list summary for an element. */
-function toSummary (element: OverpassElement): PoiSummary {
-  const { type, skIcon } = elementMarking(element.tags)
-  const summary: PoiSummary = {
-    id: elementId(element),
-    type,
-    position: { ...element.position },
-    name: elementName(element, type),
-    source: OPENSEAMAP_SOURCE_ID,
-    url: elementOsmUrl(element),
-    attribution: OPENSEAMAP_ATTRIBUTION,
-    skIcon
-  }
-  if (element.timestamp !== undefined) summary.timestamp = element.timestamp
-  if (type === 'Bridge') attachClearance(summary, element.tags)
-  return summary
 }
 
 /** Create the OpenSeaMap POI source. */
