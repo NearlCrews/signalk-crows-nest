@@ -12,7 +12,7 @@
  * leg is `Math.max(...samples)` (the value closest to zero). A POSITIVE sample is
  * an above-datum elevation (drying or land), not a depth, mirroring the ENC
  * drying-as-land rule, and is never printed as a negative depth. Each pinned
- * branch: the max-of-non-null shallowest under draft-plus-margin flags shallow
+ * branch: the max-of-the-samples shallowest under draft-plus-margin flags shallow
  * with the LAT and modeled wording, a positive sample flags land or drying and
  * never a negative depth and never a shallow flag, an empty profile reports
  * depth coverage 'nodata' with the no-data note, a hadGap profile adds the
@@ -33,15 +33,17 @@ import type { Position } from '../src/shared/types.js'
 const FROM: Position = { latitude: 43.0, longitude: 5.0 }
 const TO: Position = { latitude: 43.1, longitude: 5.0 }
 
-// draft 2 m + margin 1 m gives a 3 m draft-plus-margin contour.
-const params = {
+// draft 2 m + margin 1 m gives a 3 m draft-plus-margin contour. The provider
+// reads only draftMeters, safetyMarginMeters, and signal; the rest are the
+// interface's other required fields, set to inert valid values.
+const params: LegCheckParams = {
   waypoints: [FROM, TO],
   draftMeters: 2,
   safetyMarginMeters: 1,
   standoffNm: 0.5,
   corridorHalfWidthMeters: 500,
   bands: []
-} as unknown as LegCheckParams
+}
 
 /** A provider over a stub client that returns the given profile. */
 function provider (profile: { samples: number[], hadGap?: boolean }): ReturnType<typeof createEmodnetProvider> {
@@ -80,7 +82,7 @@ test('coversLeg is true inside the European envelope and false at a US point', (
   assert.equal(p.coversLeg(FROM, usTo), false)
 })
 
-test('shallowest is max() of the non-null samples and flags shallow under draft-plus-margin', async () => {
+test('shallowest is max() of the samples and flags shallow under draft-plus-margin', async () => {
   // Samples -2.5, -4, -8: the shallowest (closest to zero) is -2.5, so the modeled
   // depth is 2.5 m, under the 3 m draft-plus-margin contour.
   const p = provider({ samples: [-4, -2.5, -8] })
