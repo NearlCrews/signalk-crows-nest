@@ -14,6 +14,7 @@ interface Props<V extends string> {
   choices: ReadonlyArray<{ value: V, label: string }>
   value: V
   onChange: (next: V) => void
+  disabled?: boolean
 }
 
 /** A segmented choice control rendered as a fieldset of toggle buttons. */
@@ -21,7 +22,8 @@ export default function SegmentedControl<V extends string> ({
   legend,
   choices,
   value,
-  onChange
+  onChange,
+  disabled
 }: Props<V>): React.ReactElement {
   return (
     <fieldset style={S.segmented}>
@@ -33,6 +35,7 @@ export default function SegmentedControl<V extends string> ({
           aria-pressed={value === choice.value}
           style={value === choice.value ? S.segmentedBtnActive : S.segmentedBtn}
           onClick={() => onChange(choice.value)}
+          disabled={disabled}
         >
           {choice.label}
         </button>

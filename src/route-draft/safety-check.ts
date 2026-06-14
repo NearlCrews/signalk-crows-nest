@@ -56,10 +56,9 @@ import type {
   RoutePolyline
 } from '../shared/types.js'
 
-const DEPTH_SAMPLE_SPACING_NM = 0.5
-
-/** Default internal sample spacing along a leg: 0.5 nm. Not user config. */
-const DEFAULT_SAMPLE_SPACING_METERS = DEPTH_SAMPLE_SPACING_NM * METERS_PER_NAUTICAL_MILE
+// The internal depth sample spacing along a leg, 0.5 nm. Fixed, not user config: the ENC polygon
+// resolution at coastal and harbour scale makes finer spacing redundant.
+const DEFAULT_SAMPLE_SPACING_METERS = 0.5 * METERS_PER_NAUTICAL_MILE
 
 /** The ENC point-hazard layers the corridor scan reads. */
 const HAZARD_LAYERS: readonly EncLayerKey[] = ['wreck', 'obstruction', 'rock']
@@ -353,10 +352,10 @@ function nearestLandApproachMeters (
         if (!Number.isFinite(along) || !Number.isFinite(cross)) continue
         // Off the ends of the leg the perpendicular distance is not the real
         // separation, so only the on-leg span contributes a standoff reading.
-        // The bound uses rhumb leg length while projectPointOntoLeg measures
-        // great-circle along-track; this is intentionally conservative because
-        // rhumb length is >= great-circle length, so no near-end land vertex is
-        // wrongly dropped.
+        // The bound uses the rhumb leg length while projectPointOntoLeg measures
+        // great-circle along-track; for the short coastal legs this targets the two
+        // are close and the rhumb length is not the shorter, so a near-end land
+        // vertex is not wrongly dropped.
         if (along < 0 || along > legLengthMeters) continue
         if (nearest === undefined || cross < nearest) nearest = cross
       }
@@ -398,7 +397,7 @@ function hazardMessage (
   properties: Record<string, unknown>
 ): string {
   const category = categoryLabel(layerKey, properties)
-  const featureType = category !== undefined ? category : LAYER_LABEL[layerKey].toLowerCase()
+  const featureType = category ?? LAYER_LABEL[layerKey].toLowerCase()
   const parts: string[] = [featureType]
   const valsou = readNumber(properties.VALSOU)
   if (valsou !== undefined) {

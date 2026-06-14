@@ -116,7 +116,7 @@ export class BudgetTracker {
       // not reject: a rejection here would surface as a spurious draft failure
       // even though the LLM call has not been attempted yet. A persistently
       // failing write quietly weakens the cap, so log it.
-      this.opts.log?.debug(`budget state write failed: ${String(err)}`)
+      this.opts.log?.error(`budget state write failed: ${String(err)}`)
     }
   }
 }

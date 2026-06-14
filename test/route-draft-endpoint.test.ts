@@ -2,11 +2,13 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   draftFailureMessage,
+  modelsForRequest,
   openRouterErrorCode,
   parseDraftedRoute,
   parseRequest
 } from '../src/route-draft/endpoint.js'
 import { OpenRouterError } from '../src/route-draft/openrouter.js'
+import { DEFAULT_ROUTE_DRAFT_MODEL } from '../src/route-draft/config.js'
 
 /** A Boston-area chart window: [west, south, east, north]. */
 const BOUNDS: [number, number, number, number] = [-71, 42, -70, 43]
@@ -182,4 +184,20 @@ test('openRouterErrorCode maps unusable completions and transport faults to mode
   assert.deepEqual(openRouterErrorCode(new OpenRouterError(0, 'transport', 'network')), { status: 502, error: 'model-error' })
   assert.deepEqual(openRouterErrorCode(new OpenRouterError(200, 'finish-content-filter', 'filtered')), { status: 502, error: 'model-error' })
   assert.deepEqual(openRouterErrorCode(new OpenRouterError(200, 'finish-error', 'provider error')), { status: 502, error: 'model-error' })
+})
+
+// --- modelsForRequest ---------------------------------------------------------
+
+test('modelsForRequest puts the configured model first and appends the fallbacks', () => {
+  const custom = 'openai/gpt-4o'
+  const list = modelsForRequest(custom)
+  assert.equal(list[0], custom, 'the configured model leads')
+  assert.ok(list.includes('google/gemini-2.5-flash-lite'), 'the first fallback is included')
+  assert.ok(list.includes('google/gemini-2.5-flash'), 'the second fallback is included')
+})
+
+test('modelsForRequest with the default model has no duplicate and returns exactly two entries', () => {
+  const list = modelsForRequest(DEFAULT_ROUTE_DRAFT_MODEL)
+  assert.equal(list.length, 2, 'the default model is not duplicated in the fallback list')
+  assert.equal(new Set(list).size, 2, 'all entries are distinct')
 })

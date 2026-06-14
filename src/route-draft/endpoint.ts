@@ -456,7 +456,7 @@ async function handleDraft (
   // Log the model that actually served the draft and its cost, so a silent
   // fallback to a different model in the list is visible in the server log.
   app.debug(
-    `route-draft served by ${completion.model}, cost ${completion.usage.cost}, ` +
+    `route-draft served by ${completion.model}, cost $${completion.usage.cost.toFixed(6)}, ` +
     `cached tokens ${completion.usage.cachedTokens}`
   )
 

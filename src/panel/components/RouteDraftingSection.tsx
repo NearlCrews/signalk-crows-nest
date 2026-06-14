@@ -84,7 +84,7 @@ export default memo(function RouteDraftingSection ({ state, dispatch }: Props): 
             passage request into a drafted route, checked against NOAA ENC
             charted depth areas, charted land, and charted point hazards, with a
             deterministic fuel estimate. Drafting spends the OpenRouter budget
-            and needs SignalK admin access. The route is always a draft the
+            and needs Signal K admin access. The route is always a draft the
             navigator verifies on the chart before saving.
           </>
         }
@@ -142,6 +142,7 @@ export default memo(function RouteDraftingSection ({ state, dispatch }: Props): 
             choices={PROPULSION_CHOICES}
             value={config.routeDraftPropulsion}
             onChange={(propulsion) => dispatch({ type: 'setRouteDraftPropulsion', propulsion })}
+            disabled={!enabled}
           />
         </div>
         <LengthField
@@ -204,7 +205,7 @@ export default memo(function RouteDraftingSection ({ state, dispatch }: Props): 
           <NumberField
             id='ac-route-draft-cruise-speed'
             label='Cruise speed (knots)'
-            hint='Speed made good under power at cruise, used with the burn rate to derive fuel per nautical mile.'
+            hint='Speed made good under power at cruise, used with the burn rate to derive fuel per nautical mile. Leave at 0 to disable the fuel estimate.'
             value={config.routeDraftCruiseSpeedKn}
             onChange={(knots) => dispatch({ type: 'setRouteDraftCruiseSpeedKn', knots })}
             min={MIN_CRUISE_SPEED_KN}
@@ -216,7 +217,7 @@ export default memo(function RouteDraftingSection ({ state, dispatch }: Props): 
           <NumberField
             id='ac-route-draft-burn'
             label='Burn at cruise (liters per hour)'
-            hint='Fuel consumed per hour at cruise speed, in liters. Stored in liters; the fuel estimate works in liters.'
+            hint='Fuel consumed per hour at cruise speed, in liters. Stored in liters; the fuel estimate works in liters. Leave at 0 to disable the fuel estimate.'
             value={config.routeDraftBurnLitersPerHour}
             onChange={(litersPerHour) => dispatch({ type: 'setRouteDraftBurnLitersPerHour', litersPerHour })}
             min={MIN_BURN_LITERS_PER_HOUR}

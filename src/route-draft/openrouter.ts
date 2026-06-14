@@ -121,8 +121,6 @@ export interface CompleteUsage {
 export interface CompleteResult {
   text: string
   model: string
-  /** `choices[0].finish_reason`, e.g. `'stop'`. Absent in the wire body maps to `null`. */
-  finishReason: string | null
   usage: CompleteUsage
 }
 
@@ -340,7 +338,6 @@ export class OpenRouterClient {
       result: {
         text,
         model: body.model ?? this.cfg.model,
-        finishReason,
         usage: {
           promptTokens: u.prompt_tokens ?? 0,
           completionTokens: u.completion_tokens ?? 0,

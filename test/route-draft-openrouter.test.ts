@@ -51,7 +51,6 @@ test('a free-text completion sends the single model and the default max_tokens',
       assert.equal(body.response_format, undefined)
       assert.equal(body.provider, undefined)
       assert.equal(result.text, 'hello')
-      assert.equal(result.finishReason, 'stop')
     }
   )
 })

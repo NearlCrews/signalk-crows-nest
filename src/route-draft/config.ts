@@ -29,7 +29,7 @@ export type RouteDraftPropulsion = Propulsion
 
 // --- OpenRouter ---------------------------------------------------------------
 
-/** Default model slug. Gemini Flash-Lite supports strict structured outputs and is the cheapest, fastest verified route. */
+/** Default model slug. Gemini Flash-Lite supports strict structured outputs and is the cheapest, fastest verified choice. */
 export const DEFAULT_ROUTE_DRAFT_MODEL = 'google/gemini-2.5-flash-lite'
 
 /** Default daily OpenRouter call cap. Bounds calls, not dollars (see budget.ts). */
@@ -168,8 +168,8 @@ export interface RouteDraftConfig {
 }
 
 // Compile-time guard: every RouteDraftConfig field must exist as an optional wire field on
-// PluginConfig, so the runtime shape cannot gain a field the wire shape forgot. Exported so the
-// linter and noUnusedLocals treat it as used, the same witness idiom the panel POI-type groups use.
+// PluginConfig, so the runtime shape cannot gain a field the wire shape forgot.
+// Exported as a compile-time assertion: assigning true to a type that collapses to never on a key mismatch errors at this line.
 type RouteDraftKeysOnWire = keyof RouteDraftConfig extends keyof PluginConfig ? true : never
 export const ROUTE_DRAFT_CONFIG_KEYS_WITNESS: RouteDraftKeysOnWire = true
 
