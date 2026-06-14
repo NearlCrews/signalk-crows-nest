@@ -28,6 +28,15 @@ export interface LegDimensionCoverage {
 /** The dimensions a provider can supply. */
 export type Dimension = 'depth' | 'land' | 'hazards'
 
+/**
+ * Provider {@link LegSafetyProvider.precedence} ranks, LOWER is HIGHER
+ * authority. ENC, the authoritative chart source, ranks above OpenSeaMap; the
+ * gap between them is where EMODnet will sit (e.g. 10). Named here so the
+ * ordering lives in one place rather than as magic numbers in each provider.
+ */
+export const ENC_PRECEDENCE = 0
+export const OPENSEAMAP_PRECEDENCE = 20
+
 /** A covered leg with its global index and endpoints, handed to checkHazards. */
 export interface LegRef {
   leg: number
@@ -45,6 +54,16 @@ export interface LegProviderResult {
 export interface LegSafetyProvider {
   id: string
   capabilities: ReadonlySet<Dimension>
+  /**
+   * Authority rank, LOWER is HIGHER precedence: the orchestrator sorts the
+   * provider list by this field, so it drives the merge order and the
+   * cross-provider hazard dedupe (a higher-precedence provider's hazard reading
+   * is kept over a lower one's at the same charted position). ENC, the
+   * authoritative chart source, is 0; OpenSeaMap is 20, leaving a gap (e.g. 10)
+   * for EMODnet between them. Precedence is this explicit field, never the order
+   * the provider list happens to be authored in.
+   */
+  precedence: number
   /** True when this provider's footprint reaches the leg. OSM is global. */
   coversLeg: (from: Position, to: Position) => boolean
   /**
@@ -72,8 +91,10 @@ export interface LegSafetyProvider {
 
 /**
  * The active providers for one leg: every provider whose footprint reaches it.
- * Order follows the input provider list, which the orchestrator builds in
- * precedence order (ENC, then OpenSeaMap).
+ * The returned order preserves the input list order, which the orchestrator has
+ * already sorted by the explicit {@link LegSafetyProvider.precedence} field
+ * (ENC, then EMODnet later, then OpenSeaMap), so authority is the precedence
+ * field, never the order the provider list was authored in.
  */
 export function resolveProviders (
   providers: readonly LegSafetyProvider[],
@@ -86,13 +107,15 @@ export function resolveProviders (
 /**
  * The cross-provider hazard dedupe key: a lowercased hazard type word and the
  * charted position to four decimals (about 11 m), colon-joined. Both the ENC and
- * OpenSeaMap providers set this on their hazard flags, and the orchestrator
- * collapses flags sharing a key into one, keeping the first in provider
- * precedence (ENC). It lives here, called by both providers, so the precision,
- * the separator, and the lowercasing cannot drift between the two sites and
- * silently stop the same charted hazard from colliding. The ENC layer keys
- * (wreck, obstruction, rock) already match the OpenSeaMap seamark labels
- * lowercased, so the same feature reported by both yields the same key.
+ * OpenSeaMap providers set this on their hazard flags. The orchestrator dedupes
+ * CROSS-PROVIDER ONLY: a lower-precedence provider's hazard whose key a
+ * higher-precedence provider already emitted is dropped (so the ENC reading
+ * wins), but two hazards a SINGLE provider reports at the same coarse key both
+ * survive. The key lives here, called by both providers, so the precision, the
+ * separator, and the lowercasing cannot drift between the two sites and silently
+ * stop the same charted hazard from colliding. The ENC layer keys (wreck,
+ * obstruction, rock) already match the OpenSeaMap seamark labels lowercased, so
+ * the same feature reported by both yields the same key.
  */
 export function hazardDedupeKey (typeWord: string, position: Position): string {
   return `${typeWord.toLowerCase()}:${position.latitude.toFixed(4)}:${position.longitude.toFixed(4)}`

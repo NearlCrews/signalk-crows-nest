@@ -53,7 +53,7 @@ import type {
   RoutePolyline
 } from '../../shared/types.js'
 import type { LegFlag, LegCheckParams, ScanRouteCorridor } from '../safety-check.js'
-import { hazardDedupeKey } from './provider.js'
+import { hazardDedupeKey, OPENSEAMAP_PRECEDENCE } from './provider.js'
 import type {
   Dimension,
   LegRef,
@@ -173,6 +173,7 @@ export function createOpenSeaMapProvider (deps: OpenSeaMapProviderDeps): LegSafe
   return {
     id: 'openseamap',
     capabilities: OSM_CAPABILITIES,
+    precedence: OPENSEAMAP_PRECEDENCE,
     // OpenStreetMap coastline and seamark coverage is worldwide, so the provider
     // reaches every leg.
     coversLeg: () => true,

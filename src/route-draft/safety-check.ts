@@ -171,9 +171,10 @@ export async function checkLegs (
     return { flags: [], checked: false }
   }
 
-  // Provider precedence order: ENC first, then the worldwide OpenSeaMap check.
-  // Precedence drives the cross-provider hazard dedupe (the ENC reading is kept)
-  // and the flag merge order on a leg both providers cover.
+  // Build both providers, then sort by the explicit precedence field (lower is
+  // higher authority), so the merge order and the cross-provider hazard dedupe
+  // follow precedence, not the order the list was authored in. A future provider
+  // (EMODnet) slots in by its precedence rank alone.
   const providers: LegSafetyProvider[] = [
     createEncProvider({
       client: deps.client,
@@ -186,7 +187,7 @@ export async function checkLegs (
       scanRouteCorridor: deps.scanRouteCorridor,
       logger: deps.logger
     })
-  ]
+  ].sort((a, b) => a.precedence - b.precedence)
   return runOrchestrator(providers, waypoints, params, deps.logger)
 }
 
@@ -271,7 +272,11 @@ async function runOrchestrator (
   // LegSafetyProvider.checkHazards), so a provider's covered legs are split into
   // maximal runs of consecutive indices and the sweep runs once per run.
   if (anyLegRan) {
-    const hazardFlags: LegFlag[] = []
+    // Collect each provider's hazard flags as its own group, in precedence order
+    // (providers is sorted), so the dedupe stays CROSS-PROVIDER ONLY: the seen
+    // set is consulted within a provider but updated only after that provider's
+    // whole group is emitted.
+    const perProviderHazards: LegFlag[][] = []
     for (const provider of providers) {
       if (provider.checkHazards === undefined || !provider.capabilities.has('hazards')) continue
       const checkHazards = provider.checkHazards
@@ -280,27 +285,31 @@ async function runOrchestrator (
         runs.map((run) =>
           checkHazards(run.map((leg) => ({ leg, from: waypoints[leg], to: waypoints[leg + 1] })), params))
       )
-      for (const runFlags of perRun) hazardFlags.push(...runFlags)
+      perProviderHazards.push(perRun.flat())
     }
-    // Cross-provider dedupe: the same charted hazard reported by ENC and
-    // OpenSeaMap (same type, same position to four decimals) is kept once, the
-    // FIRST in provider-precedence order, which is ENC since it is processed
-    // first. A flag with no hazardKey (a `hazard` flag's only carrier, so a
-    // kind:'other' degrade note never has one) is never deduped away. The
-    // hazardKey is a transient dedupe field, so it is stripped from every
-    // returned flag and never reaches the response JSON; the flag's own kind is
-    // preserved so a degrade note stays an `other`, not relabelled a hazard.
+    // Cross-provider-ONLY dedupe. The position key is coarse (about 11 m at four
+    // decimals), which is needed to match the SAME charted feature across ENC and
+    // OpenSeaMap, but must not collapse two genuinely distinct same-type hazards a
+    // single provider reports close together. So `seen` is consulted while
+    // emitting a provider's group and only updated AFTER the group is emitted:
+    // within one provider both hazards survive, while a lower-precedence
+    // provider's hazard whose key a higher-precedence provider already emitted is
+    // dropped. A flag with no hazardKey (a kind:'other' degrade note) is never
+    // deduped away. The hazardKey is transient: it is stripped from every returned
+    // flag (so it never reaches the response JSON) and the flag's own kind is
+    // preserved, so a degrade note stays an `other` rather than being relabelled.
     const seenHazards = new Set<string>()
-    for (const flag of hazardFlags) {
-      if (flag.hazardKey !== undefined) {
-        if (seenHazards.has(flag.hazardKey)) continue
-        seenHazards.add(flag.hazardKey)
+    for (const group of perProviderHazards) {
+      const emittedKeys: string[] = []
+      for (const flag of group) {
+        if (flag.hazardKey !== undefined) {
+          if (seenHazards.has(flag.hazardKey)) continue
+          emittedKeys.push(flag.hazardKey)
+        }
+        const { hazardKey: _key, ...clean } = flag
+        flags.push(clean)
       }
-      // Strip only the transient hazardKey and keep every other field (kind,
-      // message, leg, and any future wp) by construction, so a degrade note
-      // stays its own kind and nothing leaks the dedupe key into the response.
-      const { hazardKey: _key, ...clean } = flag
-      flags.push(clean)
+      for (const key of emittedKeys) seenHazards.add(key)
     }
   }
 

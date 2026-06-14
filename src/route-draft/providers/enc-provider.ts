@@ -67,7 +67,7 @@ import type {
   QueryChartedAreas,
   ScanRouteCorridor
 } from '../safety-check.js'
-import { hazardDedupeKey } from './provider.js'
+import { ENC_PRECEDENCE, hazardDedupeKey } from './provider.js'
 import type {
   Dimension,
   LegRef,
@@ -426,6 +426,7 @@ export function createEncProvider (deps: EncProviderDeps): LegSafetyProvider {
   return {
     id: 'enc',
     capabilities: new Set<Dimension>(['depth', 'land', 'hazards']),
+    precedence: ENC_PRECEDENCE,
     coversLeg: (from, to) => isInEncCoverage(from) || isInEncCoverage(to),
     /**
      * Run one leg's charted-depth, land, and standoff check, returning its flags

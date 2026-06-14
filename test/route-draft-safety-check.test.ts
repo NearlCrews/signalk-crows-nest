@@ -16,10 +16,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { checkLegs, type LegCheckDeps, type LegCheckParams } from '../src/route-draft/safety-check.js'
+import { createEncProvider } from '../src/route-draft/providers/enc-provider.js'
+import { createOpenSeaMapProvider } from '../src/route-draft/providers/openseamap-provider.js'
 import { scanRouteCorridor } from '../src/outputs/route-hazard/route-corridor.js'
 import type { ChartedAreas, EncAreaPolygon } from '../src/inputs/noaa-enc/depth-area-query.js'
 import type { EncDirectClient, QueryRequest } from '../src/inputs/noaa-enc/enc-direct-client.js'
-import type { EncFeature, ScaleBand } from '../src/inputs/noaa-enc/enc-direct-types.js'
+import type { EncFeature, EncLayerKey, ScaleBand } from '../src/inputs/noaa-enc/enc-direct-types.js'
 import type { OverpassClient, OverpassElement, CoastlineWay } from '../src/inputs/openseamap/overpass-client.js'
 import type { Bbox, Position } from '../src/shared/types.js'
 
@@ -59,14 +61,29 @@ function encWreck (objectId: number, lon: number, lat: number): EncFeature {
   }
 }
 
-/** An OSM wreck seamark node at the given lat/lon. */
-function osmWreck (id: number, lat: number, lon: number): OverpassElement {
+/** A bare ENC point feature at the given [lon, lat], for the obstruction and rock layers. */
+function encPoint (objectId: number, lon: number, lat: number): EncFeature {
+  return {
+    type: 'Feature',
+    id: objectId,
+    geometry: { type: 'Point', coordinates: [lon, lat] },
+    properties: { OBJECTID: objectId }
+  }
+}
+
+/** An OSM seamark node of the given hazard type at the given lat/lon. */
+function osmHazard (id: number, seamarkType: string, lat: number, lon: number): OverpassElement {
   return {
     type: 'node',
     id,
-    tags: { 'seamark:type': 'wreck' },
+    tags: { 'seamark:type': seamarkType },
     position: { latitude: lat, longitude: lon }
   }
+}
+
+/** An OSM wreck seamark node at the given lat/lon. */
+function osmWreck (id: number, lat: number, lon: number): OverpassElement {
+  return osmHazard(id, 'wreck', lat, lon)
 }
 
 interface EncStub {
@@ -79,21 +96,26 @@ interface EncStub {
   sawChartedAbort: () => boolean
 }
 
+/** Point-hazard features served by the ENC stub, keyed by layer (wreck, obstruction, rock). */
+type HazardsByLayer = Partial<Record<EncLayerKey, EncFeature[]>>
+
 /**
- * An ENC stub. `depthByBand` answers the charted-area query; `wrecks` are served
- * on the wreck point-hazard layer at every band.
+ * An ENC stub. `depthByBand` answers the charted-area query; `hazards` are
+ * served per point-hazard layer at every band. An `EncFeature[]` shorthand is
+ * accepted and treated as the wreck layer, the common single-layer case.
  */
 function makeEnc (
   depthByBand: (band: ScaleBand) => ChartedAreas,
-  wrecks: EncFeature[] = []
+  hazards: EncFeature[] | HazardsByLayer = {}
 ): EncStub {
+  const byLayer: HazardsByLayer = Array.isArray(hazards) ? { wreck: hazards } : hazards
   const hazardBboxes: Bbox[] = []
   let abortSeen = false
   const client: EncDirectClient = {
     queryLayer: async ({ layerKey, bbox, signal }: QueryRequest) => {
       hazardBboxes.push(bbox)
       if (signal?.aborted === true) throw signal.reason ?? new Error('aborted')
-      return { features: layerKey === 'wreck' ? wrecks : [] }
+      return { features: byLayer[layerKey] ?? [] }
     },
     queryById: async () => undefined
   }
@@ -202,6 +224,37 @@ test('a US leg with the same wreck from ENC and OSM yields one hazard flag, the 
   assert.doesNotMatch(hazards[0].message, /OpenStreetMap-charted/)
   // The transient dedupe key never leaks into the returned flag.
   assert.equal('hazardKey' in hazards[0], false, 'hazardKey is stripped from the response')
+})
+
+test('the cross-provider hazard dedupe collapses each type (wreck, obstruction, and rock), keeping the ENC reading', async () => {
+  // One of each hazard type, charted at the same position by both providers. The
+  // ENC layer key and the OpenSeaMap seamark label lowercased agree on the dedupe
+  // key for all three, so each pair collapses to one flag and the kept flag is
+  // ENC's (never the OpenStreetMap-charted message).
+  const at = { wreck: 40.50, obstruction: 40.52, rock: 40.54 }
+  const lon = -74.0505
+  const enc = makeEnc(
+    () => ({ depthAreas: [depthArea(10)], landAreas: [] }),
+    {
+      wreck: [encWreck(9001, lon, at.wreck)],
+      obstruction: [encPoint(9002, lon, at.obstruction)],
+      rock: [encPoint(9003, lon, at.rock)]
+    }
+  )
+  const overpass = makeOverpass([], [
+    osmHazard(7001, 'wreck', at.wreck, lon),
+    osmHazard(7002, 'obstruction', at.obstruction, lon),
+    osmHazard(7003, 'rock', at.rock, lon)
+  ])
+  const result = await checkLegs(deps(enc, overpass), params({ corridorHalfWidthMeters: 1500 }))
+  const hazards = result.flags.filter((f) => f.kind === 'hazard')
+  assert.equal(hazards.length, 3, 'one flag per type, each pair collapsed across providers')
+  // Every kept flag is the ENC reading, not the OpenSeaMap one.
+  assert.equal(
+    hazards.every((f) => !/OpenStreetMap-charted/.test(f.message)),
+    true,
+    'the higher-precedence ENC reading is kept for every type'
+  )
 })
 
 test('a foreign leg is checked by OpenSeaMap and gets the collapsed depth-not-checked note', async () => {
@@ -318,4 +371,58 @@ test('non-contiguous ENC coverage runs the hazard sweep once per contiguous US r
   // foreign gap, the bug the contiguous-run split prevents.
   const distinctBboxes = new Set(enc.hazardBboxes.map((b) => JSON.stringify(b)))
   assert.equal(distinctBboxes.size, 2, 'the ENC hazard sweep ran once per contiguous US run, not once across the gap')
+})
+
+test('the providers carry the precedence the orchestrator sorts by, ENC above OpenSeaMap', () => {
+  // The factories set the explicit precedence field; lower is higher authority,
+  // and ENC must outrank OpenSeaMap. The orchestrator sorts by this field, so its
+  // dedupe and merge order follow precedence rather than construction order.
+  const enc = makeEnc(() => ({ depthAreas: [], landAreas: [] }))
+  const overpass = makeOverpass()
+  const encProvider = createEncProvider({
+    client: enc.client,
+    queryChartedAreas: enc.queryChartedAreas,
+    scanRouteCorridor
+  })
+  const osmProvider = createOpenSeaMapProvider({ client: overpass.client, scanRouteCorridor })
+  assert.ok(encProvider.precedence < osmProvider.precedence, 'ENC outranks OpenSeaMap by precedence')
+})
+
+test('the dedupe is cross-provider only: one provider keeps both close same-type hazards, a lower provider is deduped against a higher', async () => {
+  // The position key is coarse (about 11 m at four decimals), needed to match the
+  // SAME feature across providers, but it must not collapse two genuinely distinct
+  // same-type hazards a single provider reports close together.
+  const lon = -74.0505
+  // ENC reports one wreck. OSM reports THREE wrecks on the same leg:
+  //  - osm1 at the ENC position (shared key, a higher-precedence provider already
+  //    emitted it, so this one is dropped),
+  //  - osm2 and osm3 about 3 m apart at a DIFFERENT position, sharing a coarse key
+  //    with each other (40.5200) but not with ENC (40.5000). Both must survive,
+  //    because within one provider the seen set must not suppress the second.
+  const encLat = 40.50
+  const osmPairLat = 40.52
+  const enc = makeEnc(
+    () => ({ depthAreas: [depthArea(10)], landAreas: [] }),
+    [encWreck(9001, lon, encLat)]
+  )
+  const overpass = makeOverpass([], [
+    osmWreck(7001, encLat, lon), // same key as ENC, dropped cross-provider
+    osmWreck(7002, osmPairLat, lon), // distinct key from ENC
+    osmWreck(7003, osmPairLat + 0.00003, lon + 0.00003) // same coarse key as 7002
+  ])
+  const result = await checkLegs(deps(enc, overpass), params({ corridorHalfWidthMeters: 1500 }))
+  const hazards = result.flags.filter((f) => f.kind === 'hazard')
+  // ENC wreck (1) + the two distinct-from-ENC OSM wrecks (2) = 3. The OSM wreck
+  // that duplicated ENC's position is the only one dropped.
+  assert.equal(hazards.length, 3, 'within-provider close hazards both survive; only the cross-provider duplicate is dropped')
+  assert.equal(
+    hazards.filter((f) => !/OpenStreetMap-charted/.test(f.message)).length,
+    1,
+    'the ENC wreck is kept'
+  )
+  assert.equal(
+    hazards.filter((f) => /OpenStreetMap-charted/.test(f.message)).length,
+    2,
+    'both OSM wrecks that ENC did not also report survive, despite their shared coarse key'
+  )
 })
