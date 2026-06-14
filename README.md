@@ -82,6 +82,15 @@ air-draft check).
   at or below the vessel air draft (`design.airHeight` or a configured
   fallback) plus a safety margin, both as a proximity alarm as the vessel
   nears a too-low bridge and as a clearance-specific route warning ahead.
+- **AI route drafting (optional, admin only, off until you set a key)**:
+  turn a plain-language passage request into a drafted route. With an
+  OpenRouter key configured, the plugin asks the model for the turning
+  waypoints, then checks every leg in owned code against the NOAA ENC
+  charted depth-area contours, charted land, and charted point hazards, and
+  adds a deterministic fuel estimate. The route is always a draft you verify
+  on the chart before saving, it covers US ENC waters only, and the depth
+  check reads the charted depth-area contour, not the depth at every point. A
+  daily call cap bounds the OpenRouter spend.
 - **Rich point detail** rendered as plain-English HTML, with the
   source-specific attribution credit (ODbL for OSM, CC0 for NOAA, US
   Government public domain for USCG, Garmin ActiveCaptain for the base)

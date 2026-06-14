@@ -17,6 +17,8 @@ import {
 } from '../../shared/refresh-hours.js'
 import { S } from '../styles.js'
 import type { PluginConfig } from '../../shared/types.js'
+import Disclosure from './Disclosure.js'
+import Fieldset from './Fieldset.js'
 import MergeWithActiveCaptain from './MergeWithActiveCaptain.js'
 import MinimumYearField from './MinimumYearField.js'
 import NumberField from './NumberField.js'
@@ -33,37 +35,43 @@ export default function UscgLightListSource ({ state, dispatch }: Props): React.
 
   return (
     <>
-      <fieldset style={S.group}>
-        <legend style={S.groupTitle}>Refresh and freshness</legend>
-        <NumberField
-          id='ac-uscg-light-list-refresh-hours'
-          label='Refresh period (hours)'
-          hint='How often the plugin re-downloads the NAVCEN district files in the background. Longer periods reduce traffic; shorter periods pick up new aids sooner.'
-          value={state.uscgLightListRefreshHours ?? DEFAULT_REFRESH_HOURS}
-          onChange={(hours) => dispatch({ type: 'setUscgLightListRefreshHours', hours })}
-          min={MIN_REFRESH_HOURS}
-          max={MAX_REFRESH_HOURS}
-          step={1}
-          integer
+      <p style={S.hint}>
+        Imports every US Aid to Navigation record from the USCG Light List.
+        There is no layer choice; tune the refresh and merge behavior under
+        Advanced.
+      </p>
+      <Disclosure>
+        <Fieldset title='Refresh and freshness'>
+          <NumberField
+            id='ac-uscg-light-list-refresh-hours'
+            label='Refresh period (hours)'
+            hint='How often the plugin re-downloads the NAVCEN district files in the background. Longer periods reduce traffic; shorter periods pick up new aids sooner.'
+            value={state.uscgLightListRefreshHours ?? DEFAULT_REFRESH_HOURS}
+            onChange={(hours) => dispatch({ type: 'setUscgLightListRefreshHours', hours })}
+            min={MIN_REFRESH_HOURS}
+            max={MAX_REFRESH_HOURS}
+            step={1}
+            integer
+          />
+          <MinimumYearField
+            id='ac-uscg-light-list-minimum-update-year'
+            label='Earliest update year'
+            hint={'Hide records whose last USCG modification date is older than ' +
+              'this year. Leave at 0 to import every record. Records with no ' +
+              'recorded modification date are always included.'}
+            value={state.uscgLightListMinimumUpdateYear ?? DEFAULT_MINIMUM_YEAR}
+            onChange={(year) => dispatch({ type: 'setUscgLightListMinimumUpdateYear', year })}
+          />
+        </Fieldset>
+        <MergeWithActiveCaptain
+          sourceName='USCG Light List'
+          enabled={dedupeEnabled}
+          onToggleEnabled={(enabled) => dispatch({ type: 'setUscgLightListDedupe', enabled })}
+          radiusMeters={state.uscgLightListDedupeRadiusMeters}
+          onChangeRadius={(meters) => dispatch({ type: 'setUscgLightListDedupeRadius', meters })}
+          radiusInputId='ac-uscg-light-list-dedupe-radius'
         />
-        <MinimumYearField
-          id='ac-uscg-light-list-minimum-update-year'
-          label='Earliest update year'
-          hint={'Hide records whose last USCG modification date is older than ' +
-            'this year. Leave at 0 to import every record. Records with no ' +
-            'recorded modification date are always included.'}
-          value={state.uscgLightListMinimumUpdateYear ?? DEFAULT_MINIMUM_YEAR}
-          onChange={(year) => dispatch({ type: 'setUscgLightListMinimumUpdateYear', year })}
-        />
-      </fieldset>
-      <MergeWithActiveCaptain
-        sourceName='USCG Light List'
-        enabled={dedupeEnabled}
-        onToggleEnabled={(enabled) => dispatch({ type: 'setUscgLightListDedupe', enabled })}
-        radiusMeters={state.uscgLightListDedupeRadiusMeters}
-        onChangeRadius={(meters) => dispatch({ type: 'setUscgLightListDedupeRadius', meters })}
-        radiusInputId='ac-uscg-light-list-dedupe-radius'
-      />
+      </Disclosure>
     </>
   )
 }

@@ -22,9 +22,7 @@ import { bridgeBlocksVessel, clampClearanceMargin, readVesselAirDraft } from '..
 import { distanceMeters, positionToBbox, unionBbox } from '../../geo/position-utilities.js'
 import type { Bbox, CorridorPoi, PoiSummary, Position, RoutePolyline } from '../../shared/types.js'
 import { clampRouteCorridorWidth, routeCorridorWidthSchema } from '../../shared/route-corridor.js'
-
-/** Meters in a nautical mile. */
-const METERS_PER_NAUTICAL_MILE = 1852
+import { METERS_PER_NAUTICAL_MILE } from '../../shared/length.js'
 
 /**
  * How far ahead along the route, in meters, the fetch box is widened. Beyond

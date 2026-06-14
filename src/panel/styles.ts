@@ -461,7 +461,10 @@ export const S = {
   },
   label: {
     fontSize: 'var(--ac-font-body)',
-    color: 'var(--ac-text-muted)',
+    // The label takes the primary text color and a touch of weight so the
+    // field name leads the eye, with its (muted) hint reading as quiet support.
+    color: 'var(--ac-text)',
+    fontWeight: 500,
     width: 220,
     flexShrink: 0
   },
@@ -528,6 +531,27 @@ export const S = {
     letterSpacing: 0.4,
     color: 'var(--ac-text-faint)',
     margin: '0 0 8px'
+  },
+  /**
+   * Collapsible "Advanced" disclosure, built on native <details>. The summary
+   * is a 36px touch target; the body indents slightly so the disclosed group
+   * reads as nested under the summary.
+   */
+  disclosure: {
+    marginBottom: 10
+  },
+  disclosureSummary: {
+    cursor: 'pointer',
+    minHeight: 36,
+    display: 'flex',
+    alignItems: 'center',
+    fontSize: 'var(--ac-font-small)',
+    fontWeight: 600,
+    color: 'var(--ac-text-muted)',
+    userSelect: 'none'
+  },
+  disclosureBody: {
+    marginTop: 'var(--ac-space-1)'
   },
   /**
    * Inner-fieldset shell, used for the four POI-type sub-groups inside the

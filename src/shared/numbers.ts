@@ -30,6 +30,16 @@ export function finiteOrUndefined (value: unknown): number | undefined {
 }
 
 /**
+ * Type-guard form of {@link toFiniteNumber}: true when `value` is a finite
+ * number, narrowing it to `number`. The boolean twin for the request and wire
+ * validators that branch on finiteness rather than reading the value out, so a
+ * caller does not hand-roll `typeof x === 'number' && Number.isFinite(x)`.
+ */
+export function isFiniteNumber (value: unknown): value is number {
+  return toFiniteNumber(value) !== null
+}
+
+/**
  * Narrow an unknown value into a strictly positive finite `number`, or
  * return `null` when it is not. The three input modules' optional
  * config-key validators all want this exact shape (a positive merge

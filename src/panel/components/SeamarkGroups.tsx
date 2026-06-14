@@ -7,6 +7,7 @@
 import type * as React from 'react'
 import { SEAMARK_GROUP_REFS } from '../../shared/seamark-groups.js'
 import { S } from '../styles.js'
+import Fieldset from './Fieldset.js'
 
 interface Props {
   /** The currently selected seamark group ids. */
@@ -19,8 +20,7 @@ interface Props {
 export default function SeamarkGroups ({ selected, onToggle }: Props): React.ReactElement {
   return (
     <div style={S.groupsSection}>
-      <fieldset style={S.group}>
-        <legend style={S.groupTitle}>Feature groups to import</legend>
+      <Fieldset title='Feature groups to import'>
         <div style={S.checkboxGrid}>
           {SEAMARK_GROUP_REFS.map((group) => (
             <label key={group.id} style={S.checkboxLabel}>
@@ -34,7 +34,7 @@ export default function SeamarkGroups ({ selected, onToggle }: Props): React.Rea
             </label>
           ))}
         </div>
-      </fieldset>
+      </Fieldset>
       {selected.length === 0
         ? (
           <p style={S.hint}>

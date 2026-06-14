@@ -36,6 +36,39 @@ export function jsonResponse (body: unknown, status = 200, headers: Record<strin
   })
 }
 
+/** The fetch calls a {@link withMockFetch} run records: the count, the last init, and every url. */
+export interface MockFetchCalls {
+  count: number
+  lastInit?: RequestInit
+  urls: string[]
+}
+
+/**
+ * Swap in a stubbed global fetch for the duration of `fn`, then restore it. The
+ * stub records every call's init and url so a test can assert on the request.
+ * The handler receives the zero-based call index, so a multi-call test can
+ * answer each request differently.
+ */
+export async function withMockFetch (
+  handler: (callIndex: number, init?: RequestInit, url?: string) => Response | Promise<Response>,
+  fn: (calls: MockFetchCalls) => Promise<void>
+): Promise<void> {
+  const original = globalThis.fetch
+  const calls: MockFetchCalls = { count: 0, urls: [] }
+  globalThis.fetch = (async (url: unknown, init?: RequestInit): Promise<Response> => {
+    const callIndex = calls.count
+    calls.count++
+    calls.lastInit = init
+    calls.urls.push(String(url))
+    return handler(callIndex, init, String(url))
+  }) as typeof fetch
+  try {
+    await fn(calls)
+  } finally {
+    globalThis.fetch = original
+  }
+}
+
 /** Build a minimal but valid PoiDetails record for the given id. */
 export function makeDetails (id: string): PoiDetails {
   return {

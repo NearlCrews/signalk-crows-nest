@@ -14,6 +14,8 @@ import { DEFAULT_NOAA_ENC_DEBOUNCE_SECONDS } from '../../shared/bbox-debounce.js
 import { S } from '../styles.js'
 import { DEFAULT_SCALE_BAND, SCALE_BAND_LABELS, SCALE_BANDS } from '../../shared/scale-band.js'
 import type { PluginConfig } from '../../shared/types.js'
+import Disclosure from './Disclosure.js'
+import Fieldset from './Fieldset.js'
 import LabeledField from './LabeledField.js'
 import MergeWithActiveCaptain from './MergeWithActiveCaptain.js'
 import MinimumYearField from './MinimumYearField.js'
@@ -40,8 +42,7 @@ export default function NoaaEncSource ({ state, dispatch }: Props): React.ReactE
 
   return (
     <>
-      <fieldset style={S.group}>
-        <legend style={S.groupTitle}>Import layers</legend>
+      <Fieldset title='Import layers'>
         <LabeledField
           id={BAND_FIELD_ID}
           label='Chart scale band'
@@ -102,38 +103,39 @@ export default function NoaaEncSource ({ state, dispatch }: Props): React.ReactE
           return tens of thousands of rocks, which slows the chart plotter
           and obscures other hazards.
         </p>
-      </fieldset>
-      <fieldset style={S.group}>
-        <legend style={S.groupTitle}>Refresh and freshness</legend>
-        <RefreshSecondsField
-          id='ac-noaa-enc-refresh-seconds'
-          label='Refresh period (seconds)'
-          upstreamHint={'NOAA refreshes ENC data weekly, so the 30 minute ' +
-            'default only spares the ArcGIS service from re-serving identical ' +
-            'wrecks; raise it freely.'}
-          value={state.noaaEncRefreshSeconds ?? DEFAULT_NOAA_ENC_DEBOUNCE_SECONDS}
-          onChange={(seconds) => dispatch({ type: 'setNoaaEncRefreshSeconds', seconds })}
+      </Fieldset>
+      <Disclosure>
+        <Fieldset title='Refresh and freshness'>
+          <RefreshSecondsField
+            id='ac-noaa-enc-refresh-seconds'
+            label='Refresh period (seconds)'
+            upstreamHint={'NOAA refreshes ENC data weekly, so the 30 minute ' +
+              'default only spares the ArcGIS service from re-serving identical ' +
+              'wrecks; raise it freely.'}
+            value={state.noaaEncRefreshSeconds ?? DEFAULT_NOAA_ENC_DEBOUNCE_SECONDS}
+            onChange={(seconds) => dispatch({ type: 'setNoaaEncRefreshSeconds', seconds })}
+          />
+          <MinimumYearField
+            id='ac-noaa-enc-minimum-survey-year'
+            label='Earliest survey year'
+            hint={'Hide features whose hydrographic survey was conducted before ' +
+              'this year. Leave at 0 to import every survey. SORDAT is the ' +
+              'survey date, not the chart refresh date, so a feature surveyed ' +
+              'in 1985 carries that year even though NOAA refreshes the chart ' +
+              'weekly. Features with no recorded survey date are always included.'}
+            value={minimumSurveyYear}
+            onChange={(year) => dispatch({ type: 'setNoaaEncMinimumSurveyYear', year })}
+          />
+        </Fieldset>
+        <MergeWithActiveCaptain
+          sourceName='NOAA ENC'
+          enabled={dedupeEnabled}
+          onToggleEnabled={(enabled) => dispatch({ type: 'setNoaaEncDedupe', enabled })}
+          radiusMeters={state.noaaEncDedupeRadiusMeters}
+          onChangeRadius={(meters) => dispatch({ type: 'setNoaaEncDedupeRadius', meters })}
+          radiusInputId='ac-noaa-enc-dedupe-radius'
         />
-        <MinimumYearField
-          id='ac-noaa-enc-minimum-survey-year'
-          label='Earliest survey year'
-          hint={'Hide features whose hydrographic survey was conducted before ' +
-            'this year. Leave at 0 to import every survey. SORDAT is the ' +
-            'survey date, not the chart refresh date, so a feature surveyed ' +
-            'in 1985 carries that year even though NOAA refreshes the chart ' +
-            'weekly. Features with no recorded survey date are always included.'}
-          value={minimumSurveyYear}
-          onChange={(year) => dispatch({ type: 'setNoaaEncMinimumSurveyYear', year })}
-        />
-      </fieldset>
-      <MergeWithActiveCaptain
-        sourceName='NOAA ENC'
-        enabled={dedupeEnabled}
-        onToggleEnabled={(enabled) => dispatch({ type: 'setNoaaEncDedupe', enabled })}
-        radiusMeters={state.noaaEncDedupeRadiusMeters}
-        onChangeRadius={(meters) => dispatch({ type: 'setNoaaEncDedupeRadius', meters })}
-        radiusInputId='ac-noaa-enc-dedupe-radius'
-      />
+      </Disclosure>
     </>
   )
 }

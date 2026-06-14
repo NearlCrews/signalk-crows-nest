@@ -10,7 +10,7 @@
  */
 
 import type { Logger } from '../shared/types.js'
-import { MS_PER_SECOND } from '../shared/time.js'
+import { parseRetryAfterMs } from '../shared/retry-after.js'
 
 /** Tunable rate-limit knobs. All optional at the call site; defaults fill gaps. */
 export interface RateLimitOptions {
@@ -146,26 +146,6 @@ class RequestQueue {
   }
 }
 
-/**
- * Parse a Retry-After header into a millisecond delay. The header may be an
- * integer count of seconds or an HTTP date. Returns undefined when absent or
- * unparseable.
- */
-function parseRetryAfter (headerValue: string | null): number | undefined {
-  if (headerValue == null || headerValue.trim() === '') {
-    return undefined
-  }
-  const seconds = Number(headerValue)
-  if (Number.isFinite(seconds)) {
-    return Math.max(0, seconds * MS_PER_SECOND)
-  }
-  const dateMs = Date.parse(headerValue)
-  if (Number.isFinite(dateMs)) {
-    return Math.max(0, dateMs - Date.now())
-  }
-  return undefined
-}
-
 /** Exponential backoff with full jitter for the given zero-based attempt. */
 function backoffDelay (attempt: number, baseMs: number, maxMs: number): number {
   const ceiling = Math.min(maxMs, baseMs * 2 ** attempt)
@@ -292,7 +272,7 @@ export function createHttpClient (
           response.status === HTTP_TOO_MANY_REQUESTS ||
           response.status === HTTP_SERVICE_UNAVAILABLE
         const retryAfter = honorsRetryAfter
-          ? parseRetryAfter(response.headers.get('retry-after'))
+          ? parseRetryAfterMs(response.headers.get('retry-after'))
           : undefined
         // Cap a server-supplied Retry-After at `maxRetryAfterMs` rather than
         // `maxBackoffMs`: an Overpass 60 s cooldown truncated to 30 s would

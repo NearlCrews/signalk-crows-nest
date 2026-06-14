@@ -17,6 +17,7 @@ import DataSourcesSection from './components/DataSourcesSection.js'
 import type { SourceSlug } from './components/DataSourcesSection.js'
 import { sourceCardDomId } from './components/DataSourceCard.js'
 import FooterBar from './components/FooterBar.js'
+import RouteDraftingSection from './components/RouteDraftingSection.js'
 import StatusBar from './components/StatusBar.js'
 import ThemeToggle from './components/ThemeToggle.js'
 import { useConfig } from './hooks/use-config.js'
@@ -140,6 +141,7 @@ export default function PluginConfigurationPanel ({ configuration, save }: Props
           onToggleExpanded={toggleCard}
         />
         <AlertsSection state={state} dispatch={dispatch} />
+        <RouteDraftingSection state={state} dispatch={dispatch} />
         <FooterBar
           dirty={dirty}
           justSavedAt={justSavedAt}

@@ -9,6 +9,7 @@
  */
 
 import type { NormalizedSection } from './normalized-detail.js'
+import type { RouteDraftPropulsion } from '../route-draft/config.js'
 
 /** A geographic point. Matches both SignalK and ActiveCaptain conventions. */
 export interface Position {
@@ -337,4 +338,30 @@ export interface PluginConfig {
    * cache and posts to Garmin on every list call.
    */
   activeCaptainRefreshSeconds?: number
+  /** Master opt-in for AI route drafting. Off until an admin enables it. */
+  routeDraftEnabled?: boolean
+  /** OpenRouter API key, stored plaintext at rest, so the panel field is masked. */
+  routeDraftOpenRouterApiKey?: string
+  /** OpenRouter model slug the draft is routed to. */
+  routeDraftModel?: string
+  /** Daily OpenRouter call cap. Bounds calls per UTC day, not dollars. */
+  routeDraftMaxCallsPerDay?: number
+  /** Vessel propulsion kind, the primary source for the fuel and sailability math. */
+  routeDraftPropulsion?: RouteDraftPropulsion
+  /** Vessel draft, in meters. Zero defers to `design.draft.value.maximum`. */
+  routeDraftDraftMeters?: number
+  /** Depth safety margin added to the draft, in meters. */
+  routeDraftSafetyMarginMeters?: number
+  /** Closest-hauled tacking angle, in degrees off the true wind. */
+  routeDraftTackingAngleDeg?: number
+  /** Cruise speed under power, in knots. */
+  routeDraftCruiseSpeedKn?: number
+  /** Burn at cruise, in liters per hour. */
+  routeDraftBurnLitersPerHour?: number
+  /** Reserve held back before reporting the margin, as a percent of fuel aboard. */
+  routeDraftReservePercent?: number
+  /** Standoff (offing) kept off charted land, in nautical miles. */
+  routeDraftStandoffNm?: number
+  /** Max leg length above which the prompt asks the model to add a turn, in nautical miles. */
+  routeDraftMaxLegNm?: number
 }

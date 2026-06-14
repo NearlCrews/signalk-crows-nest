@@ -8,12 +8,17 @@
  * others. Browser-safe (dependency-free) like the bounds modules that use it.
  */
 
-/** Build a bounded-number config-schema fragment. */
+/**
+ * Build a bounded-number config-schema fragment. Pass `integer` for a field
+ * that must be a whole number (the schema emits `type: 'integer'` so the admin
+ * UI renders an integer input), otherwise the field is a plain number.
+ */
 export function boundedNumberSchema (
   title: string,
   defaultValue: number,
   minimum: number,
-  maximum: number
+  maximum: number,
+  integer = false
 ): Record<string, unknown> {
-  return { type: 'number', title, default: defaultValue, minimum, maximum }
+  return { type: integer ? 'integer' : 'number', title, default: defaultValue, minimum, maximum }
 }

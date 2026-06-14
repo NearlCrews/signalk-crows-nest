@@ -9,6 +9,58 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 > development milestones that preceded this publication. Their content is
 > incorporated into the 0.4.2 release.
 
+## [Unreleased]
+
+The plugin gains an optional, admin-gated AI route-draft endpoint, and the
+charted-depth capability that backs its safety check.
+
+### Added
+
+- **AI route drafting (optional, admin only, off until an OpenRouter key is
+  set).** A new `POST /api/route-draft` endpoint turns a plain-language passage
+  request into a drafted route: OpenRouter proposes the turning waypoints, then
+  owned code checks every leg against the NOAA ENC charted depth-area contours,
+  charted land, and charted point hazards (wrecks, rocks, and obstructions), and
+  computes a deterministic fuel estimate. The route is always a draft the
+  navigator verifies on the chart before saving. US ENC coverage only, and the
+  depth check reads the charted depth-AREA contour, not the depth at every
+  point. A new Route drafting panel card configures the masked OpenRouter key,
+  the model, a daily call cap, and the vessel, fuel, and routing inputs.
+- The NOAA ENC input gained a charted `Depth_Area` and `Land_Area` polygon
+  query that the route-draft depth check reads as an internal capability.
+
+### Changed
+
+- The configuration panel is decluttered with progressive disclosure: each data
+  source card now shows only its import choice by default (POI types, seamark
+  groups, or scale band and layers), with the refresh cadence, year filter,
+  merge radius, cache duration, and Overpass endpoint tucked under a per-card
+  Advanced section. The Route drafting section gains the same treatment, and its
+  field name now leads its hint visually. New shared `Fieldset` and `Disclosure`
+  panel primitives back the grouping.
+- The route-draft endpoint and the status route now share one admin gate that
+  fails closed: if the server admin middleware cannot be installed, neither
+  route mounts, so the budget-spending endpoint is never left ungated.
+- The configured OpenRouter model now leads each request, with the known-good
+  models as fallback, and the configured closest-hauled tacking angle now
+  reaches the model for a sailing vessel, so both settings take effect rather
+  than being inert.
+- The route-draft check now scans point hazards across every configured scale
+  band, deduped by charted position, so a hazard charted only at a coarser band
+  is still flagged, matching the depth sweep.
+- A drafted waypoint far outside the requested chart window is dropped as a
+  hallucination, an unexpected server error no longer reflects its internal
+  detail to the caller, and the daily call cap, which counts failed attempts
+  too, now says so in the panel.
+
+### Internal
+
+- Shared the nautical-mile constant and conversion, the `Retry-After` header
+  parser, and the finite-number guard across the modules that held copies. The
+  route-draft depth check now runs each leg's per-band charted-area queries
+  concurrently and processes legs through a small bounded-concurrency pool, and
+  it cancels its in-flight ENC queries when the request deadline passes.
+
 <a id="v090"></a>
 
 ## [0.9.0] - 2026-06-12

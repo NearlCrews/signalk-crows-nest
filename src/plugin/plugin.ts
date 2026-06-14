@@ -19,8 +19,16 @@ import type { PositionMonitor } from '../monitoring/position-monitor.js'
 import { createPluginStatus } from '../status/plugin-status.js'
 import { createStatusRouter } from '../status/status-router.js'
 import { buildPoiTypesString, ensurePoiTypes } from '../shared/poi-type-selection.js'
-import { PLUGIN_ID } from '../shared/plugin-id.js'
+import { PLUGIN_ID, PLUGIN_REPO_URL } from '../shared/plugin-id.js'
 import type { PluginConfig } from '../shared/types.js'
+import { join } from 'node:path'
+import type { IRouter } from 'express'
+import { createEncDirectClient } from '../inputs/noaa-enc/enc-direct-client.js'
+import { normalizeRouteDraftConfig, routeDraftConfigSchema } from '../route-draft/config.js'
+import { createRouteDraftRouter } from '../route-draft/endpoint.js'
+import type { RouteDraftService } from '../route-draft/endpoint.js'
+import { OpenRouterClient } from '../route-draft/openrouter.js'
+import { BudgetTracker } from '../route-draft/budget.js'
 
 const PLUGIN_NAME = "Crow's Nest"
 const PLUGIN_DESCRIPTION =
@@ -32,7 +40,7 @@ const OPEN_API = {
   info: {
     title: "Crow's Nest plugin API",
     version: '1.0.0',
-    description: 'Internal status API consumed by the plugin configuration panel.'
+    description: 'Internal status API plus the optional AI route-draft endpoint.'
   },
   paths: {
     '/api/status': {
@@ -45,6 +53,24 @@ const OPEN_API = {
             content: { 'application/json': { schema: { type: 'object' } } }
           },
           401: { description: 'The caller is not authenticated.' },
+          403: { description: 'The caller is authenticated but is not an administrator.' }
+        }
+      }
+    },
+    '/api/route-draft': {
+      post: {
+        summary: 'Draft a route from a plain-language passage request',
+        description:
+          'Asks OpenRouter for a route, then checks it against NOAA ENC charted depth, land, and ' +
+          'point hazards and computes the fuel. Optional and admin-scoped: it spends the OpenRouter ' +
+          'budget, so it is gated to administrators and is disabled until a key is configured.',
+        responses: {
+          200: {
+            description: 'A drafted route, or an ok:false body with a stable error code.',
+            content: { 'application/json': { schema: { type: 'object' } } }
+          },
+          400: { description: 'The request body was invalid.' },
+          401: { description: 'The caller is not authenticated, or drafting is not configured.' },
           403: { description: 'The caller is authenticated but is not an administrator.' }
         }
       }
@@ -69,6 +95,12 @@ export function createPlugin (
   // Replaced on every start with a recorder built for that run's enabled
   // sources; an empty recorder stands in before the first start.
   let status = createPluginStatus([])
+  // The optional AI route-draft service, built at start() when drafting is
+  // enabled and a key is set. Undefined makes the endpoint return
+  // `unauthorized` (not configured). The generation counter orphans an
+  // in-flight budget load if a teardown or a newer start beats it.
+  let routeDraftService: RouteDraftService | undefined
+  let routeDraftGeneration = 0
 
   /**
    * Tear the current runtime down. Idempotent.
@@ -79,6 +111,10 @@ export function createPlugin (
    * half-stopped runtime behind for a later call.
    */
   function teardown (): void {
+    // Always orphan any in-flight route-draft build and drop the service, even
+    // on the no-runtime path, so the endpoint cannot answer with a stale one.
+    routeDraftGeneration += 1
+    routeDraftService = undefined
     if (runtime === undefined) {
       // Even with no runtime to tear down, reset the status recorder so a
       // snapshot during the gap between teardown and the next start does
@@ -115,13 +151,61 @@ export function createPlugin (
     }
   }
 
+  /**
+   * Build the optional AI route-draft service when drafting is enabled and a
+   * key is set. The OpenRouter and ENC clients are built at once; the call
+   * budget loads asynchronously from the plugin data dir, so the service is
+   * published only once the load resolves and only if this start is still
+   * current (the generation guard).
+   */
+  function startRouteDraft (config: PluginConfig): void {
+    const rd = normalizeRouteDraftConfig(config)
+    // normalizeRouteDraftConfig already trims the key, so read it once.
+    const apiKey = rd.routeDraftOpenRouterApiKey
+    if (!rd.routeDraftEnabled || apiKey === '') return
+    const mine = routeDraftGeneration
+    const llm = new OpenRouterClient({
+      apiKey,
+      baseUrl: 'https://openrouter.ai/api/v1',
+      model: rd.routeDraftModel,
+      requestTimeoutMs: 20_000,
+      referer: PLUGIN_REPO_URL,
+      title: PLUGIN_NAME
+    })
+    const enc = createEncDirectClient()
+    const statePath = join(app.getDataDirPath(), 'route-draft-budget.json')
+    BudgetTracker.load({
+      maxPerDay: rd.routeDraftMaxCallsPerDay,
+      statePath,
+      log: { debug: (m) => { app.debug(m) }, error: (m) => { app.error(m) } }
+    }).then((budget) => {
+      if (mine === routeDraftGeneration) {
+        routeDraftService = { llm, budget, enc, config: rd }
+        app.debug("Crow's Nest route drafting ready")
+      }
+    }).catch((err) => {
+      app.error(`Cannot load the route-draft budget: ${String(err)}`)
+    })
+  }
+
+  const statusRegistrar = createStatusRouter(
+    app,
+    () => status.snapshot(runtime?.source.cacheSize() ?? 0)
+  )
+  const routeDraftRegistrar = createRouteDraftRouter(app, () => routeDraftService)
+  const registerWithRouter = (router: IRouter): void => {
+    statusRegistrar(router)
+    routeDraftRegistrar(router)
+  }
+
   return {
     id: PLUGIN_ID,
     name: PLUGIN_NAME,
     description: PLUGIN_DESCRIPTION,
     schema: assemblePluginSchema(PLUGIN_NAME, PLUGIN_DESCRIPTION, [
       ...inputs.configSchemaFragments(),
-      ...outputs.configSchemaFragments()
+      ...outputs.configSchemaFragments(),
+      routeDraftConfigSchema()
     ]),
 
     start: (rawConfig: object): void => {
@@ -131,6 +215,7 @@ export function createPlugin (
       app.setPluginStatus('Starting')
 
       const config = rawConfig as PluginConfig
+      startRouteDraft(config)
       // A fresh recorder per run, built with this run's enabled sources so the
       // status snapshot carries one row per source; it reports this run's own
       // start time and a clean error history.
@@ -258,9 +343,6 @@ export function createPlugin (
 
     getOpenApi: () => OPEN_API,
 
-    registerWithRouter: createStatusRouter(
-      app,
-      () => status.snapshot(runtime?.source.cacheSize() ?? 0)
-    )
+    registerWithRouter
   }
 }

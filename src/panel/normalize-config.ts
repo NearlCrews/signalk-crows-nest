@@ -27,6 +27,7 @@ import {
   DEFAULT_NOAA_ENC_DEBOUNCE_SECONDS,
   DEFAULT_OPENSEAMAP_DEBOUNCE_SECONDS
 } from '../shared/bbox-debounce.js'
+import { normalizeRouteDraftConfig } from '../route-draft/config.js'
 
 /**
  * Coerce the admin UI's untyped `configuration` prop into a fully populated
@@ -162,6 +163,11 @@ export function normalizeConfig (configuration: unknown): PluginConfig {
   config.activeCaptainRefreshSeconds = clampBboxDebounceSeconds(
     raw.activeCaptainRefreshSeconds, DEFAULT_ACTIVE_CAPTAIN_DEBOUNCE_SECONDS
   )
+
+  // The route-draft module owns its own clamp; spread its 13 fully clamped
+  // keys, so a non-numeric or out-of-range stored value lands on its default
+  // or nearest bound rather than reaching the panel or the runtime.
+  Object.assign(config, normalizeRouteDraftConfig(raw))
 
   return config
 }

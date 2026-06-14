@@ -8,6 +8,7 @@ import type * as React from 'react'
 import { ACTIVE_CAPTAIN_POI_TYPE_GROUPS } from '../active-captain-poi-types.js'
 import type { PluginConfig, PoiTypeFlag } from '../../shared/types.js'
 import { S } from '../styles.js'
+import Fieldset from './Fieldset.js'
 
 interface Props {
   config: PluginConfig
@@ -26,14 +27,15 @@ export default function ActiveCaptainPoiTypes ({ config, onToggle, onSetAll }: P
   // every other source card uses (Seamark groups for OpenSeaMap, Hazard
   // layers for NOAA ENC). The four sub-group fieldsets sit inside it.
   return (
-    <fieldset style={S.group}>
-      <legend style={S.groupTitle}>
-        Import layers
+    <Fieldset
+      title='Import layers'
+      actions={
         <span style={S.bulkButtons}>
           <button type='button' style={S.btnBulk} onClick={() => onSetAll(true)}>All</button>
           <button type='button' style={S.btnBulk} onClick={() => onSetAll(false)}>None</button>
         </span>
-      </legend>
+      }
+    >
       {ACTIVE_CAPTAIN_POI_TYPE_GROUPS.map((group) => (
         <fieldset key={group.title} style={S.subGroup}>
           <legend style={S.subGroupTitle}>{group.title}</legend>
@@ -60,6 +62,6 @@ export default function ActiveCaptainPoiTypes ({ config, onToggle, onSetAll }: P
             at least one to narrow the import.
           </p>
           )}
-    </fieldset>
+    </Fieldset>
   )
 }

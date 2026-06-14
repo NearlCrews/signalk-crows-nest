@@ -71,12 +71,16 @@ export interface QueryRequest {
   band: ScaleBand
   layerKey: EncLayerKey
   bbox: Bbox
+  /** Optional deadline signal; cancels the in-flight request and stops paging. */
+  signal?: AbortSignal
 }
 
 export interface QueryByIdRequest {
   band: ScaleBand
   layerKey: EncLayerKey
   objectId: number
+  /** Optional deadline signal; cancels the in-flight request. */
+  signal?: AbortSignal
 }
 
 export interface EncDirectClientConfig {
@@ -88,8 +92,8 @@ interface ArcGisFeatureCollection {
   exceededTransferLimit?: boolean
 }
 
-async function fetchJson (url: string, headers: Record<string, string>): Promise<unknown> {
-  const response = await requestText(url, headers, REQUEST_TIMEOUT_MS, 'ENC Direct')
+async function fetchJson (url: string, headers: Record<string, string>, signal?: AbortSignal): Promise<unknown> {
+  const response = await requestText(url, headers, REQUEST_TIMEOUT_MS, 'ENC Direct', signal)
   if (response.status < 200 || response.status >= 300) {
     throw new Error(`ENC Direct HTTP ${response.status} for ${url}`)
   }
@@ -141,15 +145,17 @@ export function createEncDirectClient (
   const baseUrl = config.baseUrl ?? DEFAULT_BASE_URL
   const headers = { 'User-Agent': PLUGIN_USER_AGENT }
   return {
-    async queryLayer ({ band, layerKey, bbox }) {
+    async queryLayer ({ band, layerKey, bbox, signal }) {
       const layerId = LAYER_IDS_BY_BAND[band][layerKey]
       const all: EncFeature[] = []
       let offset = 0
       // Bounded pagination loop: a misbehaving server pinning
       // exceededTransferLimit forever would otherwise loop indefinitely.
       for (let page = 0; page < MAX_PAGES; page++) {
+        // requestText rejects immediately when signal is already aborted, so the
+        // continuation does not need its own pre-fetch abort guard.
         const url = buildBboxUrl(baseUrl, band, layerId, bbox, offset)
-        const json = await fetchJson(url, headers) as ArcGisFeatureCollection
+        const json = await fetchJson(url, headers, signal) as ArcGisFeatureCollection
         const features = json.features ?? []
         for (const feature of features) all.push(feature)
         if (json.exceededTransferLimit !== true || features.length === 0) {
@@ -162,10 +168,10 @@ export function createEncDirectClient (
         'the upstream may be pinning exceededTransferLimit incorrectly'
       )
     },
-    async queryById ({ band, layerKey, objectId }) {
+    async queryById ({ band, layerKey, objectId, signal }) {
       const layerId = LAYER_IDS_BY_BAND[band][layerKey]
       const url = buildByIdUrl(baseUrl, band, layerId, objectId)
-      const json = await fetchJson(url, headers) as ArcGisFeatureCollection
+      const json = await fetchJson(url, headers, signal) as ArcGisFeatureCollection
       return (json.features ?? [])[0]
     }
   }

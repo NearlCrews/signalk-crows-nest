@@ -207,15 +207,54 @@ export function categoryLabel (
 /** Read a finite numeric property, treating null and non-numbers as absent. */
 export const readNumber = finiteOrUndefined
 
+/** The decoded shallow and deep range of an ENC Direct Depth_Area feature. */
+export interface DepthRange {
+  /**
+   * `DRVAL1`, the shallow range minimum in meters at chart datum (MLLW on US
+   * ENCs). A NEGATIVE value is a drying height (the area dries to that many
+   * meters above datum), preserved here and classified downstream as land.
+   */
+  shallowMeters?: number
+  /** `DRVAL2`, the deep range maximum in meters at chart datum. */
+  deepMeters?: number
+}
+
 /**
- * Layer-derived fallback label for a hazard feature, used as the popup header
- * and the list name when the feature carries no OBJNAM. Shared by the source's
- * `featureName` and the detail renderer so the two cannot drift.
+ * Decode the depth range from a Depth_Area feature's `DRVAL1` and `DRVAL2`
+ * attributes. Both ship as JSON numbers in meters referenced to chart datum,
+ * verified live (e.g. `DRVAL1: 0`, `DRVAL2: 18.2`). Either field is `undefined`
+ * when the wire value is null or non-numeric.
+ *
+ * Decoding is faithful: a negative `DRVAL1` is preserved, not clamped or
+ * dropped. A negative `DRVAL1` is a DRYING HEIGHT (the area dries to that many
+ * meters above datum at low water), not a water depth, so the leg-check
+ * consumer classifies it as effectively land. Classification is the consumer's
+ * job, not this decoder's. Verified live: harbour Depth_Area returns `DRVAL1`
+ * values such as `-1.6` and `-1.4`, the drying intertidal areas. Reuse
+ * {@link encDepthLabel} when tagging the value with its MLLW datum.
+ */
+export function decodeDepthRange (properties: Record<string, unknown>): DepthRange {
+  return {
+    shallowMeters: readNumber(properties.DRVAL1),
+    deepMeters: readNumber(properties.DRVAL2)
+  }
+}
+
+/**
+ * Layer-derived fallback label for a feature, used as the popup header and the
+ * list name when a hazard feature carries no OBJNAM. Shared by the source's
+ * `featureName` and the detail renderer so the two cannot drift. The hazard
+ * layers (wreck, obstruction, rock) are the POI path that reads this; the
+ * depth-area and land labels keep the table exhaustive over `EncLayerKey` and
+ * give the leg check a name for those area layers, which are not published as
+ * POIs.
  */
 export const LAYER_LABEL: Readonly<Record<EncLayerKey, string>> = {
   wreck: 'Wreck',
   obstruction: 'Obstruction',
-  rock: 'Rock'
+  rock: 'Rock',
+  depthArea: 'Depth area',
+  land: 'Land'
 }
 
 /**

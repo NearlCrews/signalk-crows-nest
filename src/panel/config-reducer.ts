@@ -5,6 +5,7 @@
  */
 
 import { POI_TYPE_FLAGS } from '../shared/poi-type-selection.js'
+import type { RouteDraftPropulsion } from '../route-draft/config.js'
 import type { PluginConfig, PoiTypeFlag } from '../shared/types.js'
 
 /** Actions the panel dispatches to mutate its working configuration. */
@@ -43,6 +44,19 @@ export type ConfigAction =
   | { type: 'setOpenSeaMapRefreshSeconds', seconds: number }
   | { type: 'setNoaaEncRefreshSeconds', seconds: number }
   | { type: 'setActiveCaptainRefreshSeconds', seconds: number }
+  | { type: 'setRouteDraftEnabled', enabled: boolean }
+  | { type: 'setRouteDraftOpenRouterApiKey', key: string }
+  | { type: 'setRouteDraftModel', model: string }
+  | { type: 'setRouteDraftMaxCallsPerDay', calls: number }
+  | { type: 'setRouteDraftPropulsion', propulsion: RouteDraftPropulsion }
+  | { type: 'setRouteDraftDraftMeters', meters: number }
+  | { type: 'setRouteDraftSafetyMarginMeters', meters: number }
+  | { type: 'setRouteDraftTackingAngleDeg', degrees: number }
+  | { type: 'setRouteDraftCruiseSpeedKn', knots: number }
+  | { type: 'setRouteDraftBurnLitersPerHour', litersPerHour: number }
+  | { type: 'setRouteDraftReservePercent', percent: number }
+  | { type: 'setRouteDraftStandoffNm', nauticalMiles: number }
+  | { type: 'setRouteDraftMaxLegNm', nauticalMiles: number }
   | { type: 'discard', config: PluginConfig }
 
 /**
@@ -158,5 +172,31 @@ export function configReducer (state: PluginConfig, action: ConfigAction): Plugi
       return setField(state, 'noaaEncRefreshSeconds', action.seconds)
     case 'setActiveCaptainRefreshSeconds':
       return setField(state, 'activeCaptainRefreshSeconds', action.seconds)
+    case 'setRouteDraftEnabled':
+      return setField(state, 'routeDraftEnabled', action.enabled)
+    case 'setRouteDraftOpenRouterApiKey':
+      return setField(state, 'routeDraftOpenRouterApiKey', action.key)
+    case 'setRouteDraftModel':
+      return setField(state, 'routeDraftModel', action.model)
+    case 'setRouteDraftMaxCallsPerDay':
+      return setField(state, 'routeDraftMaxCallsPerDay', action.calls)
+    case 'setRouteDraftPropulsion':
+      return setField(state, 'routeDraftPropulsion', action.propulsion)
+    case 'setRouteDraftDraftMeters':
+      return setField(state, 'routeDraftDraftMeters', action.meters)
+    case 'setRouteDraftSafetyMarginMeters':
+      return setField(state, 'routeDraftSafetyMarginMeters', action.meters)
+    case 'setRouteDraftTackingAngleDeg':
+      return setField(state, 'routeDraftTackingAngleDeg', action.degrees)
+    case 'setRouteDraftCruiseSpeedKn':
+      return setField(state, 'routeDraftCruiseSpeedKn', action.knots)
+    case 'setRouteDraftBurnLitersPerHour':
+      return setField(state, 'routeDraftBurnLitersPerHour', action.litersPerHour)
+    case 'setRouteDraftReservePercent':
+      return setField(state, 'routeDraftReservePercent', action.percent)
+    case 'setRouteDraftStandoffNm':
+      return setField(state, 'routeDraftStandoffNm', action.nauticalMiles)
+    case 'setRouteDraftMaxLegNm':
+      return setField(state, 'routeDraftMaxLegNm', action.nauticalMiles)
   }
 }

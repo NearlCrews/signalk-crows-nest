@@ -1,8 +1,8 @@
 /**
- * Presentational shell for a titled, opt-in fieldset: the standard `S.group`
- * fieldset, its legend, a checkbox row that toggles the section on, an optional
- * hint paragraph below the toggle, and a `children` slot for the field or
- * fields the section controls.
+ * Presentational shell for a titled, opt-in fieldset: composes {@link Fieldset}
+ * for the bordered fieldset and legend, and adds a checkbox row that toggles
+ * the section on, an optional hint paragraph below the toggle, and a `children`
+ * slot for the field or fields the section controls.
  *
  * `ProximityAlarmFields`, `RouteHazardScanFields`, `MergeWithActiveCaptain`,
  * and `BridgeAirDraftFields` each compose this shell and slot their own
@@ -14,6 +14,7 @@
  */
 
 import type * as React from 'react'
+import Fieldset from './Fieldset.js'
 import { S } from '../styles.js'
 
 interface Props {
@@ -41,8 +42,7 @@ export default function ToggleFieldset ({
   children
 }: Props): React.ReactElement {
   return (
-    <fieldset style={S.group}>
-      <legend style={S.groupTitle}>{title}</legend>
+    <Fieldset title={title}>
       <label style={S.checkboxRow}>
         <input
           type='checkbox'
@@ -54,6 +54,6 @@ export default function ToggleFieldset ({
       </label>
       {toggleHint !== undefined && <p style={S.hint}>{toggleHint}</p>}
       {children}
-    </fieldset>
+    </Fieldset>
   )
 }

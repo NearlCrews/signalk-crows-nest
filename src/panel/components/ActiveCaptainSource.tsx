@@ -13,10 +13,11 @@ import type { Dispatch } from 'react'
 import type { ConfigAction } from '../config-reducer.js'
 import { DEFAULT_MINIMUM_RATING } from '../../shared/rating.js'
 import { DEFAULT_ACTIVE_CAPTAIN_DEBOUNCE_SECONDS } from '../../shared/bbox-debounce.js'
-import { S } from '../styles.js'
 import type { PluginConfig } from '../../shared/types.js'
 import ActiveCaptainPoiTypes from './ActiveCaptainPoiTypes.js'
 import CacheDurationField from './CacheDurationField.js'
+import Disclosure from './Disclosure.js'
+import Fieldset from './Fieldset.js'
 import RatingFilterField from './RatingFilterField.js'
 import RefreshSecondsField from './RefreshSecondsField.js'
 
@@ -34,28 +35,28 @@ export default function ActiveCaptainSource ({ state, dispatch }: Props): React.
         onToggle={(flag, enabled) => dispatch({ type: 'setPoiType', flag, enabled })}
         onSetAll={(enabled) => dispatch({ type: 'setAllPoiTypes', enabled })}
       />
-      <fieldset style={S.group}>
-        <legend style={S.groupTitle}>Refresh and freshness</legend>
-        <RefreshSecondsField
-          id='ac-activecaptain-refresh-seconds'
-          label='Refresh period (seconds)'
-          upstreamHint={'ActiveCaptain is the most dynamic source (reviews and ' +
-            'hazard reports arrive continuously), so its default stays short.'}
-          value={state.activeCaptainRefreshSeconds ?? DEFAULT_ACTIVE_CAPTAIN_DEBOUNCE_SECONDS}
-          onChange={(seconds) => dispatch({ type: 'setActiveCaptainRefreshSeconds', seconds })}
-        />
-        <CacheDurationField
-          value={state.cachingDurationMinutes}
-          onChange={(minutes) => dispatch({ type: 'setCacheDuration', minutes })}
-        />
-      </fieldset>
-      <fieldset style={S.group}>
-        <legend style={S.groupTitle}>Filters</legend>
-        <RatingFilterField
-          value={state.minimumRating ?? DEFAULT_MINIMUM_RATING}
-          onChange={(rating) => dispatch({ type: 'setMinimumRating', rating })}
-        />
-      </fieldset>
+      <Disclosure>
+        <Fieldset title='Refresh and freshness'>
+          <RefreshSecondsField
+            id='ac-activecaptain-refresh-seconds'
+            label='Refresh period (seconds)'
+            upstreamHint={'ActiveCaptain is the most dynamic source (reviews and ' +
+              'hazard reports arrive continuously), so its default stays short.'}
+            value={state.activeCaptainRefreshSeconds ?? DEFAULT_ACTIVE_CAPTAIN_DEBOUNCE_SECONDS}
+            onChange={(seconds) => dispatch({ type: 'setActiveCaptainRefreshSeconds', seconds })}
+          />
+          <CacheDurationField
+            value={state.cachingDurationMinutes}
+            onChange={(minutes) => dispatch({ type: 'setCacheDuration', minutes })}
+          />
+        </Fieldset>
+        <Fieldset title='Filters'>
+          <RatingFilterField
+            value={state.minimumRating ?? DEFAULT_MINIMUM_RATING}
+            onChange={(rating) => dispatch({ type: 'setMinimumRating', rating })}
+          />
+        </Fieldset>
+      </Disclosure>
     </>
   )
 }

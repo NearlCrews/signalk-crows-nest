@@ -32,30 +32,50 @@ export interface OneShotResponse {
  * Issue a single GET to `url` with the given headers and resolve with the raw
  * response. `timeoutMs` aborts a hung connection (no FIN, no RST, a black-hole
  * proxy) and rejects with an error tagged `label` so the caller's source can
- * record which feed timed out.
+ * record which feed timed out. An optional `signal` cancels an in-flight
+ * request when the caller's deadline passes, so an abandoned query does not run
+ * to completion unread.
  */
 export function requestText (
   url: string,
   headers: Record<string, string>,
   timeoutMs: number,
-  label: string
+  label: string,
+  signal?: AbortSignal
 ): Promise<OneShotResponse> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted === true) {
+      reject(signal.reason ?? new Error(`${label} request aborted: ${url}`))
+      return
+    }
     const transport = url.startsWith('https:') ? httpsRequest : httpRequest
     const req = transport(url, { method: 'GET', headers }, res => {
       const chunks: Buffer[] = []
       res.on('data', (chunk: Buffer) => chunks.push(chunk))
-      res.on('end', () => resolve({
-        status: res.statusCode ?? 0,
-        body: Buffer.concat(chunks).toString('utf8'),
-        headers: res.headers
-      }))
-      res.on('error', reject)
+      res.on('end', () => {
+        signal?.removeEventListener('abort', onAbort)
+        resolve({
+          status: res.statusCode ?? 0,
+          body: Buffer.concat(chunks).toString('utf8'),
+          headers: res.headers
+        })
+      })
+      res.on('error', (err) => {
+        signal?.removeEventListener('abort', onAbort)
+        reject(err)
+      })
     })
+    const onAbort = (): void => {
+      req.destroy(signal?.reason ?? new Error(`${label} request aborted: ${url}`))
+    }
     req.setTimeout(timeoutMs, () => {
       req.destroy(new Error(`${label} request timed out after ${timeoutMs} ms: ${url}`))
     })
-    req.on('error', reject)
+    req.on('error', (err) => {
+      signal?.removeEventListener('abort', onAbort)
+      reject(err)
+    })
+    signal?.addEventListener('abort', onAbort, { once: true })
     req.end()
   })
 }

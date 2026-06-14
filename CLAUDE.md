@@ -9,7 +9,12 @@ plugin. It imports points of interest from multiple marine data sources
 (Garmin ActiveCaptain, OpenSeaMap via the OpenStreetMap Overpass API, the USCG
 Light List of US Aids to Navigation, and the NOAA ENC Direct database of
 wrecks, obstructions, and underwater rocks) and exposes them as Signal K
-`notes` resources so chart plotters such as Freeboard-SK can display them.
+`notes` resources so chart plotters such as Freeboard-SK can display them. It
+also hosts an optional, admin-gated AI route-draft endpoint (the server-side
+half of Binnacle's AI route drafting): it asks OpenRouter for a passage's
+turning waypoints, then checks them in owned code against NOAA ENC charted
+depth, land, and point hazards and computes a deterministic fuel estimate. The
+AI piece is entirely opt-in and off until an OpenRouter key is configured.
 
 ## Architecture rule: ONE plugin, modular files
 
@@ -60,10 +65,11 @@ self-contained module registered on one line in `src/index.ts`.
       `Retry-After`, and a `close()` that aborts in-flight work.
     - `http-one-shot.ts` - the `requestText` one-shot GET shared by the two
       raw-client sources (USCG Light List and NOAA ENC Direct): it selects the
-      `http`/`https` transport, buffers the body, and aborts on a per-request
-      timeout, leaving each caller its own status and JSON handling. Those two
-      feeds are low-volume and deliberately skip the queue and retry of
-      `http-client.ts`.
+      `http`/`https` transport, buffers the body, aborts on a per-request
+      timeout, and honors an optional caller `AbortSignal` (the route-draft
+      deadline uses it to cancel an abandoned ENC query), leaving each caller
+      its own status and JSON handling. Those two feeds are low-volume and
+      deliberately skip the queue and retry of `http-client.ts`.
     - `dedupe-pois.ts` - merges non-base POIs that duplicate an ActiveCaptain
       base POI, then runs a same-source pass that collapses internal
       duplicates within a configurable radius (default 150 feet, 45.72 m), so
@@ -149,9 +155,30 @@ self-contained module registered on one line in `src/index.ts`.
       non-dangerous status, and `encDepthLabel`, the datum-tagged
       least-depth or charted-depth label shared by the HTML renderer and the
       section builder. There are no numeric CATWRK/CATOBS enum tables because
-      the wire serves those fields as decoded strings), `enc-direct-detail.ts`
-      (the plain-English S-57 HTML detail renderer), and `noaa-enc-sections.ts`
-      (the normalized-detail section builder).
+      the wire serves those fields as decoded strings, plus `decodeDepthRange`
+      and the `DepthRange` type for the route-draft depth check, and the
+      `depthArea`/`land` polygon layer ids the same check reads),
+      `enc-direct-detail.ts` (the plain-English S-57 HTML detail renderer),
+      `noaa-enc-sections.ts` (the normalized-detail section builder), and
+      `depth-area-query.ts` (the charted `Depth_Area` and `Land_Area` polygon
+      query the route-draft leg check consumes as an internal capability, built
+      on the same `EncDirectClient`; not published as POIs).
+  - `route-draft/` - the optional, admin-gated AI route-draft feature (the
+    server-side half of Binnacle's AI route drafting, opt-in and off until an
+    OpenRouter key is set). `config.ts` (the `RouteDraftConfig` type, the
+    bounds, defaults, clamps, and the config-schema fragment, following the
+    shared bounds-module pattern), `openrouter.ts` (the OpenRouter
+    chat-completions client with structured outputs, model fallback, retry with
+    backoff, and typed terminal errors), `budget.ts` (the per-UTC-day call cap,
+    persisted to the plugin data dir, that bounds calls not dollars),
+    `fuel.ts` (the deterministic rhumb-distance and fuel estimate, honest about
+    its flat head-sea derate and refusing to fabricate a sail burn),
+    `safety-check.ts` (the owned per-leg check against the NOAA ENC charted
+    depth-area contours, land areas, and point hazards, which states the charted
+    value and never a bare verdict), and `endpoint.ts` (the `POST
+    /api/route-draft` handler that asks the model for turning waypoints then
+    disposes every flag and number in owned code; the model proposes, this code
+    disposes).
   - `outputs/` - SignalK consumers of POI data.
     - `output.ts` - the `OutputModule`, `OutputHandle`, `OutputContext`, and
       `PositionScanContributor` contracts an output implements.
@@ -188,12 +215,18 @@ self-contained module registered on one line in `src/index.ts`.
     inputs to gate outbound HTTP), and drives the per-tick scan from the
     position-driven outputs' scan contributors.
   - `geo/` - `position-utilities.ts`: geo helpers (`toPosition` parsing,
-    position to bounding box, great-circle `distanceMeters`, `unionBbox`, and
-    `projectPointOntoLeg` for corridor geometry).
+    position to bounding box, great-circle `distanceMeters`, `unionBbox`,
+    `projectPointOntoLeg` for corridor geometry, and the rhumb-line
+    `rhumbDistanceMeters` and `sampleRhumbLeg` the route-draft leg check samples
+    along).
   - `status/` - `plugin-status.ts` (records request outcomes, produces a
-    `StatusSnapshot`), `status-router.ts` (admin-gated Express router that
-    serves the snapshot), and `status-types.ts` (the `StatusSnapshot` type,
-    shared by plugin and panel).
+    `StatusSnapshot`), `status-router.ts` (Express router that serves the
+    snapshot behind the shared admin gate), `admin-gate.ts` (the
+    `ensureApiAdminGate` helper that installs the server admin middleware on the
+    plugin's `/api` subtree once per app and reports whether it holds, so both
+    the status route and the budget-spending route-draft route mount only when
+    gated and otherwise fail closed), and `status-types.ts` (the
+    `StatusSnapshot` type, shared by plugin and panel).
   - `shared/` - source-agnostic contracts and helpers shared across the
     plugin: `types.ts` (the cross-module type contracts; ActiveCaptain-only
     wire types live next to the ActiveCaptain input, not here),
@@ -281,12 +314,16 @@ self-contained module registered on one line in `src/index.ts`.
     `config-schema.ts` (the `boundedNumberSchema` fragment constructor every
     bounds module's schema builder delegates to, so the field shape lives
     once), `numbers.ts` (the `toFiniteNumber`, `finiteOrUndefined`, and
-    `positiveFiniteNumber` narrowing helpers, plus `isValidLatitude`,
+    `positiveFiniteNumber` narrowing helpers, the `isFiniteNumber` type guard,
+    plus `isValidLatitude`,
     `isValidLongitude`, `isWireTruthy`, the `clampNumber` bound-and-fallback
     helper, the `roundTo` fixed-decimals rounding the message formatter and
     the panel's display-unit conversions share, and the
     `positiveCappedNumber` fallback-then-cap helper the
-    config-bounds modules delegate to), `strings.ts` (the `presentString`
+    config-bounds modules delegate to), `retry-after.ts` (the
+    `parseRetryAfterMs` header parser shared by the queued upstream HTTP client
+    and the OpenRouter client, so the seconds-or-HTTP-date handling lives once),
+    `strings.ts` (the `presentString`
     trim-and-reject-blank reader the USCG and NOAA wire parsers and the
     panel's unit-preferences reader share),
     `debug.ts` (the `debugIsEnabled` guard that reads the npm `debug`
@@ -306,10 +343,11 @@ self-contained module registered on one line in `src/index.ts`.
     `SECONDS_PER_DAY` constants the relative-time formatters share, and the
     `MINUTES_PER_HOUR` / `MINUTES_PER_DAY` constants the minute-denominated
     cache windows derive from),
-    `length.ts` (the `METERS_PER_FOOT` constant and the `metersFromFeet` /
-    `metersFromFeetInches` conversions shared by the two bridge-clearance
-    parsers, the dedupe-radius default, and the panel's display-unit
-    conversions),
+    `length.ts` (the `METERS_PER_FOOT` and `METERS_PER_NAUTICAL_MILE`
+    constants and the `metersFromFeet` / `metersFromFeetInches` /
+    `metersFromNauticalMiles` conversions shared by the two bridge-clearance
+    parsers, the dedupe-radius default, the panel's display-unit conversions,
+    and the route-corridor and route-draft nautical-mile distances),
     `bridge-clearance.ts` (the bridge air-draft comparison: `readVesselAirDraft`
     reads `design.airHeight` then a config fallback, `bridgeBlocksVessel` plus
     the margin bounds and `clampClearanceMargin`, the `formatMeters` message
@@ -369,7 +407,10 @@ self-contained module registered on one line in `src/index.ts`.
     survives a collapse-and-expand round trip), `ActiveCaptainSource`,
     `OpenSeaMapSource`, `UscgLightListSource`, and `NoaaEncSource` (the
     per-source card bodies), `AlertsSection` (the proximity, route-hazard, and
-    bridge air-draft controls); plus the per-field input components
+    bridge air-draft controls), `RouteDraftingSection` (the opt-in AI
+    route-drafting card: the master toggle, the masked OpenRouter key and model,
+    the call budget, and the vessel, fuel, and routing inputs that feed the
+    depth, sailability, and fuel math); plus the per-field input components
     `LabeledField` (the shared label-plus-control-plus-hint scaffold, which
     wires `aria-describedby` from the hint to the control), `NumberField`
     (the labeled numeric input with a draft-while-editing buffer, on top of
@@ -379,8 +420,12 @@ self-contained module registered on one line in `src/index.ts`.
     stays in meters; every length field composes it),
     `CacheDurationField`, `EndpointUrlField`,
     `FallbackEndpointsField` (the OpenSeaMap one-per-line Overpass
-    fallback-mirror textarea), `ToggleFieldset` (the shared opt-in
-    toggle-plus-legend fieldset shell),
+    fallback-mirror textarea), `Fieldset` (the shared titled-fieldset shell,
+    legend plus an optional action slot and hint, that every grouped section
+    composes), `Disclosure` (the native `<details>` Advanced collapsible that
+    tucks each card's rarely-changed tuning out of the default view),
+    `ToggleFieldset` (the shared opt-in toggle-plus-legend fieldset shell,
+    composing `Fieldset`),
     `RatingFilterField`, `MinimumYearField` (the shared earliest-year
     NumberField wrapper used by each opting-in source card),
     `RefreshSecondsField` (the shared NumberField wrapper for the
@@ -396,9 +441,13 @@ self-contained module registered on one line in `src/index.ts`.
     `SegmentedControl`), and `SaveStatus` (the dirty / just-saved
     indicator).
     The panel is a per-source accordion: a top control bar with the theme
-    toggle, the status bar, a collapsible card per data source, then an
-    Alerts section. Disclosure state lives at the panel root so the four
-    card bodies share one stable map.
+    toggle, the status bar, a collapsible card per data source, then the
+    Alerts and Route drafting sections. Card disclosure state lives at the
+    panel root so the four card bodies share one stable map. Each card shows
+    only its import choice by default and tucks refresh, freshness, merge, and
+    connection tuning under a per-card `Disclosure` ("Advanced"); the Route
+    drafting section has one master enable, the vessel basics, and the rest of
+    its tuning under the same Advanced disclosure.
 - `test/` - `node:test` test suite, run through `tsx`.
 - `docs/` - project documentation: the development guide, troubleshooting, the
   notes-resource integration guide (`notes-resource-format.md`), the Garmin API
