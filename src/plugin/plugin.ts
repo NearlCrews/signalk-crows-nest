@@ -65,9 +65,11 @@ const OPEN_API = {
       post: {
         summary: 'Draft a route from a plain-language passage request',
         description:
-          'Asks OpenRouter for a route, then checks it against NOAA ENC charted depth, land, and ' +
-          'point hazards and computes the fuel. Optional and admin-scoped: it spends the OpenRouter ' +
-          'budget, so it is gated to administrators and is disabled until a key is configured.',
+          'Asks OpenRouter for a route, then checks each leg against NOAA ENC charted depth, land, and ' +
+          'hazards in US waters; OpenSeaMap point hazards and OpenStreetMap coastline land worldwide; ' +
+          'and EMODnet modeled depth (awareness-grade, referenced to LAT) in European seas. Computes ' +
+          'a deterministic fuel estimate. Optional and admin-scoped: it spends the OpenRouter budget, ' +
+          'so it is gated to administrators and is disabled until a key is configured.',
         requestBody: {
           required: true,
           content: {

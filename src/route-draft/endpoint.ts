@@ -61,6 +61,15 @@ const REQUEST_DEADLINE_MS = 22_000
 /** Output-token ceiling sized for a worst-case schema-conformant draft (waypoints, names, and a note). */
 const MAX_OUTPUT_TOKENS = 1500
 
+/**
+ * Maximum latitude or longitude span of the request bounds, in degrees. A
+ * route-draft viewport is regional; 120 degrees per edge is far larger than any
+ * real chart window but rejects hemisphere-scale inputs and the ~358-degree
+ * artifact produced by a naively computed antimeridian-crossing bounding box,
+ * both of which would drive the per-route Overpass tiling into hundreds of requests.
+ */
+const MAX_BOUNDS_SPAN_DEG = 120
+
 /** Low sampling temperature for repeatable coordinates: the draft wants determinism, not variety. */
 const ROUTE_DRAFT_TEMPERATURE = 0.2
 
@@ -181,6 +190,15 @@ export function parseRequest (body: unknown): ParsedRequest | { error: string } 
     !bounds.every(isFiniteNumber)
   ) {
     return { error: 'bounds must be a [west, south, east, north] number array' }
+  }
+  const [west, south, east, north] = bounds as [number, number, number, number]
+  const latSpan = north - south
+  // Antimeridian-aware longitude span: when east < west the window crosses the
+  // antimeridian (e.g. west 170, east -170 is a 20-degree window), so add 360
+  // to get the short-way span instead of the ~340-degree complementary arc.
+  const lonSpan = east >= west ? east - west : east + 360 - west
+  if (latSpan <= 0 || latSpan > MAX_BOUNDS_SPAN_DEG || lonSpan > MAX_BOUNDS_SPAN_DEG) {
+    return { error: 'bounds window is too large; zoom in and try again' }
   }
   const units = b.units === 'imperial' ? 'imperial' : 'metric'
   return {

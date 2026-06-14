@@ -68,6 +68,34 @@ test('parseRequest rejects bounds that are not four finite numbers', () => {
   assert.ok('error' in parseRequest(requestBody({ bounds: [-71, 42, -70, 'north'] })))
 })
 
+test('parseRequest accepts a normal regional bounds window', () => {
+  // A 1-degree-square Boston-area window must pass.
+  assert.ok(!('error' in parseRequest(requestBody({ bounds: BOUNDS }))))
+})
+
+test('parseRequest rejects an over-wide longitude window', () => {
+  // 200-degree span: far larger than any real chart viewport.
+  assert.ok('error' in parseRequest(requestBody({ bounds: [-100, 42, 100, 43] })))
+})
+
+test('parseRequest rejects an over-tall latitude window', () => {
+  // 130-degree span: exceeds the 120-degree cap.
+  assert.ok('error' in parseRequest(requestBody({ bounds: [-71, -70, -70, 60] })))
+})
+
+test('parseRequest rejects an inverted-latitude window (north <= south)', () => {
+  // north equal to south is a zero-height window, which must be rejected.
+  assert.ok('error' in parseRequest(requestBody({ bounds: [-71, 43, -70, 43] })))
+  // north less than south is inverted.
+  assert.ok('error' in parseRequest(requestBody({ bounds: [-71, 43, -70, 42] })))
+})
+
+test('parseRequest accepts a legitimate antimeridian-crossing window', () => {
+  // west 160, south 0, east -160, north 20: the short-way longitude span is
+  // ((-160 + 360) - 160) = 40 degrees, well within the cap.
+  assert.ok(!('error' in parseRequest(requestBody({ bounds: [160, 0, -160, 20] }))))
+})
+
 // --- parseDraftedRoute --------------------------------------------------------
 
 test('parseDraftedRoute parses a valid two-waypoint route with its optional fields', () => {
