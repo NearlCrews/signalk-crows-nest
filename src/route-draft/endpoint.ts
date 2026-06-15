@@ -50,13 +50,15 @@ const CORRIDOR_HALF_WIDTH_METERS = 0.25 * METERS_PER_NAUTICAL_MILE
 
 /**
  * Whole-request deadline, split across the LLM call and the safety check. The
- * OpenRouter client caps a single LLM request at 20 seconds (see plugin.ts), so
- * this sits just above that: a fast LLM leaves the bulk of the budget for the
- * depth and hazard check, and a near-timeout LLM lets the check degrade to an
- * honest "not checked" rather than overrunning the calling Binnacle webapp's
- * own request timeout.
+ * OpenRouter client caps a single LLM request at 20 seconds (see plugin.ts), and
+ * the worldwide check runs a bounded set of upstream queries after it (each
+ * Overpass query is itself capped, see the OpenSeaMap provider), so this leaves
+ * room for the LLM plus a dense route's checked legs to finish rather than degrade
+ * to an honest "not checked". It stays under the calling Binnacle webapp's own
+ * request timeout (35 s), which must remain the larger of the two so the server
+ * returns its result before the client gives up.
  */
-const REQUEST_DEADLINE_MS = 22_000
+const REQUEST_DEADLINE_MS = 30_000
 
 /** Output-token ceiling sized for a worst-case schema-conformant draft (waypoints, names, and a note). */
 const MAX_OUTPUT_TOKENS = 1500
@@ -305,11 +307,16 @@ const SYSTEM_PROMPT = [
   'You draft a coastal passage as an ordered list of turning waypoints. You propose intent;',
   'a downstream system performs every geometric, depth, and hazard safety check, so do not',
   'claim a route is safe. Coordinates are decimal degrees, latitude and longitude. Keep every',
-  'waypoint inside the provided bounds. Prefer open water, round headlands with offing, and keep',
-  'the requested standoff off the coast. For a sailing vessel respect the point of sail: do not',
-  'draft a single dead-upwind leg, emit explicit tack waypoints instead, and note when a leg',
-  'requires tacking. Return only the meaningful turning waypoints (named places, headlands, and',
-  'channel entrances); a downstream densifier fills the rest. Put your brief rationale in note.'
+  'waypoint inside the provided bounds, and place every waypoint on navigable water, never on',
+  'land. The route is straight lines between consecutive waypoints, so the line between any two',
+  'must itself stay on navigable water: in a river, channel, strait, or around an island, follow',
+  'the navigable channel and put a waypoint at every bend, enough that no straight leg cuts across',
+  'land, an island, or a shoal. Prefer open water, round headlands with offing, and keep the',
+  'requested standoff off the coast. For a sailing vessel respect the point of sail: do not draft a',
+  'single dead-upwind leg, emit explicit tack waypoints instead, and note when a leg requires',
+  'tacking. Return as many turning waypoints as the route needs to keep every leg on the water, not',
+  'a minimal set; a downstream densifier only interpolates the straight legs, it cannot route around',
+  'land. Put your brief rationale in note.'
 ].join(' ')
 
 /**
