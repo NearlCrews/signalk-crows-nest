@@ -89,52 +89,53 @@ const ROUTE_OPTIMIZE_TEMPERATURE = 0.1
  */
 const FALLBACK_MODELS = ['google/gemini-2.5-flash-lite', 'google/gemini-2.5-flash']
 
-/** Max turning waypoints kept from a draft. The schema and the parser share it. */
+/** Max turning waypoints kept from a draft, enforced by the parser. */
 const MAX_WAYPOINTS = 25
-/** Max length of a waypoint name. The schema and the parser share it. */
+/** Max length of a waypoint name, enforced by the parser. */
 const MAX_WAYPOINT_NAME = 60
-/** Max length of the route name and the destination name. The schema and the parser share it. */
+/** Max length of the route name and the destination name, enforced by the parser. */
 const MAX_NAME = 80
-/** Max length of the route note. The schema and the parser share it. */
+/** Max length of the route note, enforced by the parser. */
 const MAX_NOTE = 600
 
 /**
- * The structured-output schema. The model returns only turning waypoints; flags
- * come from the check. The optional top-level fields, plus the range and length
- * keywords, suit the Gemini default and fallbacks, which honor them under strict
- * mode. An OpenAI-family model set as a custom routeDraftModel would reject this
- * strict schema with a 400 (it requires every property to appear in `required`,
- * and rejects those keywords). The parser re-clamps every bound, so nothing here
- * relies on server-side enforcement.
+ * The structured-output schema, kept strict-clean so every provider's strict mode
+ * accepts it, not just Gemini's. Two rules make it portable: every property appears
+ * in `required` (an optional field is made nullable rather than omitted), and the
+ * range and length keywords (minimum, maximum, maxItems, maxLength) are dropped,
+ * because Anthropic and OpenAI strict mode reject them. With those keywords present
+ * a configured Opus or GPT model cannot honor the strict response_format, so
+ * `require_parameters: true` silently bounces the request to the Gemini fallback;
+ * dropping them lets the configured model actually run. The parser re-validates and
+ * clamps every value, so nothing here relies on server-side enforcement.
  */
 const ROUTE_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['waypoints', 'note'],
+  required: ['waypoints', 'destination', 'name', 'note', 'confidence'],
   properties: {
     waypoints: {
       type: 'array',
-      maxItems: MAX_WAYPOINTS,
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['latitude', 'longitude'],
+        required: ['latitude', 'longitude', 'name'],
         properties: {
-          latitude: { type: 'number', minimum: -90, maximum: 90 },
-          longitude: { type: 'number', minimum: -180, maximum: 180 },
-          name: { type: 'string', maxLength: MAX_WAYPOINT_NAME }
+          latitude: { type: 'number' },
+          longitude: { type: 'number' },
+          name: { type: ['string', 'null'] }
         }
       }
     },
     destination: {
-      type: 'object',
+      type: ['object', 'null'],
       additionalProperties: false,
       required: ['name'],
-      properties: { name: { type: 'string', maxLength: MAX_NAME } }
+      properties: { name: { type: 'string' } }
     },
-    name: { type: 'string', maxLength: MAX_NAME },
-    note: { type: 'string', maxLength: MAX_NOTE },
-    confidence: { type: 'string', enum: ['high', 'low'] }
+    name: { type: ['string', 'null'] },
+    note: { type: 'string' },
+    confidence: { type: ['string', 'null'], enum: ['high', 'low', null] }
   }
 }
 
@@ -342,7 +343,10 @@ export function buildUserPrompt (req: ParsedRequest, config: RouteDraftConfig): 
     }
     if (req.prompt !== '') lines.push(`Navigator's hint: ${req.prompt}`)
   } else {
-    lines.push(`Request: ${req.prompt}`)
+    lines.push(
+      `Request: ${req.prompt}`,
+      'If the request names a starting point, begin the route there. Use the vessel position below as the start only when the request names no starting point, or asks to start from the current location (for example "from here" or "from me").'
+    )
   }
   lines.push(
     `Vessel position: ${formatCoord(req.from)} (decimal degrees).`,

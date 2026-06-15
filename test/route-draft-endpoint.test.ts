@@ -238,6 +238,30 @@ test('parseDraftedRoute caps the waypoint count and slices an over-long name', (
   assert.equal(route.waypoints[0].name?.length, 60, 'a waypoint name is sliced to the schema maximum')
 })
 
+test('parseDraftedRoute tolerates the null optional fields the cross-provider schema can emit', () => {
+  // The strict-clean schema makes name, destination, and confidence required-but-nullable, so a model
+  // returns null rather than omitting them; the parser must drop a null the same as a missing value.
+  const route = parseDraftedRoute(
+    JSON.stringify({
+      waypoints: [
+        { latitude: 42.4, longitude: -70.9, name: null },
+        { latitude: 42.7, longitude: -70.8, name: null }
+      ],
+      destination: null,
+      name: null,
+      note: 'rationale',
+      confidence: null
+    }),
+    BOUNDS
+  )
+  assert.ok(route !== undefined)
+  assert.equal(route.waypoints.length, 2)
+  assert.equal(route.waypoints[0].name, undefined, 'a null waypoint name is dropped')
+  assert.equal(route.destination, undefined)
+  assert.equal(route.name, undefined)
+  assert.equal(route.confidence, undefined)
+})
+
 // --- openRouterErrorCode ------------------------------------------------------
 
 test('openRouterErrorCode maps only 401 to unauthorized', () => {
@@ -349,4 +373,19 @@ test('buildUserPrompt omits the hint line when the optimize prompt is blank', ()
   assert.ok(!('error' in parsed))
   const prompt = buildUserPrompt(parsed, TEST_CONFIG)
   assert.doesNotMatch(prompt, /Navigator's hint:/)
+})
+
+test('buildUserPrompt tells a draft to honor a named start and use the vessel position only as a fallback', () => {
+  const parsed = parseRequest(requestBody())
+  assert.ok(!('error' in parsed))
+  const prompt = buildUserPrompt(parsed, TEST_CONFIG)
+  assert.match(prompt, /If the request names a starting point, begin the route there/)
+  assert.match(prompt, /from me/)
+})
+
+test('buildUserPrompt does not add the draft start-fallback guidance to an optimize', () => {
+  const parsed = parseRequest(requestBody({ route: DRAWN }))
+  assert.ok(!('error' in parsed))
+  const prompt = buildUserPrompt(parsed, TEST_CONFIG)
+  assert.doesNotMatch(prompt, /Use the vessel position below as the start only/)
 })
