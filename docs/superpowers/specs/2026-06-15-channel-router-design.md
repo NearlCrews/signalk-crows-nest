@@ -9,9 +9,11 @@ A deterministic A* router that makes AI route-draft and optimize results follow
 navigable water instead of cutting across land. The LLM still resolves intent
 (start, destination, place names, constraints), and owned code computes the actual
 water-following geometry between the endpoints with A* over a navigable grid built
-from the charted and mapped data the plugin already fetches (ENC `Depth_Area` and
-`Land_Area`, OpenStreetMap water and coastline). The model proposes where; owned
-code disposes how to get there on the water.
+from the charted polygon data the plugin already fetches (ENC `Depth_Area` and
+`Land_Area`). The model proposes where; owned code disposes how to get there on
+the water. v1 routes where ENC charted coverage exists (US waters, including the
+Great Lakes and the Detroit River, the target use) and falls back to the LLM route
+elsewhere.
 
 ## Problem
 
@@ -30,10 +32,10 @@ what the navigator wants).
 
 - **Hybrid.** The LLM resolves endpoints and intent; A* computes the geometry
   between them. Not a separate mode, not a manual snap-only step.
-- **Depth-aware mask.** A cell is navigable when it is charted/mapped water that is
-  also deep enough (`DRVAL1 >= draft + safety margin`) where ENC depth exists;
-  land-only elsewhere. The ENC `Depth_Area` polygons double as the deep-water
-  source.
+- **Depth-aware mask, ENC-only in v1.** A cell is navigable when it is inside an
+  ENC `Depth_Area` charted deep enough (`DRVAL1 >= draft + safety margin`) and not
+  in a `Land_Area` or a drying area. The ENC `Depth_Area` polygons double as the
+  deep-water source. A worldwide OSM water mask is deferred (see the mask section).
 - **Both flows.** Applies to draft-from-scratch and to optimize (optimize is
   corridor-constrained around the drawn route).
 - **Grid + A*, owned TypeScript, no heavy dependencies.** Rejected: a visibility
@@ -68,13 +70,13 @@ one responsibility.
   transform. Pure.
 - `channel-router.ts` — the orchestrator. Given the route endpoints, the vessel
   draft and margin, the standoff, and an optional corridor polyline, it: computes
-  the route bbox (padded), fetches the nav data over that bbox once (reusing
-  `queryChartedAreas` for ENC and `queryCoastline` for OSM, each under the same
-  bounded Overpass timeout the providers use), builds the grid, snaps the start and
-  goal to the nearest navigable cell, runs A*, simplifies, and returns
-  `Position[]` turning waypoints or `undefined` (fallback). Reuses
-  `leg-geometry` (`pointInRings`, `segmentCrossesRings`, `routeBbox`), the geo
-  helpers, the length constants, and `combineAbortSignals` for the bounded fetch.
+  the route bbox (padded), fetches the ENC charted areas over that bbox once per
+  band (reusing `queryChartedAreas`, threading the request deadline signal), builds
+  the grid, snaps the start and goal to the nearest navigable cell, runs A*,
+  simplifies, and returns `Position[]` turning waypoints or `undefined` (fallback).
+  Reuses `leg-geometry` (`pointInRings`, `segmentCrossesRings`, `routeBbox`), the
+  geo helpers, and the length constants. ENC is fast (sub-second per band query in
+  live timing), so no Overpass-style per-query cap is needed here in v1.
 
 The grid is built by rasterizing the polygons (owned scanline fill) rather than a
 point-in-polygon test per cell, so a dense coastline does not make grid
@@ -83,16 +85,24 @@ small checks.
 
 ## The navigable mask (per cell)
 
-Evaluated in precedence order, matching the safety check's authority order:
+v1 builds the mask from ENC charted polygons only (authoritative US data that
+covers the Great Lakes and the Detroit River, the target use), evaluated per cell
+in precedence order matching the safety check's authority order:
 
 1. Inside an ENC `Land_Area` polygon -> blocked.
-2. Else inside an ENC `Depth_Area` polygon -> navigable iff its `DRVAL1 >= draft +
-   safetyMargin` (deep enough); a shallower area is blocked. This is the
-   depth-aware, US-authoritative case; the `Depth_Area` extent is also the
-   water extent.
-3. Else, outside ENC coverage, inside an OSM water polygon and not separated from
-   the endpoints by the OSM coastline -> navigable (land-only, no depth info).
-4. Else -> blocked (land, or no navigable-data coverage).
+2. Else inside an ENC `Depth_Area` polygon charted as drying (`DRVAL1 < 0`) ->
+   blocked (a drying area is treated as land, per the depth decoder's contract).
+3. Else inside an ENC `Depth_Area` polygon with `DRVAL1 >= draft + safetyMargin`
+   (deep enough) -> navigable. The `Depth_Area` extent is the charted water
+   extent, so this single rule gives both the water mask and the depth filter.
+4. Else -> blocked (a shallower depth area, or no charted water there).
+
+OSM is deliberately NOT a mask source in v1: the plugin fetches OSM *coastline
+lines*, which are sea-only and cannot be turned into a clean inland water/land
+mask without solving the coastline-orientation problem, and OSM has no charted
+depth. Where a route has no ENC `Depth_Area` coverage, the router declines and the
+flow falls back to the LLM/drawn route (see Fallback). A worldwide OSM water-polygon
+mask is a named follow-up, not v1.
 
 The standoff is not a hard mask but a soft cost: the distance-to-shore BFS yields a
 per-cell clearance, and A* multiplies step cost by `1 + k / (clearance + 1)`, so
@@ -130,18 +140,17 @@ within a small radius (it is deep inland, far from any water), the router return
 
 The router returns `undefined`, and the caller keeps the LLM/drawn route plus an
 `other` flag "automatic channel routing was unavailable here, verify every leg on
-the chart", when any of: the route bbox has no ENC and no OSM water coverage; an
+the chart", when any of: the route bbox has no ENC `Depth_Area` coverage; an
 endpoint cannot be snapped to navigable water; A* finds no connected water path
-(the endpoints are in disconnected basins); or the bounded nav-data fetch fails or
-times out. The existing safety check always runs regardless, so a fallback route
+(the endpoints are in disconnected basins); or the ENC fetch fails. The existing safety check always runs regardless, so a fallback route
 still gets its land, shallow, and hazard flags. The absence-of-a-flag honesty
 contract is unchanged.
 
 ## Performance and budget
 
-One nav-data fetch over the route bbox, each upstream query under the existing
-bounded Overpass timeout, so the router cannot blow the request deadline any more
-than the check can. Grid cell size scales to the bbox to keep the cell count under
+One ENC charted-areas fetch over the route bbox per usage band (sub-second per
+band in live timing), threading the request deadline signal so an abandoned fetch
+cancels; it cannot blow the request deadline. Grid cell size scales to the bbox to keep the cell count under
 a cap (coarsen large bboxes) with a floor that still resolves a narrow channel; A*
 over that grid is ~100-150 ms (spike-measured). The router runs inside the 30 s
 request deadline ahead of the bounded safety check; if the remaining budget is too
@@ -156,8 +165,8 @@ follow-up but is out of scope for v1 to keep the router landable on its own.
 - `src/route-draft/endpoint.ts` — call the channel router in `handleDraft` after
   `parseDraftedRoute` (draft) and after `anchorRouteEndpoints` (optimize), before
   `checkLegs`; replace `route.waypoints` on success, else attach the fallback note.
-  The router needs the ENC client, the Overpass client, the configured draft and
-  margin, the standoff, and (optimize only) the drawn polyline.
+  The router needs the ENC client, the configured draft and margin, the standoff,
+  the usage bands, and (optimize only) the drawn polyline.
 - `src/route-draft/config.ts` — add a corridor-half-width default and the
   standoff-cost weight to `RouteDraftConfig` (clamped via the shared bounds
   pattern) only if they need to be tunable; otherwise keep them as module
@@ -189,17 +198,19 @@ follow-up but is out of scope for v1 to keep the router landable on its own.
   preference (a path through a wide channel hugs the center, not the bank).
 - `path-simplify`: RDP collapses a dense centerline to turning points and keeps
   the endpoints.
-- `channel-router`: with stubbed `queryChartedAreas` and `queryCoastline` (no live
-  HTTP, reusing the existing provider stubs), a known land-crossing endpoint pair
-  yields a water-only path; an uncovered bbox returns `undefined`; an unsnappable
-  inland endpoint returns `undefined`; the optimize corridor restricts the path to
-  near the drawn polyline.
+- `channel-router`: with a stubbed `queryChartedAreas` (no live HTTP), a known
+  land-crossing endpoint pair yields a water-only path; a bbox with no depth areas
+  returns `undefined`; an unsnappable inland endpoint returns `undefined`; the
+  optimize corridor restricts the path to near the drawn polyline.
 - `endpoint` integration: a draft whose LLM route crosses land comes back with the
   A* water route; a no-coverage draft comes back with the LLM route plus the
   fallback note; the safety check still runs in both.
 
 ## Out of scope (future)
 
+- A worldwide OSM water-polygon mask (query `natural=water`/`waterway=riverbank`,
+  assemble multipolygons) so the router covers navigable water outside ENC
+  coverage. The main extension beyond v1's US-ENC reach.
 - Sharing the router's route-bbox nav data with the safety check (batches the
   check, removes its per-leg fetches). High value, separate change.
 - Using the LLM's interior waypoints as ordered A* via-points to preserve a stated
