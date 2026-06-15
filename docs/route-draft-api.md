@@ -60,7 +60,8 @@ about what it can and cannot do:
 
 The route-level channel note (an `other` flag, see the flags section) states the
 cause, so a client can tell apart "no mapped water here," "no continuous water
-path," "could not place an endpoint on water," and "routing skipped for time."
+path," "ran out of time before finding a path," "could not place an endpoint on
+water," and "routing skipped for time."
 
 The result is always a DRAFT to verify on the chart before saving. It is not a
 sanctioned route and it is not a guarantee of safe water.
@@ -168,10 +169,10 @@ code, and a human `message`. There are exactly five error codes:
 
 | `error` | Meaning | What to tell the operator |
 | --- | --- | --- |
-| `bad-request` | The request body was invalid (missing prompt, bad coordinates, malformed or too-large bounds). | Fix the request. The `message` says what is wrong. |
+| `bad-request` | The request body was invalid (missing prompt, bad coordinates, malformed, degenerate, or too-large bounds). | Fix the request. The `message` says what is wrong. |
 | `budget` | The daily drafting budget is used up. | Try again tomorrow, or raise the cap in the plugin. |
 | `no-route` | The model could not draft a usable route for that prompt. | Rephrase, or try a shorter passage. |
-| `model-error` | The OpenRouter call failed (a bad or empty completion, an out-of-credits account, a moderation block, a transport fault, or a provider error). | The `message` names the cause. An administrator may need to check the key or the OpenRouter account. |
+| `model-error` | The OpenRouter call failed (a bad or empty completion, an out-of-credits account, a moderation block, a transport fault, or a provider error), or the drafting service is configured but failed to start. | The `message` names the cause. An administrator may need to check the key, the OpenRouter account, or the server log. |
 | `unauthorized` | OpenRouter rejected the configured API key. | An administrator must fix the key in the plugin. |
 
 Always read and surface the `message`; it is written for an operator to act on.
