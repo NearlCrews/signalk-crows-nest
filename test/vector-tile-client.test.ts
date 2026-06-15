@@ -1,14 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-import { dirname, join } from 'node:path'
 import { createVectorTileClient } from '../src/inputs/vector-tiles/vector-tile-client.js'
 import type { RateLimitOptions } from '../src/inputs/http-client.js'
 import { silentLog } from './helpers.js'
 
-const here = dirname(fileURLToPath(import.meta.url))
-const TILE = readFileSync(join(here, 'fixtures/water-tile-z14.mvt'))
+// Resolved from the package root, the working directory when the test runner runs.
+const TILE = readFileSync('test/fixtures/water-tile-z14.mvt')
 
 const STYLE_URL = 'https://tiles.test/styles/liberty'
 const TILEJSON_URL = 'https://tiles.test/planet'

@@ -119,33 +119,6 @@ export interface CoastlineWay {
   points: number[][]
 }
 
-/** Whether an OSM area element is navigable water or a land blocker, from its tags. */
-export type OsmAreaKind = 'water' | 'land'
-
-/** One OSM way for the water-and-land area query: its kind and ordered [lon, lat] vertices. */
-export interface OsmAreaWay {
-  element: 'way'
-  kind: OsmAreaKind
-  id: number
-  points: number[][]
-}
-
-/** One OSM relation for the water-and-land area query: its kind and member ways with outer/inner roles. */
-export interface OsmAreaRelation {
-  element: 'relation'
-  kind: OsmAreaKind
-  id: number
-  members: Array<{ role: 'outer' | 'inner', points: number[][] }>
-}
-
-/**
- * A water or land area element, normalized before ring assembly (which lives in the
- * channel-router's osm-water-query, since it needs the route-draft geometry
- * primitives). A standalone way carries its own vertices; a relation carries its
- * member ways' geometry with their outer/inner roles.
- */
-export type OsmAreaElement = OsmAreaWay | OsmAreaRelation
-
 /** Public surface of the Overpass client. */
 export interface OverpassClient {
   /**
@@ -171,14 +144,6 @@ export interface OverpassClient {
    * in-flight request.
    */
   listCoastlineWays: (bbox: Bbox, signal?: AbortSignal) => Promise<CoastlineWay[]>
-  /**
-   * List the OSM water-area polygons (the navigable extent) and land features (island
-   * and explicit-land blockers) within a bounding box, for the channel router's
-   * worldwide mask. Returns normalized way and relation elements (possibly empty);
-   * ring assembly is the caller's job. Rejects on any failure. An optional caller
-   * `signal` lets a deadline cancel an in-flight request.
-   */
-  listWaterAreas: (bbox: Bbox, signal?: AbortSignal) => Promise<OsmAreaElement[]>
   /**
    * Abort any in-flight requests and stop retrying. Call this from
    * plugin.stop so a late response cannot record onto a later run's state.
@@ -252,44 +217,6 @@ function buildCoastlineQuery (bbox: Bbox): string {
 }
 
 /**
- * Server-side runtime budget, in seconds, for the channel router's water-and-land
- * area query. It is short on purpose: the query runs inside the per-request deadline
- * and the caller caps it with its own AbortSignal, so a public Overpass server must
- * give up early rather than spend a minute on a query the client has abandoned.
- */
-const WATER_QUERY_TIMEOUT_SECONDS = 8
-
-/**
- * Build the Overpass QL for the channel router's water-and-land area query. It
- * fetches OSM water polygons (the navigable extent: lakes, rivers drawn as areas,
- * lagoons, and large connected systems), excluding the non-navigable `water` values,
- * and OSM land features (`place=island`/`islet` and explicit `natural=land`) as
- * blockers, so an island mapped as its own feature rather than as a hole in the
- * surrounding water body still blocks. `out tags geom;` returns each element's tags
- * (to classify water from land) and, for a relation, its member ways' geometry with
- * their outer/inner roles. The bbox is clamped like the other queries; the water
- * helper tiles a wide box so the clamp never silently truncates coverage. Keep the tag
- * families here in lockstep with {@link osmAreaKind}, which classifies each result.
- */
-function buildWaterAreaQuery (bbox: Bbox): string {
-  const { south, west, north, east } = clampBbox(bbox)
-  return (
-    `[out:json][timeout:${WATER_QUERY_TIMEOUT_SECONDS}][bbox:${south},${west},${north},${east}];` +
-    '(' +
-    'way["natural"="water"]["water"!~"pond|reservoir|basin|wastewater"];' +
-    'relation["natural"="water"]["water"!~"pond|reservoir|basin|wastewater"];' +
-    'way["waterway"="riverbank"];' +
-    'relation["waterway"="riverbank"];' +
-    'way["place"~"^(island|islet)$"];' +
-    'relation["place"~"^(island|islet)$"];' +
-    'way["natural"="land"];' +
-    'relation["natural"="land"];' +
-    ');' +
-    'out tags geom;'
-  )
-}
-
-/**
  * Parse a typed OSM id (`node/123`) into its element type and numeric id.
  * Throws on a malformed id rather than issuing a guaranteed-empty query.
  */
@@ -318,11 +245,6 @@ interface OverpassWireElement {
   timestamp?: string
   /** Per-vertex geometry, present only when the query requested `out geom;`. */
   geometry?: Array<{ lat?: number, lon?: number }>
-  /**
-   * Relation members with per-member geometry and role, present only for a relation
-   * queried with `out geom;`. Only `type === 'way'` members carry ring geometry.
-   */
-  members?: Array<{ type?: string, role?: string, geometry?: Array<{ lat?: number, lon?: number }> }>
 }
 
 /** Response body of an Overpass query. */
@@ -392,62 +314,6 @@ function parseCoastlineWay (wire: OverpassWireElement): CoastlineWay | null {
     return null
   }
   return { points }
-}
-
-/** Read a wire geometry array into ordered [lon, lat] points, dropping invalid vertices. */
-function geometryPoints (geometry: Array<{ lat?: number, lon?: number }> | undefined): number[][] {
-  const points: number[][] = []
-  for (const vertex of geometry ?? []) {
-    const lat = vertex?.lat
-    const lon = vertex?.lon
-    if (isValidLatitude(lat) && isValidLongitude(lon)) points.push([lon, lat])
-  }
-  return points
-}
-
-/**
- * Classify an element's tags as a navigable water area, a land blocker, or null
- * (neither). Land tags are checked first so an islet tagged as both never reads as
- * water. The query already narrows to these tags; this re-derives the kind per
- * element since one query returns both. Keep this tag set in lockstep with the tag
- * families in {@link buildWaterAreaQuery}: a tag added there but not here is dropped.
- */
-function osmAreaKind (tags: Record<string, string> | undefined): OsmAreaKind | null {
-  if (tags === undefined) return null
-  if (tags.natural === 'land' || tags.place === 'island' || tags.place === 'islet') return 'land'
-  if (tags.natural === 'water' || tags.waterway === 'riverbank') return 'water'
-  return null
-}
-
-/**
- * Parse one wire element into an {@link OsmAreaElement}, or null when it is neither a
- * water nor a land feature or carries no usable geometry. A way reads its own
- * `geometry`; a relation reads each WAY member's `geometry` with the member `role`
- * (a missing or blank role defaults to `outer`, per the OSM multipolygon
- * convention). Node and sub-relation members are dropped, since only way members
- * carry ring geometry.
- */
-function parseWaterElement (wire: OverpassWireElement): OsmAreaElement | null {
-  if (wire == null || !Number.isFinite(wire.id)) return null
-  const kind = osmAreaKind(wire.tags)
-  if (kind === null) return null
-  if (wire.type === 'way') {
-    const points = geometryPoints(wire.geometry)
-    if (points.length < 2) return null
-    return { element: 'way', kind, id: wire.id as number, points }
-  }
-  if (wire.type === 'relation') {
-    const members: OsmAreaRelation['members'] = []
-    for (const member of wire.members ?? []) {
-      if (member?.type !== 'way') continue
-      const points = geometryPoints(member.geometry)
-      if (points.length < 2) continue
-      members.push({ role: member.role === 'inner' ? 'inner' : 'outer', points })
-    }
-    if (members.length === 0) return null
-    return { element: 'relation', kind, id: wire.id as number, members }
-  }
-  return null
 }
 
 /**
@@ -626,27 +492,10 @@ export function createOverpassClient (
     }
   }
 
-  async function listWaterAreas (
-    bbox: Bbox, signal?: AbortSignal
-  ): Promise<OsmAreaElement[]> {
-    try {
-      const data = await runRawQuery(
-        buildWaterAreaQuery(bbox),
-        'Overpass water-area request failed',
-        signal
-      )
-      return collectElements(data, parseWaterElement, 'malformed water/land element(s)')
-    } catch (error) {
-      log.debug(`Overpass water-area failed for ${JSON.stringify(bbox)}: ${String(error)}`)
-      throw error
-    }
-  }
-
   return {
     listPointsOfInterest,
     getById,
     listCoastlineWays,
-    listWaterAreas,
     close: () => { http.close() }
   }
 }

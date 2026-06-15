@@ -85,7 +85,9 @@ and tested known points against the decoded `water` layer:
   router's water source.
 - **Resolve the tile URL from the style TileJSON, cached and re-resolved on age-out.**
   The default style is OpenFreeMap "liberty"; the source is configurable.
-- **Decode with `@mapbox/vector-tile@2` plus `pbf@3`,** the verified pairing, using
+- **Decode with `@mapbox/vector-tile@3` plus `pbf@5`,** the verified pairing (both
+  expose named exports, `VectorTile` and `PbfReader`, which import cleanly under both
+  the CJS build and the tsx test runner with no default-export interop quirk), using
   the decoder's own `feature.toGeoJSON(x, y, z)` for ring grouping and the
   tile-to-lon/lat transform (it classifies exterior rings and holes by signed area in
   tile space, handling the y-down winding correctly, and applies the inverse-Mercator
@@ -280,19 +282,19 @@ contingent on the concurrency profile, so the plan must set it explicitly.
 
 ## Dependency choice
 
-`@mapbox/vector-tile@^2` and `pbf@^3` are the verified, canonical MVT decode stack
-(the version pairing the spike confirmed; `@mapbox/vector-tile@2` does not pair with
-`pbf@4`/`5`, whose export split to `PbfReader`). `@mapbox/vector-tile` pulls
-`@mapbox/point-geometry` transitively (no direct add needed). Licenses are permissive
-(BSD-3-Clause and ISC). A hand-written MVT decoder is rejected: protobuf varint, the
-geometry command and zigzag decoding, and the ring classification are error-prone to
-own and re-verify, exactly the case the project's adopt-a-library rule covers. The
-plan must: pin the working versions, verify the `import Pbf from 'pbf'` shape compiles
-and runs under the project's module target and lowest `engines.node` (the spike hit an
-ESM-interop quirk that the build target resolves), run `npm audit --omit=dev` and
-record it (a scored registry gate), and confirm CI passes on the Node matrix. The
-comparison is recorded for the commit and CHANGELOG; this section and the prior draft's
-duplicate ecosystem note are merged here.
+`@mapbox/vector-tile@^3` and `pbf@^5` are the verified, canonical MVT decode stack.
+Both expose NAMED exports (`import { VectorTile } from '@mapbox/vector-tile'`,
+`import { PbfReader } from 'pbf'`), which the spike confirmed import and decode a live
+tile cleanly under both the CJS build and the tsx test runner, sidestepping the
+default-export interop quirk an older `pbf` triggered. `@mapbox/vector-tile` pulls
+`@mapbox/point-geometry` transitively (no direct add), and `@types/geojson` arrives
+transitively for the `toGeoJSON` return type; both ship their own `.d.ts`. Licenses
+are permissive (BSD-3-Clause and ISC), and a fresh install reported zero
+vulnerabilities. A hand-written MVT decoder is rejected: protobuf varint, the geometry
+command and zigzag decoding, and the ring classification are error-prone to own and
+re-verify, exactly the case the project's adopt-a-library rule covers. The plan must
+run `npm audit --omit=dev` and record it (a scored registry gate) and confirm CI
+passes on the Node matrix. The comparison is recorded for the commit and CHANGELOG.
 
 ## Error handling and edge cases
 

@@ -179,7 +179,6 @@ function makeOverpass (
       return hazards
     },
     getById: async () => undefined,
-    listWaterAreas: async () => [],
     close: () => {}
   }
   return {

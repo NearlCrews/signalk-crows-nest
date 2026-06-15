@@ -37,8 +37,8 @@ import type { RouteDraftConfig } from './config.js'
 import { checkLegs } from './safety-check.js'
 import type { LegFlag } from './safety-check.js'
 import { estimateFuel, routeDistanceMeters } from './fuel.js'
-import { routeChannel, queryWaterAreas } from './channel-router/index.js'
-import type { ChannelDeclineReason, ChannelRouteResult } from './channel-router/index.js'
+import { routeChannel } from './channel-router/index.js'
+import type { ChannelDeclineReason, ChannelRouteResult, TileWaterSource } from './channel-router/index.js'
 
 /**
  * Usage bands the depth check queries, finest first. Best-band picks the finest with coverage and,
@@ -85,17 +85,18 @@ const CHANNEL_NOTE_BY_REASON: Record<ChannelDeclineReason | 'skipped', string> =
   unsnappable: 'Channel routing could not place the start or end on navigable water, so this is the direct AI route. Verify every leg against the chart.',
   'land-leg': 'The auto-routed path crossed land or left charted water at the final check and was discarded, so this is the direct AI route. Treat it with extra caution and verify every leg against the chart.',
   'fetch-failed': 'Channel routing could not reach the chart data sources, so this is the direct AI route. Verify every leg against the chart.',
-  'coverage-incomplete': 'Channel routing could not load the full chart data for this area, so this is the direct AI route. Verify every leg against the chart.',
   skipped: 'Channel routing was skipped to keep within the time budget, so this is the direct AI route. Verify every leg against the chart.'
 }
 
 /**
- * Route-level caveat when the channel route followed an OSM water outline, which
- * carries no depth: the route avoids charted land but the router did not check depth.
+ * Route-level caveat when the channel route followed mapped water outlines that carry
+ * no depth. The wording does not claim the route "avoids charted land", because the
+ * water outlines are generalized for display and can omit a small island or narrow
+ * hazard; it describes what the router did and points the navigator at the chart.
  */
-const CHANNEL_OSM_WATER_CAVEAT: LegFlag = {
+const CHANNEL_TILE_WATER_CAVEAT: LegFlag = {
   kind: 'other',
-  message: 'This route was auto-routed to follow mapped water outlines that carry no depth data, so it avoids charted land but is not depth-checked. Treat it as a draft and verify every leg against the chart, especially in narrow or shoal water.'
+  message: 'This route was auto-routed to stay within mapped water outlines, which are generalized for display and carry no depth, so it can omit a small island or narrow hazard and is not depth-checked. Treat it as a draft and verify every leg against the chart, especially in narrow or shoal water.'
 }
 
 /**
@@ -193,6 +194,8 @@ export interface RouteDraftService {
   overpass: OverpassClient
   /** The EMODnet client the European modeled-depth leg check queries through. */
   emodnet: EmodnetClient
+  /** The worldwide vector-tile water source the channel router routes over (holds the tile cache). */
+  tileWater: TileWaterSource
   /** The resolved route-draft configuration (vessel, fuel, and routing settings). */
   config: RouteDraftConfig
   /**
@@ -634,7 +637,7 @@ async function handleDraft (
   const channelResult: ChannelRouteResult | { ok: false, reason: 'skipped' } =
     deadlineMs - Date.now() >= ROUTER_MIN_BUDGET_MS
       ? await routeChannel(
-        { client: service.enc, queryChartedAreas, overpass: service.overpass, queryWaterAreas, bands: DEPTH_BANDS, logger },
+        { client: service.enc, queryChartedAreas, queryWater: service.tileWater.queryTileWater, bands: DEPTH_BANDS, logger },
         {
           from: { latitude: route.waypoints[0].latitude, longitude: route.waypoints[0].longitude },
           to: { latitude: route.waypoints[route.waypoints.length - 1].latitude, longitude: route.waypoints[route.waypoints.length - 1].longitude },
@@ -730,7 +733,7 @@ export function applyChannelRoute (
 ): { waypoints: DraftWaypoint[], notes: LegFlag[] } {
   if (result.ok) {
     const replaced = result.waypoints.map((p) => ({ latitude: p.latitude, longitude: p.longitude }))
-    return { waypoints: replaced, notes: result.usedOsmWater ? [CHANNEL_OSM_WATER_CAVEAT] : [] }
+    return { waypoints: replaced, notes: result.usedTileWater ? [CHANNEL_TILE_WATER_CAVEAT] : [] }
   }
   return { waypoints, notes: [{ kind: 'other', message: CHANNEL_NOTE_BY_REASON[result.reason] }] }
 }

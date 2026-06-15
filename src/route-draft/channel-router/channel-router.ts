@@ -12,16 +12,16 @@
  * geometry on the water.
  *
  * Coverage is positive: a cell is navigable only where ENC charts it deep enough or
- * where OSM maps water, and any land source (ENC land, OSM land) blocks. Outside both
- * (notably the open sea, which OSM does not map as a water polygon) the router
- * declines and the caller keeps the LLM or drawn route. The router never verifies
- * depth for OSM water; that honesty stays with the post-route safety check, and the
- * caller flags an OSM-water success as depth-unverified.
+ * where the vector-tile water layer maps water, and any land source (ENC land, ENC
+ * drying, a tile-water island hole) blocks. Outside coverage (a failed tile, or a
+ * window too large to tile) the router declines and the caller keeps the LLM or drawn
+ * route. The router never verifies depth for tile water; that honesty stays with the
+ * post-route safety check, and the caller flags a tile-water success as
+ * depth-unverified.
  */
 
 import type { EncDirectClient } from '../../inputs/noaa-enc/enc-direct-client.js'
 import type { ChartedAreas } from '../../inputs/noaa-enc/depth-area-query.js'
-import type { OverpassClient } from '../../inputs/openseamap/overpass-client.js'
 import type { ScaleBand } from '../../shared/scale-band.js'
 import type { Bbox, Logger, Position } from '../../shared/types.js'
 import { METERS_PER_NAUTICAL_MILE } from '../../shared/length.js'
@@ -31,12 +31,10 @@ import type { QueryChartedAreas } from '../safety-check.js'
 import { buildNavGrid, resolveGridSize, type NavGrid } from './nav-grid.js'
 import { findPath } from './astar.js'
 import { simplifyPath } from './path-simplify.js'
-import type { OsmAreas } from './osm-water-query.js'
+import type { TileWater } from './tile-water-query.js'
 
-/** The OSM water-and-land query, matching {@link queryWaterAreas}; injected so tests stub it. */
-export type QueryWaterAreas = (
-  client: OverpassClient, bbox: Bbox, signal?: AbortSignal, logger?: Logger
-) => Promise<OsmAreas>
+/** The tile-water query, matching {@link TileWaterSource.queryTileWater}; injected so tests stub it. */
+export type QueryTileWater = (bbox: Bbox, signal?: AbortSignal, logger?: Logger) => Promise<TileWater>
 
 /** A typed reason the router could not produce a water route. */
 export type ChannelDeclineReason =
@@ -45,11 +43,10 @@ export type ChannelDeclineReason =
   | 'unsnappable'
   | 'land-leg'
   | 'fetch-failed'
-  | 'coverage-incomplete'
 
 /** The result of {@link routeChannel}: the water route, or the reason it could not build one. */
 export type ChannelRouteResult =
-  | { ok: true, waypoints: Position[], usedOsmWater: boolean }
+  | { ok: true, waypoints: Position[], usedTileWater: boolean }
   | { ok: false, reason: ChannelDeclineReason }
 
 /** Injected collaborators; both queries are injected so a test runs without live HTTP. */
@@ -58,10 +55,8 @@ export interface ChannelRouterDeps {
   client: EncDirectClient
   /** The charted depth-area and land-area query (US). */
   queryChartedAreas: QueryChartedAreas
-  /** The Overpass client, passed through to the water-and-land query. */
-  overpass: OverpassClient
-  /** The OSM water-and-land query (worldwide). */
-  queryWaterAreas: QueryWaterAreas
+  /** The worldwide vector-tile water query. */
+  queryWater: QueryTileWater
   /** The usage bands to query for ENC depth, finest first. */
   bands: ScaleBand[]
   /** Optional logger for the degrade paths. */
@@ -97,6 +92,8 @@ const CORRIDOR_HALF_WIDTH_METERS = 1 * METERS_PER_NAUTICAL_MILE
 const SIMPLIFY_EPSILON_CELLS = 1.5
 /** RDP deviation cap, in meters, so a coarsened grid does not collapse a real bend. */
 const SIMPLIFY_EPSILON_METERS = 50
+/** Re-check sampling spacing cap, in meters, so a coarsened grid does not widen the sampling past it. */
+const SAMPLE_CAP_METERS = 30
 
 /**
  * Compute a water-following route from `from` to `to`. Returns the turning waypoints
@@ -115,34 +112,30 @@ export async function routeChannel (
   if (resolveGridSize(bbox) === null) return { ok: false, reason: 'no-coverage' }
 
   // Fetch both sources concurrently. ENC fetch never rejects (it returns undefined when
-  // every band failed); the OSM query rejects only when every tile failed. So the ENC
-  // settle is always fulfilled, and the only rejection is OSM. Both empty or failed is
-  // fetch-failed; otherwise an empty-but-present result is honest no coverage.
-  const [encSettled, osmSettled] = await Promise.allSettled([
+  // every band failed); the tile-water query rejects only when every tile failed. So the
+  // ENC settle is always fulfilled, and the only rejection is tile-water. Both empty or
+  // failed is fetch-failed; otherwise an empty-but-present result is honest no coverage.
+  const [encSettled, tileSettled] = await Promise.allSettled([
     fetchEncAreas(deps, bbox, req.signal),
-    deps.queryWaterAreas(deps.overpass, bbox, req.signal, deps.logger)
+    deps.queryWater(bbox, req.signal, deps.logger)
   ])
   const encBands = encSettled.status === 'fulfilled' ? encSettled.value : undefined
-  const osm = osmSettled.status === 'fulfilled' ? osmSettled.value : undefined
-  if (encBands === undefined && osm === undefined) {
-    if (osmSettled.status === 'rejected') deps.logger?.debug(`channel-router fetch-failed: ${String(osmSettled.reason)}`)
+  const tile = tileSettled.status === 'fulfilled' ? tileSettled.value : undefined
+  if (encBands === undefined && tile === undefined) {
+    if (tileSettled.status === 'rejected') deps.logger?.debug(`channel-router fetch-failed: ${String(tileSettled.reason)}`)
     return { ok: false, reason: 'fetch-failed' }
   }
   const bands = encBands ?? []
-  // A flattened view of all bands for the land re-check and the OSM-water-used test; the grid
+  // A flattened view of all bands for the land re-check and the tile-water-used test; the grid
   // itself takes the per-band list so a finer band wins per cell (see buildNavGrid).
   const enc: ChartedAreas = { depthAreas: bands.flatMap((b) => b.depthAreas), landAreas: bands.flatMap((b) => b.landAreas) }
-  const water: OsmAreas = osm ?? { water: [], land: [] }
-  // A capped-out land mask cannot be trusted (a dropped blocker could route over land), so
-  // decline rather than route on an incomplete land mask.
-  if (water.landIncomplete === true) return { ok: false, reason: 'coverage-incomplete' }
+  const water: TileWater = tile ?? { water: [] }
   if (enc.depthAreas.length === 0 && water.water.length === 0) return { ok: false, reason: 'no-coverage' }
 
   const grid = buildNavGrid({
     bbox,
     chartedBands: bands,
     osmWater: water.water,
-    osmLand: water.land,
     draftMeters: req.draftMeters,
     safetyMarginMeters: req.safetyMarginMeters,
     standoffMeters: req.standoffNm * METERS_PER_NAUTICAL_MILE,
@@ -160,9 +153,10 @@ export async function routeChannel (
   if (cells === undefined) return { ok: false, reason: 'no-path' }
 
   const contour = req.draftMeters + req.safetyMarginMeters
-  const sampleSpacing = grid.cellMeters / 2
+  const sampleSpacing = Math.min(grid.cellMeters / 2, SAMPLE_CAP_METERS)
   const landRings = landRingsOf(enc, water)
-  const legSafe = (a: Position, b: Position): boolean => !legCrossesLand(a, b, landRings)
+  const legSafe = (a: Position, b: Position): boolean =>
+    legStaysOnWater(a, b, enc, water, contour, sampleSpacing, landRings)
 
   // Simplify the A* centerline to turning points, then repair: a simplified leg that
   // would cross land or leave water (an RDP chord cutting a concave shore) is replaced by
@@ -192,10 +186,10 @@ export async function routeChannel (
   const interior = routeCells.slice(1, -1).map(([c, r]) => grid.cellCenter(c, r))
   const waypoints = [startPos, ...interior, goalPos]
 
-  if (!routeStaysOnWater(waypoints, enc, water, req.deadlineMs)) {
+  if (!routeStaysOnWater(waypoints, enc, water, contour, sampleSpacing, req.deadlineMs)) {
     return { ok: false, reason: 'land-leg' }
   }
-  return { ok: true, waypoints, usedOsmWater: usedOsmWater(waypoints, enc, water, contour, sampleSpacing) }
+  return { ok: true, waypoints, usedTileWater: usedTileWater(waypoints, enc, water, contour, sampleSpacing) }
 }
 
 /**
@@ -240,73 +234,114 @@ function snapToWater (grid: NavGrid, p: Position, maxSnapMeters: number): [numbe
   return undefined
 }
 
+/** True when a point is inside an ENC depth area charted deep enough (defined `DRVAL1 >= contour`). */
+function inEncDeep (lon: number, lat: number, charted: ChartedAreas, contour: number): boolean {
+  return charted.depthAreas.some((area) => {
+    if (!pointInRings(lon, lat, area.rings)) return false
+    const drval1 = area.depthRange?.shallowMeters
+    return drval1 !== undefined && drval1 >= contour
+  })
+}
+
 /**
- * The land rings a route must not cross: ENC `Land_Area` polygons, ENC drying areas
- * (charted `DRVAL1 < 0`, treated as land per the depth decoder's contract), and OSM
- * land features (islands mapped as their own feature, explicit land). Built once per
+ * The land rings a route must not cross, for the EXACT crossing test: ENC `Land_Area`
+ * polygons, ENC drying areas (charted `DRVAL1 < 0`, treated as land), and the HOLE
+ * rings of tile-water polygons (islands fully within a tile). Tile-water OUTER rings
+ * are deliberately NOT included: they include the tile-clip seam, so an exact test
+ * against them would false-positive on a leg crossing a tile boundary; the coast and
+ * seam islands are caught by the sampled navigability test instead. Built once per
  * route so a caller checking many legs does not rebuild it.
  */
-function landRingsOf (charted: ChartedAreas, osm: OsmAreas): number[][][][] {
+function landRingsOf (charted: ChartedAreas, water: TileWater): number[][][][] {
   const drying = charted.depthAreas
     .filter((a) => { const d = a.depthRange?.shallowMeters; return d !== undefined && d < 0 })
     .map((a) => a.rings)
-  return [...charted.landAreas.map((a) => a.rings), ...drying, ...osm.land.map((a) => a.rings)]
-}
-
-/** True when the leg `a`->`b` crosses any land ring (exact, no sampling). */
-function legCrossesLand (a: Position, b: Position, landRings: number[][][][]): boolean {
-  const aPt = [a.longitude, a.latitude]
-  const bPt = [b.longitude, b.latitude]
-  return landRings.some((rings) => segmentCrossesRings(aPt, bPt, rings))
+  const islandHoles = water.water.filter((p) => p.rings.length > 1).map((p) => p.rings.slice(1))
+  return [...charted.landAreas.map((a) => a.rings), ...drying, ...islandHoles]
 }
 
 /**
- * True when no final leg crosses charted land. This is the router's own honesty
- * backstop at full polygon resolution, independent of the cell grid: the grid routes
- * on positively-covered water, and this catches a simplified or snapped leg that would
- * cut land (a sub-cell sliver, or an island the grid missed). It checks LAND only, not
- * coverage or depth: an uncharted gap between depth areas is not land, and a leg
- * through shallow or uncharted water is the safety check's job to flag, never silently
- * a land crossing. Exported so the re-check is unit-tested directly.
+ * Full-resolution navigability of a point, matching the grid: blocked inside ENC land,
+ * blocked inside an ENC depth area that is drying, shallow, or unknown (shallowest
+ * wins), navigable inside an ENC deep-enough area or a tile-water polygon (even-odd
+ * excludes island holes), else not covered (treated as land, the safe direction).
  */
-export function routeStaysOnWater (
-  waypoints: Position[],
-  charted: ChartedAreas,
-  osm: OsmAreas,
-  deadlineMs?: number
+function navigableAt (lon: number, lat: number, charted: ChartedAreas, water: TileWater, contour: number): boolean {
+  if (charted.landAreas.some((a) => pointInRings(lon, lat, a.rings))) return false
+  const encBlocked = charted.depthAreas.some((area) => {
+    if (!pointInRings(lon, lat, area.rings)) return false
+    const drval1 = area.depthRange?.shallowMeters
+    return drval1 === undefined || drval1 < contour
+  })
+  if (encBlocked) return false
+  if (inEncDeep(lon, lat, charted, contour)) return true
+  return water.water.some((w) => pointInRings(lon, lat, w.rings))
+}
+
+/**
+ * True when a single final leg stays on navigable water: it crosses no exact land ring
+ * (ENC land, ENC drying, a tile-water island hole), and every sampled point along it is
+ * navigable at full resolution. The exact test catches a thin island the sampling could
+ * straddle; the sampled test catches a real coast or a tile-seam island (where the
+ * point is outside all water) and treats a tile boundary as in-water.
+ */
+function legStaysOnWater (
+  a: Position, b: Position, charted: ChartedAreas, water: TileWater,
+  contour: number, sampleSpacingMeters: number, landRings: number[][][][]
 ): boolean {
-  const landRings = landRingsOf(charted, osm)
-  for (let i = 0; i + 1 < waypoints.length; i += 1) {
-    // Bail to a decline if the synchronous re-check runs past the deadline, rather than
-    // overrunning into the safety check's budget. A declined route is the safe outcome.
-    if (deadlineMs !== undefined && Date.now() > deadlineMs) return false
-    if (legCrossesLand(waypoints[i], waypoints[i + 1], landRings)) return false
+  const aPt = [a.longitude, a.latitude]
+  const bPt = [b.longitude, b.latitude]
+  if (landRings.some((rings) => segmentCrossesRings(aPt, bPt, rings))) return false
+  for (const s of [a, ...sampleRhumbLeg(a, b, Math.max(1, sampleSpacingMeters)), b]) {
+    if (!navigableAt(s.longitude, s.latitude, charted, water, contour)) return false
   }
   return true
 }
 
 /**
- * True when any sampled point along the route sits on OSM water rather than inside an
- * ENC deep-enough area, so a route whose waypoints land in ENC water but whose legs
- * pass through OSM-only water still earns the depth-unverified caveat. Samples at the
- * same spacing as the re-check, so a depth-unverified interior leg is not missed.
+ * True when no final leg leaves navigable water. The router's honesty backstop at full
+ * polygon resolution, independent of the cell grid. Exported so the re-check is
+ * unit-tested directly.
  */
-function usedOsmWater (
-  waypoints: Position[], charted: ChartedAreas, osm: OsmAreas, contour: number, sampleSpacingMeters: number
+export function routeStaysOnWater (
+  waypoints: Position[],
+  charted: ChartedAreas,
+  water: TileWater,
+  contourMeters: number,
+  sampleSpacingMeters: number,
+  deadlineMs?: number
 ): boolean {
-  if (osm.water.length === 0) return false
+  const landRings = landRingsOf(charted, water)
+  for (let i = 0; i + 1 < waypoints.length; i += 1) {
+    // Bail to a decline if the synchronous re-check runs past the deadline, rather than
+    // overrunning into the safety check's budget. A declined route is the safe outcome.
+    if (deadlineMs !== undefined && Date.now() > deadlineMs) return false
+    if (!legStaysOnWater(waypoints[i], waypoints[i + 1], charted, water, contourMeters, sampleSpacingMeters, landRings)) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * True when any sampled point along the route sits on tile water rather than inside an
+ * ENC deep-enough area, so a route whose waypoints land in ENC depth but whose legs
+ * pass through tile-water-only stretches still earns the depth-unverified caveat. Uses
+ * the SAME `inEncDeep` predicate the re-check uses, so a tile-water leg (including a
+ * tile-water fill of an ENC gap) is never presented as depth-checked.
+ */
+function usedTileWater (
+  waypoints: Position[], charted: ChartedAreas, water: TileWater, contour: number, sampleSpacingMeters: number
+): boolean {
+  if (water.water.length === 0) return false
   const spacing = Math.max(1, sampleSpacingMeters)
-  const inEncDeep = (lon: number, lat: number): boolean => charted.depthAreas.some((area) => {
-    if (!pointInRings(lon, lat, area.rings)) return false
-    const drval1 = area.depthRange?.shallowMeters
-    return drval1 !== undefined && drval1 >= contour
-  })
   for (let i = 0; i + 1 < waypoints.length; i += 1) {
     for (const p of [waypoints[i], ...sampleRhumbLeg(waypoints[i], waypoints[i + 1], spacing)]) {
-      if (inEncDeep(p.longitude, p.latitude)) continue
-      if (osm.water.some((w) => pointInRings(p.longitude, p.latitude, w.rings))) return true
+      if (inEncDeep(p.longitude, p.latitude, charted, contour)) continue
+      if (water.water.some((w) => pointInRings(p.longitude, p.latitude, w.rings))) return true
     }
   }
   const last = waypoints[waypoints.length - 1]
-  return !inEncDeep(last.longitude, last.latitude) && osm.water.some((w) => pointInRings(last.longitude, last.latitude, w.rings))
+  return !inEncDeep(last.longitude, last.latitude, charted, contour) &&
+    water.water.some((w) => pointInRings(last.longitude, last.latitude, w.rings))
 }

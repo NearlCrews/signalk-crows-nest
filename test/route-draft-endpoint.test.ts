@@ -397,22 +397,22 @@ test('buildUserPrompt does not add the draft start-fallback guidance to an optim
 test('applyChannelRoute replaces the waypoints on an ENC success with no caveat', () => {
   const original = [{ latitude: 1, longitude: 1 }, { latitude: 2, longitude: 2 }]
   const channel = [{ latitude: 1, longitude: 1 }, { latitude: 1.5, longitude: 1.2 }, { latitude: 2, longitude: 2 }]
-  const r = applyChannelRoute(original, { ok: true, waypoints: channel, usedOsmWater: false })
+  const r = applyChannelRoute(original, { ok: true, waypoints: channel, usedTileWater: false })
   assert.equal(r.waypoints.length, 3)
   assert.deepEqual(r.notes, [])
 })
 
-test('applyChannelRoute adds the depth caveat on an OSM-water success', () => {
+test('applyChannelRoute adds the depth caveat on a tile-water success', () => {
   const channel = [{ latitude: 1, longitude: 1 }, { latitude: 2, longitude: 2 }]
-  const r = applyChannelRoute([], { ok: true, waypoints: channel, usedOsmWater: true })
+  const r = applyChannelRoute([], { ok: true, waypoints: channel, usedTileWater: true })
   assert.equal(r.waypoints.length, 2)
   assert.equal(r.notes.length, 1)
-  assert.match(r.notes[0].message, /no depth data|not depth-checked/i)
+  assert.match(r.notes[0].message, /no depth|not depth-checked/i)
 })
 
 test('applyChannelRoute keeps the route and notes geometry on every non-success', () => {
   const original = [{ latitude: 1, longitude: 1 }, { latitude: 2, longitude: 2 }]
-  for (const reason of ['no-coverage', 'no-path', 'unsnappable', 'land-leg', 'fetch-failed', 'coverage-incomplete', 'skipped'] as const) {
+  for (const reason of ['no-coverage', 'no-path', 'unsnappable', 'land-leg', 'fetch-failed', 'skipped'] as const) {
     const r = applyChannelRoute(original, { ok: false, reason })
     assert.equal(r.waypoints, original, `${reason} keeps the original route`)
     assert.equal(r.notes.length, 1, `${reason} attaches the geometry note`)

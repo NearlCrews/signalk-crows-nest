@@ -81,54 +81,6 @@ test('listCoastlineWays issues a coastline out-geom query and parses geometry in
   )
 })
 
-test('listWaterAreas parses a water way, a multipolygon relation, and a land island, and classifies each', async () => {
-  await withMockFetch(
-    () => jsonResponse({
-      elements: [
-        {
-          type: 'way',
-          id: 10,
-          tags: { natural: 'water' },
-          geometry: [{ lat: 0, lon: 0 }, { lat: 0, lon: 1 }, { lat: 1, lon: 1 }, { lat: 0, lon: 0 }]
-        },
-        {
-          type: 'relation',
-          id: 20,
-          tags: { natural: 'water', water: 'lake' },
-          members: [
-            { type: 'way', role: 'outer', geometry: [{ lat: 0, lon: 0 }, { lat: 0, lon: 2 }] },
-            { type: 'way', role: '', geometry: [{ lat: 0, lon: 2 }, { lat: 2, lon: 0 }, { lat: 0, lon: 0 }] },
-            { type: 'way', role: 'inner', geometry: [{ lat: 0.4, lon: 0.4 }, { lat: 0.4, lon: 0.6 }, { lat: 0.6, lon: 0.4 }, { lat: 0.4, lon: 0.4 }] },
-            { type: 'node', role: 'admin_centre', geometry: [{ lat: 0.5, lon: 0.5 }] }
-          ]
-        },
-        { type: 'way', id: 30, tags: { place: 'island' }, geometry: [{ lat: 5, lon: 5 }, { lat: 5, lon: 6 }, { lat: 6, lon: 6 }, { lat: 5, lon: 5 }] },
-        // A reservoir is excluded by the query value filter; even if returned, it classifies as water but the query never asks for it. A tagless element is dropped.
-        { type: 'way', id: 31, geometry: [{ lat: 9, lon: 9 }, { lat: 9, lon: 10 }] }
-      ]
-    }),
-    async (calls) => {
-      const client = createOverpassClient(endpoint, silentLog, fastLimits)
-      const areas = await client.listWaterAreas(sampleBbox)
-      const body = String(calls.lastInit?.body)
-      assert.ok(body.includes('"natural"="water"'), `expected a water query, got ${body}`)
-      assert.ok(body.includes('"water"!~"pond|reservoir|basin|wastewater"'), 'expected the non-navigable water values excluded')
-      assert.ok(body.includes('"place"~"^(island|islet)$"'), 'expected the island land query')
-      assert.ok(body.includes('out tags geom;'), 'expected tags and geom out')
-      assert.equal(areas.length, 3, 'the tagless way is dropped')
-      const way = areas.find((a) => a.id === 10)
-      assert.deepEqual(way, { element: 'way', kind: 'water', id: 10, points: [[0, 0], [1, 0], [1, 1], [0, 0]] })
-      const rel = areas.find((a) => a.id === 20)
-      assert.equal(rel?.element, 'relation')
-      assert.equal(rel?.kind, 'water')
-      // The node member is dropped; the blank-role member defaults to outer.
-      assert.deepEqual(rel?.element === 'relation' ? rel.members.map((m) => m.role) : [], ['outer', 'outer', 'inner'])
-      const island = areas.find((a) => a.id === 30)
-      assert.equal(island?.kind, 'land')
-    }
-  )
-})
-
 test('an already-aborted caller signal aborts the request', async () => {
   await withMockFetch(
     (_callIndex, init) => {

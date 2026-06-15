@@ -46,7 +46,6 @@ function fakeClient (overrides: Partial<OverpassClient> = {}): {
       return rockNode
     },
     listCoastlineWays: async () => [],
-    listWaterAreas: async () => [],
     close: () => {},
     ...overrides
   }
