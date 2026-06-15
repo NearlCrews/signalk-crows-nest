@@ -98,10 +98,11 @@ interface Decoder {
 }
 let decoderPromise: Promise<Decoder> | undefined
 async function loadDecoder (): Promise<Decoder> {
+  // Reset the memo on a failed import so a transient load error does not poison every later call.
   decoderPromise ??= (async (): Promise<Decoder> => {
     const [vt, pbf] = await Promise.all([import('@mapbox/vector-tile'), import('pbf')])
     return { VectorTile: vt.VectorTile, PbfReader: pbf.PbfReader } as unknown as Decoder
-  })()
+  })().catch((error) => { decoderPromise = undefined; throw error })
   return decoderPromise
 }
 
@@ -133,6 +134,7 @@ export function createVectorTileClient (
 ): VectorTileClient {
   const http = createHttpClient(log, { label: 'VectorTile', requestTimeoutMs: REQUEST_TIMEOUT_MS, defaults: DEFAULTS }, options)
   let template: string | undefined
+  let templatePromise: Promise<string> | undefined
 
   async function fetchJson (url: string, signal?: AbortSignal): Promise<unknown> {
     const response = await http.fetch(url, { headers: BASE_HEADERS, signal })
@@ -150,9 +152,22 @@ export function createVectorTileClient (
     return tmpl.replace('{z}', String(z)).replace('{x}', String(x)).replace('{y}', String(y))
   }
 
+  // Resolve the template once, sharing one in-flight resolution across concurrent callers
+  // (a whole tile batch can 404 at once when a build ages out). The memo clears on
+  // settle: success leaves `template` set so later callers short-circuit, failure clears
+  // `templatePromise` so a retry re-attempts.
   async function ensureTemplate (signal?: AbortSignal): Promise<string> {
-    if (template === undefined) template = await resolveTemplate(fetchJson, styleUrl, signal)
-    return template
+    if (template !== undefined) return template
+    templatePromise ??= resolveTemplate(fetchJson, styleUrl, signal)
+      .then((t) => { template = t; return t })
+      .finally(() => { templatePromise = undefined })
+    return templatePromise
+  }
+
+  // Drop the cached template only if it is still the one that 404'd, so a concurrent
+  // 404 that already refreshed it is not discarded back to a second resolution.
+  function invalidateTemplate (stale: string): void {
+    if (template === stale) template = undefined
   }
 
   async function fetchLayer (
@@ -165,7 +180,7 @@ export function createVectorTileClient (
     } catch (error) {
       // A 404 means the cached build path aged out: re-resolve once and retry.
       if (error instanceof HttpError && error.status === 404) {
-        template = undefined
+        invalidateTemplate(tmpl)
         const fresh = await ensureTemplate(signal)
         return decodeLayer(decoder, await fetchTileBytes(tileUrl(fresh, z, x, y), signal), z, x, y, layerName)
       }

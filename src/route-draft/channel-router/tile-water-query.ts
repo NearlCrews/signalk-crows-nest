@@ -145,6 +145,7 @@ export function createTileWaterSource (client: VectorTileClient): TileWaterSourc
     let lastError: unknown
     const water: AreaPolygon[] = []
     let total = 0
+    let capHit = false
     for (const result of results) {
       if (result.status === 'rejected') {
         failed += 1
@@ -153,9 +154,11 @@ export function createTileWaterSource (client: VectorTileClient): TileWaterSourc
         continue
       }
       ok += 1
+      if (capHit) continue
       for (const poly of result.value) {
         if (total >= MAX_TOTAL_VERTICES) {
           logger?.debug(`tile-water: assembly stopped at the ${MAX_TOTAL_VERTICES}-vertex cap`)
+          capHit = true
           break
         }
         water.push(poly)

@@ -261,10 +261,18 @@ function landRingsOf (charted: ChartedAreas, water: TileWater): number[][][][] {
 }
 
 /**
- * Full-resolution navigability of a point, matching the grid: blocked inside ENC land,
- * blocked inside an ENC depth area that is drying, shallow, or unknown (shallowest
- * wins), navigable inside an ENC deep-enough area or a tile-water polygon (even-odd
- * excludes island holes), else not covered (treated as land, the safe direction).
+ * Full-resolution navigability of a point: blocked inside ENC land, blocked inside an
+ * ENC depth area that is drying, shallow, or unknown, navigable inside an ENC
+ * deep-enough area or a tile-water polygon (even-odd excludes island holes), else not
+ * covered (treated as land, the safe direction).
+ *
+ * Band precedence differs from the grid ON PURPOSE. The grid lets a FINER band win per
+ * cell (buildNavGrid), so a cell deep on a fine band but shallow on a coarse one is
+ * navigable. This re-check sees the FLATTENED all-bands view, where shallowest wins: a
+ * single shallow area blocks the point even if a finer band charts it deep. That makes
+ * the re-check strictly MORE conservative than the grid, so it can only decline a leg
+ * the grid allowed, never approve one the grid blocked: it never widens what passes,
+ * the safe direction for a depth check.
  */
 function navigableAt (lon: number, lat: number, charted: ChartedAreas, water: TileWater, contour: number): boolean {
   if (charted.landAreas.some((a) => pointInRings(lon, lat, a.rings))) return false
