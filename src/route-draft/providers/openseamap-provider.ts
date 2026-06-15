@@ -29,6 +29,7 @@
  * without live HTTP.
  */
 
+import { combineAbortSignals } from '../../shared/abort.js'
 import { metersFromNauticalMiles } from '../../shared/length.js'
 import { formatNm } from '../../shared/format-meters.js'
 import { tileBbox } from '../../shared/bbox-tiles.js'
@@ -70,6 +71,20 @@ const HAZARD_SEAMARK_REGEX = '^(rock|wreck|obstruction)$'
 
 /** The dimensions this provider supplies: land and hazards, never depth. */
 const OSM_CAPABILITIES: ReadonlySet<Dimension> = new Set<Dimension>(['land', 'hazards'])
+
+/**
+ * Per-query timeout for the Overpass coastline and seamark queries, bounded
+ * independently of the whole-request deadline. Overpass latency is slow and wildly
+ * variable (well under a second to fifteen-plus seconds for one query), and a
+ * single slow query must not consume the whole request budget and time out the
+ * entire safety check, dropping the other providers' results with it. When it
+ * fires, the leg's OSM contribution degrades honestly to not-checked: in US waters
+ * ENC still carries charted land and hazards, and elsewhere the leg is flagged
+ * not-checked rather than blocking the draft. Shorter legs (a route that follows
+ * the channel with enough waypoints) keep each query's corridor small and fast, so
+ * this bound rarely fires in practice.
+ */
+const OSM_QUERY_TIMEOUT_MS = 6000
 
 /**
  * Injected collaborators for the OpenSeaMap provider. The scan type is shared
@@ -200,7 +215,8 @@ export function createOpenSeaMapProvider (deps: OpenSeaMapProviderDeps): LegSafe
       let landCoverage: 'data' | 'nodata' = 'data'
       try {
         const bbox = legBbox(from, to, standoffMeters)
-        const ways = await queryCoastline(deps.client, bbox, params.signal)
+        const signal = combineAbortSignals([params.signal, AbortSignal.timeout(OSM_QUERY_TIMEOUT_MS)])
+        const ways = await queryCoastline(deps.client, bbox, signal)
         const lines = ways.map((way) => way.points)
         addLandFlags(flags, leg, from, to, lines, standoffMeters)
       } catch (error) {
@@ -231,7 +247,8 @@ export function createOpenSeaMapProvider (deps: OpenSeaMapProviderDeps): LegSafe
 
       let hazards: OsmHazardScan
       try {
-        hazards = await queryHazards(deps.client, routeBbox(waypoints, corridorHalfWidthMeters), params.signal)
+        const signal = combineAbortSignals([params.signal, AbortSignal.timeout(OSM_QUERY_TIMEOUT_MS)])
+        hazards = await queryHazards(deps.client, routeBbox(waypoints, corridorHalfWidthMeters), signal)
       } catch (error) {
         deps.logger?.debug(`OpenSeaMap route hazard query failed: ${String(error)}`)
         flags.push({ kind: 'other', message: 'point hazards not checked: the OpenStreetMap query failed' })

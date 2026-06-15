@@ -269,6 +269,7 @@ export async function runOrchestrator (
   // queries overlap without flooding the single upstream endpoint, collecting
   // each leg's outcome in leg order for a deterministic result.
   const legCount = waypoints.length - 1
+  const checkStarted = Date.now()
   const outcomes: LegOutcome[] = new Array(legCount)
   let nextLeg = 0
   async function runWorker (): Promise<void> {
@@ -387,10 +388,12 @@ export async function runOrchestrator (
       if (provider.checkHazards === undefined || !provider.capabilities.has('hazards')) continue
       const checkHazards = provider.checkHazards
       const runs = contiguousRuns(legCount, (leg) => outcomes[leg].active.includes(provider))
+      const hazStarted = Date.now()
       const perRun = await Promise.all(
         runs.map((run) =>
           checkHazards(run.map((leg) => ({ leg, from: waypoints[leg], to: waypoints[leg + 1] })), params))
       )
+      logger?.debug(`check-timing: ${provider.id} hazard sweep over ${runs.length} run(s) ${Date.now() - hazStarted}ms`)
       perProviderHazards.push(perRun.flat())
     }
     // Cross-provider-ONLY dedupe. The position key is coarse (about 11 m at four
@@ -419,6 +422,7 @@ export async function runOrchestrator (
     }
   }
 
+  logger?.debug(`check-timing: total ${Date.now() - checkStarted}ms over ${legCount} legs`)
   return { flags, checked: anyLegRan }
 }
 
@@ -469,10 +473,13 @@ async function runLeg (
 ): Promise<LegOutcome> {
   const active = resolveProviders(providers, from, to)
   const contributions = await Promise.all(active.map(async (provider): Promise<ProviderContribution> => {
+    const started = Date.now()
     try {
       const result = await provider.checkLeg(leg, from, to, params)
+      logger?.debug(`check-timing: leg ${leg} ${provider.id} checkLeg ${Date.now() - started}ms`)
       return { provider, flags: result.flags, coverage: result.coverage }
     } catch (error) {
+      logger?.debug(`check-timing: leg ${leg} ${provider.id} checkLeg FAILED ${Date.now() - started}ms`)
       logger?.debug(`leg ${leg} ${provider.id} charted-area query failed: ${String(error)}`)
       return {
         provider,
