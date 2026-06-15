@@ -8,6 +8,7 @@ function stubClient (ways: CoastlineWay[], calls: { n: number }): OverpassClient
     listPointsOfInterest: async () => [],
     getById: async () => undefined,
     listCoastlineWays: async () => { calls.n += 1; return ways },
+    listWaterAreas: async () => [],
     close: () => {}
   }
 }

@@ -33,6 +33,7 @@ function client (overrides: Partial<OverpassClient> = {}): OverpassClient {
     listPointsOfInterest: async () => [],
     getById: async () => undefined,
     listCoastlineWays: async () => [],
+    listWaterAreas: async () => [],
     close: () => {},
     ...overrides
   }
