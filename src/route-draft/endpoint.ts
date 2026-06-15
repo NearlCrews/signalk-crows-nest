@@ -87,7 +87,7 @@ const ROUTE_OPTIMIZE_TEMPERATURE = 0.1
  * configured model already appears here (the default does), the duplicate is
  * removed, so the list is the fallback chain regardless of which model leads.
  */
-const FALLBACK_MODELS = ['google/gemini-2.5-flash-lite', 'google/gemini-2.5-flash']
+const FALLBACK_MODELS = ['google/gemini-2.5-flash', 'google/gemini-2.5-flash-lite']
 
 /** Max turning waypoints kept from a draft, enforced by the parser. */
 const MAX_WAYPOINTS = 25

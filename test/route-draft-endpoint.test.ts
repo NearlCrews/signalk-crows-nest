@@ -302,8 +302,8 @@ test('modelsForRequest puts the configured model first and appends the fallbacks
   const custom = 'openai/gpt-4o'
   const list = modelsForRequest(custom)
   assert.equal(list[0], custom, 'the configured model leads')
-  assert.ok(list.includes('google/gemini-2.5-flash-lite'), 'the first fallback is included')
-  assert.ok(list.includes('google/gemini-2.5-flash'), 'the second fallback is included')
+  assert.ok(list.includes('google/gemini-2.5-flash'), 'the gemini-flash fallback is included')
+  assert.ok(list.includes('google/gemini-2.5-flash-lite'), 'the gemini-flash-lite fallback is included')
 })
 
 test('modelsForRequest with the default model has no duplicate and returns exactly two entries', () => {

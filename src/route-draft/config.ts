@@ -29,8 +29,13 @@ export type RouteDraftPropulsion = Propulsion
 
 // --- OpenRouter ---------------------------------------------------------------
 
-/** Default model slug. Gemini Flash-Lite supports strict structured outputs and is the cheapest, fastest verified choice. */
-export const DEFAULT_ROUTE_DRAFT_MODEL = 'google/gemini-2.5-flash-lite'
+/**
+ * Default model slug. Gemini Flash supports strict structured outputs and, in live testing, returns
+ * detailed routes (comparable to Opus) in about two seconds at low cost. Flash-Lite, the earlier
+ * default, is faster still but returns noticeably coarser routes, so it is kept only as a last-resort
+ * fallback rather than the default.
+ */
+export const DEFAULT_ROUTE_DRAFT_MODEL = 'google/gemini-2.5-flash'
 
 /** Default daily OpenRouter call cap. Bounds calls, not dollars (see budget.ts). */
 export const DEFAULT_MAX_CALLS_PER_DAY = 25
