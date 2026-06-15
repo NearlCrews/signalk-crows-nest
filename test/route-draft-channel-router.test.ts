@@ -105,6 +105,17 @@ test('routeChannel snaps an endpoint outside the water to the default reach (a c
   assert.equal(r.ok, true)
 })
 
+test('routeChannel snaps past an isolated pocket to the main channel and routes', async () => {
+  // `from` sits in a tiny pocket disconnected from the main water. Snapping must skip the pocket
+  // (which A* cannot escape) and land on the main body, else the route declines no-path even though
+  // the through-channel is in reach. This is the Detroit-River near-shore case.
+  const pocket = ring(0.0, 0.05, 0.01, 0.06)
+  const main = ring(0.02, 0.0, 0.3, 0.3)
+  const water: TileWater = { water: [pocket, main] }
+  const r = await routeChannel(deps(NO_ENC, water), { from: { latitude: 0.055, longitude: 0.005 }, to: { latitude: 0.15, longitude: 0.15 }, ...base })
+  assert.equal(r.ok, true)
+})
+
 test('routeChannel declines fetch-failed only when both sources throw', async () => {
   const r = await routeChannel(
     deps(NO_ENC, NO_WATER, {

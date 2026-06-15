@@ -163,9 +163,9 @@ export async function routeChannel (
   if (!grid.hasWater) return { ok: false, reason: 'no-coverage' }
 
   const maxSnap = req.maxSnapMeters ?? DEFAULT_MAX_SNAP_METERS
-  const start = snapToWater(grid, req.from, maxSnap)
-  const goal = snapToWater(grid, req.to, maxSnap)
-  if (start === undefined || goal === undefined) return { ok: false, reason: 'unsnappable' }
+  const snapped = snapEndpoints(grid, req.from, req.to, maxSnap)
+  if ('reason' in snapped) return { ok: false, reason: snapped.reason }
+  const { start, goal, comp: mainWater } = snapped
 
   const pathStatus = { timedOut: false }
   const cells = findPath(grid, start, goal, req.deadlineMs, pathStatus)
@@ -200,10 +200,17 @@ export async function routeChannel (
     }
   }
 
-  // Pin the requested endpoints when navigable (the navigator chose them), else the snapped cell center.
-  const startPos = grid.isNavigable(...grid.cellOf(req.from)) ? req.from : grid.cellCenter(routeCells[0][0], routeCells[0][1])
+  // Pin the requested endpoints when they sit on the main channel (the navigator chose them), else the
+  // snapped cell center. Checking the main component, not just navigability, matters when the requested
+  // point is in a disconnected pocket: pinning to it there would make the first leg jump across the gap
+  // to where A* actually started, which the re-check would then reject.
+  const onMain = (p: Position): boolean => {
+    const [c, r] = grid.cellOf(p)
+    return grid.isNavigable(c, r) && mainWater[r * grid.cols + c] === 1
+  }
+  const startPos = onMain(req.from) ? req.from : grid.cellCenter(routeCells[0][0], routeCells[0][1])
   const lastCell = routeCells[routeCells.length - 1]
-  const goalPos = grid.isNavigable(...grid.cellOf(req.to)) ? req.to : grid.cellCenter(lastCell[0], lastCell[1])
+  const goalPos = onMain(req.to) ? req.to : grid.cellCenter(lastCell[0], lastCell[1])
   const interior = routeCells.slice(1, -1).map(([c, r]) => grid.cellCenter(c, r))
   const waypoints = [startPos, ...interior, goalPos]
 
@@ -232,15 +239,76 @@ async function fetchEncAreas (
   return ok
 }
 
+/** Orthogonal neighbor offsets, hoisted so the component flood does not rebuild them per cell. */
+const ORTHO: ReadonlyArray<readonly [number, number]> = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+
+/**
+ * A mask of the 4-connected navigable cells reachable from `seed`. 4-connectivity is a subset of the
+ * A* moves (orthogonal steps never corner-cut), so any masked cell is A*-reachable from the seed.
+ */
+function componentFrom (grid: NavGrid, seed: [number, number]): Uint8Array {
+  const { cols, rows } = grid
+  const mask = new Uint8Array(cols * rows)
+  const queue = new Int32Array(cols * rows)
+  let head = 0
+  let tail = 0
+  const s = seed[1] * cols + seed[0]
+  mask[s] = 1
+  queue[tail++] = s
+  while (head < tail) {
+    const i = queue[head++]
+    const r = Math.floor(i / cols)
+    const c = i - r * cols
+    for (const [dc, dr] of ORTHO) {
+      const nc = c + dc
+      const nr = r + dr
+      if (nc < 0 || nc >= cols || nr < 0 || nr >= rows) continue
+      const ni = nr * cols + nc
+      if (mask[ni] === 1 || !grid.isNavigable(nc, nr)) continue
+      mask[ni] = 1
+      queue[tail++] = ni
+    }
+  }
+  return mask
+}
+
+/** Either both endpoints snapped onto a shared navigable component (with that component), or a reason. */
+type SnapResult =
+  | { start: [number, number], goal: [number, number], comp: Uint8Array }
+  | { reason: 'unsnappable' | 'no-path' }
+
+/**
+ * Snap both endpoints onto a SHARED navigable component so A* can connect them. Each snaps to its
+ * nearest navigable cell first; when those land in different components (a near-shore endpoint often
+ * snaps to an isolated pocket A* cannot escape), one is re-snapped into the other's component to reach
+ * the through-channel. If neither can reach the other's water within the cap, the basins are genuinely
+ * disconnected (no-path); if an endpoint has no navigable water within the cap at all, unsnappable.
+ */
+function snapEndpoints (grid: NavGrid, from: Position, to: Position, maxSnap: number): SnapResult {
+  const startNear = snapToWater(grid, from, maxSnap)
+  const goalNear = snapToWater(grid, to, maxSnap)
+  if (startNear === undefined || goalNear === undefined) return { reason: 'unsnappable' }
+  const goalComp = componentFrom(grid, goalNear)
+  if (goalComp[startNear[1] * grid.cols + startNear[0]] === 1) return { start: startNear, goal: goalNear, comp: goalComp }
+  const startInGoal = snapToWater(grid, from, maxSnap, goalComp)
+  if (startInGoal !== undefined) return { start: startInGoal, goal: goalNear, comp: goalComp }
+  const startComp = componentFrom(grid, startNear)
+  const goalInStart = snapToWater(grid, to, maxSnap, startComp)
+  if (goalInStart !== undefined) return { start: startNear, goal: goalInStart, comp: startComp }
+  return { reason: 'no-path' }
+}
+
 /**
  * The nearest navigable cell to a position within `maxSnapMeters`, by an
  * expanding-ring search bounded in cells by the grid's own cell size, accepting a
- * candidate only when its true distance is within the cap. Returns the position's own
- * cell when it is already navigable.
+ * candidate only when its true distance is within the cap and, when `inComponent` is
+ * given, the cell is in that component. Returns the position's own cell when it qualifies.
  */
-function snapToWater (grid: NavGrid, p: Position, maxSnapMeters: number): [number, number] | undefined {
+function snapToWater (grid: NavGrid, p: Position, maxSnapMeters: number, inComponent?: Uint8Array): [number, number] | undefined {
+  const ok = (c: number, r: number): boolean =>
+    grid.isNavigable(c, r) && (inComponent === undefined || inComponent[r * grid.cols + c] === 1)
   const [c0, r0] = grid.cellOf(p)
-  if (grid.isNavigable(c0, r0)) return [c0, r0]
+  if (ok(c0, r0)) return [c0, r0]
   const maxRadius = Math.max(1, Math.ceil(maxSnapMeters / grid.cellMeters))
   for (let radius = 1; radius <= maxRadius; radius += 1) {
     for (let dr = -radius; dr <= radius; dr += 1) {
@@ -248,7 +316,7 @@ function snapToWater (grid: NavGrid, p: Position, maxSnapMeters: number): [numbe
         if (Math.max(Math.abs(dr), Math.abs(dc)) !== radius) continue
         const c = c0 + dc
         const r = r0 + dr
-        if (grid.isNavigable(c, r) && distanceMeters(p, grid.cellCenter(c, r)) <= maxSnapMeters) return [c, r]
+        if (ok(c, r) && distanceMeters(p, grid.cellCenter(c, r)) <= maxSnapMeters) return [c, r]
       }
     }
   }
