@@ -116,11 +116,11 @@ self-contained module registered on one line in `src/index.ts`.
       the source offline. Besides the POI list query (`listPointsOfInterest`, the
       route-draft OpenSeaMap hazard provider reuses it with a hard-coded hazard
       regex), it exposes `listCoastlineWays` for the route-draft coastline land
-      check and `listWaterAreas` for the channel router's water-and-land query,
-      plus the `MAX_BBOX_SPAN_DEGREES` clamp and the `CoastlineWay` and
-      `OsmAreaElement` wire types those route-draft consumers read; every query
-      threads an optional `AbortSignal` so an abandoned check cancels its
-      in-flight requests),
+      check, plus the `MAX_BBOX_SPAN_DEGREES` clamp and the `CoastlineWay` wire
+      type that consumer reads; every query threads an optional `AbortSignal` so
+      an abandoned check cancels its in-flight requests. The channel router no
+      longer reads water from Overpass: its water source is vector tiles (see
+      `inputs/vector-tiles/` and `route-draft/channel-router/tile-water-query.ts`)),
       `seamark-mapping.ts` (one table mapping every `seamark:type` value to
       the plugin's `PoiType` union, a Freeboard-registered `:sk-` icon, and a
       plain-English label in lockstep, with isolated-danger marks rendered as
@@ -182,6 +182,12 @@ self-contained module registered on one line in `src/index.ts`.
       `depth-area-query.ts` (the charted `Depth_Area` and `Land_Area` polygon
       query the route-draft leg check consumes as an internal capability, built
       on the same `EncDirectClient`; not published as POIs).
+    - `vector-tiles/` - the vector-tile client for the channel router's water
+      source: `vector-tile-client.ts` resolves the versioned tile-URL template
+      from the style's TileJSON, fetches a tile, gunzips and decodes the
+      OpenMapTiles `water` layer with the Mapbox Vector Tile stack, and returns
+      one layer's polygon geometries in lon/lat. It serves the channel router,
+      not a POI source, so it publishes no POIs.
   - `route-draft/` - the optional, admin-gated AI route-draft feature (the
     server-side half of Binnacle's AI route drafting, opt-in and off until an
     OpenRouter key is set). The safety check is worldwide: it resolves data
@@ -242,24 +248,26 @@ self-contained module registered on one line in `src/index.ts`.
       the geometry on the water while the model owns only the endpoints and the
       intent. `channel-router.ts` (the orchestrator: it sizes and validates the
       route bbox, declining a cross-antimeridian or oversized window before any
-      fetch, fetches the ENC charted areas per band and the OSM water-and-land
-      areas concurrently, builds the navigable grid, snaps the endpoints to
+      fetch, fetches the ENC charted areas per band and the vector-tile water
+      concurrently, builds the navigable grid, snaps the endpoints to
       water, runs A*, simplifies the path, re-validates every final leg at
       polygon resolution, and returns the turning waypoints or a typed decline
-      reason; it never verifies depth for OSM water, so the caller flags an
-      OSM-water success as depth-unverified), `osm-water-query.ts` (the
-      worldwide OSM water-and-land Overpass query, an internal capability not
-      published as POIs, that tiles the bbox, dedupes elements across tiles, and
-      assembles each into an outer-ring-then-holes polygon; it lives here, not
-      under `inputs/openseamap`, because the ring assembly needs the route-draft
-      geometry primitives an inputs module must not depend on), `nav-grid.ts`
+      reason; it never verifies depth for tile water, so the caller flags a
+      tile-water success as depth-unverified), `tile-water-query.ts` (the
+      worldwide water source: it picks a zoom, enumerates the Web-Mercator tiles
+      covering the bbox, reads the pre-clipped OpenMapTiles `water` layer through
+      the vector-tile client, and returns water polygons with islands as holes,
+      caching decoded tiles in an LRU; it lives here, not under `inputs/`, because
+      the tile math and assembly are channel-router concerns, while the HTTP and
+      decode live in `inputs/vector-tiles/vector-tile-client.ts`), `nav-grid.ts`
       (the depth-aware navigable grid via scanline rasterization: a cell is
-      navigable only where ENC charts it deep enough or OSM maps water, and any
-      ENC or OSM land blocks, with a standoff cost ramp toward the desired
+      navigable only where ENC charts it deep enough or tile water maps water, and
+      any ENC land, ENC drying, or tile-water island hole blocks, with a standoff
+      cost ramp toward the desired
       offing), `astar.ts` (the grid A* with a binary min-heap), `path-simplify.ts`
       (the pure Ramer-Douglas-Peucker reduction of the A* centerline to turning
       points), and `index.ts` (the slice's barrel, exporting `routeChannel`,
-      `routeStaysOnWater`, and `queryWaterAreas` with their types).
+      `routeStaysOnWater`, and `createTileWaterSource` with their types).
   - `outputs/` - SignalK consumers of POI data.
     - `output.ts` - the `OutputModule`, `OutputHandle`, `OutputContext`, and
       `PositionScanContributor` contracts an output implements.

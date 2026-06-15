@@ -83,10 +83,21 @@ src/                      # TypeScript source
 │   │                      #   with conditional GET): module, source adapter,
 │   │                      #   NAVCEN client, on-disk index store, types, mapping,
 │   │                      #   detail renderer
-│   └── noaa-enc/          # The NOAA ENC Direct input (US-only, at-runtime bbox
-│                          #   query): module, source adapter, ArcGIS REST client,
-│                          #   wire types, S-57 enum and per-layer mapping,
-│                          #   plain-English detail renderer
+│   ├── noaa-enc/          # The NOAA ENC Direct input (US-only, at-runtime bbox
+│   │                      #   query): module, source adapter, ArcGIS REST client,
+│   │                      #   wire types, S-57 enum and per-layer mapping,
+│   │                      #   plain-English detail renderer
+│   └── vector-tiles/      # The channel router's water source: resolves the tile
+│                          #   template, fetches, gunzips, and decodes the OpenMapTiles
+│                          #   water layer to lon/lat polygons
+├── route-draft/         # The optional, admin-gated AI route-draft feature (server half):
+│                         #   endpoint.ts (parse, draft or optimize, safety-check, fuel),
+│                         #   safety-check.ts (worldwide per-leg provider resolution),
+│                         #   channel-router/ (deterministic water-following A*: the
+│                         #   vector-tile water source, nav-grid, astar, path-simplify,
+│                         #   orchestrator), providers/ (ENC and OpenSeaMap leg checks),
+│                         #   emodnet/ (European modeled depth), openrouter.ts, budget.ts,
+│                         #   fuel.ts, config.ts, and leg-geometry.ts
 ├── outputs/              # SignalK consumers of POI data
 │   ├── output.ts          # The OutputModule and PositionScanContributor contracts
 │   ├── output-registry.ts # Holds the outputs, starts the enabled ones
