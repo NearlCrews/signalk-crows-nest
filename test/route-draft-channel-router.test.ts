@@ -155,18 +155,27 @@ test('routeChannel constrains the optimize corridor to the drawn polyline', asyn
   for (const w of r.waypoints) assert.ok(Math.abs(w.latitude - w.longitude) < 0.25, `${JSON.stringify(w)} near the diagonal`)
 })
 
-test('routeStaysOnWater rejects a leg that crosses a land ring', () => {
+test('routeStaysOnWater rejects a leg that crosses an ENC land area', () => {
   const charted: ChartedAreas = { depthAreas: [encBox(0, 0, 1, 1, 10)], landAreas: [encBox(0.4, 0.4, 0.6, 0.6)] }
   const across: Position[] = [{ latitude: 0.5, longitude: 0.1 }, { latitude: 0.5, longitude: 0.9 }]
   const around: Position[] = [{ latitude: 0.5, longitude: 0.1 }, { latitude: 0.9, longitude: 0.5 }, { latitude: 0.5, longitude: 0.9 }]
-  assert.equal(routeStaysOnWater(across, charted, NO_OSM, 2.5, 5000), false)
-  assert.equal(routeStaysOnWater(around, charted, NO_OSM, 2.5, 5000), true)
+  assert.equal(routeStaysOnWater(across, charted, NO_OSM), false)
+  assert.equal(routeStaysOnWater(around, charted, NO_OSM), true)
 })
 
-test('routeStaysOnWater rejects a leg that leaves the OSM water polygon', () => {
-  const osm: OsmAreas = { water: [ring(0, 0, 1, 0.3)], land: [] }
-  const leaves: Position[] = [{ latitude: 0.1, longitude: 0.1 }, { latitude: 0.9, longitude: 0.9 }]
-  const stays: Position[] = [{ latitude: 0.1, longitude: 0.1 }, { latitude: 0.1, longitude: 0.9 }]
-  assert.equal(routeStaysOnWater(leaves, NO_ENC, osm, 2.5, 5000), false)
-  assert.equal(routeStaysOnWater(stays, NO_ENC, osm, 2.5, 5000), true)
+test('routeStaysOnWater rejects a leg that crosses an OSM land ring but allows an uncharted gap', () => {
+  const osm: OsmAreas = { water: [ring(0, 0, 1, 1)], land: [ring(0.4, 0, 0.6, 0.8)] }
+  const across: Position[] = [{ latitude: 0.5, longitude: 0.1 }, { latitude: 0.5, longitude: 0.9 }]
+  const clear: Position[] = [{ latitude: 0.9, longitude: 0.1 }, { latitude: 0.9, longitude: 0.9 }]
+  assert.equal(routeStaysOnWater(across, NO_ENC, osm), false)
+  assert.equal(routeStaysOnWater(clear, NO_ENC, osm), true)
+  // A leg through an area with no water polygon and no land is not a land crossing: the
+  // safety check owns coverage and depth, the router's re-check owns land only.
+  assert.equal(routeStaysOnWater(clear, NO_ENC, { water: [], land: [] }), true)
+})
+
+test('routeStaysOnWater treats an ENC drying area as land', () => {
+  const charted: ChartedAreas = { depthAreas: [encBox(0, 0, 1, 1, 10), encBox(0.4, 0.4, 0.6, 0.6, -1.5)], landAreas: [] }
+  const across: Position[] = [{ latitude: 0.5, longitude: 0.1 }, { latitude: 0.5, longitude: 0.9 }]
+  assert.equal(routeStaysOnWater(across, charted, NO_OSM), false)
 })

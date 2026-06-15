@@ -156,19 +156,40 @@ export async function routeChannel (
   const cells = findPath(grid, start, goal, req.deadlineMs)
   if (cells === undefined) return { ok: false, reason: 'no-path' }
 
-  const epsilon = Math.min(SIMPLIFY_EPSILON_CELLS, SIMPLIFY_EPSILON_METERS / grid.cellMeters)
-  const simplified = simplifyPath(cells, epsilon)
-  // Pin the requested endpoints when they are already navigable (the navigator chose
-  // them), else use the snapped cell center so the saved route never starts or ends on
-  // land. The interior is the RDP of the A* path between the snapped cells.
-  const startPos = grid.isNavigable(...grid.cellOf(req.from)) ? req.from : grid.cellCenter(start[0], start[1])
-  const goalPos = grid.isNavigable(...grid.cellOf(req.to)) ? req.to : grid.cellCenter(goal[0], goal[1])
-  const interior = simplified.slice(1, -1).map(([c, r]) => grid.cellCenter(c, r))
-  const waypoints = [startPos, ...interior, goalPos]
-
   const contour = req.draftMeters + req.safetyMarginMeters
   const sampleSpacing = grid.cellMeters / 2
-  if (!routeStaysOnWater(waypoints, enc, water, contour, sampleSpacing, req.deadlineMs)) {
+  const landRings = landRingsOf(enc, water)
+  const legSafe = (a: Position, b: Position): boolean => !legCrossesLand(a, b, landRings)
+
+  // Simplify the A* centerline to turning points, then repair: a simplified leg that
+  // would cross land or leave water (an RDP chord cutting a concave shore) is replaced by
+  // the A* sub-path it spanned, which is land-safe at cell resolution. So the router
+  // rounds an island rather than declining on a simplification artifact.
+  const epsilon = Math.min(SIMPLIFY_EPSILON_CELLS, SIMPLIFY_EPSILON_METERS / grid.cellMeters)
+  const simplified = simplifyPath(cells, epsilon)
+  const indexByCell = new Map<string, number>()
+  cells.forEach((c, i) => indexByCell.set(`${c[0]},${c[1]}`, i))
+  const keptIdx = simplified.map((c) => indexByCell.get(`${c[0]},${c[1]}`) ?? 0)
+  const routeCells: Array<[number, number]> = [cells[keptIdx[0]]]
+  for (let k = 1; k < keptIdx.length; k += 1) {
+    if (req.deadlineMs !== undefined && Date.now() > req.deadlineMs) return { ok: false, reason: 'land-leg' }
+    const p = keptIdx[k - 1]
+    const q = keptIdx[k]
+    if (legSafe(grid.cellCenter(cells[p][0], cells[p][1]), grid.cellCenter(cells[q][0], cells[q][1]))) {
+      routeCells.push(cells[q])
+    } else {
+      for (let m = p + 1; m <= q; m += 1) routeCells.push(cells[m])
+    }
+  }
+
+  // Pin the requested endpoints when navigable (the navigator chose them), else the snapped cell center.
+  const startPos = grid.isNavigable(...grid.cellOf(req.from)) ? req.from : grid.cellCenter(routeCells[0][0], routeCells[0][1])
+  const lastCell = routeCells[routeCells.length - 1]
+  const goalPos = grid.isNavigable(...grid.cellOf(req.to)) ? req.to : grid.cellCenter(lastCell[0], lastCell[1])
+  const interior = routeCells.slice(1, -1).map(([c, r]) => grid.cellCenter(c, r))
+  const waypoints = [startPos, ...interior, goalPos]
+
+  if (!routeStaysOnWater(waypoints, enc, water, req.deadlineMs)) {
     return { ok: false, reason: 'land-leg' }
   }
   return { ok: true, waypoints, usedOsmWater: usedOsmWater(waypoints, enc, water, contour, sampleSpacing) }
@@ -216,56 +237,46 @@ function snapToWater (grid: NavGrid, p: Position, maxSnapMeters: number): [numbe
 }
 
 /**
- * Full-resolution navigability of a point: blocked inside any ENC land or OSM land,
- * blocked inside an ENC depth area that is drying, shallow, or of unknown depth
- * (shallowest wins), navigable inside an ENC deep-enough area or an OSM water polygon
- * (even-odd handles island holes), else not covered.
+ * The land rings a route must not cross: ENC `Land_Area` polygons, ENC drying areas
+ * (charted `DRVAL1 < 0`, treated as land per the depth decoder's contract), and OSM
+ * land features (islands mapped as their own feature, explicit land). Built once per
+ * route so a caller checking many legs does not rebuild it.
  */
-function navigableAt (lon: number, lat: number, charted: ChartedAreas, osm: OsmAreas, contour: number): boolean {
-  for (const land of charted.landAreas) if (pointInRings(lon, lat, land.rings)) return false
-  for (const land of osm.land) if (pointInRings(lon, lat, land.rings)) return false
-  let encDeep = false
-  for (const area of charted.depthAreas) {
-    if (!pointInRings(lon, lat, area.rings)) continue
-    const drval1 = area.depthRange?.shallowMeters
-    if (drval1 === undefined || drval1 < contour) return false
-    encDeep = true
-  }
-  if (encDeep) return true
-  for (const w of osm.water) if (pointInRings(lon, lat, w.rings)) return true
-  return false
+function landRingsOf (charted: ChartedAreas, osm: OsmAreas): number[][][][] {
+  const drying = charted.depthAreas
+    .filter((a) => { const d = a.depthRange?.shallowMeters; return d !== undefined && d < 0 })
+    .map((a) => a.rings)
+  return [...charted.landAreas.map((a) => a.rings), ...drying, ...osm.land.map((a) => a.rings)]
+}
+
+/** True when the leg `a`->`b` crosses any land ring (exact, no sampling). */
+function legCrossesLand (a: Position, b: Position, landRings: number[][][][]): boolean {
+  const aPt = [a.longitude, a.latitude]
+  const bPt = [b.longitude, b.latitude]
+  return landRings.some((rings) => segmentCrossesRings(aPt, bPt, rings))
 }
 
 /**
- * True when every final leg stays on navigable water at polygon resolution: no leg
- * crosses an ENC or OSM land ring (exact), and every sampled point along each leg is
- * navigable (catches an RDP leg that leaves the water polygon or clips an island
- * hole, where a segment-versus-water-ring test would false-positive on a shared
- * boundary). Exported so the re-check is unit-tested directly.
+ * True when no final leg crosses charted land. This is the router's own honesty
+ * backstop at full polygon resolution, independent of the cell grid: the grid routes
+ * on positively-covered water, and this catches a simplified or snapped leg that would
+ * cut land (a sub-cell sliver, or an island the grid missed). It checks LAND only, not
+ * coverage or depth: an uncharted gap between depth areas is not land, and a leg
+ * through shallow or uncharted water is the safety check's job to flag, never silently
+ * a land crossing. Exported so the re-check is unit-tested directly.
  */
 export function routeStaysOnWater (
   waypoints: Position[],
   charted: ChartedAreas,
   osm: OsmAreas,
-  contourMeters: number,
-  sampleSpacingMeters: number,
   deadlineMs?: number
 ): boolean {
-  const landRings = [...charted.landAreas.map((a) => a.rings), ...osm.land.map((a) => a.rings)]
-  const spacing = Math.max(1, sampleSpacingMeters)
-  let sampleCount = 0
+  const landRings = landRingsOf(charted, osm)
   for (let i = 0; i + 1 < waypoints.length; i += 1) {
-    const a = waypoints[i]
-    const b = waypoints[i + 1]
-    const aPt = [a.longitude, a.latitude]
-    const bPt = [b.longitude, b.latitude]
-    if (landRings.some((rings) => segmentCrossesRings(aPt, bPt, rings))) return false
-    for (const s of [a, ...sampleRhumbLeg(a, b, spacing), b]) {
-      // Bail to a decline if the synchronous re-check runs past the deadline, rather than
-      // overrunning into the safety check's budget. A declined route is the safe outcome.
-      if ((sampleCount++ & 4095) === 0 && deadlineMs !== undefined && Date.now() > deadlineMs) return false
-      if (!navigableAt(s.longitude, s.latitude, charted, osm, contourMeters)) return false
-    }
+    // Bail to a decline if the synchronous re-check runs past the deadline, rather than
+    // overrunning into the safety check's budget. A declined route is the safe outcome.
+    if (deadlineMs !== undefined && Date.now() > deadlineMs) return false
+    if (legCrossesLand(waypoints[i], waypoints[i + 1], landRings)) return false
   }
   return true
 }
