@@ -412,12 +412,19 @@ test('applyChannelRoute adds the depth caveat on an OSM-water success', () => {
 
 test('applyChannelRoute keeps the route and notes geometry on every non-success', () => {
   const original = [{ latitude: 1, longitude: 1 }, { latitude: 2, longitude: 2 }]
-  for (const reason of ['no-coverage', 'no-path', 'unsnappable', 'land-leg', 'fetch-failed', 'skipped'] as const) {
+  for (const reason of ['no-coverage', 'no-path', 'unsnappable', 'land-leg', 'fetch-failed', 'coverage-incomplete', 'skipped'] as const) {
     const r = applyChannelRoute(original, { ok: false, reason })
     assert.equal(r.waypoints, original, `${reason} keeps the original route`)
     assert.equal(r.notes.length, 1, `${reason} attaches the geometry note`)
-    assert.match(r.notes[0].message, /Channel routing did not run/i)
+    assert.equal(r.notes[0].kind, 'other')
+    assert.match(r.notes[0].message, /direct AI route/i, `${reason} note names the direct AI route`)
   }
+})
+
+test('applyChannelRoute names the land-leg case honestly as a discarded path, not a missing one', () => {
+  const original = [{ latitude: 1, longitude: 1 }, { latitude: 2, longitude: 2 }]
+  const r = applyChannelRoute(original, { ok: false, reason: 'land-leg' })
+  assert.match(r.notes[0].message, /crossed land|discarded/i)
 })
 
 test('mergeChannelNote keeps a land flag before an appended other note', () => {

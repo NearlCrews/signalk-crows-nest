@@ -28,7 +28,7 @@ import { METERS_PER_NAUTICAL_MILE } from '../../shared/length.js'
 import { distanceMeters, sampleRhumbLeg } from '../../geo/position-utilities.js'
 import { pointInRings, routeBbox, segmentCrossesRings } from '../leg-geometry.js'
 import type { QueryChartedAreas } from '../safety-check.js'
-import { buildNavGrid, type NavGrid } from './nav-grid.js'
+import { buildNavGrid, resolveGridSize, type NavGrid } from './nav-grid.js'
 import { findPath } from './astar.js'
 import { simplifyPath } from './path-simplify.js'
 import type { OsmAreas } from './osm-water-query.js'
@@ -38,10 +38,19 @@ export type QueryWaterAreas = (
   client: OverpassClient, bbox: Bbox, signal?: AbortSignal, logger?: Logger
 ) => Promise<OsmAreas>
 
+/** A typed reason the router could not produce a water route. */
+export type ChannelDeclineReason =
+  | 'no-coverage'
+  | 'no-path'
+  | 'unsnappable'
+  | 'land-leg'
+  | 'fetch-failed'
+  | 'coverage-incomplete'
+
 /** The result of {@link routeChannel}: the water route, or the reason it could not build one. */
 export type ChannelRouteResult =
   | { ok: true, waypoints: Position[], usedOsmWater: boolean }
-  | { ok: false, reason: 'no-coverage' | 'no-path' | 'unsnappable' | 'land-leg' | 'fetch-failed' }
+  | { ok: false, reason: ChannelDeclineReason }
 
 /** Injected collaborators; both queries are injected so a test runs without live HTTP. */
 export interface ChannelRouterDeps {
@@ -88,12 +97,6 @@ const CORRIDOR_HALF_WIDTH_METERS = 1 * METERS_PER_NAUTICAL_MILE
 const SIMPLIFY_EPSILON_CELLS = 1.5
 /** RDP deviation cap, in meters, so a coarsened grid does not collapse a real bend. */
 const SIMPLIFY_EPSILON_METERS = 50
-/**
- * Maximum span, in degrees, of the waypoint-derived bbox on either edge. A wider
- * window is declined before any fetch: it catches a cross-antimeridian union (a near
- * 360-degree span) and a passage too large for the grid to resolve at the cell floor.
- */
-const MAX_BBOX_SPAN_DEG = 8
 
 /**
  * Compute a water-following route from `from` to `to`. Returns the turning waypoints
@@ -105,27 +108,31 @@ export async function routeChannel (
 ): Promise<ChannelRouteResult> {
   const anchors = req.bboxAnchors ?? req.corridor ?? [req.from, req.to]
   const bbox = routeBbox(anchors, BBOX_PAD_METERS)
-  // Decline a degenerate, cross-antimeridian, or oversized bbox BEFORE any fetch, so a
-  // stray far waypoint cannot fan the water query into many tiles or waste the ENC fetch.
-  if (
-    !(bbox.east > bbox.west) || !(bbox.north > bbox.south) ||
-    (bbox.east - bbox.west) > MAX_BBOX_SPAN_DEG || (bbox.north - bbox.south) > MAX_BBOX_SPAN_DEG
-  ) {
-    return { ok: false, reason: 'no-coverage' }
-  }
+  // Decline a degenerate, cross-antimeridian, or too-large-to-resolve bbox BEFORE any
+  // fetch, so a stray far waypoint cannot waste the ENC and OSM fetches that the grid
+  // would then decline. This uses the grid's own size resolution, so the pre-fetch
+  // decline matches exactly what buildNavGrid would reject.
+  if (resolveGridSize(bbox) === null) return { ok: false, reason: 'no-coverage' }
 
   // Fetch both sources concurrently. ENC fetch never rejects (it returns undefined when
-  // every band failed); the OSM query rejects only when every tile failed. Both failing
-  // is fetch-failed; otherwise an empty-but-present result is honest no coverage.
+  // every band failed); the OSM query rejects only when every tile failed. So the ENC
+  // settle is always fulfilled, and the only rejection is OSM. Both empty or failed is
+  // fetch-failed; otherwise an empty-but-present result is honest no coverage.
   const [encSettled, osmSettled] = await Promise.allSettled([
     fetchEncAreas(deps, bbox, req.signal),
     deps.queryWaterAreas(deps.overpass, bbox, req.signal, deps.logger)
   ])
   const charted = encSettled.status === 'fulfilled' ? encSettled.value : undefined
   const osm = osmSettled.status === 'fulfilled' ? osmSettled.value : undefined
-  if (charted === undefined && osm === undefined) return { ok: false, reason: 'fetch-failed' }
+  if (charted === undefined && osm === undefined) {
+    if (osmSettled.status === 'rejected') deps.logger?.debug(`channel-router fetch-failed: ${String(osmSettled.reason)}`)
+    return { ok: false, reason: 'fetch-failed' }
+  }
   const enc: ChartedAreas = charted ?? { depthAreas: [], landAreas: [] }
   const water: OsmAreas = osm ?? { water: [], land: [] }
+  // A capped-out land mask cannot be trusted (a dropped blocker could route over land), so
+  // decline rather than route on an incomplete land mask.
+  if (water.landIncomplete === true) return { ok: false, reason: 'coverage-incomplete' }
   if (enc.depthAreas.length === 0 && water.water.length === 0) return { ok: false, reason: 'no-coverage' }
 
   const grid = buildNavGrid({
@@ -160,10 +167,11 @@ export async function routeChannel (
   const waypoints = [startPos, ...interior, goalPos]
 
   const contour = req.draftMeters + req.safetyMarginMeters
-  if (!routeStaysOnWater(waypoints, enc, water, contour, grid.cellMeters / 2)) {
+  const sampleSpacing = grid.cellMeters / 2
+  if (!routeStaysOnWater(waypoints, enc, water, contour, sampleSpacing, req.deadlineMs)) {
     return { ok: false, reason: 'land-leg' }
   }
-  return { ok: true, waypoints, usedOsmWater: usedOsmWater(waypoints, enc, water, contour) }
+  return { ok: true, waypoints, usedOsmWater: usedOsmWater(waypoints, enc, water, contour, sampleSpacing) }
 }
 
 /** Fetch and merge the ENC charted areas across the bands, or undefined when every band rejected. */
@@ -240,10 +248,12 @@ export function routeStaysOnWater (
   charted: ChartedAreas,
   osm: OsmAreas,
   contourMeters: number,
-  sampleSpacingMeters: number
+  sampleSpacingMeters: number,
+  deadlineMs?: number
 ): boolean {
   const landRings = [...charted.landAreas.map((a) => a.rings), ...osm.land.map((a) => a.rings)]
   const spacing = Math.max(1, sampleSpacingMeters)
+  let sampleCount = 0
   for (let i = 0; i + 1 < waypoints.length; i += 1) {
     const a = waypoints[i]
     const b = waypoints[i + 1]
@@ -251,22 +261,37 @@ export function routeStaysOnWater (
     const bPt = [b.longitude, b.latitude]
     if (landRings.some((rings) => segmentCrossesRings(aPt, bPt, rings))) return false
     for (const s of [a, ...sampleRhumbLeg(a, b, spacing), b]) {
+      // Bail to a decline if the synchronous re-check runs past the deadline, rather than
+      // overrunning into the safety check's budget. A declined route is the safe outcome.
+      if ((sampleCount++ & 4095) === 0 && deadlineMs !== undefined && Date.now() > deadlineMs) return false
       if (!navigableAt(s.longitude, s.latitude, charted, osm, contourMeters)) return false
     }
   }
   return true
 }
 
-/** True when any final waypoint sits on OSM water rather than inside an ENC deep-enough area. */
-function usedOsmWater (waypoints: Position[], charted: ChartedAreas, osm: OsmAreas, contour: number): boolean {
-  for (const wp of waypoints) {
-    const inEncDeep = charted.depthAreas.some((area) => {
-      if (!pointInRings(wp.longitude, wp.latitude, area.rings)) return false
-      const drval1 = area.depthRange?.shallowMeters
-      return drval1 !== undefined && drval1 >= contour
-    })
-    if (inEncDeep) continue
-    if (osm.water.some((w) => pointInRings(wp.longitude, wp.latitude, w.rings))) return true
+/**
+ * True when any sampled point along the route sits on OSM water rather than inside an
+ * ENC deep-enough area, so a route whose waypoints land in ENC water but whose legs
+ * pass through OSM-only water still earns the depth-unverified caveat. Samples at the
+ * same spacing as the re-check, so a depth-unverified interior leg is not missed.
+ */
+function usedOsmWater (
+  waypoints: Position[], charted: ChartedAreas, osm: OsmAreas, contour: number, sampleSpacingMeters: number
+): boolean {
+  if (osm.water.length === 0) return false
+  const spacing = Math.max(1, sampleSpacingMeters)
+  const inEncDeep = (lon: number, lat: number): boolean => charted.depthAreas.some((area) => {
+    if (!pointInRings(lon, lat, area.rings)) return false
+    const drval1 = area.depthRange?.shallowMeters
+    return drval1 !== undefined && drval1 >= contour
+  })
+  for (let i = 0; i + 1 < waypoints.length; i += 1) {
+    for (const p of [waypoints[i], ...sampleRhumbLeg(waypoints[i], waypoints[i + 1], spacing)]) {
+      if (inEncDeep(p.longitude, p.latitude)) continue
+      if (osm.water.some((w) => pointInRings(p.longitude, p.latitude, w.rings))) return true
+    }
   }
-  return false
+  const last = waypoints[waypoints.length - 1]
+  return !inEncDeep(last.longitude, last.latitude) && osm.water.some((w) => pointInRings(last.longitude, last.latitude, w.rings))
 }

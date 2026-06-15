@@ -112,6 +112,7 @@ test('listWaterAreas parses a water way, a multipolygon relation, and a land isl
       const areas = await client.listWaterAreas(sampleBbox)
       const body = String(calls.lastInit?.body)
       assert.ok(body.includes('"natural"="water"'), `expected a water query, got ${body}`)
+      assert.ok(body.includes('"water"!~"pond|reservoir|basin|wastewater"'), 'expected the non-navigable water values excluded')
       assert.ok(body.includes('"place"~"^(island|islet)$"'), 'expected the island land query')
       assert.ok(body.includes('out tags geom;'), 'expected tags and geom out')
       assert.equal(areas.length, 3, 'the tagless way is dropped')

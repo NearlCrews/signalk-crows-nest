@@ -268,7 +268,8 @@ const WATER_QUERY_TIMEOUT_SECONDS = 8
  * surrounding water body still blocks. `out tags geom;` returns each element's tags
  * (to classify water from land) and, for a relation, its member ways' geometry with
  * their outer/inner roles. The bbox is clamped like the other queries; the water
- * helper tiles a wide box so the clamp never silently truncates coverage.
+ * helper tiles a wide box so the clamp never silently truncates coverage. Keep the tag
+ * families here in lockstep with {@link osmAreaKind}, which classifies each result.
  */
 function buildWaterAreaQuery (bbox: Bbox): string {
   const { south, west, north, east } = clampBbox(bbox)
@@ -408,7 +409,8 @@ function geometryPoints (geometry: Array<{ lat?: number, lon?: number }> | undef
  * Classify an element's tags as a navigable water area, a land blocker, or null
  * (neither). Land tags are checked first so an islet tagged as both never reads as
  * water. The query already narrows to these tags; this re-derives the kind per
- * element since one query returns both.
+ * element since one query returns both. Keep this tag set in lockstep with the tag
+ * families in {@link buildWaterAreaQuery}: a tag added there but not here is dropped.
  */
 function osmAreaKind (tags: Record<string, string> | undefined): OsmAreaKind | null {
   if (tags === undefined) return null

@@ -89,6 +89,12 @@ test('routeChannel declines with no coverage when neither source covers the rout
   assert.deepEqual(r, { ok: false, reason: 'no-coverage' })
 })
 
+test('routeChannel declines coverage-incomplete when the OSM land mask was capped', async () => {
+  const osm: OsmAreas = { water: [ring(0, 0, 1, 1)], land: [], landIncomplete: true }
+  const r = await routeChannel(deps(NO_ENC, osm), { from: CORNER_FROM, to: CORNER_TO, ...base })
+  assert.deepEqual(r, { ok: false, reason: 'coverage-incomplete' })
+})
+
 test('routeChannel declines no-path for disconnected basins', async () => {
   const charted: ChartedAreas = { depthAreas: [encBox(0, 0, 0.3, 1, 10), encBox(0.7, 0, 1, 1, 10)], landAreas: [] }
   const r = await routeChannel(deps(charted), { from: { latitude: 0.5, longitude: 0.1 }, to: { latitude: 0.5, longitude: 0.9 }, ...base })

@@ -104,6 +104,20 @@ test('a land element lands in the land list, not the water list', async () => {
   assert.equal(land.length, 1)
 })
 
+test('exceeding the land-element cap marks the result land-incomplete', async () => {
+  const landEls: OsmAreaElement[] = []
+  for (let i = 0; i < 4001; i += 1) {
+    landEls.push({ element: 'way', kind: 'land', id: i, points: [[0, 0], [0, 0.001], [0.001, 0.001], [0, 0]] })
+  }
+  const result = await queryWaterAreas(stubClient(landEls), ONE_TILE)
+  assert.equal(result.landIncomplete, true)
+})
+
+test('a normal result does not set land-incomplete', async () => {
+  const result = await queryWaterAreas(stubClient([{ element: 'way', kind: 'land', id: 1, points: [[0, 0], [0, 1], [1, 1], [0, 0]] }]), ONE_TILE)
+  assert.equal(result.landIncomplete, undefined)
+})
+
 test('queryWaterAreas rejects only when every tile query fails', async () => {
   const client: OverpassClient = {
     ...stubClient([]),

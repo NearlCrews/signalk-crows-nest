@@ -38,7 +38,7 @@ import { checkLegs } from './safety-check.js'
 import type { LegFlag } from './safety-check.js'
 import { estimateFuel, routeDistanceMeters } from './fuel.js'
 import { routeChannel, queryWaterAreas } from './channel-router/index.js'
-import type { ChannelRouteResult } from './channel-router/index.js'
+import type { ChannelDeclineReason, ChannelRouteResult } from './channel-router/index.js'
 
 /**
  * Usage bands the depth check queries, finest first. Best-band picks the finest with coverage and,
@@ -73,13 +73,20 @@ const MAX_OUTPUT_TOKENS = 1500
 const ROUTER_MIN_BUDGET_MS = 12_000
 
 /**
- * Route-level note when channel routing did not run (no coverage, declined, or
- * skipped for budget), so the navigator never mistakes a clean line for a vetted one.
- * It speaks to geometry, distinct from the safety check's depth-not-checked note.
+ * Route-level geometry note per channel-routing outcome, so the navigator always learns
+ * when channel routing did not run and why, and never mistakes a clean line for a vetted
+ * one. Each speaks to geometry, distinct from the safety check's depth-not-checked note.
+ * The `land-leg` case in particular is named honestly: the router DID run and found the
+ * path crossed land, which warrants more caution, not less.
  */
-const CHANNEL_UNAVAILABLE_FLAG: LegFlag = {
-  kind: 'other',
-  message: 'Channel routing did not run for this passage (no charted depth or mapped water to follow), so this is the direct AI route. The legs are straight lines between waypoints, verify each one against the chart.'
+const CHANNEL_NOTE_BY_REASON: Record<ChannelDeclineReason | 'skipped', string> = {
+  'no-coverage': 'Channel routing did not run here (no charted depth or mapped water to follow), so this is the direct AI route. The legs are straight lines between waypoints, verify each one against the chart.',
+  'no-path': 'Channel routing could not find a continuous water path between these points, so this is the direct AI route. Verify every leg against the chart.',
+  unsnappable: 'Channel routing could not place the start or end on navigable water, so this is the direct AI route. Verify every leg against the chart.',
+  'land-leg': 'The auto-routed path crossed land or left charted water at the final check and was discarded, so this is the direct AI route. Treat it with extra caution and verify every leg against the chart.',
+  'fetch-failed': 'Channel routing could not reach the chart data sources, so this is the direct AI route. Verify every leg against the chart.',
+  'coverage-incomplete': 'Channel routing could not load the full chart data for this area, so this is the direct AI route. Verify every leg against the chart.',
+  skipped: 'Channel routing was skipped to keep within the time budget, so this is the direct AI route. Verify every leg against the chart.'
 }
 
 /**
@@ -725,7 +732,7 @@ export function applyChannelRoute (
     const replaced = result.waypoints.map((p) => ({ latitude: p.latitude, longitude: p.longitude }))
     return { waypoints: replaced, notes: result.usedOsmWater ? [CHANNEL_OSM_WATER_CAVEAT] : [] }
   }
-  return { waypoints, notes: [CHANNEL_UNAVAILABLE_FLAG] }
+  return { waypoints, notes: [{ kind: 'other', message: CHANNEL_NOTE_BY_REASON[result.reason] }] }
 }
 
 /** Merge the channel notes onto the safety-check flags and order them. Exported for the seam tests. */

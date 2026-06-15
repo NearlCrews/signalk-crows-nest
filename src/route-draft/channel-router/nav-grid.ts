@@ -68,19 +68,30 @@ function emptyGrid (bbox: Bbox): NavGrid {
   }
 }
 
-export function buildNavGrid (params: NavGridParams): NavGrid {
-  const { bbox, charted, draftMeters, safetyMarginMeters, standoffMeters, deadlineMs } = params
+/** The resolved grid dimensions for a bbox: column and row counts and the cell size in meters. */
+export interface GridSize {
+  cols: number
+  rows: number
+  cell: number
+}
+
+/**
+ * Resolve the grid dimensions for a bbox, or null when it cannot be gridded: a
+ * degenerate or antimeridian-crossing window (east <= west), a non-finite span, or a
+ * window so large that fitting the cell-count cap forces a cell above the size floor
+ * (too coarse to resolve a channel). Shared with the channel router so it can decline
+ * before any fetch exactly when the grid would, rather than fetching and then failing.
+ */
+export function resolveGridSize (bbox: Bbox, targetCellMeters?: number): GridSize | null {
   const lonSpanDeg = bbox.east - bbox.west
   const latSpanDeg = bbox.north - bbox.south
-  // Decline a degenerate or antimeridian-crossing bbox (east <= west) rather than build a garbage grid.
   if (!(lonSpanDeg > 0) || !(latSpanDeg > 0) || !Number.isFinite(lonSpanDeg) || !Number.isFinite(latSpanDeg)) {
-    return emptyGrid(bbox)
+    return null
   }
-
   const midLat = (bbox.north + bbox.south) / 2
   const widthMeters = lonSpanDeg * metersPerDegreeLon(midLat)
   const heightMeters = latSpanDeg * METERS_PER_DEGREE
-  let cell = params.targetCellMeters ?? DEFAULT_CELL_METERS
+  let cell = targetCellMeters ?? DEFAULT_CELL_METERS
   let cols = Math.max(1, Math.ceil(widthMeters / cell))
   let rows = Math.max(1, Math.ceil(heightMeters / cell))
   while (cols * rows > MAX_CELLS) {
@@ -88,7 +99,18 @@ export function buildNavGrid (params: NavGridParams): NavGrid {
     cols = Math.max(1, Math.ceil(widthMeters / cell))
     rows = Math.max(1, Math.ceil(heightMeters / cell))
   }
-  if (cell > MAX_CELL_METERS) return emptyGrid(bbox)
+  if (cell > MAX_CELL_METERS) return null
+  return { cols, rows, cell }
+}
+
+export function buildNavGrid (params: NavGridParams): NavGrid {
+  const { bbox, charted, draftMeters, safetyMarginMeters, standoffMeters, deadlineMs } = params
+  const size = resolveGridSize(bbox, params.targetCellMeters)
+  if (size === null) return emptyGrid(bbox)
+  const { cols, rows, cell } = size
+  const lonSpanDeg = bbox.east - bbox.west
+  const latSpanDeg = bbox.north - bbox.south
+  const midLat = (bbox.north + bbox.south) / 2
 
   const lonOf = (col: number): number => bbox.west + ((col + 0.5) / cols) * lonSpanDeg
   const latOf = (row: number): number => bbox.north - ((row + 0.5) / rows) * latSpanDeg
