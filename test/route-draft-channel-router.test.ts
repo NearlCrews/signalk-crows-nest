@@ -160,34 +160,33 @@ test('routeChannel constrains the optimize corridor to the drawn polyline', asyn
 })
 
 const SPACING = 5000
-const CONTOUR = 2.5
 
 test('routeStaysOnWater rejects a leg that crosses an ENC land area', () => {
   const charted: ChartedAreas = { depthAreas: [encBox(0, 0, 1, 1, 10)], landAreas: [encBox(0.4, 0.4, 0.6, 0.6)] }
   const across: Position[] = [{ latitude: 0.5, longitude: 0.1 }, { latitude: 0.5, longitude: 0.9 }]
   const around: Position[] = [{ latitude: 0.5, longitude: 0.1 }, { latitude: 0.9, longitude: 0.5 }, { latitude: 0.5, longitude: 0.9 }]
-  assert.equal(routeStaysOnWater(across, charted, NO_WATER, CONTOUR, SPACING), false)
-  assert.equal(routeStaysOnWater(around, charted, NO_WATER, CONTOUR, SPACING), true)
+  assert.equal(routeStaysOnWater(across, charted, NO_WATER, SPACING), false)
+  assert.equal(routeStaysOnWater(around, charted, NO_WATER, SPACING), true)
 })
 
 test('routeStaysOnWater rejects a leg that crosses a tile-water island hole (exact)', () => {
   const water: TileWater = { water: [ringWithHole(0, 0, 1, 1, 0.4, 0.4, 0.6, 0.6)] }
   const across: Position[] = [{ latitude: 0.5, longitude: 0.1 }, { latitude: 0.5, longitude: 0.9 }]
   const around: Position[] = [{ latitude: 0.5, longitude: 0.1 }, { latitude: 0.9, longitude: 0.5 }, { latitude: 0.5, longitude: 0.9 }]
-  assert.equal(routeStaysOnWater(across, NO_ENC, water, CONTOUR, SPACING), false)
-  assert.equal(routeStaysOnWater(around, NO_ENC, water, CONTOUR, SPACING), true)
+  assert.equal(routeStaysOnWater(across, NO_ENC, water, SPACING), false)
+  assert.equal(routeStaysOnWater(around, NO_ENC, water, SPACING), true)
 })
 
 test('routeStaysOnWater rejects a leg that leaves the tile water (sampled coast)', () => {
   const water: TileWater = { water: [ring(0, 0, 1, 0.3)] } // water only in the south band
   const leaves: Position[] = [{ latitude: 0.1, longitude: 0.1 }, { latitude: 0.9, longitude: 0.9 }]
   const stays: Position[] = [{ latitude: 0.1, longitude: 0.1 }, { latitude: 0.1, longitude: 0.9 }]
-  assert.equal(routeStaysOnWater(leaves, NO_ENC, water, CONTOUR, SPACING), false)
-  assert.equal(routeStaysOnWater(stays, NO_ENC, water, CONTOUR, SPACING), true)
+  assert.equal(routeStaysOnWater(leaves, NO_ENC, water, SPACING), false)
+  assert.equal(routeStaysOnWater(stays, NO_ENC, water, SPACING), true)
 })
 
 test('routeStaysOnWater treats an ENC drying area as land', () => {
   const charted: ChartedAreas = { depthAreas: [encBox(0, 0, 1, 1, 10), encBox(0.4, 0.4, 0.6, 0.6, -1.5)], landAreas: [] }
   const across: Position[] = [{ latitude: 0.5, longitude: 0.1 }, { latitude: 0.5, longitude: 0.9 }]
-  assert.equal(routeStaysOnWater(across, charted, NO_WATER, CONTOUR, SPACING), false)
+  assert.equal(routeStaysOnWater(across, charted, NO_WATER, SPACING), false)
 })

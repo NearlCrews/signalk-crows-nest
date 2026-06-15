@@ -175,7 +175,7 @@ export async function routeChannel (
   const sampleSpacing = Math.min(grid.cellMeters / 2, SAMPLE_CAP_METERS)
   const landRings = landRingsOf(enc, water)
   const legSafe = (a: Position, b: Position): boolean =>
-    legStaysOnWater(a, b, enc, water, contour, sampleSpacing, landRings)
+    legStaysOnWater(a, b, enc, water, sampleSpacing, landRings)
 
   // Simplify the A* centerline to turning points, then repair: a simplified leg that
   // would cross land or leave water (an RDP chord cutting a concave shore) is replaced by
@@ -214,7 +214,7 @@ export async function routeChannel (
   const interior = routeCells.slice(1, -1).map(([c, r]) => grid.cellCenter(c, r))
   const waypoints = [startPos, ...interior, goalPos]
 
-  if (!routeStaysOnWater(waypoints, enc, water, contour, sampleSpacing, req.deadlineMs)) {
+  if (!routeStaysOnWater(waypoints, enc, water, sampleSpacing, req.deadlineMs)) {
     return { ok: false, reason: 'land-leg' }
   }
   return { ok: true, waypoints, usedTileWater: usedTileWater(waypoints, enc, water, contour, sampleSpacing) }
@@ -272,19 +272,71 @@ function componentFrom (grid: NavGrid, seed: [number, number]): Uint8Array {
   return mask
 }
 
+/**
+ * A mask of the cells in the LARGEST 4-connected navigable component, the through-channel. Both
+ * endpoints prefer to snap onto it, since a near-shore endpoint's nearest water is often a tiny
+ * isolated pocket while the main waterway sits a little further out.
+ */
+function largestNavigableComponent (grid: NavGrid): Uint8Array {
+  const { cols, rows } = grid
+  const n = cols * rows
+  const comp = new Int32Array(n).fill(-1)
+  const queue = new Int32Array(n)
+  let bestId = -1
+  let bestSize = 0
+  let nextId = 0
+  for (let seed = 0; seed < n; seed += 1) {
+    if (comp[seed] !== -1) continue
+    const sc = seed % cols
+    const sr = (seed - sc) / cols
+    if (!grid.isNavigable(sc, sr)) continue
+    const id = nextId++
+    let head = 0
+    let tail = 0
+    let size = 0
+    comp[seed] = id
+    queue[tail++] = seed
+    while (head < tail) {
+      const i = queue[head++]
+      size += 1
+      const r = Math.floor(i / cols)
+      const c = i - r * cols
+      for (const [dc, dr] of ORTHO) {
+        const nc = c + dc
+        const nr = r + dr
+        if (nc < 0 || nc >= cols || nr < 0 || nr >= rows) continue
+        const ni = nr * cols + nc
+        if (comp[ni] !== -1 || !grid.isNavigable(nc, nr)) continue
+        comp[ni] = id
+        queue[tail++] = ni
+      }
+    }
+    if (size > bestSize) { bestSize = size; bestId = id }
+  }
+  const mask = new Uint8Array(n)
+  if (bestId >= 0) for (let i = 0; i < n; i += 1) if (comp[i] === bestId) mask[i] = 1
+  return mask
+}
+
 /** Either both endpoints snapped onto a shared navigable component (with that component), or a reason. */
 type SnapResult =
   | { start: [number, number], goal: [number, number], comp: Uint8Array }
   | { reason: 'unsnappable' | 'no-path' }
 
 /**
- * Snap both endpoints onto a SHARED navigable component so A* can connect them. Each snaps to its
- * nearest navigable cell first; when those land in different components (a near-shore endpoint often
- * snaps to an isolated pocket A* cannot escape), one is re-snapped into the other's component to reach
- * the through-channel. If neither can reach the other's water within the cap, the basins are genuinely
- * disconnected (no-path); if an endpoint has no navigable water within the cap at all, unsnappable.
+ * Snap both endpoints onto a SHARED navigable component so A* can connect them. They first try the
+ * largest component (the through-channel), since a near-shore endpoint's nearest water is often a tiny
+ * isolated pocket A* cannot escape while the main waterway is a little further out. When both cannot
+ * reach the largest, fall back to each endpoint's own nearest water and, if those differ, re-snap one
+ * into the other's component. If neither can reach the other's water within the cap, the basins are
+ * genuinely disconnected (no-path); if an endpoint has no navigable water within the cap at all, unsnappable.
  */
 function snapEndpoints (grid: NavGrid, from: Position, to: Position, maxSnap: number): SnapResult {
+  const largest = largestNavigableComponent(grid)
+  const startMain = snapToWater(grid, from, maxSnap, largest)
+  const goalMain = snapToWater(grid, to, maxSnap, largest)
+  if (startMain !== undefined && goalMain !== undefined) return { start: startMain, goal: goalMain, comp: largest }
+
   const startNear = snapToWater(grid, from, maxSnap)
   const goalNear = snapToWater(grid, to, maxSnap)
   if (startNear === undefined || goalNear === undefined) return { reason: 'unsnappable' }
@@ -350,28 +402,25 @@ function landRingsOf (charted: ChartedAreas, water: TileWater): number[][][][] {
 }
 
 /**
- * Full-resolution navigability of a point: blocked inside ENC land, blocked inside an
- * ENC depth area that is drying, shallow, or unknown, navigable inside an ENC
- * deep-enough area or a tile-water polygon (even-odd excludes island holes), else not
- * covered (treated as land, the safe direction).
- *
- * Band precedence differs from the grid ON PURPOSE. The grid lets a FINER band win per
- * cell (buildNavGrid), so a cell deep on a fine band but shallow on a coarse one is
- * navigable. This re-check sees the FLATTENED all-bands view, where shallowest wins: a
- * single shallow area blocks the point even if a finer band charts it deep. That makes
- * the re-check strictly MORE conservative than the grid, so it can only decline a leg
- * the grid allowed, never approve one the grid blocked: it never widens what passes,
- * the safe direction for a depth check.
+ * Whether a point is ON NAVIGABLE WATER for the re-check. The re-check verifies the route stays on
+ * water and does not cross land or leave the water; it does NOT require the water to be deep enough,
+ * because depth is the safety check's job (it flags every charted-shallow leg with its DRVAL1 and
+ * datum). Routing through charted-shallow water and reporting it as a draft to verify is far better
+ * than declining and keeping the model's straight line across land. So a point is off water only
+ * inside ENC land, inside an ENC drying area (charted `DRVAL1 < 0`, exposed at low tide), or outside
+ * all water (a coast or an uncharted gap); a point in any other ENC depth area or in tile water is on
+ * water. A tile-water route still earns the depth-unverified caveat via {@link usedTileWater}.
  */
-function navigableAt (lon: number, lat: number, charted: ChartedAreas, water: TileWater, contour: number): boolean {
+function navigableAt (lon: number, lat: number, charted: ChartedAreas, water: TileWater): boolean {
   if (charted.landAreas.some((a) => pointInRings(lon, lat, a.rings))) return false
-  const encBlocked = charted.depthAreas.some((area) => {
-    if (!pointInRings(lon, lat, area.rings)) return false
+  let inEncWater = false
+  for (const area of charted.depthAreas) {
+    if (!pointInRings(lon, lat, area.rings)) continue
     const drval1 = area.depthRange?.shallowMeters
-    return drval1 === undefined || drval1 < contour
-  })
-  if (encBlocked) return false
-  if (inEncDeep(lon, lat, charted, contour)) return true
+    if (drval1 !== undefined && drval1 < 0) return false // drying: exposed at low tide, treat as land
+    inEncWater = true
+  }
+  if (inEncWater) return true
   return water.water.some((w) => pointInRings(lon, lat, w.rings))
 }
 
@@ -384,16 +433,16 @@ function navigableAt (lon: number, lat: number, charted: ChartedAreas, water: Ti
  */
 function legStaysOnWater (
   a: Position, b: Position, charted: ChartedAreas, water: TileWater,
-  contour: number, sampleSpacingMeters: number, landRings: number[][][][]
+  sampleSpacingMeters: number, landRings: number[][][][]
 ): boolean {
   const aPt = [a.longitude, a.latitude]
   const bPt = [b.longitude, b.latitude]
   if (landRings.some((rings) => segmentCrossesRings(aPt, bPt, rings))) return false
-  if (!navigableAt(a.longitude, a.latitude, charted, water, contour)) return false
+  if (!navigableAt(a.longitude, a.latitude, charted, water)) return false
   for (const s of sampleRhumbLeg(a, b, Math.max(1, sampleSpacingMeters))) {
-    if (!navigableAt(s.longitude, s.latitude, charted, water, contour)) return false
+    if (!navigableAt(s.longitude, s.latitude, charted, water)) return false
   }
-  return navigableAt(b.longitude, b.latitude, charted, water, contour)
+  return navigableAt(b.longitude, b.latitude, charted, water)
 }
 
 /**
@@ -405,7 +454,6 @@ export function routeStaysOnWater (
   waypoints: Position[],
   charted: ChartedAreas,
   water: TileWater,
-  contourMeters: number,
   sampleSpacingMeters: number,
   deadlineMs?: number
 ): boolean {
@@ -414,7 +462,7 @@ export function routeStaysOnWater (
     // Bail to a decline if the synchronous re-check runs past the deadline, rather than
     // overrunning into the safety check's budget. A declined route is the safe outcome.
     if (deadlineMs !== undefined && Date.now() > deadlineMs) return false
-    if (!legStaysOnWater(waypoints[i], waypoints[i + 1], charted, water, contourMeters, sampleSpacingMeters, landRings)) {
+    if (!legStaysOnWater(waypoints[i], waypoints[i + 1], charted, water, sampleSpacingMeters, landRings)) {
       return false
     }
   }
