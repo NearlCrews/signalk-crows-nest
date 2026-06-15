@@ -2,9 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make AI route-draft and optimize results follow navigable water instead of cutting across land, by computing the geometry with deterministic A* over an ENC-derived navigable grid while the LLM keeps resolving intent and endpoints.
+**Goal:** Make AI route-draft and optimize results follow navigable water instead of cutting across land, by computing the geometry with deterministic A* over a navigable grid (ENC depth in US waters, OSM water polygons worldwide, OSM land blockers) while the LLM keeps resolving intent and endpoints.
 
-**Architecture:** A new `src/route-draft/channel-router/` slice. `channel-router.ts` fetches ENC charted areas over the route bbox (reusing `queryChartedAreas`), `nav-grid.ts` rasterizes them into a depth-aware navigable grid with a distance-to-shore standoff field, `astar.ts` finds the water path, `path-simplify.ts` reduces it to turning waypoints. `endpoint.ts` calls it after `parseDraftedRoute` (draft) and `anchorRouteEndpoints` (optimize), replacing the waypoints on success and falling back to the LLM/drawn route with a note otherwise. The existing safety check still runs on the result.
+**Architecture:** A new `src/route-draft/channel-router/` slice plus one input-side module. `channel-router.ts` fetches ENC charted areas (per band) AND OSM water-and-land areas over the route bbox concurrently, `nav-grid.ts` rasterizes them into a depth-aware navigable grid with a distance-to-shore standoff field, `astar.ts` finds the water path, `path-simplify.ts` reduces it to turning waypoints. `endpoint.ts` calls it after `parseDraftedRoute` (draft) and `anchorRouteEndpoints` (optimize), replacing the waypoints on success and falling back to the LLM/drawn route with a note otherwise. The existing safety check still runs on the result.
+
+**Worldwide revision status (2026-06-15):** Tasks 1 to 3 below (path-simplify, astar, the ENC-only nav-grid) are implemented and committed. The remaining work is the worldwide expansion, captured in the "Worldwide revision: task deltas" section at the end of this plan, which AMENDS Tasks 3 to 6 and adds the OSM water-and-land source. The authoritative design is the spec; where this plan's original Tasks 4 to 6 differ from the deltas section or the spec, the deltas and spec win.
 
 **Tech Stack:** TypeScript (Node, ESM, neostandard no-semicolon style), `node:test` via tsx, owned algorithms (binary heap, A*, scanline-free per-polygon rasterization, BFS, RDP) with no new runtime dependency. Reuses `leg-geometry` (`pointInRings`), `depth-area-query` (`queryChartedAreas`, `ChartedAreas`, `EncAreaPolygon`), `geo/position-utilities`, `shared/length`, and `shared/types` (`Position`, `Bbox`).
 
@@ -1066,3 +1068,117 @@ Add these concrete cases (house style `node:test`):
 - **Spec coverage:** hybrid (Task 5 keeps the LLM, routes between its endpoints); depth-aware ENC mask incl. drying and shallow (Task 3); draft and optimize incl. corridor (Tasks 4, 5); grid+A* owned, no deps (Tasks 1-3); always-on with graceful fallback + note (Tasks 4, 5); safety check still runs (Task 5 leaves `checkLegs` in place); performance via bbox fetch + cell cap + deadline signal (Tasks 3, 4); endpoints pinned to the requested start/end (Task 4); testing per module (every task). Out-of-scope items (OSM water mask, check data-sharing) are not implemented, as intended.
 - **Placeholder scan:** none; every code step has complete code. Task 5's two notes (move `resolveDraftMeters` up; the flags merge) are concrete edits, not TBDs.
 - **Type consistency:** `Position` `{latitude, longitude}` and `Bbox` `{north,south,east,west}` are the existing shared types; `AStarGrid` (Task 2) is implemented by `NavGrid` (Task 3) which `routeChannel` (Task 4) consumes; `ChartedAreas`/`EncAreaPolygon` come from `depth-area-query`; `simplifyPath`, `findPath`, `buildNavGrid`, `routeChannel`, `applyChannelRoute` names match across tasks; cells are `[col,row]` throughout.
+
+---
+
+## Worldwide revision: task deltas (authoritative over the original Tasks 4 to 6)
+
+Tasks 1 to 3 are committed. These deltas add the OSM water-and-land source and amend
+the grid, orchestrator, and endpoint per the worldwide spec. Implement in order; each
+is its own commit. TDD throughout (test first, watch fail, implement, watch pass).
+
+### Task W1: OSM water-and-land Overpass source
+
+**Files:**
+- Modify: `src/inputs/openseamap/overpass-client.ts` (add `listWaterAreas`)
+- Create: `src/inputs/openseamap/osm-water-query.ts` (`queryWaterAreas`, ring assembly)
+- Test: extend `test/overpass-client.test.ts`; create `test/openseamap-osm-water-query.test.ts`
+
+Client: add a discriminated `OsmAreaElement` (`{ element: 'way', kind, id, points }` or
+`{ element: 'relation', kind, id, members: [{ role, points }] }`), where `kind` is
+`water` or `land` derived from the element tags, and `listWaterAreas(bbox, signal)`
+that queries (per the spec's query block) with `out tags geom;` and server
+`[timeout:8]`, flowing each wire element through `collectElements` with one
+`parseWaterElement`. Extend `OverpassWireElement` with `members?: Array<{ type?, role?,
+geometry?: Array<{ lat?, lon? }> }>`; only `member.type === 'way'` members carry
+geometry; a blank `role` defaults to `outer`.
+
+Query module: `queryWaterAreas(client, bbox, signal): Promise<OsmAreas>` where
+`OsmAreas = { water: Array<{ rings: number[][][] }>, land: Array<{ rings: number[][][] }> }`.
+Tile the bbox (`MAX_BBOX_SPAN_DEGREES`), decline (empty) above `MAX_WATER_TILES = 4`,
+query each tile sequentially with a fresh per-call signal
+`combineAbortSignals([signal, AbortSignal.timeout(ROUTER_OSM_QUERY_TIMEOUT_MS)])`
+(`4000`), catch per tile, throw the last error only when EVERY tile failed. Dedupe
+elements by `element:id`. Assemble: a closed way -> one ring; a relation -> stitch
+`outer` members head-to-tail into closed rings and `inner` members into holes, drop an
+inner not contained in any outer, drop unclosed chains. Enforce
+`MAX_VERTICES_PER_POLYGON = 20000` (decimate), `MAX_WATER_ELEMENTS_PER_TILE = 400`
+(truncate and log), and `MAX_TOTAL_WATER_VERTICES = 200000` (stop and log). Do NOT
+import `EncAreaPolygon`; return the plain `{ rings }` structural shape.
+
+Tests: way -> ring; open way dropped; relation outer (two member ways) + inner -> hole;
+inner not contained dropped; id-dedupe across tiles; unclosed chain dropped; over-cap
+ring decimated; land vs water classification by tag; client `listWaterAreas` parses a
+relation's `members[].geometry` with roles and a way's `geometry`.
+
+### Task W2: nav-grid accepts OSM water and land
+
+**Files:**
+- Modify: `src/route-draft/channel-router/nav-grid.ts`
+- Test: extend `test/route-draft-channel-nav-grid.test.ts`
+
+Add to `NavGridParams`: `osmWater?: Array<{ rings: number[][][] }>` and
+`osmLand?: Array<{ rings: number[][][] }>`. After the ENC depth and land stamps and
+BEFORE the `navigable = covered && !blocked` derivation, rasterize OSM water into
+`covered` (only) and OSM land into `blocked` (only) via the same deadline-threaded
+`fillPolygonCells`. The single derivation after all stamps preserves "any block wins."
+
+Tests: OSM water alone is navigable; OSM land over OSM water is blocked; ENC land over
+OSM water is blocked; ENC shallow over OSM water stays blocked.
+
+### Task W3: orchestrator fetches both sources, generalized re-check (replaces original Task 4)
+
+**Files:**
+- Create: `src/route-draft/channel-router/channel-router.ts`, `index.ts`
+- Test: `test/route-draft-channel-router.test.ts`
+
+`ChannelRouteResult = { ok: true, waypoints: Position[], usedOsmWater: boolean } | { ok: false, reason: 'no-coverage' | 'no-path' | 'unsnappable' | 'land-leg' | 'fetch-failed' }`.
+
+Deps inject `queryChartedAreas` (ENC) and `queryWaterAreas` (OSM) so tests stub both
+with no live HTTP. Flow: validate/decline the waypoint-derived bbox
+(antimeridian/oversize) BEFORE any fetch; `Promise.allSettled` ENC (per band) and OSM
+concurrently, proceed if either returned, `fetch-failed` only if both threw;
+`no-coverage` when no ENC depth area AND no OSM water; build the grid with ENC +
+osmWater + osmLand; snap endpoints (`unsnappable`); `findPath` (`no-path`); RDP;
+final-leg re-check (exact `segmentCrossesRings` against ENC land AND OSM land rings,
+plus sampled `navigableAt` at `cellMeters / 2`), `land-leg` on failure; compute
+`usedOsmWater` (a final waypoint inside OSM water but not inside an ENC deep area).
+
+Tests (stubbed sources): ENC land-crossing pair -> water path; OSM-water-only ->
+water path with `usedOsmWater true`; OSM land island over OSM water -> path rounds it;
+ENC land over OSM water blocks; neither source -> `no-coverage`; unsnappable ->
+`unsnappable`; corridor restricts; final-leg leaving water -> `land-leg`; antimeridian
+bbox -> declines before any stub fetch is called.
+
+### Task W4: endpoint wiring with the geometry note and OSM-water caveat (replaces original Task 5)
+
+**Files:**
+- Modify: `src/route-draft/endpoint.ts`
+- Test: extend `test/route-draft-endpoint.test.ts`
+
+Build one `Logger`, reuse `resolveDraftMeters` (move its call above the router block).
+Budget skip: when `deadlineMs - Date.now() < ROUTER_MIN_BUDGET_MS` (`12000`), skip the
+router and treat as a non-success with reason `skipped`. Otherwise call `routeChannel`
+with the ENC client, the OSM client via `queryWaterAreas`, the bands, the draft,
+margin, standoff, `bboxAnchors` = the full LLM waypoints (draft) and `corridor` =
+`parsed.route` (optimize), and the remaining-budget signal. Tested seams:
+`applyChannelRoute(waypoints, result)` returns the replaced waypoints plus a
+`usedOsmWater` flag and a `note`/`caveat`; on every non-success it returns the
+GEOMETRY note (including `no-coverage`, reversing the original suppression); on an
+OSM-water success it returns the depth caveat. `mergeChannelNote(checkFlags, notes)`
+appends and `orderFlags`-sorts. Tests: geometry note on each non-success reason; the
+OSM-water-success caveat; note ordering (a `land` flag precedes the appended `other`);
+corridor-iff-optimize via the request builder.
+
+### Task W5: gate, live verification, and docs (replaces original Task 6)
+
+Gate: `npm run typecheck && npm run lint && npm test && npm run build`, all green,
+captured to files and read back (Pi truncation). Run `/cleanup diff` (or
+code-reviewer plus silent-failure-hunter subagents) on the integrated diff and fix
+every finding (all severities) unless refuted or by-design with a reason. Live-verify
+on boatpi: rebuild dist, restart signalk, POST a Grosse Ile to Belle Isle draft (admin
+JWT, wide bounds) and confirm the river-following waypoints with no land flags; AND an
+OSM-water-only target outside ENC (an inland lake or wide river with a mapped island)
+to exercise the worldwide path and island handling, not just the doubly-covered case.
+Docs: `docs/route-draft-api.md` (channel-routed geometry, the worldwide reach and its
+limits) and `CHANGELOG.md` (Unreleased, by what it does, no process framing).
