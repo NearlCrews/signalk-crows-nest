@@ -12,8 +12,14 @@ function box (w: number, s: number, e: number, n: number, shallowMeters?: number
   }
 }
 
+/** A square ring polygon (the structural shape OSM water and land use). */
+function ring (w: number, s: number, e: number, n: number): { rings: number[][][] } {
+  return { rings: [[[w, s], [e, s], [e, n], [w, n], [w, s]]] }
+}
+
 const BBOX = { west: 0, south: 0, east: 1, north: 1 }
 const base = { draftMeters: 2, safetyMarginMeters: 0.5, standoffMeters: 0, targetCellMeters: 250 }
+const NO_ENC: ChartedAreas = { depthAreas: [], landAreas: [] }
 
 test('a deep depth area is navigable; outside it is blocked', () => {
   const charted: ChartedAreas = { depthAreas: [box(0.2, 0.2, 0.8, 0.8, 10)], landAreas: [] }
@@ -93,6 +99,32 @@ test('the optimize corridor restricts navigable cells to near the drawn polyline
   })
   assert.equal(g.isNavigable(...g.cellOf({ latitude: 0.5, longitude: 0.5 })), true) // on the diagonal
   assert.equal(g.isNavigable(...g.cellOf({ latitude: 0.9, longitude: 0.1 })), false) // far corner
+})
+
+test('an OSM water polygon alone (no ENC) is navigable', () => {
+  const g = buildNavGrid({ bbox: BBOX, charted: NO_ENC, osmWater: [ring(0.2, 0.2, 0.8, 0.8)], ...base })
+  assert.equal(g.hasWater, true)
+  assert.equal(g.isNavigable(...g.cellOf({ latitude: 0.5, longitude: 0.5 })), true)
+  assert.equal(g.isNavigable(...g.cellOf({ latitude: 0.05, longitude: 0.05 })), false)
+})
+
+test('an OSM land island over OSM water is blocked', () => {
+  const g = buildNavGrid({ bbox: BBOX, charted: NO_ENC, osmWater: [ring(0.1, 0.1, 0.9, 0.9)], osmLand: [ring(0.4, 0.4, 0.6, 0.6)], ...base })
+  assert.equal(g.isNavigable(...g.cellOf({ latitude: 0.5, longitude: 0.5 })), false)
+  assert.equal(g.isNavigable(...g.cellOf({ latitude: 0.2, longitude: 0.2 })), true)
+})
+
+test('an ENC land area blocks over OSM water', () => {
+  const charted: ChartedAreas = { depthAreas: [], landAreas: [box(0.4, 0.4, 0.6, 0.6)] }
+  const g = buildNavGrid({ bbox: BBOX, charted, osmWater: [ring(0.1, 0.1, 0.9, 0.9)], ...base })
+  assert.equal(g.isNavigable(...g.cellOf({ latitude: 0.5, longitude: 0.5 })), false)
+  assert.equal(g.isNavigable(...g.cellOf({ latitude: 0.2, longitude: 0.2 })), true)
+})
+
+test('an ENC shallow depth area still blocks even when OSM maps water there', () => {
+  const charted: ChartedAreas = { depthAreas: [box(0.2, 0.2, 0.8, 0.8, 1)], landAreas: [] }
+  const g = buildNavGrid({ bbox: BBOX, charted, osmWater: [ring(0.2, 0.2, 0.8, 0.8)], ...base })
+  assert.equal(g.isNavigable(...g.cellOf({ latitude: 0.5, longitude: 0.5 })), false)
 })
 
 test('a degenerate or antimeridian-crossing bbox declines (no water)', () => {

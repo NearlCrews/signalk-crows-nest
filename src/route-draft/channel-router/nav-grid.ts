@@ -14,9 +14,25 @@ export const MAX_CELL_METERS = 250
 /** Check the deadline this often during the synchronous passes. */
 const DEADLINE_CHECK_CELLS = 8192
 
+/** A polygon as GeoJSON `[lon, lat]` rings (outer first, then holes); the shape both sources share. */
+export interface RingPolygon {
+  rings: number[][][]
+}
+
 export interface NavGridParams {
   bbox: Bbox
   charted: ChartedAreas
+  /**
+   * OSM navigable WATER polygons (depth-unknown), worldwide. They mark coverage only;
+   * they never block, so an ENC-charted block on the same cell still wins.
+   */
+  osmWater?: RingPolygon[]
+  /**
+   * OSM LAND blockers (islands mapped as their own feature, explicit land), worldwide.
+   * They block exactly like an ENC land area, so an island inside an OSM water body
+   * that is not modeled as a hole still blocks.
+   */
+  osmLand?: RingPolygon[]
   draftMeters: number
   safetyMarginMeters: number
   /** Desired offing in meters for the soft mid-channel cost; 0 disables the standoff bias. */
@@ -103,6 +119,22 @@ export function buildNavGrid (params: NavGridParams): NavGrid {
   }
   for (const area of charted.landAreas) {
     if (fillPolygonCells(area.rings, colF, rowF, cols, rows, (i) => { blocked[i] = 1 }, deadlineMs)) {
+      return emptyGrid(bbox)
+    }
+  }
+
+  // OSM worldwide layer: water marks coverage only (depth-unknown, never blocks, so
+  // an ENC-charted block on the same cell still wins), and land blocks exactly like an
+  // ENC land area (an island mapped as its own feature, not as a water hole, blocks).
+  // Both stamp before the single navigable derivation, so any block wins regardless of
+  // source order.
+  for (const poly of params.osmWater ?? []) {
+    if (fillPolygonCells(poly.rings, colF, rowF, cols, rows, (i) => { covered[i] = 1 }, deadlineMs)) {
+      return emptyGrid(bbox)
+    }
+  }
+  for (const poly of params.osmLand ?? []) {
+    if (fillPolygonCells(poly.rings, colF, rowF, cols, rows, (i) => { blocked[i] = 1 }, deadlineMs)) {
       return emptyGrid(bbox)
     }
   }
