@@ -461,7 +461,9 @@ export function buildNavGrid (params: NavGridParams): NavGrid {
   }
   for (const area of charted.depthAreas) {
     const drval1 = area.depthRange?.shallowMeters
-    const tooShallow = drval1 !== undefined && drval1 < contour
+    // Block on undefined (unknown depth, never silently passed), drying (<0), or shallower than the
+    // contour. Sticky OR across overlapping bands: a later deep stamp never clears an earlier block.
+    const tooShallow = drval1 === undefined || drval1 < contour
     stamp(area, (i) => { covered[i] = 1; if (tooShallow) blocked[i] = 1 })
   }
   for (const area of charted.landAreas) stamp(area, (i) => { blocked[i] = 1 })
@@ -912,6 +914,150 @@ Update `docs/route-draft-api.md` to note that returned waypoints are channel-rou
 git add docs/route-draft-api.md CHANGELOG.md
 git commit -m "docs(route-draft): document channel-routed geometry"
 ```
+
+---
+
+## Review fixes (folded in from the six-specialist review; these AMEND the tasks above)
+
+Where this section and a task above differ, this section wins. Apply during implementation.
+
+### RF1 (Task 0, new): hoist the planar-meters helpers into `shared/length.ts`
+
+`src/inputs/dedupe-pois.ts` already owns `METERS_PER_DEGREE = 111320` and the `* cos(lat)` longitude scaling; the router must not add more copies. Add to `src/shared/length.ts`:
+
+```ts
+/** Meters per degree of latitude (and of longitude at the equator). */
+export const METERS_PER_DEGREE = 111_320
+/** Meters per degree of longitude at a given latitude. */
+export function metersPerDegreeLon (latitude: number): number {
+  return METERS_PER_DEGREE * Math.cos((latitude * Math.PI) / 180)
+}
+```
+
+Refactor `dedupe-pois.ts` to import these (remove its local copy). `nav-grid.ts` and `channel-router.ts` import them; do NOT inline `111_320` anywhere in the new code.
+
+### RF2 (Task 2, astar): visited-skip and a deadline bail
+
+Add a `closed` set and an optional deadline. After `const cur = open.pop()`, `if (closed[cur]) continue; closed[cur] = 1`. Accept `deadlineMs?: number` and every 4096 pops check `if (deadlineMs !== undefined && Date.now() > deadlineMs) return undefined`. `closed` is a `Uint8Array(cols*rows)`. Keep the existing `tentative < gScore` relaxation. (Confirmed correct and unchanged: break-on-goal-pop, the diagonal-corner-cut guard.)
+
+### RF3 (Task 3, nav-grid): scanline rasterization, not per-cell point-in-polygon
+
+Replace the per-cell `stamp`/`pointInRings` loop with a scanline fill (the spec's stated approach; the per-cell version is O(cells x vertices) and risks a Pi timeout). Add:
+
+```ts
+/** Fill cells whose CENTER lies inside the polygon (even-odd over all rings) by scanline. */
+function fillPolygonCells (
+  rings: number[][][], toCol: (lon: number) => number, toRow: (lat: number) => number,
+  cols: number, rows: number, onCell: (index: number) => void
+): void {
+  const edges: Array<[number, number, number, number]> = []
+  let rMin = rows; let rMax = -1
+  for (const ring of rings) {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+      const x0 = toCol(ring[j][0]); const y0 = toRow(ring[j][1])
+      const x1 = toCol(ring[i][0]); const y1 = toRow(ring[i][1])
+      edges.push([x0, y0, x1, y1])
+      rMin = Math.min(rMin, Math.floor(Math.min(y0, y1)))
+      rMax = Math.max(rMax, Math.ceil(Math.max(y0, y1)))
+    }
+  }
+  rMin = Math.max(0, rMin); rMax = Math.min(rows - 1, rMax)
+  for (let row = rMin; row <= rMax; row += 1) {
+    const y = row + 0.5
+    const xs: number[] = []
+    for (const [x0, y0, x1, y1] of edges) {
+      if ((y0 > y) === (y1 > y)) continue
+      xs.push(x0 + ((y - y0) / (y1 - y0)) * (x1 - x0))
+    }
+    xs.sort((a, b) => a - b)
+    for (let k = 0; k + 1 < xs.length; k += 2) {
+      const cStart = Math.max(0, Math.ceil(xs[k] - 0.5))
+      const cEnd = Math.min(cols - 1, Math.floor(xs[k + 1] - 0.5))
+      for (let col = cStart; col <= cEnd; col += 1) onCell(row * cols + col)
+    }
+  }
+}
+```
+
+with `toCol = (lon) => ((lon - bbox.west) / (bbox.east - bbox.west)) * cols` and `toRow = (lat) => ((bbox.north - lat) / (bbox.north - bbox.south)) * rows`. Use `fillPolygonCells` for both the depth-area stamp (RF: block on undefined/drying/shallow, already fixed inline) and the land stamp. Keep the `covered`/`blocked` sticky-OR.
+
+Other nav-grid amendments:
+- **Expose `cellMeters`** on `NavGrid` (the final coarsened `cell`), so the orchestrator's snap is exact (RF6). 
+- **Antimeridian / degenerate bbox decline:** at the top of `buildNavGrid`, if `bbox.east <= bbox.west` or the width/height is non-finite or zero, return a grid with `hasWater = false` (the orchestrator then declines, matching the spec's v1 antimeridian behavior). Do not rely on `MAX_CELLS` to mask it.
+- **Corridor distance reuse:** replace the local `distanceToSegmentMeters` with `projectPointOntoLeg` from `geo/position-utilities.js` (clamp along-track to `[0, legLen]`, compare `abs(crossTrackMeters)` to the half-width), matching the three existing call sites; if a planar helper is still wanted, build it from `metersPerDegreeLon` (RF1), never a fresh `111_320`.
+- **Deadline bail:** accept `deadlineMs?: number`; check it once per row in the rasterize and once per ~4096 cells in the BFS, returning an empty (`hasWater=false`) grid on overrun.
+- **Comment fix:** the BFS seeds blocked cells only (not "blocked-or-edge"); correct the comment. The `stepPenalty` linear ramp is kept; reconcile the spec note (done in the spec).
+- **Lower `MAX_CELLS` to 250_000** for the Pi, and add a cell-size floor: if fitting under the cap forces `cell` above `MAX_CELL_METERS` (e.g. 250), the route is too large for v1; return `hasWater = false` (decline) rather than a grid too coarse to resolve a channel.
+
+### RF4 (Task 4, channel-router): reason result, full-waypoint bbox, allSettled, final-leg land re-check
+
+- **Result type** (replaces the `Position[] | undefined` return):
+
+```ts
+export type ChannelRouteResult =
+  | { ok: true, waypoints: Position[] }
+  | { ok: false, reason: 'no-coverage' | 'no-path' | 'unsnappable' | 'land-leg' | 'fetch-failed' }
+```
+
+Map: fetch threw -> `fetch-failed`; `depthAreas.length === 0` or `!grid.hasWater` -> `no-coverage`; snap fails -> `unsnappable`; `findPath` undefined -> `no-path`; a final leg crosses land -> `land-leg`.
+
+- **Import the canonical type:** `import type { QueryChartedAreas } from '../safety-check.js'` and delete the local `QueryChartedAreas` declaration.
+- **`bboxAnchors`:** add `bboxAnchors?: Position[]` to `ChannelRouteRequest`; size the bbox with `routeBbox(req.bboxAnchors ?? req.corridor ?? [req.from, req.to], BBOX_PAD_METERS)`. `endpoint.ts` passes the LLM's full `route.waypoints` as `bboxAnchors` for draft so a winding channel is inside the grid.
+- **`fetchAreas` resilience:** use `Promise.allSettled` over the bands, merge the fulfilled ones, proceed if at least one band returned, and only treat it as `fetch-failed` when ALL bands rejected. Log rejected bands at `debug`.
+- **Snap by true meters (RF6):** in `snapToWater`, accept a candidate cell only when `distanceMeters(p, grid.cellCenter(c, r)) <= maxSnapMeters` (use `distanceMeters` from `geo/position-utilities.js`); bound the ring radius by `ceil(maxSnapMeters / grid.cellMeters)`. Remove the `cellCenter(1,0)` derivation.
+- **Endpoint pinning (RF, honesty):** build the result endpoints as: if `req.from` is navigable use it, else use `grid.cellCenter(start)`; same for `to`. So the saved route never starts/ends on land. The interior is the RDP of the A* path between `start` and `goal`.
+- **Final-leg land re-check (RF, the key honesty backstop):** after assembling `waypoints: Position[]`, for each consecutive pair test every land area:
+
+```ts
+const landRings = charted.landAreas.map((a) => a.rings)
+for (let i = 0; i + 1 < waypoints.length; i += 1) {
+  const a = [waypoints[i].longitude, waypoints[i].latitude]
+  const b = [waypoints[i + 1].longitude, waypoints[i + 1].latitude]
+  if (landRings.some((rings) => segmentCrossesRings(a, b, rings))) return { ok: false, reason: 'land-leg' }
+}
+return { ok: true, waypoints }
+```
+
+(`segmentCrossesRings` is already imported from `leg-geometry`.)
+- **RDP epsilon cap:** `SIMPLIFY_EPSILON_CELLS` deviation must not exceed ~50 m on a coarsened grid; pass `simplifyPath(cells, Math.min(1.5, 50 / grid.cellMeters))`.
+- **Thread the deadline** into `buildNavGrid` and `findPath`.
+
+### RF5 (Task 5, endpoint): budget skip, shared logger, reason -> note, tested seams
+
+- **Build one `Logger`** local in `handleDraft` and pass it to both `routeChannel` and `checkLegs`.
+- **Budget skip (spec-required):** `const ROUTER_MIN_BUDGET_MS = 8_000`; if `deadlineMs - Date.now() < ROUTER_MIN_BUDGET_MS`, skip the router, keep the LLM/drawn route, and attach the note (reason `skipped`). Otherwise call the router.
+- **Reason -> note via a tested seam.** Replace `applyChannelRoute` with:
+
+```ts
+export function applyChannelRoute (
+  waypoints: Array<{ latitude: number, longitude: number, name?: string }>,
+  result: ChannelRouteResult | { ok: false, reason: 'skipped' }
+): { waypoints: typeof waypoints, note: LegFlag | undefined } {
+  if (result.ok) return { waypoints: result.waypoints.map((p) => ({ latitude: p.latitude, longitude: p.longitude })), note: undefined }
+  // no-coverage is already spoken by the safety check's per-leg no-charted-depth note; do not double it.
+  if (result.reason === 'no-coverage') return { waypoints, note: undefined }
+  return { waypoints, note: CHANNEL_ROUTE_UNAVAILABLE_FLAG }
+}
+```
+
+- **`mergeChannelNote` seam** (tested): `export function mergeChannelNote (checkFlags: LegFlag[], note: LegFlag | undefined): LegFlag[] { return orderFlags(note !== undefined ? [...checkFlags, note] : checkFlags) }`. Use it for the response flags. Test: a `land` check flag still precedes the appended `other`; no-note passes through unchanged.
+- **`channelRequestFor` builder** (tested, optional but recommended): a pure helper that builds the `ChannelRouteRequest` from `parsed`, `route`, and `config`, asserting `corridor`/`bboxAnchors` are set iff `parsed.route` is defined; one test that draft has no `corridor` and optimize does.
+
+### RF6 (tests): additions across the suites
+
+Add these concrete cases (house style `node:test`):
+- astar: diagonal-corner-cut guard (`gridFrom(['.#','#.'])` start `[0,0]` goal `[1,1]` -> `undefined`); `start === goal` -> `[start]`; blocked-start -> `undefined`; strengthen the open-water test with a per-step `isNavigable` and adjacency assertion.
+- nav-grid: overlapping-band shallowest-wins (deep+shallow over one cell -> blocked, asserted both stamp orders); undefined-DRVAL1 area -> blocked; `cellOf`/`cellCenter` round-trip; a one-cell-wide channel at a coarse `targetCellMeters` -> `hasWater` false (honest decline); contour boundary (`shallowMeters` exactly `draft+margin` navigable, just below blocked); make the clearance test strict (`stepPenalty(edge) > stepPenalty(mid)` and `> 0`).
+- path-simplify: a five-point zigzag keeps all five at small epsilon; a mid-point just over vs just under epsilon.
+- channel-router: a real `Land_Area` island spanning the straight `from->to` line yields a water-only path (assert each waypoint outside the land ring AND that the straight `from->to` crosses the island, proving the input was land-crossing); the optimize `corridor` constrains (every waypoint within the half-width of the drawn polyline); the `land-leg` re-check rejects a route forced across a sub-cell land sliver; endpoints are the requested points when navigable; band merge across two bands.
+- endpoint: `mergeChannelNote` ordering and pass-through (RF5); `channelRequestFor` corridor-iff-optimize (RF5).
+
+### RF7: items reviewed and deliberately not changed (by-design)
+
+- Owned A*, binary heap, and RDP over an npm dep: kept (project rule; ~90 lines).
+- Module decomposition (four files): kept; `nav-grid` shrinks after RF1/RF3 (drops the local meters helper and the per-cell stamp).
+- Using the LLM's interior waypoints as A* via-points (to preserve a stated passage choice): deferred to the spec's follow-up list; v1 routes endpoint-to-endpoint with the full-waypoint bbox (RF4), and the success-case keeps the model's prose `note` as stated intent on a draft-to-verify route.
+- Sharing the router's route-bbox fetch with the safety check (batches the check): remains the named follow-up; v1 accepts the extra ENC fetch, bounded by the budget skip (RF5) and the deadline threading (RF2-RF4). Live verification (Task 6) must confirm the full-bbox harbour-band fetch over the Grosse Ile to Belle Isle window is fast enough; if not, the follow-up is pulled forward.
 
 ---
 

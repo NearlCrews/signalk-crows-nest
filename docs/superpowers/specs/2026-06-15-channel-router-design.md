@@ -92,10 +92,26 @@ in precedence order matching the safety check's authority order:
 1. Inside an ENC `Land_Area` polygon -> blocked.
 2. Else inside an ENC `Depth_Area` polygon charted as drying (`DRVAL1 < 0`) ->
    blocked (a drying area is treated as land, per the depth decoder's contract).
-3. Else inside an ENC `Depth_Area` polygon with `DRVAL1 >= draft + safetyMargin`
-   (deep enough) -> navigable. The `Depth_Area` extent is the charted water
-   extent, so this single rule gives both the water mask and the depth filter.
-4. Else -> blocked (a shallower depth area, or no charted water there).
+3. Else inside an ENC `Depth_Area` polygon with a known `DRVAL1 >= draft +
+   safetyMargin` (deep enough) -> navigable. A `Depth_Area` whose `DRVAL1` is
+   undefined (charted water of unknown depth) is BLOCKED, not navigable: the
+   plugin never silently passes unknown depth, matching the enc-provider, which
+   excludes undefined-DRVAL1 areas from its deep reading. The `Depth_Area` extent
+   is the charted water extent, so a covered-and-deep cell gives both the water
+   mask and the depth filter.
+4. Else -> blocked (a shallower or unknown-depth area, or no charted water there).
+
+Blocking is sticky across overlapping usage bands (shallowest wins): a cell
+covered by both a deep coarse-band area and a shallow or unknown finer-band area is
+blocked, because any covering area below the contour or of unknown depth sets the
+block and a later deep stamp never clears it.
+
+Land rasterization is at cell resolution and so cannot see a land feature thinner
+than a cell. That is acceptable only because the router re-validates every FINAL
+simplified leg (including the two snapped-endpoint connecting legs) against the
+land polygons at full resolution with `segmentCrossesRings` before returning: any
+final leg that crosses land forces the router to decline (fallback), so the
+router's own output is honest independent of the safety check.
 
 OSM is deliberately NOT a mask source in v1: the plugin fetches OSM *coastline
 lines*, which are sea-only and cannot be turned into a clean inland water/land
@@ -113,38 +129,57 @@ channel narrower than twice the offing).
 ## Data flow
 
 - **Draft.** After `parseDraftedRoute`, take the first waypoint as the start and
-  the last as the destination. Run the channel router start -> goal over the full
-  bbox mask. On success, replace `route.waypoints` with the A* turning waypoints,
-  keeping the model's `name`, `destination`, `note`, and `confidence`; the LLM's
-  interior waypoints are discarded (A* owns geometry). The prompt's standoff intent
-  continues to flow through the standoff cost.
+  the last as the destination, and size the route bbox from the LLM's FULL waypoint
+  list (its interior points trace where the channel runs, so the grid covers a
+  winding channel that bulges outside the straight start-to-end line). Run the
+  channel router start -> goal over that mask. On success, replace `route.waypoints`
+  with the A* turning waypoints, keeping the model's `name`, `destination`, `note`,
+  and `confidence`; the interior waypoints are discarded for geometry (A* owns the
+  path). Preserving them as A* via-points to keep a stated passage choice ("via the
+  west passage") is a noted follow-up. The standoff intent flows through the
+  standoff cost.
 - **Optimize.** After `anchorRouteEndpoints` pins the endpoints to the drawn first
   and last, run the router start -> goal with the mask further restricted to a
   corridor: only cells within a configured distance of the drawn polyline are
   navigable, so the result snaps the navigator's route onto the channel without
   abandoning the path they chose. On success, replace the waypoints as above.
 
-The router runs before `checkLegs`, so the safety check validates the A* route. The
-router and the check read the same charted data, so a successful A* route should
-return with few or no `land` flags; that is the point.
+The router runs before `checkLegs`, so the safety check still validates the result.
+But the router does NOT rely on the shared-mask check as its land backstop (the two
+read the same polygons, so a coarse-grid land leak could fool both): the router
+re-validates its own final legs at polygon resolution (see Endpoints and snapping)
+and declines if any cross land. The check is the independent second pass.
 
 ## Endpoints and snapping
 
 The LLM endpoints (or the drawn endpoints, for optimize) may sit on land (the bug
 this fixes) or just off the navigable grid. Each endpoint is snapped to the nearest
-navigable cell by a bounded BFS from its cell. If an endpoint cannot be snapped
-within a small radius (it is deep inland, far from any water), the router returns
-`undefined` and the flow falls back to the LLM/drawn route with the note.
+navigable cell by a bounded search, measured in true meters against a cap (~0.5 nm).
+An endpoint is kept as-requested only when it is already navigable; when it had to
+be snapped (it was on land or off the grid), the SNAPPED cell center is used as the
+route endpoint, so the saved route never begins or ends on land. If an endpoint
+cannot be snapped within the cap, the router declines.
+
+Before returning, the router re-checks every FINAL simplified leg (the snapped
+endpoints and the A* interior, after RDP) against the ENC land polygons at full
+resolution with `segmentCrossesRings`. If any final leg crosses land (a sub-cell
+sliver the grid missed, or a coarse-grid cell whose footprint was half land), the
+router declines. This makes the router's output honest at polygon resolution rather
+than trusting the cell grid.
 
 ## Fallback and honesty
 
-The router returns `undefined`, and the caller keeps the LLM/drawn route plus an
-`other` flag "automatic channel routing was unavailable here, verify every leg on
-the chart", when any of: the route bbox has no ENC `Depth_Area` coverage; an
-endpoint cannot be snapped to navigable water; A* finds no connected water path
-(the endpoints are in disconnected basins); or the ENC fetch fails. The existing safety check always runs regardless, so a fallback route
-still gets its land, shallow, and hazard flags. The absence-of-a-flag honesty
-contract is unchanged.
+The router returns a reason rather than a bare `undefined`, so the caller can act on
+the cause: `no-coverage` (no ENC `Depth_Area` in the bbox), `no-path` (endpoints in
+disconnected basins), `unsnappable` (an endpoint too far from water), `land-leg` (a
+final leg crosses land on re-check), `fetch-failed` (the ENC fetch threw), or
+`skipped` (too little request budget left). On any reason the caller keeps the
+LLM/drawn route. For `no-coverage` the caller does NOT add a channel note, because
+the existing safety check already emits its own per-leg no-charted-depth note for
+that same condition and a second note would be redundant; for every other reason it
+adds one `other` flag naming that the route is the raw draft to verify. The existing
+safety check always runs regardless, so a fallback route still gets its land,
+shallow, and hazard flags. The absence-of-a-flag honesty contract is unchanged.
 
 ## Performance and budget
 
