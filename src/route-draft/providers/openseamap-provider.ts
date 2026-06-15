@@ -35,7 +35,6 @@ import { formatNm } from '../../shared/format-meters.js'
 import { tileBbox } from '../../shared/bbox-tiles.js'
 import {
   cumulativeLegStartMeters,
-  legBbox,
   legForAlongTrack,
   nearestPolylineApproachMeters,
   polylineCrossesLeg,
@@ -78,11 +77,11 @@ const OSM_CAPABILITIES: ReadonlySet<Dimension> = new Set<Dimension>(['land', 'ha
  * variable (well under a second to fifteen-plus seconds for one query), and a
  * single slow query must not consume the whole request budget and time out the
  * entire safety check, dropping the other providers' results with it. When it
- * fires, the leg's OSM contribution degrades honestly to not-checked: in US waters
- * ENC still carries charted land and hazards, and elsewhere the leg is flagged
- * not-checked rather than blocking the draft. Shorter legs (a route that follows
- * the channel with enough waypoints) keep each query's corridor small and fast, so
- * this bound rarely fires in practice.
+ * fires, the OSM contribution degrades honestly to not-checked: in US waters ENC
+ * still carries charted land and hazards, and elsewhere the legs are flagged
+ * not-checked rather than blocking the draft. The coastline is fetched ONCE for the
+ * whole route, so this bound is hit at most once for the land check no matter how
+ * many legs the route has, instead of once per leg.
  */
 const OSM_QUERY_TIMEOUT_MS = 6000
 
@@ -185,6 +184,21 @@ async function queryHazards (
  * dimensions worldwide; depth is never one of them.
  */
 export function createOpenSeaMapProvider (deps: OpenSeaMapProviderDeps): LegSafetyProvider {
+  // The route's coastline, fetched ONCE for the whole route bbox and shared across every leg's land
+  // check, so the cost is a few tiled Overpass queries for the route rather than one per leg (the
+  // dominant cost on a dense channel-routed track). Memoized on first use within this route; a
+  // rejection is shared, so every leg degrades to land-not-checked together, bounded by one timeout.
+  let routeCoastline: Promise<number[][][]> | undefined
+  const loadRouteCoastline = (params: LegCheckParams): Promise<number[][][]> => {
+    if (routeCoastline === undefined) {
+      const standoffMeters = metersFromNauticalMiles(params.standoffNm)
+      const bbox = routeBbox(params.waypoints, standoffMeters)
+      const signal = combineAbortSignals([params.signal, AbortSignal.timeout(OSM_QUERY_TIMEOUT_MS)])
+      routeCoastline = queryCoastline(deps.client, bbox, signal).then((ways) => ways.map((way) => way.points))
+    }
+    return routeCoastline
+  }
+
   return {
     id: OPENSEAMAP_PROVIDER_ID,
     capabilities: OSM_CAPABILITIES,
@@ -193,16 +207,15 @@ export function createOpenSeaMapProvider (deps: OpenSeaMapProviderDeps): LegSafe
     // reaches every leg.
     coversLeg: () => true,
     /**
-     * Run one leg's coastline land and standoff check, reporting only what this
-     * provider verifies: the land flags and the land coverage. Depth is not a
-     * capability here, so the orchestrator's capability-keyed not-checked pass
-     * owns the depth-not-checked note for a leg no depth provider covers; this
-     * provider does not self-emit one, which would otherwise contradict a depth
-     * provider (ENC or EMODnet) that did check the same leg. A rejected coastline
-     * query degrades to a land-not-checked note (with land coverage nodata)
-     * rather than throwing, because this provider is global: if it threw, the
-     * orchestrator would mark the whole leg as not-run even though no depth source
-     * ever covers it here.
+     * Run one leg's coastline land and standoff check against the route's shared coastline (fetched
+     * once for the whole route, not per leg), reporting only what this provider verifies: the land
+     * flags and the land coverage. Depth is not a capability here, so the orchestrator's
+     * capability-keyed not-checked pass owns the depth-not-checked note for a leg no depth provider
+     * covers; this provider does not self-emit one, which would otherwise contradict a depth provider
+     * (ENC or EMODnet) that did check the same leg. A rejected coastline fetch degrades to a
+     * land-not-checked note (with land coverage nodata) rather than throwing, because this provider is
+     * global: if it threw, the orchestrator would mark the whole leg as not-run even though no depth
+     * source ever covers it here.
      */
     async checkLeg (
       leg: number,
@@ -214,10 +227,7 @@ export function createOpenSeaMapProvider (deps: OpenSeaMapProviderDeps): LegSafe
       const flags: LegFlag[] = []
       let landCoverage: 'data' | 'nodata' = 'data'
       try {
-        const bbox = legBbox(from, to, standoffMeters)
-        const signal = combineAbortSignals([params.signal, AbortSignal.timeout(OSM_QUERY_TIMEOUT_MS)])
-        const ways = await queryCoastline(deps.client, bbox, signal)
-        const lines = ways.map((way) => way.points)
+        const lines = await loadRouteCoastline(params)
         addLandFlags(flags, leg, from, to, lines, standoffMeters)
       } catch (error) {
         deps.logger?.debug(`leg ${leg} OpenSeaMap coastline query failed: ${String(error)}`)

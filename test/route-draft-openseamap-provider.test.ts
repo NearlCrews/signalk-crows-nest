@@ -138,6 +138,19 @@ test('degrades to a land-not-checked note when the coastline query rejects', asy
   assert.equal(result.flags.some((f) => /depth/i.test(f.message)), false)
 })
 
+test('fetches the coastline once for the whole route, shared across legs', async () => {
+  let coastlineCalls = 0
+  const provider = createOpenSeaMapProvider({
+    client: client({ listCoastlineWays: async () => { coastlineCalls += 1; return [] } }),
+    scanRouteCorridor
+  })
+  const wps: Position[] = [{ latitude: 43.0, longitude: 5.0 }, { latitude: 43.1, longitude: 5.0 }, { latitude: 43.2, longitude: 5.0 }]
+  const multiLeg: LegCheckParams = { ...params, waypoints: wps }
+  await provider.checkLeg(0, wps[0], wps[1], multiLeg)
+  await provider.checkLeg(1, wps[1], wps[2], multiLeg)
+  assert.equal(coastlineCalls, 1, 'the coastline is fetched once for the route, not per leg')
+})
+
 test('queries hazards with the hard-coded rock/wreck/obstruction regex regardless of config', async () => {
   const regexes: string[] = []
   const provider = createOpenSeaMapProvider({
