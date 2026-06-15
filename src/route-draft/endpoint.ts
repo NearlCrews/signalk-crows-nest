@@ -37,6 +37,8 @@ import type { RouteDraftConfig } from './config.js'
 import { checkLegs } from './safety-check.js'
 import type { LegFlag } from './safety-check.js'
 import { estimateFuel, routeDistanceMeters } from './fuel.js'
+import { routeChannel, queryWaterAreas } from './channel-router/index.js'
+import type { ChannelRouteResult } from './channel-router/index.js'
 
 /**
  * Usage bands the depth check queries, finest first. Best-band picks the finest with coverage and,
@@ -62,6 +64,32 @@ const REQUEST_DEADLINE_MS = 30_000
 
 /** Output-token ceiling sized for a worst-case schema-conformant draft (waypoints, names, and a note). */
 const MAX_OUTPUT_TOKENS = 1500
+
+/**
+ * Minimum remaining request budget to run the channel router. Below this the router is
+ * skipped so the safety check still has time to run: the route stays the LLM or drawn
+ * geometry, with the channel-unavailable note attached.
+ */
+const ROUTER_MIN_BUDGET_MS = 12_000
+
+/**
+ * Route-level note when channel routing did not run (no coverage, declined, or
+ * skipped for budget), so the navigator never mistakes a clean line for a vetted one.
+ * It speaks to geometry, distinct from the safety check's depth-not-checked note.
+ */
+const CHANNEL_UNAVAILABLE_FLAG: LegFlag = {
+  kind: 'other',
+  message: 'Channel routing did not run for this passage (no charted depth or mapped water to follow), so this is the direct AI route. The legs are straight lines between waypoints, verify each one against the chart.'
+}
+
+/**
+ * Route-level caveat when the channel route followed an OSM water outline, which
+ * carries no depth: the route avoids charted land but the router did not check depth.
+ */
+const CHANNEL_OSM_WATER_CAVEAT: LegFlag = {
+  kind: 'other',
+  message: 'This route was auto-routed to follow mapped water outlines that carry no depth data, so it avoids charted land but is not depth-checked. Treat it as a draft and verify every leg against the chart, especially in narrow or shoal water.'
+}
 
 /**
  * Maximum latitude or longitude span of the request bounds, in degrees. A
@@ -589,6 +617,34 @@ async function handleDraft (
   // future tightening.
   if (parsed.route !== undefined) anchorRouteEndpoints(route.waypoints, parsed.route)
 
+  // One logger and one draft figure for both the channel router and the safety check.
+  const logger = { debug: (m: string) => { app.debug(m) }, error: (m: string) => { app.error(m) } }
+  const draftMeters = resolveDraftMeters(app, config)
+
+  // Replace the model geometry with a deterministic water-following route where ENC or
+  // OSM water coverage allows; otherwise keep the drafted or drawn route and note it.
+  // The router is skipped when too little request budget remains for it plus the check.
+  const channelResult: ChannelRouteResult | { ok: false, reason: 'skipped' } =
+    deadlineMs - Date.now() >= ROUTER_MIN_BUDGET_MS
+      ? await routeChannel(
+        { client: service.enc, queryChartedAreas, overpass: service.overpass, queryWaterAreas, bands: DEPTH_BANDS, logger },
+        {
+          from: { latitude: route.waypoints[0].latitude, longitude: route.waypoints[0].longitude },
+          to: { latitude: route.waypoints[route.waypoints.length - 1].latitude, longitude: route.waypoints[route.waypoints.length - 1].longitude },
+          draftMeters,
+          safetyMarginMeters: config.routeDraftSafetyMarginMeters,
+          standoffNm: config.routeDraftStandoffNm,
+          ...(parsed.route !== undefined
+            ? { corridor: parsed.route }
+            : { bboxAnchors: route.waypoints.map((wp) => ({ latitude: wp.latitude, longitude: wp.longitude })) }),
+          signal: AbortSignal.timeout(Math.max(MS_PER_SECOND, deadlineMs - Date.now())),
+          deadlineMs
+        }
+      )
+      : { ok: false, reason: 'skipped' }
+  const channel = applyChannelRoute(route.waypoints, channelResult)
+  route.waypoints = channel.waypoints
+
   const positions: Position[] = route.waypoints.map((wp) => ({ latitude: wp.latitude, longitude: wp.longitude }))
 
   // The deterministic safety check, bounded by the remaining request budget. If
@@ -596,7 +652,6 @@ async function handleDraft (
   // the abort controller cancels the in-flight ENC queries so the abandoned
   // check leaves no orphaned upstream requests running.
   const checkBudget = deadlineMs - Date.now()
-  const draftMeters = resolveDraftMeters(app, config)
   const checkAbort = new AbortController()
   const check = await withDeadline(
     checkLegs(
@@ -606,7 +661,7 @@ async function handleDraft (
         overpass: service.overpass,
         emodnet: service.emodnet,
         scanRouteCorridor,
-        logger: { debug: (m: string) => { app.debug(m) }, error: (m: string) => { app.error(m) } }
+        logger
       },
       {
         waypoints: positions,
@@ -626,6 +681,7 @@ async function handleDraft (
   )
 
   const fuel = computeFuel(app, config, routeDistanceMeters(positions))
+  const flags = mergeChannelNote(check.flags, channel.notes)
 
   res.json({
     ok: true,
@@ -635,7 +691,7 @@ async function handleDraft (
     note: route.note,
     ...(route.confidence !== undefined ? { confidence: route.confidence } : {}),
     ...(fuel !== undefined ? { fuel } : {}),
-    ...(check.flags.length > 0 ? { flags: orderFlags(check.flags) } : {}),
+    ...(flags.length > 0 ? { flags } : {}),
     // The marker Binnacle asserts to confirm this build actually consumed the route field, since a
     // pre-optimize 0.10.0 build would silently draft from scratch and report the same version.
     ...(parsed.route !== undefined ? { optimized: true } : {})
@@ -648,6 +704,33 @@ const FLAG_RANK: Record<LegFlag['kind'], number> = { land: 0, shallow: 1, hazard
 /** Order flags so the most safety-critical read first: land, shallow, hazard, then other. */
 function orderFlags (flags: LegFlag[]): LegFlag[] {
   return [...flags].sort((a, b) => FLAG_RANK[a.kind] - FLAG_RANK[b.kind])
+}
+
+/** A drafted waypoint, the shape the response carries (the model's name is kept on a fallback). */
+type DraftWaypoint = { latitude: number, longitude: number, name?: string }
+
+/**
+ * Apply the channel router's result to the route. On success the model geometry is
+ * replaced by the water-following waypoints (A* owns the path, so waypoint names are
+ * dropped), with a depth caveat when the path followed an OSM water outline. On any
+ * non-success (no coverage, a decline, or a budget skip) the route is kept and the
+ * geometry note is attached, so a declined route is never indistinguishable from a
+ * routed one. Exported for the endpoint seam tests.
+ */
+export function applyChannelRoute (
+  waypoints: DraftWaypoint[],
+  result: ChannelRouteResult | { ok: false, reason: 'skipped' }
+): { waypoints: DraftWaypoint[], notes: LegFlag[] } {
+  if (result.ok) {
+    const replaced = result.waypoints.map((p) => ({ latitude: p.latitude, longitude: p.longitude }))
+    return { waypoints: replaced, notes: result.usedOsmWater ? [CHANNEL_OSM_WATER_CAVEAT] : [] }
+  }
+  return { waypoints, notes: [CHANNEL_UNAVAILABLE_FLAG] }
+}
+
+/** Merge the channel notes onto the safety-check flags and order them. Exported for the seam tests. */
+export function mergeChannelNote (checkFlags: LegFlag[], notes: LegFlag[]): LegFlag[] {
+  return orderFlags([...checkFlags, ...notes])
 }
 
 /** The contract fuel object, or undefined when no honest estimate is possible. */

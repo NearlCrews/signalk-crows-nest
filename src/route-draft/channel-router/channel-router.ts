@@ -31,7 +31,7 @@ import type { QueryChartedAreas } from '../safety-check.js'
 import { buildNavGrid, type NavGrid } from './nav-grid.js'
 import { findPath } from './astar.js'
 import { simplifyPath } from './path-simplify.js'
-import { queryWaterAreas, type OsmAreas } from './osm-water-query.js'
+import type { OsmAreas } from './osm-water-query.js'
 
 /** The OSM water-and-land query, matching {@link queryWaterAreas}; injected so tests stub it. */
 export type QueryWaterAreas = (

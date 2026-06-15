@@ -2,13 +2,16 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   anchorRouteEndpoints,
+  applyChannelRoute,
   buildUserPrompt,
   draftFailureMessage,
+  mergeChannelNote,
   modelsForRequest,
   openRouterErrorCode,
   parseDraftedRoute,
   parseRequest
 } from '../src/route-draft/endpoint.js'
+import type { LegFlag } from '../src/route-draft/safety-check.js'
 import { OpenRouterError } from '../src/route-draft/openrouter.js'
 import { DEFAULT_ROUTE_DRAFT_MODEL, normalizeRouteDraftConfig } from '../src/route-draft/config.js'
 
@@ -389,4 +392,43 @@ test('buildUserPrompt does not add the draft start-fallback guidance to an optim
   assert.ok(!('error' in parsed))
   const prompt = buildUserPrompt(parsed, TEST_CONFIG)
   assert.doesNotMatch(prompt, /Use the vessel position below as the start only/)
+})
+
+test('applyChannelRoute replaces the waypoints on an ENC success with no caveat', () => {
+  const original = [{ latitude: 1, longitude: 1 }, { latitude: 2, longitude: 2 }]
+  const channel = [{ latitude: 1, longitude: 1 }, { latitude: 1.5, longitude: 1.2 }, { latitude: 2, longitude: 2 }]
+  const r = applyChannelRoute(original, { ok: true, waypoints: channel, usedOsmWater: false })
+  assert.equal(r.waypoints.length, 3)
+  assert.deepEqual(r.notes, [])
+})
+
+test('applyChannelRoute adds the depth caveat on an OSM-water success', () => {
+  const channel = [{ latitude: 1, longitude: 1 }, { latitude: 2, longitude: 2 }]
+  const r = applyChannelRoute([], { ok: true, waypoints: channel, usedOsmWater: true })
+  assert.equal(r.waypoints.length, 2)
+  assert.equal(r.notes.length, 1)
+  assert.match(r.notes[0].message, /no depth data|not depth-checked/i)
+})
+
+test('applyChannelRoute keeps the route and notes geometry on every non-success', () => {
+  const original = [{ latitude: 1, longitude: 1 }, { latitude: 2, longitude: 2 }]
+  for (const reason of ['no-coverage', 'no-path', 'unsnappable', 'land-leg', 'fetch-failed', 'skipped'] as const) {
+    const r = applyChannelRoute(original, { ok: false, reason })
+    assert.equal(r.waypoints, original, `${reason} keeps the original route`)
+    assert.equal(r.notes.length, 1, `${reason} attaches the geometry note`)
+    assert.match(r.notes[0].message, /Channel routing did not run/i)
+  }
+})
+
+test('mergeChannelNote keeps a land flag before an appended other note', () => {
+  const checkFlags: LegFlag[] = [{ leg: 0, kind: 'land', message: 'crosses land' }]
+  const notes: LegFlag[] = [{ kind: 'other', message: 'channel note' }]
+  const merged = mergeChannelNote(checkFlags, notes)
+  assert.equal(merged[0].kind, 'land')
+  assert.equal(merged[merged.length - 1].kind, 'other')
+})
+
+test('mergeChannelNote passes the check flags through unchanged when there is no note', () => {
+  const checkFlags: LegFlag[] = [{ leg: 0, kind: 'shallow', message: 'shoal' }]
+  assert.deepEqual(mergeChannelNote(checkFlags, []), checkFlags)
 })
