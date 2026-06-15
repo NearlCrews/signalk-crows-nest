@@ -270,13 +270,22 @@ and `blocked`, where navigable is derived ONCE after every source has stamped bo
 1. Inside an ENC `Land_Area` polygon, or an OSM land feature -> `blocked`.
 2. Inside an ENC `Depth_Area` charted drying (`DRVAL1 < 0`), shallower than the
    contour (`DRVAL1 < draft + margin`), or of UNKNOWN depth (`DRVAL1` undefined) ->
-   `covered` and `blocked` (sticky OR across overlapping bands: a shallower or
-   unknown band blocks and a later deep stamp never clears it). The plugin never
-   silently passes unknown depth, matching the enc-provider.
+   `covered` and `blocked`. The plugin never silently passes unknown depth, matching
+   the enc-provider.
 3. Inside an ENC `Depth_Area` charted deep enough (`DRVAL1 >= draft + margin`) ->
    `covered`.
 4. Inside an OSM water polygon (and not in one of its island holes) -> `covered`,
    depth UNKNOWN (land-avoidance only; the safety check owns depth here).
+
+The ENC bands are rasterized FINEST FIRST with per-cell priority, matching the safety
+check's per-leg best-band selection. Within one band a shallow area wins over an
+overlapping deep one (a sticky OR, a later deep stamp never clears a block). ACROSS
+bands a finer band wins per cell: a cell any finer band already touched is skipped, so
+a coarse low-resolution `Depth_Area` (a coastal or general band routinely returns one
+big `DRVAL1 = 0` area over the whole window) never overrides the fine harbour band's
+charted deep channel. Live testing found this essential: without it, San Francisco
+Bay, Chesapeake, and Puget Sound all declined no-coverage despite a deep charted
+channel, because the coarse band's zero-depth area blocked every cell.
 
 OSM sources write `covered` (water) or `blocked` (land) and never clear a bit set by
 ENC; the navigable derivation `navigable = covered && !blocked` runs once after all
@@ -486,13 +495,23 @@ Stated bluntly so reach is never mistaken for coverage:
 - Depth, for any leg the router draws from OSM water. The water outline carries no
   depth, so an OSM-water route avoids charted land but is not depth-verified. The
   success caveat and the safety check's depth-not-checked note say so.
-- A very large water body (a Great-Lakes-scale lake or inland sea). Its OSM
-  `natural=water` relation is returned in full by `out geom;` and exceeds the
-  router's per-query fetch budget, so the OSM water query times out for it. In US
-  waters ENC carries the route there (the Detroit River target is ENC-covered, so
-  this is non-fatal); elsewhere the route declines to the model geometry with the
-  note. Clipping the relation geometry to the bbox, or fetching only ways, is a
-  follow-up.
+- Large or very detailed OSM water outside ENC. `out geom;` returns a matched
+  polygon's FULL geometry, not the in-bbox part, so a big lake (Lake Geneva, fetched
+  in ~15 s in testing), a dense lagoon (Venice, ~24 s), or a fragmented archipelago
+  (Stockholm, ~16 s) exceeds the router's per-query budget and the OSM query times
+  out. In US waters ENC carries the route (the Detroit River target is ENC-covered);
+  elsewhere the route declines to the model geometry with the note. This is mostly
+  benign: a route across large OPEN water is a straight line that does not cross land
+  anyway, and the safety check's OSM coastline check still flags a near-shore leg.
+  The router's real value is constrained water (rivers, channels, around islands),
+  which is mapped as smaller polygons that fetch fast (the Detroit River system
+  fetched in ~1.6 s). Clipping the geometry to the bbox is not available in Overpass
+  QL; a cross-request cache of the fetched water, or the pre-processed OSM water
+  polygon shapefiles, is the real fix and a follow-up.
+- Water that OSM does not map as a `natural=water` polygon at all. Some bodies are
+  bounded only by `natural=coastline` (a former sea arm like the IJsselmeer, or any
+  open coast), so the coverage-positive mask finds no water polygon and the router
+  declines. The coastline-derived open-sea mask follow-up addresses this.
 - An island mapped only as an untagged landform (for example a wooded islet with no
   `place=island`/`islet`, `natural=land`, or water-relation `inner` ring) outside
   ENC coverage. The mask blocks islands that are inner-ring holes or that carry an

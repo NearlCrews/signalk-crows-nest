@@ -39,9 +39,17 @@ about what it can and cannot do:
 - The OPEN SEA has no OpenStreetMap water polygon, so an offshore or open-coastal
   leg gets no channel routing: the geometry is kept and the route-level note says
   channel routing did not run. The per-leg safety check still runs.
-- A very large water body (a Great-Lakes-scale lake) can exceed the request
-  budget to fetch from OpenStreetMap. In US waters ENC carries the route there;
-  elsewhere the route falls back to the model geometry with the note.
+- Large or very detailed water outside ENC (a big lake, a dense lagoon, a
+  fragmented archipelago) can exceed the request budget to fetch from
+  OpenStreetMap, which returns each water polygon's full geometry. In US waters ENC
+  carries the route there; elsewhere the route falls back to the model geometry with
+  the note. This is mostly benign: a route across large open water is a straight line
+  that does not cross land anyway, and the per-leg safety check still flags a
+  near-shore leg. The router's strength is constrained water (rivers, channels,
+  around islands), which fetches fast.
+- Some water is not mapped in OpenStreetMap as a water polygon at all (a body
+  bounded only by coastline), so the router finds no coverage there and keeps the
+  model geometry.
 - A route is never returned over land by the channel router. When it cannot find
   a clean water path, it declines and keeps the model or drawn geometry with the
   note, rather than returning a route that crosses land.
