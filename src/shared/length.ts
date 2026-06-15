@@ -18,6 +18,18 @@ export const METERS_PER_KM = 1000
 /** Meters in one international nautical mile. Exact by definition. */
 export const METERS_PER_NAUTICAL_MILE = 1852
 
+/**
+ * Meters per degree of latitude, and of longitude at the equator. A spherical
+ * approximation, good to a fraction of a percent at the leg and grid scales the
+ * route-draft modules work at. Shared so the planar projection lives once.
+ */
+export const METERS_PER_DEGREE = 111_320
+
+/** Meters per degree of longitude at a given latitude. */
+export function metersPerDegreeLon (latitude: number): number {
+  return METERS_PER_DEGREE * Math.cos((latitude * Math.PI) / 180)
+}
+
 /** Convert a length in feet to meters. */
 export function metersFromFeet (feet: number): number {
   return feet * METERS_PER_FOOT

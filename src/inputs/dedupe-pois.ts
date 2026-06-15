@@ -21,6 +21,7 @@
  */
 
 import { distanceMeters } from '../geo/position-utilities.js'
+import { METERS_PER_DEGREE } from '../shared/length.js'
 import { ACTIVE_CAPTAIN_SOURCE_ID } from '../shared/source-ids.js'
 import {
   DEFAULT_DEDUPE_RADIUS_METERS,
@@ -65,9 +66,6 @@ export function dedupeRadiusSchema (title: string): Record<string, unknown> {
     title, DEFAULT_DEDUPE_RADIUS_METERS, MIN_DEDUPE_RADIUS_METERS, MAX_DEDUPE_RADIUS_METERS
   )
 }
-
-/** Meters per degree of latitude, used to project positions for the grid. */
-const METERS_PER_DEGREE = 111320
 
 /**
  * Multiplier used to pack two grid-cell coordinates into a single Map key.
