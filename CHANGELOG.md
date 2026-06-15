@@ -39,18 +39,21 @@ check covers routes worldwide, plus the charted-depth capability that backs it.
   the response carries an `optimized` marker so a client can confirm the route was
   consumed. Documented in `docs/route-draft-api.md`.
 - **Channel routing follows the water.** Where charted depth (US ENC) or mapped
-  water (OpenStreetMap) covers the passage, the endpoint replaces the model's
-  straight legs with a deterministic water-following route computed in owned code
-  (a depth-aware navigable grid plus A* over it), so the drafted waypoints follow
-  the channel rather than cutting across land. The grid avoids charted and mapped
-  land, including an island mapped as its own OpenStreetMap feature rather than as
-  a hole in the surrounding water, and the returned route is re-checked at full
-  polygon resolution so a returned channel route never crosses land. Where no
-  coverage is available (the open sea has no mapped water polygon), where the
-  water body is too large to fetch within the request budget, or where routing is
-  skipped to leave the safety check time, the model or drawn geometry is kept and
-  a route-level note says which. A route built on a mapped water outline carries
-  an explicit depth-unverified caveat, since that outline carries no depth.
+  water covers the passage, the endpoint replaces the model's straight legs with a
+  deterministic water-following route computed in owned code (a depth-aware
+  navigable grid plus A* over it), so the drafted waypoints follow the channel
+  rather than cutting across land. Mapped water is read from vector tiles, the
+  OpenStreetMap-derived water layer the chart base map renders, where each water
+  body is a pre-clipped polygon and an island is a hole in it; because the tiles
+  are pre-clipped, big water and coastline-bounded bodies route worldwide, inland
+  or on the coast. The grid avoids charted and mapped land, including the island
+  holes, and the returned route is re-checked at full polygon resolution so a
+  returned channel route never crosses land. Where no coverage is available, where
+  the passage is too large to cover within the tile budget, or where routing is
+  skipped to leave the safety check time, the model or drawn geometry is kept and a
+  route-level note says which. A route built on a mapped water outline carries an
+  explicit depth-unverified caveat, since tile water is generalized for display and
+  carries no depth.
 - **Worldwide route-draft safety check.** The check now covers routes worldwide,
   not US ENC waters alone. Per leg it runs the union of every applicable
   provider: NOAA ENC charted depth-area contours, charted land, and charted

@@ -15,41 +15,45 @@ code, checks every leg against marine data and computes a fuel estimate. The
 model proposes; the plugin disposes. Every safety flag and every number in the
 response is decided by the plugin, never by the model.
 
-When charted depth (US ENC) or mapped water (OpenStreetMap) covers the passage,
-the plugin replaces the model's straight legs with a water-following route
-computed by owned code (a navigable grid plus A* over it), so the returned
-waypoints follow the channel rather than cutting across land. The grid avoids
-charted and mapped land, including an island mapped as its own OpenStreetMap
-feature rather than as a hole in the surrounding water, and the returned route is
-re-checked at full polygon resolution, so a returned channel route never crosses
-charted land. When no such coverage is available, or routing is skipped to leave
-time for the safety check, the model's (or the drawn) geometry is kept and a
-route-level note says which. The channel router never reads depth from an
-OpenStreetMap water outline, so a route built on one carries an explicit
-depth-unverified note. The returned waypoints are still a draft to verify on the
-chart in every case.
+When charted depth (US ENC) or mapped water covers the passage, the plugin
+replaces the model's straight legs with a water-following route computed by owned
+code (a navigable grid plus A* over it), so the returned waypoints follow the
+channel rather than cutting across land. Mapped water is read from vector tiles,
+the OpenStreetMap-derived water layer the chart base map already renders, where
+each water body is a pre-clipped polygon and an island is a hole in it. The grid
+avoids charted and mapped land, including those island holes, and the returned
+route is re-checked at full polygon resolution, so a returned channel route never
+crosses charted land. When no such coverage is available, or routing is skipped
+to leave time for the safety check, the model's (or the drawn) geometry is kept
+and a route-level note says which. The channel router never reads depth from a
+mapped water outline, so a route built on one carries an explicit depth-unverified
+note. The returned waypoints are still a draft to verify on the chart in every
+case.
 
 ### Channel routing: reach and limits
 
 Channel routing is coverage-positive and best-effort, so its reach is honest
 about what it can and cannot do:
 
-- It follows charted water in US ENC waters, and mapped inland and enclosed water
-  worldwide (lakes, rivers drawn as areas, lagoons, and connected systems).
-- The OPEN SEA has no OpenStreetMap water polygon, so an offshore or open-coastal
-  leg gets no channel routing: the geometry is kept and the route-level note says
-  channel routing did not run. The per-leg safety check still runs.
-- Large or very detailed water outside ENC (a big lake, a dense lagoon, a
-  fragmented archipelago) can exceed the request budget to fetch from
-  OpenStreetMap, which returns each water polygon's full geometry. In US waters ENC
-  carries the route there; elsewhere the route falls back to the model geometry with
-  the note. This is mostly benign: a route across large open water is a straight line
-  that does not cross land anyway, and the per-leg safety check still flags a
-  near-shore leg. The router's strength is constrained water (rivers, channels,
-  around islands), which fetches fast.
-- Some water is not mapped in OpenStreetMap as a water polygon at all (a body
-  bounded only by coastline), so the router finds no coverage there and keeps the
-  model geometry.
+- It follows charted water in US ENC waters, and mapped water worldwide read from
+  vector tiles: lakes, rivers and lagoons drawn as areas, enclosed and coastal
+  water, and the open-water polygon along a coast. The tiles are pre-clipped, so
+  fetching them is bounded and fast wherever the passage is, inland or on the
+  coast, including big water and coastline-bounded bodies that the old full-polygon
+  fetch could not handle.
+- The router covers the passage's extent at the highest tile zoom whose
+  covering-tile count fits a small budget. A passage larger than roughly a few
+  hundred kilometers on a side exceeds that budget even at the coarsest zoom, so a
+  very long passage gets no channel routing: the geometry is kept and the
+  route-level note says channel routing did not run. In US waters ENC still carries
+  the route there. This is mostly benign: a leg across that much open water is a
+  straight line that does not cross land anyway, and the per-leg safety check still
+  flags a near-shore leg.
+- Tile water is generalized for display, not surveyed for navigation. At the chosen
+  zoom a small island can be generalized away and a narrow channel can be merged
+  into the surrounding water, so the router can miss a feature a chart shows. This
+  is why a tile-water route carries the depth-unverified note and is always a draft
+  to verify on the chart.
 - A route is never returned over land by the channel router. When it cannot find
   a clean water path, it declines and keeps the model or drawn geometry with the
   note, rather than returning a route that crosses land.
@@ -218,10 +222,10 @@ found." Say "the check raised these flags; verify the route on the chart."
 - `other`: everything else, including standoff warnings (a leg passes closer to
   land than the configured offing), explicit not-checked notes, the route-level
   collapsed depth-not-checked note, the route-level EMODnet awareness note, and
-  the channel-router notes (a depth-unverified caveat when the route followed an
-  OpenStreetMap water outline, or a channel-unavailable note when the plugin kept
-  the straight model or drawn geometry because no charted depth or mapped water
-  was available to route through).
+  the channel-router notes (a depth-unverified caveat when the route followed a
+  mapped water outline, or a channel-unavailable note when the plugin kept the
+  straight model or drawn geometry because no charted depth or mapped water was
+  available to route through).
 
 ### Datum matters
 
@@ -270,6 +274,8 @@ explicit "not checked," never a silent pass.
 - The notes-resource integration format (how POIs are published) is documented
   in `notes-resource-format.md`.
 - The design and the per-region rationale are in
-  `superpowers/specs/2026-06-14-worldwide-route-draft-check-design.md`, and the
+  `superpowers/specs/2026-06-14-worldwide-route-draft-check-design.md`, the
   channel router's design is in
-  `superpowers/specs/2026-06-15-channel-router-design.md`.
+  `superpowers/specs/2026-06-15-channel-router-design.md`, and the vector-tile
+  water source is in
+  `superpowers/specs/2026-06-15-vector-tile-water-source-design.md`.
