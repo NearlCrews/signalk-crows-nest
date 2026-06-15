@@ -12,8 +12,13 @@ wrecks, obstructions, and underwater rocks) and exposes them as Signal K
 `notes` resources so chart plotters such as Freeboard-SK can display them. It
 also hosts an optional, admin-gated AI route-draft endpoint (the server-side
 half of Binnacle's AI route drafting): it asks OpenRouter for a passage's
-turning waypoints, then checks them in owned code against NOAA ENC charted
-depth, land, and point hazards and computes a deterministic fuel estimate. The
+turning waypoints, optionally re-routes the geometry through a deterministic
+channel router so the legs follow charted or mapped water, then checks every
+leg in owned code and computes a deterministic fuel estimate. The safety check
+is worldwide, resolving data providers per leg by the union of every provider
+whose coverage envelope reaches the leg: NOAA ENC charted depth, land, and
+point hazards in US waters, EMODnet modeled depth in European seas, and an
+OpenStreetMap coastline land check plus OpenSeaMap point hazards worldwide. The
 AI piece is entirely opt-in and off until an OpenRouter key is configured.
 
 ## Architecture rule: ONE plugin, modular files
@@ -108,7 +113,14 @@ self-contained module registered on one line in `src/index.ts`.
       `http-client.ts`, with the required `User-Agent`; it takes an ordered
       endpoint list, a primary plus any configured fallback mirrors, and fails
       over to the next on a failure so a single instance outage does not take
-      the source offline),
+      the source offline. Besides the POI list query (`listPointsOfInterest`, the
+      route-draft OpenSeaMap hazard provider reuses it with a hard-coded hazard
+      regex), it exposes `listCoastlineWays` for the route-draft coastline land
+      check and `listWaterAreas` for the channel router's water-and-land query,
+      plus the `MAX_BBOX_SPAN_DEGREES` clamp and the `CoastlineWay` and
+      `OsmAreaElement` wire types those route-draft consumers read; every query
+      threads an optional `AbortSignal` so an abandoned check cancels its
+      in-flight requests),
       `seamark-mapping.ts` (one table mapping every `seamark:type` value to
       the plugin's `PoiType` union, a Freeboard-registered `:sk-` icon, and a
       plain-English label in lockstep, with isolated-danger marks rendered as
@@ -198,8 +210,17 @@ self-contained module registered on one line in `src/index.ts`.
     the open-polyline `polylineCrossesLeg` and `nearestPolylineApproachMeters`
     coastline helpers, plus `legBbox`, `routeBbox`, `cumulativeLegStartMeters`,
     and `legForAlongTrack`), and `endpoint.ts` (the `POST /api/route-draft`
-    handler that asks the model for turning waypoints then disposes every flag
-    and number in owned code; the model proposes, this code disposes).
+    handler that asks the model for turning waypoints, optionally re-routes the
+    geometry through the channel router, then disposes every flag and number in
+    owned code; the model proposes, this code disposes. It also serves the
+    optimize variant: when the request carries a drawn `route`, it refines that
+    polyline instead of drafting from words, anchors the result's endpoints to
+    the drawn start and end, and returns an `optimized` marker. It attaches one
+    route-level geometry note: an OSM-water depth caveat when the channel route
+    followed a mapped water outline that carries no depth, or a
+    channel-unavailable note when routing did not run (no coverage, declined, or
+    skipped for budget) and the straight model or drawn geometry was kept, so a
+    navigator never mistakes a straight AI line for a vetted one).
     - `providers/` - the per-leg data providers the orchestrator runs.
       `provider.ts` (the `LegSafetyProvider` contract, the precedence
       constants, the provider-id constants, the `resolveProviders` per-leg
@@ -215,6 +236,30 @@ self-contained module registered on one line in `src/index.ts`.
       client built on `http-one-shot.ts`; it lives here, not under `inputs/`,
       because EMODnet has no POI-source counterpart, mirroring how
       `depth-area-query.ts` sits under `inputs/noaa-enc`).
+    - `channel-router/` - the deterministic water-following router the endpoint
+      runs before the safety check to replace the model's straight legs with a
+      route that follows charted or mapped water where coverage allows; it owns
+      the geometry on the water while the model owns only the endpoints and the
+      intent. `channel-router.ts` (the orchestrator: it sizes and validates the
+      route bbox, declining a cross-antimeridian or oversized window before any
+      fetch, fetches the ENC charted areas per band and the OSM water-and-land
+      areas concurrently, builds the navigable grid, snaps the endpoints to
+      water, runs A*, simplifies the path, re-validates every final leg at
+      polygon resolution, and returns the turning waypoints or a typed decline
+      reason; it never verifies depth for OSM water, so the caller flags an
+      OSM-water success as depth-unverified), `osm-water-query.ts` (the
+      worldwide OSM water-and-land Overpass query, an internal capability not
+      published as POIs, that tiles the bbox, dedupes elements across tiles, and
+      assembles each into an outer-ring-then-holes polygon; it lives here, not
+      under `inputs/openseamap`, because the ring assembly needs the route-draft
+      geometry primitives an inputs module must not depend on), `nav-grid.ts`
+      (the depth-aware navigable grid via scanline rasterization: a cell is
+      navigable only where ENC charts it deep enough or OSM maps water, and any
+      ENC or OSM land blocks, with a standoff cost ramp toward the desired
+      offing), `astar.ts` (the grid A* with a binary min-heap), `path-simplify.ts`
+      (the pure Ramer-Douglas-Peucker reduction of the A* centerline to turning
+      points), and `index.ts` (the slice's barrel, exporting `routeChannel`,
+      `routeStaysOnWater`, and `queryWaterAreas` with their types).
   - `outputs/` - SignalK consumers of POI data.
     - `output.ts` - the `OutputModule`, `OutputHandle`, `OutputContext`, and
       `PositionScanContributor` contracts an output implements.
@@ -390,14 +435,16 @@ self-contained module registered on one line in `src/index.ts`.
     `SECONDS_PER_DAY` constants the relative-time formatters share, and the
     `MINUTES_PER_HOUR` / `MINUTES_PER_DAY` constants the minute-denominated
     cache windows derive from),
-    `length.ts` (the `METERS_PER_FOOT` and `METERS_PER_NAUTICAL_MILE`
-    constants and the `metersFromFeet` / `metersFromFeetInches` /
+    `length.ts` (the `METERS_PER_FOOT`, `METERS_PER_KM`,
+    `METERS_PER_NAUTICAL_MILE`, and `METERS_PER_DEGREE` constants, the
+    latitude-dependent `metersPerDegreeLon` helper the channel-router grid sizes
+    its cells with, and the `metersFromFeet` / `metersFromFeetInches` /
     `metersFromNauticalMiles` conversions shared by the two bridge-clearance
     parsers, the dedupe-radius default, the panel's display-unit conversions,
     and the route-corridor and route-draft nautical-mile distances),
     `format-meters.ts` (the `formatMeters` one-decimal meter formatter every
     safety message uses, plus `formatNm`, the two-decimal nautical-mile
-    formatter the route-draft OpenSeaMap standoff message reads),
+    formatter the route-draft ENC and OpenSeaMap standoff messages read),
     `bridge-clearance.ts` (the bridge air-draft comparison: `readVesselAirDraft`
     reads `design.airHeight` then a config fallback, `bridgeBlocksVessel` plus
     the margin bounds and `clampClearanceMargin`, the `formatMeters` message

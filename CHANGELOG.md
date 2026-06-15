@@ -38,6 +38,14 @@ check covers routes worldwide, plus the charted-depth capability that backs it.
   fuel estimate. The plain-language prompt becomes an optional one-line hint, and
   the response carries an `optimized` marker so a client can confirm the route was
   consumed. Documented in `docs/route-draft-api.md`.
+- **Channel routing follows the water.** Where charted depth (US ENC) or mapped
+  water (OpenStreetMap) covers the passage, the endpoint replaces the model's
+  straight legs with a deterministic water-following route computed in owned code
+  (a depth-aware navigable grid plus A* over it), so the drafted waypoints follow
+  the channel rather than cutting across land. Where no such coverage is
+  available, the model or drawn geometry is kept and a route-level note says so,
+  and a route built on a mapped water outline carries an explicit depth-unverified
+  caveat, since that outline carries no depth.
 - **Worldwide route-draft safety check.** The check now covers routes worldwide,
   not US ENC waters alone. Per leg it runs the union of every applicable
   provider: NOAA ENC charted depth-area contours, charted land, and charted

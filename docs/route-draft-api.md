@@ -9,10 +9,21 @@ and behavior reference, not a tutorial on the plugin internals.
 
 `POST /api/route-draft` turns a plain-language passage request into a drafted
 route. The plugin asks an LLM (through OpenRouter) for the passage's turning
-waypoints, then, in owned deterministic code, checks every leg against marine
-data and computes a fuel estimate. The model proposes; the plugin disposes. Every
-safety flag and every number in the response is decided by the plugin, never by
-the model.
+waypoints, optionally re-routes the geometry through a deterministic channel
+router so the legs follow charted or mapped water, then, in owned deterministic
+code, checks every leg against marine data and computes a fuel estimate. The
+model proposes; the plugin disposes. Every safety flag and every number in the
+response is decided by the plugin, never by the model.
+
+When charted depth (US ENC) or mapped water (OpenStreetMap) covers the passage,
+the plugin replaces the model's straight legs with a water-following route
+computed by owned code (a navigable grid plus A* over it), so the returned
+waypoints follow the channel rather than cutting across land. When no such
+coverage is available, or routing is skipped to leave time for the safety check,
+the model's (or the drawn) geometry is kept and a route-level note says so. The
+channel router never reads depth from an OpenStreetMap water outline, so a route
+built on one carries an explicit depth-unverified note. The returned waypoints
+are still a draft to verify on the chart in every case.
 
 The result is always a DRAFT to verify on the chart before saving. It is not a
 sanctioned route and it is not a guarantee of safe water.
@@ -173,7 +184,11 @@ found." Say "the check raised these flags; verify the route on the chart."
   OpenStreetMap-charted).
 - `other`: everything else, including standoff warnings (a leg passes closer to
   land than the configured offing), explicit not-checked notes, the route-level
-  collapsed depth-not-checked note, and the route-level EMODnet awareness note.
+  collapsed depth-not-checked note, the route-level EMODnet awareness note, and
+  the channel-router notes (a depth-unverified caveat when the route followed an
+  OpenStreetMap water outline, or a channel-unavailable note when the plugin kept
+  the straight model or drawn geometry because no charted depth or mapped water
+  was available to route through).
 
 ### Datum matters
 
@@ -222,4 +237,6 @@ explicit "not checked," never a silent pass.
 - The notes-resource integration format (how POIs are published) is documented
   in `notes-resource-format.md`.
 - The design and the per-region rationale are in
-  `superpowers/specs/2026-06-14-worldwide-route-draft-check-design.md`.
+  `superpowers/specs/2026-06-14-worldwide-route-draft-check-design.md`, and the
+  channel router's design is in
+  `superpowers/specs/2026-06-15-channel-router-design.md`.
