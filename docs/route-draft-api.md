@@ -47,10 +47,22 @@ sanctioned route and it is not a guarantee of safe water.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `prompt` | string, required | The plain-language passage request. Non-blank. |
+| `prompt` | string | The plain-language passage request. Required and non-blank when drafting from words; optional, a one-line steering hint, when `route` is given. |
 | `from` | `{ latitude, longitude }`, required | The vessel's start position, decimal degrees. |
 | `bounds` | `[west, south, east, north]`, required | The visible chart window, decimal degrees, four finite numbers. The model is told to keep waypoints inside this window, and a waypoint far outside it is dropped as a hallucination. The window may cross the antimeridian (west greater than east). A window wider than 120 degrees on either edge (antimeridian-aware for longitude) is rejected, so send a real viewport, not a hemisphere. |
 | `units` | `"metric"` or `"imperial"` | Units for any prose the model writes. Anything other than `"imperial"` is treated as `"metric"`. Coordinates are always decimal degrees and stored values are SI regardless. |
+| `route` | `[{ latitude, longitude }, ...]`, optional | The navigator's drawn route to OPTIMIZE, ordered turning points, coordinates only (no names). Its presence makes the request an optimize: the plugin refines this polyline rather than drafting from the prompt alone. Two to 25 waypoints; a non-array, an invalid coordinate, fewer than two, or more than 25 is rejected as `bad-request` before any model call. |
+
+### The optimize variant
+
+When `route` is present the endpoint optimizes that drawn route instead of drafting
+from scratch. It keeps the drawn start and destination (the plugin anchors the
+first and last returned waypoints to the exact drawn coordinates after the model
+replies, keeping the model's names), uses a lower sampling temperature, and treats
+`prompt` as an optional one-line hint. The response is the same shape plus the
+`optimized` marker below. Everything else, the worldwide per-leg safety check, the
+flags, the fuel estimate, the five-case error vocabulary, and the per-UTC-day call
+budget, is identical to a draft.
 
 ## Response: success
 
@@ -84,6 +96,7 @@ HTTP 200 with `ok: true`:
 | `confidence` | Optional `"high"` or `"low"`, the model's own confidence. Treat `"low"` as a stronger prompt to verify. |
 | `fuel` | Optional fuel estimate (see below). Omitted when no honest estimate is possible. |
 | `flags` | Optional array of per-leg and route-level safety flags (see below). Omitted when there are none. |
+| `optimized` | Present and `true` only when the request carried a `route` and the plugin consumed it. A client that sent a `route` should assert this to detect an older build that ignored the field and drafted from scratch; it is absent on a from-scratch draft. |
 
 ### The fuel object
 

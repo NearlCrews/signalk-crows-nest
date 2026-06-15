@@ -30,6 +30,14 @@ check covers routes worldwide, plus the charted-depth capability that backs it.
   the depth at every point. A new Route drafting panel card configures the masked
   OpenRouter key, the model, a daily call cap, and the vessel, fuel, and routing
   inputs.
+- **Optimize a drawn route.** `POST /api/route-draft` now also accepts an optional
+  `route`, the navigator's drawn waypoints. When present, the endpoint refines that
+  route instead of drafting from words: it keeps the drawn start and destination,
+  moves and adds turning waypoints only as needed to clear the charted and modeled
+  hazards with the standoff, and runs the same worldwide per-leg safety check and
+  fuel estimate. The plain-language prompt becomes an optional one-line hint, and
+  the response carries an `optimized` marker so a client can confirm the route was
+  consumed. Documented in `docs/route-draft-api.md`.
 - **Worldwide route-draft safety check.** The check now covers routes worldwide,
   not US ENC waters alone. Per leg it runs the union of every applicable
   provider: NOAA ENC charted depth-area contours, charted land, and charted
