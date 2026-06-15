@@ -52,16 +52,17 @@ const CACHE_MAX_BYTES = 48 * 1024 * 1024
 /** Approximate bytes per stored vertex (two doubles plus array overhead) for the cache size budget. */
 const BYTES_PER_VERTEX = 24
 
-const lonToTile = (lon: number, z: number): number => Math.floor((lon + 180) / 360 * 2 ** z)
-const latToTile = (lat: number, z: number): number => {
+const lonToTile = (lon: number, scale: number): number => Math.floor((lon + 180) / 360 * scale)
+const latToTile = (lat: number, scale: number): number => {
   const r = lat * Math.PI / 180
-  return Math.floor((1 - Math.asinh(Math.tan(r)) / Math.PI) / 2 * 2 ** z)
+  return Math.floor((1 - Math.asinh(Math.tan(r)) / Math.PI) / 2 * scale)
 }
 
 /** The covering-tile count for a bbox at zoom `z`. */
 function tileCount (bbox: Bbox, z: number): number {
-  const nx = lonToTile(bbox.east, z) - lonToTile(bbox.west, z) + 1
-  const ny = latToTile(bbox.south, z) - latToTile(bbox.north, z) + 1
+  const scale = 2 ** z
+  const nx = lonToTile(bbox.east, scale) - lonToTile(bbox.west, scale) + 1
+  const ny = latToTile(bbox.south, scale) - latToTile(bbox.north, scale) + 1
   return nx * ny
 }
 
@@ -75,9 +76,14 @@ export function pickZoom (bbox: Bbox): number | undefined {
 
 /** The integer `{ x, y }` tiles covering a bbox at zoom `z`. */
 export function tilesForBbox (bbox: Bbox, z: number): Array<{ x: number, y: number }> {
+  const scale = 2 ** z
+  const xMin = lonToTile(bbox.west, scale)
+  const xMax = lonToTile(bbox.east, scale)
+  const yMin = latToTile(bbox.north, scale)
+  const yMax = latToTile(bbox.south, scale)
   const tiles: Array<{ x: number, y: number }> = []
-  for (let x = lonToTile(bbox.west, z); x <= lonToTile(bbox.east, z); x += 1) {
-    for (let y = latToTile(bbox.north, z); y <= latToTile(bbox.south, z); y += 1) {
+  for (let x = xMin; x <= xMax; x += 1) {
+    for (let y = yMin; y <= yMax; y += 1) {
       tiles.push({ x, y })
     }
   }
@@ -106,10 +112,17 @@ function toAreaPolygons (geoms: TileGeometry[]): AreaPolygon[] {
   return out
 }
 
+/** Total vertex count of one water polygon. */
+function vertexCountOne (poly: AreaPolygon): number {
+  let n = 0
+  for (const ring of poly.rings) n += ring.length
+  return n
+}
+
 /** Total vertex count across a tile's water polygons (the LRU size unit). */
 function vertexCount (polys: AreaPolygon[]): number {
   let n = 0
-  for (const p of polys) for (const ring of p.rings) n += ring.length
+  for (const p of polys) n += vertexCountOne(p)
   return n
 }
 
@@ -162,7 +175,7 @@ export function createTileWaterSource (client: VectorTileClient): TileWaterSourc
           break
         }
         water.push(poly)
-        total += vertexCount([poly])
+        total += vertexCountOne(poly)
       }
     }
     if (ok === 0 && failed > 0) throw lastError instanceof Error ? lastError : new Error('every water tile fetch failed')

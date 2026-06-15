@@ -6,13 +6,15 @@ import type { AStarGrid } from './astar.js'
 /** Standoff cost weight: the step-cost multiplier at zero clearance, ramping to 0 at the desired offing. */
 const STANDOFF_WEIGHT = 6
 /** Default target cell size in meters; a larger bbox coarsens from here. */
-export const DEFAULT_CELL_METERS = 60
+const DEFAULT_CELL_METERS = 60
 /** Cell-count ceiling; a larger bbox coarsens until it fits. */
-export const MAX_CELLS = 250_000
+const MAX_CELLS = 250_000
 /** Cell-size ceiling; a route so large it would need coarser cells than this is declined (too coarse to resolve a channel). */
-export const MAX_CELL_METERS = 250
+const MAX_CELL_METERS = 250
 /** Check the deadline this often during the synchronous passes. */
 const DEADLINE_CHECK_CELLS = 8192
+/** Orthogonal neighbor offsets for the clearance BFS, hoisted so the loop does not rebuild them per cell. */
+const ORTHO_NEIGHBORS: ReadonlyArray<readonly [number, number]> = [[1, 0], [-1, 0], [0, 1], [0, -1]]
 
 /** A polygon as GeoJSON `[lon, lat]` rings (outer first, then holes); the shape both sources share. */
 export interface RingPolygon {
@@ -76,7 +78,7 @@ function emptyGrid (bbox: Bbox): NavGrid {
 }
 
 /** The resolved grid dimensions for a bbox: column and row counts and the cell size in meters. */
-export interface GridSize {
+interface GridSize {
   cols: number
   rows: number
   cell: number
@@ -143,8 +145,9 @@ export function buildNavGrid (params: NavGridParams): NavGrid {
   // bands a finer band wins per cell: a cell any finer band already touched is skipped, so a coarse
   // low-resolution shallow or zero-depth area never overrides a fine band's charted deep channel.
   const decidedByFinerBand = new Uint8Array(cols * rows)
+  const bandTouched = new Uint8Array(cols * rows)
   for (const band of bands) {
-    const bandTouched = new Uint8Array(cols * rows)
+    bandTouched.fill(0)
     for (const area of band.depthAreas) {
       const drval1 = area.depthRange?.shallowMeters
       const tooShallow = drval1 === undefined || drval1 < contour
@@ -221,7 +224,7 @@ export function buildNavGrid (params: NavGridParams): NavGrid {
     const i = queue[head]
     const r = Math.floor(i / cols)
     const c = i - r * cols
-    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+    for (const [dc, dr] of ORTHO_NEIGHBORS) {
       const nc = c + dc; const nr = r + dr
       if (nc < 0 || nc >= cols || nr < 0 || nr >= rows) continue
       const ni = nr * cols + nc

@@ -7,6 +7,7 @@
  */
 
 import { requestText, type OneShotResponse } from '../../inputs/http-one-shot.js'
+import { isFiniteNumber } from '../../shared/numbers.js'
 import { PLUGIN_USER_AGENT } from '../../shared/plugin-id.js'
 import { MS_PER_SECOND } from '../../shared/time.js'
 import type { Position } from '../../shared/types.js'
@@ -57,7 +58,7 @@ export function createEmodnetClient (deps: EmodnetClientDeps = {}): EmodnetClien
         throw new Error('EMODnet depth_profile returned non-JSON')
       }
       if (!Array.isArray(raw)) throw new Error('EMODnet depth_profile did not return an array')
-      const samples = raw.filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
+      const samples = raw.filter(isFiniteNumber)
       const hadNull = raw.some((v) => v === null)
       return { samples, hadGap: hadNull && samples.length > 0 }
     }

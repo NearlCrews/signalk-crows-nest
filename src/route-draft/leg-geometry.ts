@@ -13,7 +13,11 @@
  */
 
 import { distanceMeters, initialBearingRad, positionToBbox, projectPointOntoLeg, rhumbDistanceMeters, sampleRhumbLeg, unionBbox } from '../geo/position-utilities.js'
+import { isFiniteNumber } from '../shared/numbers.js'
 import type { Bbox, Position } from '../shared/types.js'
+
+/** Sub-points per coastline segment when sampling its approach to a leg, including both endpoints. */
+const DENSIFY_STEPS = 20
 
 /**
  * True when `[lon, lat]` lies inside the polygon `rings` (outer ring with holes)
@@ -158,26 +162,22 @@ export function nearestPolylineApproachMeters (
   let nearest: number | undefined
   for (const line of lines) {
     for (let i = 0; i + 1 < line.length; i += 1) {
-      for (const [lon, lat] of densifySegment(line[i], line[i + 1])) {
+      const a = line[i]
+      const b = line[i + 1]
+      // Densify the segment into DENSIFY_STEPS + 1 points inline, so a long sparse segment passing
+      // close to the leg is not missed, without allocating a sub-point array per segment.
+      for (let s = 0; s <= DENSIFY_STEPS; s += 1) {
+        const t = s / DENSIFY_STEPS
+        const lon = a[0] + (b[0] - a[0]) * t
+        const lat = a[1] + (b[1] - a[1]) * t
         const projection = projectPointOntoLeg(from, to, { latitude: lat, longitude: lon }, bearing)
         const along = projection.alongTrackMeters
         const cross = Math.abs(projection.crossTrackMeters)
-        if (!Number.isFinite(along) || !Number.isFinite(cross)) continue
+        if (!isFiniteNumber(along) || !isFiniteNumber(cross)) continue
         if (along < 0 || along > legLengthMeters) continue
         if (nearest === undefined || cross < nearest) nearest = cross
       }
     }
   }
   return nearest
-}
-
-/** Sample a coastline segment into 21 equally-spaced points (including both endpoints). */
-function densifySegment (a: number[], b: number[]): number[][] {
-  const steps = 20
-  const out: number[][] = []
-  for (let i = 0; i <= steps; i += 1) {
-    const t = i / steps
-    out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t])
-  }
-  return out
 }

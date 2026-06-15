@@ -115,7 +115,6 @@ const DEFAULTS: RateLimitOptions = {
 
 /** One coastline way (a `natural=coastline` line) as an ordered vertex list. */
 export interface CoastlineWay {
-  /** Ordered [lon, lat] vertices of one coastline way. */
   points: number[][]
 }
 
