@@ -42,10 +42,15 @@ check covers routes worldwide, plus the charted-depth capability that backs it.
   water (OpenStreetMap) covers the passage, the endpoint replaces the model's
   straight legs with a deterministic water-following route computed in owned code
   (a depth-aware navigable grid plus A* over it), so the drafted waypoints follow
-  the channel rather than cutting across land. Where no such coverage is
-  available, the model or drawn geometry is kept and a route-level note says so,
-  and a route built on a mapped water outline carries an explicit depth-unverified
-  caveat, since that outline carries no depth.
+  the channel rather than cutting across land. The grid avoids charted and mapped
+  land, including an island mapped as its own OpenStreetMap feature rather than as
+  a hole in the surrounding water, and the returned route is re-checked at full
+  polygon resolution so a returned channel route never crosses land. Where no
+  coverage is available (the open sea has no mapped water polygon), where the
+  water body is too large to fetch within the request budget, or where routing is
+  skipped to leave the safety check time, the model or drawn geometry is kept and
+  a route-level note says which. A route built on a mapped water outline carries
+  an explicit depth-unverified caveat, since that outline carries no depth.
 - **Worldwide route-draft safety check.** The check now covers routes worldwide,
   not US ENC waters alone. Per leg it runs the union of every applicable
   provider: NOAA ENC charted depth-area contours, charted land, and charted

@@ -486,6 +486,13 @@ Stated bluntly so reach is never mistaken for coverage:
 - Depth, for any leg the router draws from OSM water. The water outline carries no
   depth, so an OSM-water route avoids charted land but is not depth-verified. The
   success caveat and the safety check's depth-not-checked note say so.
+- A very large water body (a Great-Lakes-scale lake or inland sea). Its OSM
+  `natural=water` relation is returned in full by `out geom;` and exceeds the
+  router's per-query fetch budget, so the OSM water query times out for it. In US
+  waters ENC carries the route there (the Detroit River target is ENC-covered, so
+  this is non-fatal); elsewhere the route declines to the model geometry with the
+  note. Clipping the relation geometry to the bbox, or fetching only ways, is a
+  follow-up.
 - An island mapped only as an untagged landform (for example a wooded islet with no
   `place=island`/`islet`, `natural=land`, or water-relation `inner` ring) outside
   ENC coverage. The mask blocks islands that are inner-ring holes or that carry an

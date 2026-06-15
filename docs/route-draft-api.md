@@ -18,12 +18,37 @@ response is decided by the plugin, never by the model.
 When charted depth (US ENC) or mapped water (OpenStreetMap) covers the passage,
 the plugin replaces the model's straight legs with a water-following route
 computed by owned code (a navigable grid plus A* over it), so the returned
-waypoints follow the channel rather than cutting across land. When no such
-coverage is available, or routing is skipped to leave time for the safety check,
-the model's (or the drawn) geometry is kept and a route-level note says so. The
-channel router never reads depth from an OpenStreetMap water outline, so a route
-built on one carries an explicit depth-unverified note. The returned waypoints
-are still a draft to verify on the chart in every case.
+waypoints follow the channel rather than cutting across land. The grid avoids
+charted and mapped land, including an island mapped as its own OpenStreetMap
+feature rather than as a hole in the surrounding water, and the returned route is
+re-checked at full polygon resolution, so a returned channel route never crosses
+charted land. When no such coverage is available, or routing is skipped to leave
+time for the safety check, the model's (or the drawn) geometry is kept and a
+route-level note says which. The channel router never reads depth from an
+OpenStreetMap water outline, so a route built on one carries an explicit
+depth-unverified note. The returned waypoints are still a draft to verify on the
+chart in every case.
+
+### Channel routing: reach and limits
+
+Channel routing is coverage-positive and best-effort, so its reach is honest
+about what it can and cannot do:
+
+- It follows charted water in US ENC waters, and mapped inland and enclosed water
+  worldwide (lakes, rivers drawn as areas, lagoons, and connected systems).
+- The OPEN SEA has no OpenStreetMap water polygon, so an offshore or open-coastal
+  leg gets no channel routing: the geometry is kept and the route-level note says
+  channel routing did not run. The per-leg safety check still runs.
+- A very large water body (a Great-Lakes-scale lake) can exceed the request
+  budget to fetch from OpenStreetMap. In US waters ENC carries the route there;
+  elsewhere the route falls back to the model geometry with the note.
+- A route is never returned over land by the channel router. When it cannot find
+  a clean water path, it declines and keeps the model or drawn geometry with the
+  note, rather than returning a route that crosses land.
+
+The route-level channel note (an `other` flag, see the flags section) states the
+cause, so a client can tell apart "no mapped water here," "no continuous water
+path," "could not place an endpoint on water," and "routing skipped for time."
 
 The result is always a DRAFT to verify on the chart before saving. It is not a
 sanctioned route and it is not a guarantee of safe water.
