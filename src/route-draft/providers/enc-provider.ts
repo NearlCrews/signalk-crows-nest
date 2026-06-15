@@ -51,6 +51,7 @@ import {
 } from '../../inputs/noaa-enc/s57-mapping.js'
 import { formatMeters, formatNm } from '../../shared/format-meters.js'
 import { METERS_PER_NAUTICAL_MILE, metersFromNauticalMiles } from '../../shared/length.js'
+import { isFiniteNumber } from '../../shared/numbers.js'
 import { isInEncCoverage } from '../../shared/regions.js'
 import { SCALE_BAND_LABELS } from '../../shared/scale-band.js'
 import type {
@@ -226,7 +227,7 @@ function nearestLandApproachMeters (
         const projection = projectPointOntoLeg(from, to, point, bearing)
         const along = projection.alongTrackMeters
         const cross = Math.abs(projection.crossTrackMeters)
-        if (!Number.isFinite(along) || !Number.isFinite(cross)) continue
+        if (!isFiniteNumber(along) || !isFiniteNumber(cross)) continue
         // Off the ends of the leg the perpendicular distance is not the real
         // separation, so only the on-leg span contributes a standoff reading.
         // The bound uses the rhumb leg length while projectPointOntoLeg measures
@@ -250,7 +251,7 @@ function nearestLandApproachMeters (
 function hazardSummary (layerKey: EncLayerKey, feature: EncFeature): PoiSummary | null {
   if (feature.geometry.type !== 'Point') return null
   const [lon, lat] = feature.geometry.coordinates
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null
+  if (!isFiniteNumber(lat) || !isFiniteNumber(lon)) return null
   const objectId = typeof feature.id === 'number'
     ? feature.id
     : (typeof feature.properties.OBJECTID === 'number' ? feature.properties.OBJECTID : undefined)
@@ -485,7 +486,8 @@ export function createEncProvider (deps: EncProviderDeps): LegSafetyProvider {
       try {
         hazards = await queryHazards(deps, params.bands, routeBbox(waypoints, corridorHalfWidthMeters), params.signal)
       } catch (error) {
-        deps.logger?.debug(`route hazard query failed: ${String(error)}`)
+        // At error level so a persistent ENC hazard-service outage is visible in normal logs, not only with debug on.
+        deps.logger?.error(`route hazard query failed: ${String(error)}`)
         flags.push({ kind: 'other', message: 'point hazards not checked: charted query failed' })
         return flags
       }

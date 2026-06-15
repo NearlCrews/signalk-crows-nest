@@ -412,7 +412,7 @@ test('applyChannelRoute adds the depth caveat on a tile-water success', () => {
 
 test('applyChannelRoute keeps the route and notes geometry on every non-success', () => {
   const original = [{ latitude: 1, longitude: 1 }, { latitude: 2, longitude: 2 }]
-  for (const reason of ['no-coverage', 'no-path', 'unsnappable', 'land-leg', 'fetch-failed', 'skipped'] as const) {
+  for (const reason of ['no-coverage', 'no-path', 'deadline', 'unsnappable', 'land-leg', 'fetch-failed', 'skipped'] as const) {
     const r = applyChannelRoute(original, { ok: false, reason })
     assert.equal(r.waypoints, original, `${reason} keeps the original route`)
     assert.equal(r.notes.length, 1, `${reason} attaches the geometry note`)

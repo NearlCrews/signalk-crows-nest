@@ -54,7 +54,6 @@ class MinHeap {
 }
 
 const SQRT2 = Math.SQRT2
-// 8-connectivity offsets and their step distances.
 const NEIGHBORS: ReadonlyArray<[number, number, number]> = [
   [1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1],
   [1, 1, SQRT2], [1, -1, SQRT2], [-1, 1, SQRT2], [-1, -1, SQRT2]
@@ -71,13 +70,15 @@ const DEADLINE_CHECK_INTERVAL = 4096
  * `undefined` when the goal is unreachable, when an endpoint is not navigable, or
  * when `deadlineMs` is given and passes mid-search. A diagonal step is disallowed
  * when it would cut between two blocked orthogonal neighbors, so the path never
- * clips a land corner.
+ * clips a land corner. When `status` is given, its `timedOut` is set true only for
+ * the deadline case, so a caller can tell a timeout apart from a true no-path.
  */
 export function findPath (
   grid: AStarGrid,
   start: [number, number],
   goal: [number, number],
-  deadlineMs?: number
+  deadlineMs?: number,
+  status?: { timedOut: boolean }
 ): Array<[number, number]> | undefined {
   const { cols, rows } = grid
   if (!grid.isNavigable(start[0], start[1]) || !grid.isNavigable(goal[0], goal[1])) return undefined
@@ -98,6 +99,7 @@ export function findPath (
     closed[cur] = 1
     if (cur === goalIdx) break
     if ((pops += 1) % DEADLINE_CHECK_INTERVAL === 0 && deadlineMs !== undefined && Date.now() > deadlineMs) {
+      if (status !== undefined) status.timedOut = true
       return undefined
     }
     const cr = Math.floor(cur / cols)

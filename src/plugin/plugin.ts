@@ -78,9 +78,12 @@ const OPEN_API = {
             'application/json': {
               schema: {
                 type: 'object',
-                required: ['prompt', 'from', 'bounds'],
+                required: ['from', 'bounds'],
                 properties: {
-                  prompt: { type: 'string', description: 'Plain-language passage request.' },
+                  prompt: {
+                    type: 'string',
+                    description: 'Plain-language passage request. Required for a from-scratch draft; an optional hint when route is present.'
+                  },
                   from: {
                     type: 'object',
                     required: ['latitude', 'longitude'],
@@ -95,6 +98,20 @@ const OPEN_API = {
                     items: { type: 'number' },
                     minItems: 4,
                     maxItems: 4
+                  },
+                  route: {
+                    type: 'array',
+                    description: 'Optional drawn route to optimize, ordered turning points. When present the endpoint refines it and prompt becomes an optional hint.',
+                    minItems: 2,
+                    maxItems: 25,
+                    items: {
+                      type: 'object',
+                      required: ['latitude', 'longitude'],
+                      properties: {
+                        latitude: { type: 'number' },
+                        longitude: { type: 'number' }
+                      }
+                    }
                   },
                   units: { type: 'string', enum: ['metric', 'imperial'] }
                 }
@@ -140,6 +157,10 @@ export function createPlugin (
   // `unauthorized` (not configured). The generation counter orphans an
   // in-flight budget load if a teardown or a newer start beats it.
   let routeDraftService: RouteDraftService | undefined
+  // True when drafting is configured (a key is set) but the service failed to start, for example a
+  // budget-state load error. It lets the endpoint return a "configured but failed to start" error
+  // rather than the misleading "not configured" when the service is undefined for that reason.
+  let routeDraftInitFailed = false
   let routeDraftGeneration = 0
   // The route-draft Overpass client is a queued client with in-flight work to
   // abort, unlike the one-shot ENC client, so it is held alongside the service
@@ -164,6 +185,7 @@ export function createPlugin (
     // service is published only after the async budget load.
     routeDraftGeneration += 1
     routeDraftService = undefined
+    routeDraftInitFailed = false
     if (routeDraftOverpass !== undefined) {
       try {
         routeDraftOverpass.close()
@@ -228,6 +250,8 @@ export function createPlugin (
     // normalizeRouteDraftConfig already trims the key, so read it once.
     const apiKey = rd.routeDraftOpenRouterApiKey
     if (!rd.routeDraftEnabled || apiKey === '') return
+    // Drafting is configured from here on; start clean so a prior failed start does not stick.
+    routeDraftInitFailed = false
     const mine = routeDraftGeneration
     const llm = new OpenRouterClient({
       apiKey,
@@ -242,8 +266,6 @@ export function createPlugin (
     // Like the ENC client it is a stateless one-shot client holding no sockets
     // between calls, so it needs no close on teardown.
     const emodnet = createEmodnetClient()
-    // One Logger adapter over app.debug/app.error, shared by the Overpass client
-    // and the budget loader below.
     const log: Logger = { debug: (m) => { app.debug(m) }, error: (m) => { app.error(m) } }
     // The worldwide OpenSeaMap leg check queries through this Overpass client.
     // The default endpoint suffices (no per-source config here); the lighter
@@ -263,9 +285,12 @@ export function createPlugin (
     }).then((budget) => {
       if (mine === routeDraftGeneration) {
         routeDraftService = { llm, budget, enc, overpass, emodnet, tileWater, config: rd, models: modelsForRequest(rd.routeDraftModel) }
+        routeDraftInitFailed = false
         app.debug("Crow's Nest route drafting ready")
       }
     }).catch((err) => {
+      // Configured but failed to start: record it so the endpoint reports a start failure, not "not configured".
+      if (mine === routeDraftGeneration) routeDraftInitFailed = true
       app.error(`Cannot load the route-draft budget: ${String(err)}`)
     })
   }
@@ -274,7 +299,7 @@ export function createPlugin (
     app,
     () => status.snapshot(runtime?.source.cacheSize() ?? 0)
   )
-  const routeDraftRegistrar = createRouteDraftRouter(app, () => routeDraftService)
+  const routeDraftRegistrar = createRouteDraftRouter(app, () => routeDraftService, () => routeDraftInitFailed)
   const registerWithRouter = (router: IRouter): void => {
     statusRegistrar(router)
     routeDraftRegistrar(router)

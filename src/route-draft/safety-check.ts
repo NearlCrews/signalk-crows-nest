@@ -480,10 +480,11 @@ async function runLeg (
       return { provider, flags: result.flags, coverage: result.coverage }
     } catch (error) {
       logger?.debug(`check-timing: leg ${leg} ${provider.id} checkLeg FAILED ${Date.now() - started}ms`)
-      logger?.debug(`leg ${leg} ${provider.id} charted-area query failed: ${String(error)}`)
+      // At error level so a persistent provider outage is visible in normal logs; the leg still degrades to a not-checked flag.
+      logger?.error(`leg ${leg} ${provider.id} charted-area query failed: ${String(error)}`)
       return {
         provider,
-        flags: [{ leg, kind: 'other', message: 'depth and hazards not checked for this leg: charted query failed' } as LegFlag]
+        flags: [{ leg, kind: 'other', message: 'depth not checked for this leg: charted query failed' } as LegFlag]
       }
     }
   }))

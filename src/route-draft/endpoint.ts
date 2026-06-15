@@ -82,6 +82,7 @@ const ROUTER_MIN_BUDGET_MS = 12_000
 const CHANNEL_NOTE_BY_REASON: Record<ChannelDeclineReason | 'skipped', string> = {
   'no-coverage': 'Channel routing did not run here (no charted depth or mapped water to follow), so this is the direct AI route. The legs are straight lines between waypoints, verify each one against the chart.',
   'no-path': 'Channel routing could not find a continuous water path between these points, so this is the direct AI route. Verify every leg against the chart.',
+  deadline: 'Channel routing ran out of time before finding a water path, so this is the direct AI route. Verify every leg against the chart.',
   unsnappable: 'Channel routing could not place the start or end on navigable water, so this is the direct AI route. Verify every leg against the chart.',
   'land-leg': 'The auto-routed path crossed land or left charted water at the final check and was discarded, so this is the direct AI route. Treat it with extra caution and verify every leg against the chart.',
   'fetch-failed': 'Channel routing could not reach the chart data sources, so this is the direct AI route. Verify every leg against the chart.',
@@ -268,8 +269,8 @@ export function parseRequest (body: unknown): ParsedRequest | { error: string } 
   // antimeridian (e.g. west 170, east -170 is a 20-degree window), so add 360
   // to get the short-way span instead of the ~340-degree complementary arc.
   const lonSpan = east >= west ? east - west : east + 360 - west
-  if (latSpan <= 0 || latSpan > MAX_BOUNDS_SPAN_DEG || lonSpan > MAX_BOUNDS_SPAN_DEG) {
-    return { error: 'bounds window is too large; zoom in and try again' }
+  if (latSpan <= 0 || lonSpan <= 0 || latSpan > MAX_BOUNDS_SPAN_DEG || lonSpan > MAX_BOUNDS_SPAN_DEG) {
+    return { error: 'bounds window is degenerate or too large; pan or zoom and try again' }
   }
   const units = b.units === 'imperial' ? 'imperial' : 'metric'
   return {
@@ -357,6 +358,11 @@ const SYSTEM_PROMPT = [
   'land. Put your brief rationale in note.'
 ].join(' ')
 
+/** Serialize a position as `latitude, longitude` at five decimals, the form both prompt paths use. */
+function formatCoord (p: Position): string {
+  return `${p.latitude.toFixed(5)}, ${p.longitude.toFixed(5)}`
+}
+
 /**
  * Build the user prompt for a draft or an optimize. With a drawn route present it
  * frames the task as refining that polyline, keeping the start, the destination,
@@ -365,11 +371,6 @@ const SYSTEM_PROMPT = [
  * the prompt. The vessel, bounds, propulsion, standoff, max-leg, and units
  * guidance is shared. Exported for the endpoint prompt-shape tests.
  */
-/** Serialize a position as `latitude, longitude` at five decimals, the form both prompt paths use. */
-function formatCoord (p: Position): string {
-  return `${p.latitude.toFixed(5)}, ${p.longitude.toFixed(5)}`
-}
-
 export function buildUserPrompt (req: ParsedRequest, config: RouteDraftConfig): string {
   const [west, south, east, north] = req.bounds
   const lines: string[] = []
@@ -772,7 +773,8 @@ function computeFuel (
  */
 export function createRouteDraftRouter (
   app: ServerAPI,
-  getService: () => RouteDraftService | undefined
+  getService: () => RouteDraftService | undefined,
+  getInitFailed: () => boolean = () => false
 ): (router: IRouter) => void {
   const mounted = new WeakSet<IRouter>()
   return (router: IRouter): void => {
@@ -786,7 +788,11 @@ export function createRouteDraftRouter (
     router.post('/api/route-draft', (req: Request, res: Response): void => {
       const service = getService()
       if (service === undefined) {
-        fail(res, 401, 'unauthorized', 'AI route drafting is not configured. An administrator must enable it and set the OpenRouter key in the Crow\'s Nest plugin.')
+        if (getInitFailed()) {
+          fail(res, 502, 'model-error', 'Route drafting is configured but failed to start. Check the Crow\'s Nest plugin server log for details.')
+        } else {
+          fail(res, 401, 'unauthorized', 'AI route drafting is not configured. An administrator must enable it and set the OpenRouter key in the Crow\'s Nest plugin.')
+        }
         return
       }
       handleDraft(app, service, req, res).catch((err) => {

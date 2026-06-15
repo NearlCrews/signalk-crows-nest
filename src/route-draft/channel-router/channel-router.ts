@@ -40,6 +40,7 @@ export type QueryTileWater = (bbox: Bbox, signal?: AbortSignal, logger?: Logger)
 export type ChannelDeclineReason =
   | 'no-coverage'
   | 'no-path'
+  | 'deadline'
   | 'unsnappable'
   | 'land-leg'
   | 'fetch-failed'
@@ -122,13 +123,20 @@ export async function routeChannel (
   const encBands = encSettled.status === 'fulfilled' ? encSettled.value : undefined
   const tile = tileSettled.status === 'fulfilled' ? tileSettled.value : undefined
   if (encBands === undefined && tile === undefined) {
-    if (tileSettled.status === 'rejected') deps.logger?.debug(`channel-router fetch-failed: ${String(tileSettled.reason)}`)
+    // fetchEncAreas never rejects by design, so log it defensively if that invariant is ever broken.
+    if (encSettled.status === 'rejected') deps.logger?.debug(`channel-router fetch-failed (ENC): ${String(encSettled.reason)}`)
+    if (tileSettled.status === 'rejected') deps.logger?.debug(`channel-router fetch-failed (tiles): ${String(tileSettled.reason)}`)
     return { ok: false, reason: 'fetch-failed' }
   }
   const bands = encBands ?? []
   // A flattened view of all bands for the land re-check and the tile-water-used test; the grid
-  // itself takes the per-band list so a finer band wins per cell (see buildNavGrid).
-  const enc: ChartedAreas = { depthAreas: bands.flatMap((b) => b.depthAreas), landAreas: bands.flatMap((b) => b.landAreas) }
+  // itself takes the per-band list so a finer band wins per cell (see buildNavGrid). One pass
+  // over the bands builds both lists, rather than two flatMaps each walking every band's areas.
+  const enc: ChartedAreas = { depthAreas: [], landAreas: [] }
+  for (const band of bands) {
+    for (const area of band.depthAreas) enc.depthAreas.push(area)
+    for (const area of band.landAreas) enc.landAreas.push(area)
+  }
   const water: TileWater = tile ?? { water: [] }
   if (enc.depthAreas.length === 0 && water.water.length === 0) return { ok: false, reason: 'no-coverage' }
 
@@ -149,8 +157,9 @@ export async function routeChannel (
   const goal = snapToWater(grid, req.to, maxSnap)
   if (start === undefined || goal === undefined) return { ok: false, reason: 'unsnappable' }
 
-  const cells = findPath(grid, start, goal, req.deadlineMs)
-  if (cells === undefined) return { ok: false, reason: 'no-path' }
+  const pathStatus = { timedOut: false }
+  const cells = findPath(grid, start, goal, req.deadlineMs, pathStatus)
+  if (cells === undefined) return { ok: false, reason: pathStatus.timedOut ? 'deadline' : 'no-path' }
 
   const contour = req.draftMeters + req.safetyMarginMeters
   const sampleSpacing = Math.min(grid.cellMeters / 2, SAMPLE_CAP_METERS)
@@ -164,9 +173,11 @@ export async function routeChannel (
   // rounds an island rather than declining on a simplification artifact.
   const epsilon = Math.min(SIMPLIFY_EPSILON_CELLS, SIMPLIFY_EPSILON_METERS / grid.cellMeters)
   const simplified = simplifyPath(cells, epsilon)
-  const indexByCell = new Map<string, number>()
-  cells.forEach((c, i) => indexByCell.set(`${c[0]},${c[1]}`, i))
-  const keptIdx = simplified.map((c) => indexByCell.get(`${c[0]},${c[1]}`) ?? 0)
+  // A collision-free integer key (col + row * cols) instead of a string, since the A* path can be
+  // up to the cell cap; this avoids a string allocation per cell.
+  const indexByCell = new Map<number, number>()
+  cells.forEach((c, i) => indexByCell.set(c[0] + c[1] * grid.cols, i))
+  const keptIdx = simplified.map((c) => indexByCell.get(c[0] + c[1] * grid.cols) ?? 0)
   const routeCells: Array<[number, number]> = [cells[keptIdx[0]]]
   for (let k = 1; k < keptIdx.length; k += 1) {
     if (req.deadlineMs !== undefined && Date.now() > req.deadlineMs) return { ok: false, reason: 'land-leg' }
@@ -300,10 +311,11 @@ function legStaysOnWater (
   const aPt = [a.longitude, a.latitude]
   const bPt = [b.longitude, b.latitude]
   if (landRings.some((rings) => segmentCrossesRings(aPt, bPt, rings))) return false
-  for (const s of [a, ...sampleRhumbLeg(a, b, Math.max(1, sampleSpacingMeters)), b]) {
+  if (!navigableAt(a.longitude, a.latitude, charted, water, contour)) return false
+  for (const s of sampleRhumbLeg(a, b, Math.max(1, sampleSpacingMeters))) {
     if (!navigableAt(s.longitude, s.latitude, charted, water, contour)) return false
   }
-  return true
+  return navigableAt(b.longitude, b.latitude, charted, water, contour)
 }
 
 /**
@@ -343,13 +355,14 @@ function usedTileWater (
 ): boolean {
   if (water.water.length === 0) return false
   const spacing = Math.max(1, sampleSpacingMeters)
+  const onTileWater = (p: Position): boolean =>
+    !inEncDeep(p.longitude, p.latitude, charted, contour) &&
+    water.water.some((w) => pointInRings(p.longitude, p.latitude, w.rings))
   for (let i = 0; i + 1 < waypoints.length; i += 1) {
-    for (const p of [waypoints[i], ...sampleRhumbLeg(waypoints[i], waypoints[i + 1], spacing)]) {
-      if (inEncDeep(p.longitude, p.latitude, charted, contour)) continue
-      if (water.water.some((w) => pointInRings(p.longitude, p.latitude, w.rings))) return true
-    }
+    const a = waypoints[i]
+    const b = waypoints[i + 1]
+    if (onTileWater(a) || onTileWater(b)) return true
+    for (const p of sampleRhumbLeg(a, b, spacing)) if (onTileWater(p)) return true
   }
-  const last = waypoints[waypoints.length - 1]
-  return !inEncDeep(last.longitude, last.latitude, charted, contour) &&
-    water.water.some((w) => pointInRings(last.longitude, last.latitude, w.rings))
+  return false
 }
