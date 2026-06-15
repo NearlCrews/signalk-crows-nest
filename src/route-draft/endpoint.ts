@@ -100,14 +100,14 @@ const MAX_NOTE = 600
 
 /**
  * The structured-output schema, kept strict-clean so every provider's strict mode
- * accepts it, not just Gemini's. Two rules make it portable: every property appears
- * in `required` (an optional field is made nullable rather than omitted), and the
- * range and length keywords (minimum, maximum, maxItems, maxLength) are dropped,
- * because Anthropic and OpenAI strict mode reject them. With those keywords present
- * a configured Opus or GPT model cannot honor the strict response_format, so
- * `require_parameters: true` silently bounces the request to the Gemini fallback;
- * dropping them lets the configured model actually run. The parser re-validates and
- * clamps every value, so nothing here relies on server-side enforcement.
+ * accepts it, not just Gemini's. Rules learned from live cross-provider testing:
+ * every property appears in `required` (an optional value is nullable rather than
+ * omitted); the range and length keywords (minimum, maximum, maxItems, maxLength)
+ * are dropped, since Anthropic and OpenAI strict mode reject them; and `confidence`
+ * is a plain-string enum, not a nullable one, because Anthropic rejects an `enum`
+ * whose values do not match a nullable union type ("Enum value 'high' does not
+ * match declared type ['string', 'null']"). The parser re-validates and clamps
+ * every value, so nothing here relies on server-side enforcement.
  */
 const ROUTE_SCHEMA = {
   type: 'object',
@@ -135,7 +135,7 @@ const ROUTE_SCHEMA = {
     },
     name: { type: ['string', 'null'] },
     note: { type: 'string' },
-    confidence: { type: ['string', 'null'], enum: ['high', 'low', null] }
+    confidence: { type: 'string', enum: ['high', 'low'] }
   }
 }
 
@@ -540,7 +540,11 @@ async function handleDraft (
       user: buildUserPrompt(parsed, config),
       responseFormat: { type: 'json_schema', json_schema: { name: 'route_draft', strict: true, schema: ROUTE_SCHEMA } },
       models: service.models,
-      provider: { require_parameters: true },
+      // No provider require_parameters filter: OpenRouter does not advertise the Anthropic models as
+      // supporting strict response_format, so require_parameters returns 404 (no endpoints) and a
+      // configured Opus or Claude model silently falls back to Gemini. Without the filter OpenRouter
+      // routes to a provider that honors the schema (verified live for Opus and Gemini), and the parser
+      // is the backstop if a provider ever ignores it and returns prose.
       temperature: parsed.route !== undefined ? ROUTE_OPTIMIZE_TEMPERATURE : ROUTE_DRAFT_TEMPERATURE,
       maxTokens: MAX_OUTPUT_TOKENS,
       abortSignal: AbortSignal.timeout(Math.max(MS_PER_SECOND, deadlineMs - Date.now()))

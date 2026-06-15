@@ -239,8 +239,9 @@ test('parseDraftedRoute caps the waypoint count and slices an over-long name', (
 })
 
 test('parseDraftedRoute tolerates the null optional fields the cross-provider schema can emit', () => {
-  // The strict-clean schema makes name, destination, and confidence required-but-nullable, so a model
-  // returns null rather than omitting them; the parser must drop a null the same as a missing value.
+  // The strict-clean schema makes name and destination required-but-nullable, so a model returns null
+  // rather than omitting them; the parser drops a null the same as a missing value. confidence is a
+  // plain enum now, but the parser still drops a stray null defensively, which this also covers.
   const route = parseDraftedRoute(
     JSON.stringify({
       waypoints: [
