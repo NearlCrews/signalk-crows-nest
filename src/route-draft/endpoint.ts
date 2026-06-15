@@ -74,6 +74,12 @@ const MAX_BOUNDS_SPAN_DEG = 120
 const ROUTE_DRAFT_TEMPERATURE = 0.2
 
 /**
+ * An even lower temperature for an optimize: it refines a polyline the navigator
+ * already shaped, so it should hew to that intent rather than explore.
+ */
+const ROUTE_OPTIMIZE_TEMPERATURE = 0.1
+
+/**
  * Known-good models that support strict structured outputs, in preference
  * order. The configured model leads each request and these follow it (see
  * {@link modelsForRequest}), so OpenRouter falls through to a capable model when
@@ -167,6 +173,12 @@ interface ParsedRequest {
   from: Position
   bounds: [number, number, number, number]
   units: 'metric' | 'imperial'
+  /**
+   * The drawn route to optimize, ordered turning points. Its presence makes the
+   * request an optimize: the model refines this polyline instead of drafting from
+   * the prompt alone, and the prompt becomes an optional steering hint.
+   */
+  route?: Position[]
 }
 
 function fail (res: Response, status: number, error: DraftErrorCode, message: string): void {
@@ -177,8 +189,26 @@ function fail (res: Response, status: number, error: DraftErrorCode, message: st
 export function parseRequest (body: unknown): ParsedRequest | { error: string } {
   if (body === null || typeof body !== 'object') return { error: 'a JSON body is required' }
   const b = body as Record<string, unknown>
+  // An optimize request carries the drawn route. Validate it first, because its
+  // presence makes the plain-language prompt an optional hint rather than required.
+  let route: Position[] | undefined
+  if (b.route !== undefined) {
+    if (!Array.isArray(b.route)) return { error: 'route must be an array of waypoints' }
+    const points: Position[] = []
+    for (const item of b.route) {
+      const position = toPosition(item)
+      if (position === null) return { error: 'route waypoints must be valid latitude and longitude coordinates' }
+      points.push(position)
+    }
+    if (points.length < 2) return { error: 'route to optimize must have at least two waypoints' }
+    if (points.length > MAX_WAYPOINTS) {
+      return { error: `route to optimize has more than the ${MAX_WAYPOINTS}-waypoint limit; simplify it and try again` }
+    }
+    route = points
+  }
   const prompt = presentString(b.prompt)
-  if (prompt === undefined) return { error: 'prompt is required' }
+  // The prompt is required to draft from words, but optional as a steering hint when a route is given.
+  if (prompt === undefined && route === undefined) return { error: 'prompt is required' }
   const from = toPosition(b.from)
   if (from === null) {
     return { error: 'from.latitude and from.longitude must be valid coordinates' }
@@ -202,10 +232,11 @@ export function parseRequest (body: unknown): ParsedRequest | { error: string } 
   }
   const units = b.units === 'imperial' ? 'imperial' : 'metric'
   return {
-    prompt,
+    prompt: prompt ?? '',
     from,
     bounds: bounds as [number, number, number, number],
-    units
+    units,
+    ...(route !== undefined ? { route } : {})
   }
 }
 
@@ -280,16 +311,46 @@ const SYSTEM_PROMPT = [
   'channel entrances); a downstream densifier fills the rest. Put your brief rationale in note.'
 ].join(' ')
 
-function buildUserPrompt (req: ParsedRequest, config: RouteDraftConfig): string {
+/**
+ * Build the user prompt for a draft or an optimize. With a drawn route present it
+ * frames the task as refining that polyline, keeping the start, the destination,
+ * and the intent the shape implies, and serializes the input as ordered latitude,
+ * longitude lines with the prompt as an optional hint; otherwise it drafts from
+ * the prompt. The vessel, bounds, propulsion, standoff, max-leg, and units
+ * guidance is shared. Exported for the endpoint prompt-shape tests.
+ */
+/** Serialize a position as `latitude, longitude` at five decimals, the form both prompt paths use. */
+function formatCoord (p: Position): string {
+  return `${p.latitude.toFixed(5)}, ${p.longitude.toFixed(5)}`
+}
+
+export function buildUserPrompt (req: ParsedRequest, config: RouteDraftConfig): string {
   const [west, south, east, north] = req.bounds
-  const lines = [
-    `Request: ${req.prompt}`,
-    `Vessel position: ${req.from.latitude.toFixed(5)}, ${req.from.longitude.toFixed(5)} (decimal degrees).`,
+  const lines: string[] = []
+  if (req.route !== undefined) {
+    lines.push(
+      'Improve the drawn route below. Keep its start (the first waypoint) and its destination (the last',
+      'waypoint), and the intent the shape implies. Move waypoints only as needed to clear charted',
+      'shallows, land, and hazards with the requested standoff, and add turning waypoints where a leg is',
+      'too long or rounds a headland. Tighten the track only where that does not reduce safety. Do not',
+      'merely repeat the input. If the route already meets these goals, return it unchanged and say so in',
+      'note.',
+      'Drawn route, in order (latitude, longitude):'
+    )
+    for (const wp of req.route) {
+      lines.push(`  ${formatCoord(wp)}`)
+    }
+    if (req.prompt !== '') lines.push(`Navigator's hint: ${req.prompt}`)
+  } else {
+    lines.push(`Request: ${req.prompt}`)
+  }
+  lines.push(
+    `Vessel position: ${formatCoord(req.from)} (decimal degrees).`,
     `Stay within bounds west ${west}, south ${south}, east ${east}, north ${north}.`,
     `Propulsion: ${config.routeDraftPropulsion}. Cruise speed ${config.routeDraftCruiseSpeedKn} knots.`,
     `Keep about ${config.routeDraftStandoffNm} nautical miles off charted land.`,
     `Add an intermediate turning waypoint on any leg longer than ${config.routeDraftMaxLegNm} nautical miles.`
-  ]
+  )
   // A sailing or motorsailing vessel respects its point of sail, so pass the
   // configured closest-hauled angle the panel presents as guidance to the
   // model: treat a leg within that angle of dead upwind as needing tacks.
@@ -385,6 +446,23 @@ export function parseDraftedRoute (
 }
 
 /**
+ * Anchor an optimized route's endpoints to the navigator's drawn start and end.
+ * The model may nudge the first or last waypoint; the navigator chose where the
+ * passage begins and ends, so owned code restores those exact coordinates while
+ * keeping the model's names. Mutates the waypoints array in place. Exported for
+ * the endpoint trust-boundary tests.
+ */
+export function anchorRouteEndpoints (
+  waypoints: Array<{ latitude: number, longitude: number, name?: string }>,
+  seed: Position[]
+): void {
+  if (waypoints.length === 0 || seed.length === 0) return
+  waypoints[0] = { ...waypoints[0], ...seed[0] }
+  const lastIndex = waypoints.length - 1
+  waypoints[lastIndex] = { ...waypoints[lastIndex], ...seed[seed.length - 1] }
+}
+
+/**
  * Map an OpenRouterError onto the contract code. Only HTTP 401, an invalid or
  * missing key, is an auth failure. OpenRouter's 403 is a moderation or
  * permission block and 402 is an empty credit balance, neither of which the
@@ -459,7 +537,7 @@ async function handleDraft (
       responseFormat: { type: 'json_schema', json_schema: { name: 'route_draft', strict: true, schema: ROUTE_SCHEMA } },
       models: service.models,
       provider: { require_parameters: true },
-      temperature: ROUTE_DRAFT_TEMPERATURE,
+      temperature: parsed.route !== undefined ? ROUTE_OPTIMIZE_TEMPERATURE : ROUTE_DRAFT_TEMPERATURE,
       maxTokens: MAX_OUTPUT_TOKENS,
       abortSignal: AbortSignal.timeout(Math.max(MS_PER_SECOND, deadlineMs - Date.now()))
     })
@@ -488,6 +566,13 @@ async function handleDraft (
     fail(res, 200, 'no-route', 'The AI could not draft a usable route for that. Try rephrasing, or a shorter passage.')
     return
   }
+
+  // On an optimize, anchor the endpoints to the navigator's drawn start and end so the saved route
+  // begins and ends exactly where they intended; this runs before the check so the flags describe the
+  // route they will save. v1 leaves withinRequestBounds (in parseDraftedRoute) as the only spatial
+  // leash on the interior optimize output; a cross-track leash against the drawn polyline is a possible
+  // future tightening.
+  if (parsed.route !== undefined) anchorRouteEndpoints(route.waypoints, parsed.route)
 
   const positions: Position[] = route.waypoints.map((wp) => ({ latitude: wp.latitude, longitude: wp.longitude }))
 
@@ -535,7 +620,10 @@ async function handleDraft (
     note: route.note,
     ...(route.confidence !== undefined ? { confidence: route.confidence } : {}),
     ...(fuel !== undefined ? { fuel } : {}),
-    ...(check.flags.length > 0 ? { flags: orderFlags(check.flags) } : {})
+    ...(check.flags.length > 0 ? { flags: orderFlags(check.flags) } : {}),
+    // The marker Binnacle asserts to confirm this build actually consumed the route field, since a
+    // pre-optimize 0.10.0 build would silently draft from scratch and report the same version.
+    ...(parsed.route !== undefined ? { optimized: true } : {})
   })
 }
 
