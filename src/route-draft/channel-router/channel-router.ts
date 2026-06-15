@@ -122,13 +122,16 @@ export async function routeChannel (
     fetchEncAreas(deps, bbox, req.signal),
     deps.queryWaterAreas(deps.overpass, bbox, req.signal, deps.logger)
   ])
-  const charted = encSettled.status === 'fulfilled' ? encSettled.value : undefined
+  const encBands = encSettled.status === 'fulfilled' ? encSettled.value : undefined
   const osm = osmSettled.status === 'fulfilled' ? osmSettled.value : undefined
-  if (charted === undefined && osm === undefined) {
+  if (encBands === undefined && osm === undefined) {
     if (osmSettled.status === 'rejected') deps.logger?.debug(`channel-router fetch-failed: ${String(osmSettled.reason)}`)
     return { ok: false, reason: 'fetch-failed' }
   }
-  const enc: ChartedAreas = charted ?? { depthAreas: [], landAreas: [] }
+  const bands = encBands ?? []
+  // A flattened view of all bands for the land re-check and the OSM-water-used test; the grid
+  // itself takes the per-band list so a finer band wins per cell (see buildNavGrid).
+  const enc: ChartedAreas = { depthAreas: bands.flatMap((b) => b.depthAreas), landAreas: bands.flatMap((b) => b.landAreas) }
   const water: OsmAreas = osm ?? { water: [], land: [] }
   // A capped-out land mask cannot be trusted (a dropped blocker could route over land), so
   // decline rather than route on an incomplete land mask.
@@ -137,7 +140,7 @@ export async function routeChannel (
 
   const grid = buildNavGrid({
     bbox,
-    charted: enc,
+    chartedBands: bands,
     osmWater: water.water,
     osmLand: water.land,
     draftMeters: req.draftMeters,
@@ -195,10 +198,14 @@ export async function routeChannel (
   return { ok: true, waypoints, usedOsmWater: usedOsmWater(waypoints, enc, water, contour, sampleSpacing) }
 }
 
-/** Fetch and merge the ENC charted areas across the bands, or undefined when every band rejected. */
+/**
+ * Fetch the ENC charted areas per band, returning the fulfilled bands FINEST FIRST (the
+ * order of `deps.bands`), or undefined when every band rejected. The bands are kept
+ * separate, not merged, so the grid can let a finer band win per cell.
+ */
 async function fetchEncAreas (
   deps: ChannelRouterDeps, bbox: Bbox, signal?: AbortSignal
-): Promise<ChartedAreas | undefined> {
+): Promise<ChartedAreas[] | undefined> {
   const settled = await Promise.allSettled(
     deps.bands.map((band) => deps.queryChartedAreas(deps.client, { band, bbox, signal }))
   )
@@ -207,10 +214,7 @@ async function fetchEncAreas (
     deps.logger?.debug('channel-router: every ENC band fetch failed')
     return undefined
   }
-  return {
-    depthAreas: ok.flatMap((a) => a.depthAreas),
-    landAreas: ok.flatMap((a) => a.landAreas)
-  }
+  return ok
 }
 
 /**

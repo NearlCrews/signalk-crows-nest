@@ -101,6 +101,18 @@ test('the optimize corridor restricts navigable cells to near the drawn polyline
   assert.equal(g.isNavigable(...g.cellOf({ latitude: 0.9, longitude: 0.1 })), false) // far corner
 })
 
+test('a finer band deep area wins over a coarser band shallow area on the same cell', () => {
+  // The real bug this guards: a coarse band (coastal/general) returns one big DRVAL1=0 area
+  // over the whole window; a sticky-OR merge would block the fine harbour deep channel.
+  const fine: ChartedAreas = { depthAreas: [box(0.2, 0.2, 0.8, 0.8, 10)], landAreas: [] }
+  const coarse: ChartedAreas = { depthAreas: [box(0, 0, 1, 1, 0)], landAreas: [] }
+  const g = buildNavGrid({ bbox: BBOX, chartedBands: [fine, coarse], ...base })
+  // The middle is inside the fine deep area, so the finer band wins and it stays navigable.
+  assert.equal(g.isNavigable(...g.cellOf({ latitude: 0.5, longitude: 0.5 })), true)
+  // A cell only the coarse shallow area covers is blocked (the coarse reading applies where no finer band does).
+  assert.equal(g.isNavigable(...g.cellOf({ latitude: 0.05, longitude: 0.05 })), false)
+})
+
 test('an OSM water polygon alone (no ENC) is navigable', () => {
   const g = buildNavGrid({ bbox: BBOX, charted: NO_ENC, osmWater: [ring(0.2, 0.2, 0.8, 0.8)], ...base })
   assert.equal(g.hasWater, true)

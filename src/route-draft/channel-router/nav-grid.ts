@@ -21,7 +21,14 @@ export interface RingPolygon {
 
 export interface NavGridParams {
   bbox: Bbox
-  charted: ChartedAreas
+  /** A single charted band (the simple form, used by tests). Ignored when `chartedBands` is set. */
+  charted?: ChartedAreas
+  /**
+   * The ENC charted bands FINEST FIRST. A finer band's reading wins per cell: a coarser
+   * band only fills cells no finer band covered, so a coarse low-resolution shallow area
+   * never overrides a fine band's charted deep channel. Defaults to `[charted]`.
+   */
+  chartedBands?: ChartedAreas[]
   /**
    * OSM navigable WATER polygons (depth-unknown), worldwide. They mark coverage only;
    * they never block, so an ENC-charted block on the same cell still wins.
@@ -104,7 +111,8 @@ export function resolveGridSize (bbox: Bbox, targetCellMeters?: number): GridSiz
 }
 
 export function buildNavGrid (params: NavGridParams): NavGrid {
-  const { bbox, charted, draftMeters, safetyMarginMeters, standoffMeters, deadlineMs } = params
+  const { bbox, draftMeters, safetyMarginMeters, standoffMeters, deadlineMs } = params
+  const bands = params.chartedBands ?? (params.charted !== undefined ? [params.charted] : [])
   const size = resolveGridSize(bbox, params.targetCellMeters)
   if (size === null) return emptyGrid(bbox)
   const { cols, rows, cell } = size
@@ -129,20 +137,36 @@ export function buildNavGrid (params: NavGridParams): NavGrid {
   const blocked = new Uint8Array(cols * rows)
   const overDeadline = (): boolean => deadlineMs !== undefined && Date.now() > deadlineMs
 
-  // A Depth_Area marks coverage; it also blocks when its DRVAL1 is unknown, drying (<0), or shallower
-  // than the contour (sticky OR across overlapping bands: a later deep stamp never clears a block). A
-  // Land_Area always blocks.
-  for (const area of charted.depthAreas) {
-    const drval1 = area.depthRange?.shallowMeters
-    const tooShallow = drval1 === undefined || drval1 < contour
-    if (fillPolygonCells(area.rings, colF, rowF, cols, rows, (i) => { covered[i] = 1; if (tooShallow) blocked[i] = 1 }, deadlineMs)) {
-      return emptyGrid(bbox)
+  // Rasterize the ENC bands FINEST FIRST. A Depth_Area marks coverage; it also blocks when its DRVAL1
+  // is unknown, drying (<0), or shallower than the contour. A Land_Area blocks. Within a band a shallow
+  // area wins over an overlapping deep one (sticky OR, a later deep stamp never clears a block). ACROSS
+  // bands a finer band wins per cell: a cell any finer band already touched is skipped, so a coarse
+  // low-resolution shallow or zero-depth area never overrides a fine band's charted deep channel.
+  const decidedByFinerBand = new Uint8Array(cols * rows)
+  for (const band of bands) {
+    const bandTouched = new Uint8Array(cols * rows)
+    for (const area of band.depthAreas) {
+      const drval1 = area.depthRange?.shallowMeters
+      const tooShallow = drval1 === undefined || drval1 < contour
+      if (fillPolygonCells(area.rings, colF, rowF, cols, rows, (i) => {
+        bandTouched[i] = 1
+        if (decidedByFinerBand[i] === 1) return
+        covered[i] = 1
+        if (tooShallow) blocked[i] = 1
+      }, deadlineMs)) {
+        return emptyGrid(bbox)
+      }
     }
-  }
-  for (const area of charted.landAreas) {
-    if (fillPolygonCells(area.rings, colF, rowF, cols, rows, (i) => { blocked[i] = 1 }, deadlineMs)) {
-      return emptyGrid(bbox)
+    for (const area of band.landAreas) {
+      if (fillPolygonCells(area.rings, colF, rowF, cols, rows, (i) => {
+        bandTouched[i] = 1
+        if (decidedByFinerBand[i] === 1) return
+        blocked[i] = 1
+      }, deadlineMs)) {
+        return emptyGrid(bbox)
+      }
     }
+    for (let i = 0; i < bandTouched.length; i += 1) if (bandTouched[i] === 1) decidedByFinerBand[i] = 1
   }
 
   // OSM worldwide layer: water marks coverage only (depth-unknown, never blocks, so

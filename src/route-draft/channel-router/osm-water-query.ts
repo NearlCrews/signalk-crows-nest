@@ -56,11 +56,17 @@ export interface OsmAreas {
 export const MAX_WATER_TILES = 4
 
 /**
- * Per-tile Overpass timeout, tighter than the safety check's, because the router runs
- * before the safety check and must leave it budget. Folded onto the caller deadline
- * per tile, so one slow tile aborts at this bound rather than holding the whole query.
+ * Per-tile Overpass timeout for the water-and-land fetch. OSM water is mapped as large
+ * polygons that `out geom;` returns in full, so a bay, lagoon, or lake routinely needs
+ * several seconds; 4 seconds proved too tight (it dropped regions that fetch in 6 to 8
+ * seconds). The route bbox is gated to a single tile (the grid declines a window wider
+ * than it can resolve), so this is the router's whole OSM budget, spent concurrently
+ * with the fast ENC fetch and before the safety check. It is folded onto the caller
+ * deadline per tile, so a pathologically slow region (a very detailed lagoon) aborts
+ * here and degrades to the model route rather than hanging. The budget skip in the
+ * endpoint keeps the safety check's time even when the router spends this.
  */
-export const ROUTER_OSM_QUERY_TIMEOUT_MS = 4000
+export const ROUTER_OSM_QUERY_TIMEOUT_MS = 8000
 
 /** Cap on collected WATER elements; the excess is dropped, which is safe (under-coverage). */
 const MAX_WATER_ELEMENTS = 1500
