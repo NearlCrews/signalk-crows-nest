@@ -114,6 +114,8 @@ export async function routeChannel (
   deps: ChannelRouterDeps,
   req: ChannelRouteRequest
 ): Promise<ChannelRouteResult> {
+  const t0 = Date.now()
+  const elapsed = (): number => Date.now() - t0
   const anchors = req.bboxAnchors ?? req.corridor ?? [req.from, req.to]
   const bbox = routeBbox(anchors, BBOX_PAD_METERS)
   // Decline a degenerate, cross-antimeridian, or too-large-to-resolve bbox BEFORE any
@@ -160,16 +162,23 @@ export async function routeChannel (
     ...(req.corridor !== undefined ? { corridor: { polyline: req.corridor, halfWidthMeters: CORRIDOR_HALF_WIDTH_METERS } } : {}),
     ...(req.deadlineMs !== undefined ? { deadlineMs: req.deadlineMs } : {})
   })
+  deps.logger?.debug(`channel-router diag: bands=${bands.length} encAreas=${enc.depthAreas.length}d/${enc.landAreas.length}L tile=${water.water.length} grid=${grid.cols}x${grid.rows}@${grid.cellMeters}m hasWater=${grid.hasWater} (${elapsed()}ms)`)
   if (!grid.hasWater) return { ok: false, reason: 'no-coverage' }
 
   const maxSnap = req.maxSnapMeters ?? DEFAULT_MAX_SNAP_METERS
   const snapped = snapEndpoints(grid, req.from, req.to, maxSnap)
-  if ('reason' in snapped) return { ok: false, reason: snapped.reason }
+  if ('reason' in snapped) {
+    deps.logger?.debug(`channel-router diag: decline ${snapped.reason} at snap (${elapsed()}ms)`)
+    return { ok: false, reason: snapped.reason }
+  }
   const { start, goal, comp: mainWater } = snapped
 
   const pathStatus = { timedOut: false }
   const cells = findPath(grid, start, goal, req.deadlineMs, pathStatus)
-  if (cells === undefined) return { ok: false, reason: pathStatus.timedOut ? 'deadline' : 'no-path' }
+  if (cells === undefined) {
+    deps.logger?.debug(`channel-router diag: decline ${pathStatus.timedOut ? 'deadline' : 'no-path'} at A* (${elapsed()}ms)`)
+    return { ok: false, reason: pathStatus.timedOut ? 'deadline' : 'no-path' }
+  }
 
   const contour = req.draftMeters + req.safetyMarginMeters
   const sampleSpacing = Math.min(grid.cellMeters / 2, SAMPLE_CAP_METERS)
@@ -190,7 +199,10 @@ export async function routeChannel (
   const keptIdx = simplified.map((c) => indexByCell.get(c[0] + c[1] * grid.cols) ?? 0)
   const routeCells: Array<[number, number]> = [cells[keptIdx[0]]]
   for (let k = 1; k < keptIdx.length; k += 1) {
-    if (req.deadlineMs !== undefined && Date.now() > req.deadlineMs) return { ok: false, reason: 'land-leg' }
+    if (req.deadlineMs !== undefined && Date.now() > req.deadlineMs) {
+      deps.logger?.debug(`channel-router diag: decline land-leg at repair deadline (${elapsed()}ms)`)
+      return { ok: false, reason: 'land-leg' }
+    }
     const p = keptIdx[k - 1]
     const q = keptIdx[k]
     if (legSafe(grid.cellCenter(cells[p][0], cells[p][1]), grid.cellCenter(cells[q][0], cells[q][1]))) {
@@ -215,8 +227,25 @@ export async function routeChannel (
   const waypoints = [startPos, ...interior, goalPos]
 
   if (!routeStaysOnWater(waypoints, enc, water, sampleSpacing, req.deadlineMs)) {
+    if (deps.logger !== undefined) {
+      const overDeadline = req.deadlineMs !== undefined && Date.now() > req.deadlineMs
+      const reCheckLandRings = landRingsOf(enc, water)
+      let detail = 'no failing leg found'
+      for (let i = 0; i + 1 < waypoints.length; i += 1) {
+        const a = waypoints[i]
+        const b = waypoints[i + 1]
+        const xCross = reCheckLandRings.some((rings) => segmentCrossesRings([a.longitude, a.latitude], [b.longitude, b.latitude], rings))
+        let sampledOff = false
+        for (const s of [a, ...sampleRhumbLeg(a, b, Math.max(1, sampleSpacing)), b]) {
+          if (!navigableAt(s.longitude, s.latitude, enc, water)) { sampledOff = true; break }
+        }
+        if (xCross || sampledOff) { detail = `leg ${i}/${waypoints.length - 1} exactCross=${xCross} sampledOff=${sampledOff}`; break }
+      }
+      deps.logger.debug(`channel-router diag: decline land-leg at re-check, ${waypoints.length}wp, overDeadline=${overDeadline}, ${detail} (${elapsed()}ms)`)
+    }
     return { ok: false, reason: 'land-leg' }
   }
+  deps.logger?.debug(`channel-router diag: OK ${waypoints.length}wp (${elapsed()}ms)`)
   return { ok: true, waypoints, usedTileWater: usedTileWater(waypoints, enc, water, contour, sampleSpacing) }
 }
 
