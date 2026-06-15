@@ -97,6 +97,14 @@ test('routeChannel declines unsnappable when the endpoints are far from water', 
   assert.deepEqual(r, { ok: false, reason: 'unsnappable' })
 })
 
+test('routeChannel snaps an endpoint outside the water to the default reach (a couple of nm)', async () => {
+  // `from` sits ~1.3 nm south of the water box, on no navigable cell. The default snap cap (no
+  // maxSnapMeters) must still reach the channel, the case a near-shore or island endpoint hits.
+  const water: TileWater = { water: [ring(0.1, 0.1, 0.3, 0.3)] }
+  const r = await routeChannel(deps(NO_ENC, water), { from: { latitude: 0.08, longitude: 0.2 }, to: { latitude: 0.2, longitude: 0.2 }, ...base })
+  assert.equal(r.ok, true)
+})
+
 test('routeChannel declines fetch-failed only when both sources throw', async () => {
   const r = await routeChannel(
     deps(NO_ENC, NO_WATER, {

@@ -83,10 +83,20 @@ export interface ChannelRouteRequest {
   deadlineMs?: number
 }
 
-/** Padding around the bbox anchors, in meters, so a channel that bulges off the straight line is covered. */
-const BBOX_PAD_METERS = 0.5 * METERS_PER_NAUTICAL_MILE
-/** Default cap an endpoint may be snapped to navigable water. */
-const DEFAULT_MAX_SNAP_METERS = 0.5 * METERS_PER_NAUTICAL_MILE
+/**
+ * Default cap an endpoint may be snapped to navigable water. A named place or a near-shore
+ * waypoint often sits on land or in ENC-charted shallow water (a `DRVAL1 < contour` depth
+ * area, which the grid blocks), with the navigable channel a mile or two away: too small a
+ * cap declines the whole route as unsnappable and the caller keeps the model's straight line
+ * across land, so this is generous enough to reach the channel from a realistic endpoint.
+ */
+const DEFAULT_MAX_SNAP_METERS = 2 * METERS_PER_NAUTICAL_MILE
+/**
+ * Padding around the bbox anchors, in meters, so a channel that bulges off the straight line
+ * is covered. At least the snap cap, so the navigable water an endpoint may snap to is inside
+ * the grid: a snap cap larger than the padded grid would search cells that do not exist.
+ */
+const BBOX_PAD_METERS = DEFAULT_MAX_SNAP_METERS
 /** Optimize corridor half-width when the caller does not override it. */
 const CORRIDOR_HALF_WIDTH_METERS = 1 * METERS_PER_NAUTICAL_MILE
 /** RDP epsilon, in cells, before the per-grid metric cap below. */
