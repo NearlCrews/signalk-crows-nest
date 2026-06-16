@@ -673,6 +673,7 @@ async function handleDraft (
         client: service.enc,
         queryChartedAreas,
         overpass: service.overpass,
+        queryTileWater: service.tileWater.queryTileWater,
         emodnet: service.emodnet,
         scanRouteCorridor,
         logger

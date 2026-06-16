@@ -7,9 +7,10 @@
  * providers run as a per-leg UNION: the NOAA ENC check (charted DEPTH AREA
  * contours, LAND AREAS, and POINT HAZARDS) over US waters, the EMODnet check
  * (European MODELED bathymetry depth) over the European seas, and the worldwide
- * OpenSeaMap check (OpenStreetMap coastline land and seamark hazards) on every
- * leg. The model proposes the waypoints; the providers' owned code disposes the
- * `land`, `shallow`, and `hazard` flags from the charted geometry.
+ * OpenSeaMap check (OpenStreetMap-derived vector-tile water outline for land, and
+ * OpenStreetMap seamark point hazards) on every leg. The model proposes the
+ * waypoints; the providers' owned code disposes the `land`, `shallow`, and
+ * `hazard` flags from the charted geometry.
  *
  * Depth authority follows precedence: on a leg where more than one depth provider
  * covers it, the highest-precedence one that returned data owns depth (ENC's
@@ -28,8 +29,9 @@
  * charted value, the MLLW datum, and the usage band, and never a bare verdict.
  *
  * The check is injectable and mostly pure: `deps` carries the ENC client, the
- * charted-area query, the Overpass client, the EMODnet client, and the corridor
- * scan, so a test stubs them without live HTTP. The orchestrator owns the
+ * charted-area query, the Overpass client, the tile-water query, the EMODnet
+ * client, and the corridor scan, so a test stubs them without live HTTP. The
+ * orchestrator owns the
  * bounded-concurrency leg pool, the per-leg depth-authority pass, the
  * capability-keyed not-checked accounting, the per-provider contiguous-run hazard
  * sweep, and the cross-provider hazard dedupe; the per-source query work lives in
@@ -53,7 +55,7 @@ import { capitalizeFirst } from '../shared/strings.js'
 import type { EmodnetClient } from './emodnet/emodnet-client.js'
 import { createEmodnetProvider } from './providers/emodnet-provider.js'
 import { createEncProvider } from './providers/enc-provider.js'
-import { createOpenSeaMapProvider } from './providers/openseamap-provider.js'
+import { createOpenSeaMapProvider, type QueryTileWater } from './providers/openseamap-provider.js'
 import {
   EMODNET_PROVIDER_ID,
   resolveProviders,
@@ -144,8 +146,10 @@ export interface LegCheckDeps {
   client: EncDirectClient
   /** The charted depth-area and land-area query (one bounded call per leg per band). */
   queryChartedAreas: QueryChartedAreas
-  /** The Overpass client the worldwide OpenSeaMap provider queries through. */
+  /** The Overpass client the worldwide OpenSeaMap provider queries through for point hazards. */
   overpass: OverpassClient
+  /** The tile-water query the worldwide OpenSeaMap provider reads for its land check. */
+  queryTileWater: QueryTileWater
   /** The EMODnet depth-profile client the European modeled-depth provider queries through. */
   emodnet: EmodnetClient
   /** The route-corridor point-hazard scan. */
@@ -220,6 +224,7 @@ export async function checkLegs (
     }),
     createOpenSeaMapProvider({
       client: deps.overpass,
+      queryTileWater: deps.queryTileWater,
       scanRouteCorridor: deps.scanRouteCorridor,
       logger: deps.logger
     })

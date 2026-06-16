@@ -17,12 +17,13 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { checkLegs, runOrchestrator, type LegCheckDeps, type LegCheckParams, type LegFlag } from '../src/route-draft/safety-check.js'
 import { createEncProvider } from '../src/route-draft/providers/enc-provider.js'
-import { createOpenSeaMapProvider } from '../src/route-draft/providers/openseamap-provider.js'
+import { createOpenSeaMapProvider, type QueryTileWater } from '../src/route-draft/providers/openseamap-provider.js'
 import { scanRouteCorridor } from '../src/outputs/route-hazard/route-corridor.js'
 import type { ChartedAreas, EncAreaPolygon } from '../src/inputs/noaa-enc/depth-area-query.js'
 import type { EncDirectClient, QueryRequest } from '../src/inputs/noaa-enc/enc-direct-client.js'
 import type { EncFeature, EncLayerKey, ScaleBand } from '../src/inputs/noaa-enc/enc-direct-types.js'
-import type { OverpassClient, OverpassElement, CoastlineWay } from '../src/inputs/openseamap/overpass-client.js'
+import type { OverpassClient, OverpassElement } from '../src/inputs/openseamap/overpass-client.js'
+import type { TileWater } from '../src/route-draft/channel-router/tile-water-query.js'
 import type { EmodnetClient, EmodnetProfile } from '../src/route-draft/emodnet/emodnet-client.js'
 import type {
   Coverage,
@@ -149,30 +150,19 @@ function makeEnc (
 
 interface OverpassStub {
   client: OverpassClient
-  /** Whether listCoastlineWays saw an aborted signal. */
-  sawCoastlineAbort: () => boolean
   /** How many times the hazard list query ran. */
   hazardCalls: () => number
 }
 
 /**
- * An Overpass stub. `coastline` answers listCoastlineWays; `hazards` are served
- * on the point-of-interest list query. close() is a no-op.
+ * An Overpass stub. `hazards` are served on the point-of-interest list query;
+ * land is no longer an Overpass responsibility (it reads the tile-water source),
+ * so listCoastlineWays is a no-op. close() is a no-op.
  */
-function makeOverpass (
-  coastline: CoastlineWay[] = [],
-  hazards: OverpassElement[] = []
-): OverpassStub {
-  let abortSeen = false
+function makeOverpass (hazards: OverpassElement[] = []): OverpassStub {
   let hazardCallCount = 0
   const client: OverpassClient = {
-    listCoastlineWays: async (_bbox, signal) => {
-      if (signal?.aborted === true) {
-        abortSeen = true
-        throw signal.reason ?? new Error('aborted')
-      }
-      return coastline
-    },
+    listCoastlineWays: async () => [],
     listPointsOfInterest: async (_bbox, _regex, signal) => {
       hazardCallCount += 1
       if (signal?.aborted === true) throw signal.reason ?? new Error('aborted')
@@ -183,9 +173,37 @@ function makeOverpass (
   }
   return {
     client,
-    sawCoastlineAbort: () => abortSeen,
     hazardCalls: () => hazardCallCount
   }
+}
+
+/** A world-covering water outline: every point is on water, so no leg flags land. */
+const WORLD_WATER: TileWater = {
+  water: [{ rings: [[[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]]] }]
+}
+
+/** A small water outline off West Africa: a leg elsewhere leaves it, so the land check fires. */
+const AWAY_WATER: TileWater = {
+  water: [{ rings: [[[0, 0], [0.1, 0], [0.1, 0.1], [0, 0.1], [0, 0]]] }]
+}
+
+interface TileWaterStub {
+  query: QueryTileWater
+  /** Whether the tile-water query saw an aborted signal. */
+  sawAbort: () => boolean
+}
+
+/** A tile-water stub serving one fixed outline (world water by default), recording an aborted signal. */
+function makeTileWater (result: TileWater = WORLD_WATER): TileWaterStub {
+  let abortSeen = false
+  const query: QueryTileWater = async (_bbox, signal) => {
+    if (signal?.aborted === true) {
+      abortSeen = true
+      throw signal.reason ?? new Error('aborted')
+    }
+    return result
+  }
+  return { query, sawAbort: () => abortSeen }
 }
 
 interface EmodnetStub {
@@ -211,11 +229,17 @@ function makeEmodnet (profile: EmodnetProfile = { samples: [], hadGap: false }):
   return { client, calls: () => callCount }
 }
 
-function deps (enc: EncStub, overpass: OverpassStub, emodnet: EmodnetStub = makeEmodnet()): LegCheckDeps {
+function deps (
+  enc: EncStub,
+  overpass: OverpassStub,
+  emodnet: EmodnetStub = makeEmodnet(),
+  tileWater: TileWaterStub = makeTileWater()
+): LegCheckDeps {
   return {
     client: enc.client,
     queryChartedAreas: enc.queryChartedAreas,
     overpass: overpass.client,
+    queryTileWater: tileWater.query,
     emodnet: emodnet.client,
     scanRouteCorridor
   }
@@ -252,7 +276,7 @@ test('a US leg with the same wreck from ENC and OSM yields one hazard flag, the 
     () => ({ depthAreas: [depthArea(10)], landAreas: [] }),
     [encWreck(9001, lon, lat)]
   )
-  const overpass = makeOverpass([], [osmWreck(7001, lat, lon)])
+  const overpass = makeOverpass([osmWreck(7001, lat, lon)])
   const result = await checkLegs(deps(enc, overpass), params({ corridorHalfWidthMeters: 800 }))
   const hazards = result.flags.filter((f) => f.kind === 'hazard')
   assert.equal(hazards.length, 1, 'the same wreck from both providers is flagged once')
@@ -279,7 +303,7 @@ test('the cross-provider hazard dedupe collapses each type (wreck, obstruction, 
       rock: [encPoint(9003, lon, at.rock)]
     }
   )
-  const overpass = makeOverpass([], [
+  const overpass = makeOverpass([
     osmHazard(7001, 'wreck', at.wreck, lon),
     osmHazard(7002, 'obstruction', at.obstruction, lon),
     osmHazard(7003, 'rock', at.rock, lon)
@@ -297,14 +321,12 @@ test('the cross-provider hazard dedupe collapses each type (wreck, obstruction, 
 
 test('a no-depth-provider leg is checked by OpenSeaMap and gets the collapsed depth-not-checked note', async () => {
   // A mid-ocean leg: neither ENC nor EMODnet covers it, so its ENC stub is never
-  // relied on. OSM provides land (a coastline crossing) and the depth note comes
-  // from the orchestrator's capability-keyed not-checked pass, since no depth
-  // provider declares depth on this leg.
+  // relied on. OSM owns land (from the tile-water outline, which here covers the
+  // leg) and the depth note comes from the orchestrator's capability-keyed
+  // not-checked pass, since no depth provider declares depth on this leg.
   const enc = makeEnc(() => ({ depthAreas: [], landAreas: [] }))
   const emodnet = makeEmodnet()
-  // A coastline way crossing the leg, so OSM raises a land flag.
-  const crossing: CoastlineWay = { points: [[-140.04, -19.9], [-140.04, -20.2]] }
-  const overpass = makeOverpass([crossing])
+  const overpass = makeOverpass()
   const result = await checkLegs(deps(enc, overpass, emodnet), params({ waypoints: [OCEAN_FROM, OCEAN_TO] }))
   assert.equal(result.checked, true, 'OSM ran, so the check ran')
   // ENC was not queried for charted areas on a leg it does not cover.
@@ -330,7 +352,7 @@ test('a US-envelope leg whose far end is foreign still gets OpenSeaMap coverage 
   const bimini: Position = { latitude: 25.74, longitude: -79.30 }
   const enc = makeEnc(() => ({ depthAreas: [depthArea(10)], landAreas: [] }))
   // An OSM wreck on the leg path near the Bimini (foreign) end.
-  const overpass = makeOverpass([], [osmWreck(7100, 25.743, -79.383)])
+  const overpass = makeOverpass([osmWreck(7100, 25.743, -79.383)])
   const result = await checkLegs(
     deps(enc, overpass),
     params({ waypoints: [miami, bimini], corridorHalfWidthMeters: 1500 })
@@ -359,15 +381,16 @@ test('the depth-not-checked note collapses to ONE flag over a multi-leg no-depth
   assert.match(depthNotes[0].message, /3 of 3 legs/)
 })
 
-test('the deadline abort cancels every in-flight provider, ENC and Overpass alike', async () => {
+test('the deadline abort cancels every in-flight provider, ENC and the land query alike', async () => {
   const controller = new AbortController()
   controller.abort()
   const enc = makeEnc(() => ({ depthAreas: [depthArea(10)], landAreas: [] }))
   const overpass = makeOverpass()
-  const result = await checkLegs(deps(enc, overpass), params({ signal: controller.signal }))
+  const tileWater = makeTileWater()
+  const result = await checkLegs(deps(enc, overpass, makeEmodnet(), tileWater), params({ signal: controller.signal }))
   // The aborted signal reached both providers' in-flight queries.
   assert.equal(enc.sawChartedAbort(), true, 'the deadline signal reached the ENC charted-area query')
-  assert.equal(overpass.sawCoastlineAbort(), true, 'the deadline signal reached the Overpass coastline query')
+  assert.equal(tileWater.sawAbort(), true, 'the deadline signal reached the tile-water land query')
   // ENC threw (its leg query aborted) but OSM degraded rather than throwing (it
   // is global, so a thrown query would wrongly mark the leg as not-run). So at
   // least one provider ran in the degrade sense: the check still produced flags.
@@ -429,7 +452,7 @@ test('the providers carry the precedence the orchestrator sorts by, ENC above Op
     queryChartedAreas: enc.queryChartedAreas,
     scanRouteCorridor
   })
-  const osmProvider = createOpenSeaMapProvider({ client: overpass.client, scanRouteCorridor })
+  const osmProvider = createOpenSeaMapProvider({ client: overpass.client, queryTileWater: makeTileWater().query, scanRouteCorridor })
   assert.ok(encProvider.precedence < osmProvider.precedence, 'ENC outranks OpenSeaMap by precedence')
 })
 
@@ -450,7 +473,7 @@ test('the dedupe is cross-provider only: one provider keeps both close same-type
     () => ({ depthAreas: [depthArea(10)], landAreas: [] }),
     [encWreck(9001, lon, encLat)]
   )
-  const overpass = makeOverpass([], [
+  const overpass = makeOverpass([
     osmWreck(7001, encLat, lon), // same key as ENC, dropped cross-provider
     osmWreck(7002, osmPairLat, lon), // distinct key from ENC
     osmWreck(7003, osmPairLat + 0.00003, lon + 0.00003) // same coarse key as 7002
@@ -474,16 +497,17 @@ test('the dedupe is cross-provider only: one provider keeps both close same-type
 
 test('a European leg is checked by EMODnet for depth and OpenSeaMap for land and hazards, with the route-level awareness note', async () => {
   // ENC does not cover a Mediterranean leg, so EMODnet owns depth there. EMODnet
-  // returns a shallow modeled reading; OSM provides a coastline crossing (land)
-  // and a hazard seamark. The route-level EMODnet awareness note appears once.
+  // returns a shallow modeled reading; OSM provides land (the leg leaves the
+  // water outline) and a hazard seamark. The route-level EMODnet awareness note
+  // appears once.
   const enc = makeEnc(() => ({ depthAreas: [], landAreas: [] }))
   // 2.5 m modeled depth, under the 3 m draft-plus-margin contour: a shallow flag.
   const emodnet = makeEmodnet({ samples: [-2.5], hadGap: false })
-  // A coastline way crossing the leg for land, and a wreck seamark for a hazard.
-  const crossing: CoastlineWay = { points: [[7.04, 43.4], [7.04, 43.7]] }
-  const overpass = makeOverpass([crossing], [osmWreck(7200, 43.55, 7.05)])
+  // A wreck seamark for a hazard, and a tile-water outline the Mediterranean leg
+  // leaves (it covers only West Africa), so the land check fires.
+  const overpass = makeOverpass([osmWreck(7200, 43.55, 7.05)])
   const result = await checkLegs(
-    deps(enc, overpass, emodnet),
+    deps(enc, overpass, emodnet, makeTileWater(AWAY_WATER)),
     params({ waypoints: [MED_FROM, MED_TO], corridorHalfWidthMeters: 1500 })
   )
   assert.equal(result.checked, true)
@@ -494,7 +518,7 @@ test('a European leg is checked by EMODnet for depth and OpenSeaMap for land and
   assert.equal(shallow.length, 1, 'EMODnet flagged the shallow leg')
   assert.match(shallow[0].message, /EMODnet modeled depth/)
   // OSM supplied land and a hazard.
-  assert.ok(result.flags.some((f) => f.kind === 'land'), 'OSM flagged the coastline crossing')
+  assert.ok(result.flags.some((f) => f.kind === 'land'), 'OSM flagged the leg leaving the water outline')
   assert.ok(result.flags.some((f) => f.kind === 'hazard'), 'OSM flagged the wreck seamark')
   // Since EMODnet owns depth here, no collapsed depth-not-checked note.
   assert.equal(result.flags.some((f) => /depth not checked/i.test(f.message)), false)
