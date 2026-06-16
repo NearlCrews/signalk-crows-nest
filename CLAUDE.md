@@ -214,7 +214,14 @@ self-contained module registered on one line in `src/index.ts`.
     bare verdict), `leg-geometry.ts` (the planar ring helpers shared by the
     providers: `pointInRings`, `segmentCrossesRings`, `legBbox`, `routeBbox`,
     `cumulativeLegStartMeters`, and `legForAlongTrack`; the coastline land check
-    reads the vector-tile water outline, not an open coastline polyline), and
+    reads the vector-tile water outline, not an open coastline polyline),
+    `country-boundaries.ts` (border-aware routing: a bundled, simplified admin-0
+    country partition, read once at start and degrading to a no-op if absent, that
+    classifies a point's country, gates a route as same-country via `homeForRoute`,
+    and yields the other countries' water rings overlapping a route bbox so the
+    channel router blocks foreign water and a same-country route stays in its own
+    waters; it partitions only inland and boundary-lake water, so marine and
+    different-country routes are unconstrained), and
     `endpoint.ts` (the `POST /api/route-draft`
     handler that asks the model for turning waypoints, optionally re-routes the
     geometry through the channel router, then disposes every flag and number in
@@ -262,8 +269,10 @@ self-contained module registered on one line in `src/index.ts`.
       decode live in `inputs/vector-tiles/vector-tile-client.ts`), `nav-grid.ts`
       (the depth-aware navigable grid via scanline rasterization: a cell is
       navigable only where ENC charts it deep enough or tile water maps water, and
-      any ENC land, ENC drying, or tile-water island hole blocks, with a standoff
-      cost ramp toward the desired
+      any ENC land, ENC drying, or tile-water island hole blocks; a foreign-country
+      water block for border-aware routing stamps blocked but NOT the shore mask, so
+      the one-cell shore erosion does not pinch a narrow home channel a cell off the
+      border, with a standoff cost ramp toward the desired
       offing), `astar.ts` (the grid A* with a binary min-heap), `path-simplify.ts`
       (the pure Ramer-Douglas-Peucker reduction of the A* centerline to turning
       points), and `index.ts` (the slice's barrel, exporting `routeChannel`,
@@ -558,9 +567,14 @@ self-contained module registered on one line in `src/index.ts`.
   notes-resource integration guide (`notes-resource-format.md`), the Garmin API
   research notes, decision records, and maintainer notes.
 - `assets/` - committed, published static files: `icons/` (the plugin icon in
-  SVG and PNG sizes, wired through the `signalk.appIcon` field) and
-  `screenshots/` (the admin-panel and Freeboard-SK images declared under
-  `signalk.screenshots` for the plugin-registry listing).
+  SVG and PNG sizes, wired through the `signalk.appIcon` field), `screenshots/`
+  (the admin-panel and Freeboard-SK images declared under `signalk.screenshots`
+  for the plugin-registry listing), and `boundaries/` (the bundled, simplified
+  country partition for border-aware route drafting, built by
+  `scripts/build-boundaries.mjs`; see `assets/boundaries/README.md`). The
+  boundary data is deliberately bundled rather than a fetched input module
+  because it is a small, static worldwide partition with no upstream API, read
+  once at plugin start and degrading to a no-op if absent.
 - `dist/` and `public/` - compiled plugin and bundled panel. Generated, not
   committed. They are published to npm alongside `assets/` (see the `files`
   field in `package.json`).

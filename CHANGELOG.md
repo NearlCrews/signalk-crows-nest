@@ -11,6 +11,16 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Border-aware route drafting. When a drafted route's start and destination are in the same country,
+  the channel router keeps the path in that country's waters instead of taking the shortest water path
+  across an international border, so a Detroit River route between two US points stays out of Canadian
+  water. Where no in-country water route exists it still returns the crossing route, with a note that it
+  crosses the international boundary. It covers the inland and boundary-lake waters that a bundled,
+  simplified country dataset partitions (the Great Lakes and their connecting rivers); marine and
+  different-country routes are unchanged.
+
 ### Changed
 
 - Renamed the bridge-clearance message formatter to `formatClearanceMeters`,
