@@ -22,7 +22,7 @@
 
 ## Data sources, POI types, and resources affected
 
-<!-- Optional. List affected data sources (ActiveCaptain, OpenSeaMap, USCG Light List, NOAA ENC Direct), POI types, or Signal K resource paths, e.g. ActiveCaptain Marina POIs, resources/notes. Remove section if not applicable. -->
+<!-- Optional. List affected data sources (ActiveCaptain, OpenSeaMap, USCG Light List, NOAA ENC Direct), POI types, Signal K resource paths, or route-draft pieces (the ENC, OpenSeaMap, or EMODnet safety provider, the channel router, the optimize path), e.g. ActiveCaptain Marina POIs, resources/notes, the EMODnet provider. Remove section if not applicable. -->
 
 ## Breaking changes / migration
 

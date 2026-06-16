@@ -23,7 +23,8 @@ proximity, route-corridor, and bridge air-draft alarms.
 
 ## What's new in 0.10.0
 
-AI route drafting arrives, and its safety check covers routes worldwide.
+AI route drafting arrives, it follows the water, and its safety check covers
+routes worldwide.
 
 - **AI route drafting (optional, admin only, off until you set a key).** A
   new `POST /api/route-draft` endpoint turns a plain-language passage
@@ -31,6 +32,21 @@ AI route drafting arrives, and its safety check covers routes worldwide.
   then owned code checks every leg and adds a deterministic fuel estimate.
   A new Route drafting panel card holds the masked OpenRouter key, the
   model, a daily call cap, and the vessel, fuel, and routing inputs.
+- **Channel routing that follows the water.** Where charted depth (US ENC)
+  or mapped water covers the passage, the endpoint replaces the model's
+  straight legs with a deterministic water-following route computed in owned
+  code: a depth-aware navigable grid plus A* over it, reading charted depth
+  from US ENC or mapped water from vector tiles. The drafted waypoints follow
+  the channel rather than cutting across land, and the returned route is
+  re-checked at full polygon resolution so it never crosses land. A route
+  built on a mapped water outline carries an explicit depth-unverified caveat,
+  and where no coverage is available the model geometry is kept with a note
+  saying so.
+- **Optimize a drawn route.** `POST /api/route-draft` also accepts an
+  optional drawn `route`. When present, the endpoint refines that polyline
+  instead of drafting from words, anchors the result to the drawn start and
+  destination, runs the same worldwide safety check and fuel estimate, and
+  returns an `optimized` marker so a client can confirm the route was used.
 - **Worldwide safety check.** The route-draft check now covers routes
   worldwide, resolving data providers per leg: NOAA ENC charted depth,
   land, and point hazards in US waters, OpenSeaMap point hazards and an
@@ -39,10 +55,6 @@ AI route drafting arrives, and its safety check covers routes worldwide.
   seas. Every dimension is either checked with its value and datum stated
   or flagged explicitly as not checked, never silently passed. The route is
   always a draft you verify on the chart before saving.
-- **Operator-actionable failures.** Each OpenRouter failure now points at
-  the fix: an invalid or missing key at the plugin key, an empty balance at
-  the OpenRouter dashboard, and a moderation or permission block as a
-  refused request to rephrase.
 
 See the [changelog](CHANGELOG.md#v0100) for the full list.
 
@@ -88,15 +100,22 @@ air-draft check).
   turn a plain-language passage request into a drafted route. With an
   OpenRouter key configured, the plugin asks the model for the turning
   waypoints, then checks every leg in owned code and adds a deterministic
-  fuel estimate. The safety check covers routes worldwide, resolving data
-  providers per leg: NOAA ENC charted depth, land, and point hazards in US
-  waters, OpenSeaMap point hazards and an OpenStreetMap coastline land check
-  worldwide, and EMODnet modeled depth (awareness-grade, referenced to Lowest
-  Astronomical Tide) in European seas. Every dimension is either checked with
-  its value and datum stated or flagged explicitly as not checked, never
-  silently passed. The route is always a draft you verify on the chart before
-  saving, the depth check reads the charted depth-area contour rather than the
-  depth at every point, and a daily call cap bounds the OpenRouter spend.
+  fuel estimate. Where charted depth (US ENC) or mapped water covers the
+  passage, a deterministic channel router replaces the model's straight legs
+  with a water-following route over a depth-aware navigable grid plus A*, so
+  the waypoints follow the channel rather than cutting across land. The
+  endpoint also optimizes a drawn route: pass a `route` and it refines that
+  polyline instead of drafting from words, anchors the drawn endpoints, and
+  returns an `optimized` marker. The safety check covers routes worldwide,
+  resolving data providers per leg: NOAA ENC charted depth, land, and point
+  hazards in US waters, OpenSeaMap point hazards and an OpenStreetMap coastline
+  land check worldwide, and EMODnet modeled depth (awareness-grade, referenced
+  to Lowest Astronomical Tide) in European seas. Every dimension is either
+  checked with its value and datum stated or flagged explicitly as not checked,
+  never silently passed. The route is always a draft you verify on the chart
+  before saving, the depth check reads the charted depth-area contour rather
+  than the depth at every point, and a daily call cap bounds the OpenRouter
+  spend.
 - **Rich point detail** rendered as plain-English HTML, with the
   source-specific attribution credit (ODbL for OSM, CC0 for NOAA, US
   Government public domain for USCG, Garmin ActiveCaptain for the base)
@@ -215,6 +234,10 @@ The panel has these areas:
    alarm is enabled): the proximity-alarm, route-corridor scan, and
    bridge air-draft check controls, each in its own fieldset with an
    opt-in toggle and its numeric settings.
+5. **Route drafting section** (optional, admin only, off until you set a
+   key): a master enable, the masked OpenRouter key and model, a daily call
+   cap, and the vessel, fuel, and routing inputs, with the rarely-changed
+   tuning tucked under an Advanced disclosure.
 
 Per-source enable toggles live on each card's header, alongside the
 disclosure chevron. Each card carries a small live-status pill on the
@@ -232,6 +255,8 @@ on the next request.
 - [Development guide](docs/development.md)
 - [Notes-resource integration guide](docs/notes-resource-format.md): the
   wire format and the normalized detail schema for client developers
+- [Route-draft API guide](docs/route-draft-api.md): the contract for the
+  optional AI route-draft endpoint, for client integrators
 - [Architecture notes](CLAUDE.md): project layout and module map
 - [Changelog](CHANGELOG.md)
 - [Contributing](.github/CONTRIBUTING.md)

@@ -55,6 +55,18 @@ The plugin ships its own configuration panel: a federated React app, loaded by
 the Signal K admin UI through Module Federation, that replaces the generated
 settings form with a live status section and grouped POI-type toggles.
 
+The plugin also hosts an optional, admin-gated AI route-draft feature under
+`src/route-draft/`. It asks OpenRouter for a passage's turning waypoints,
+optionally re-routes the geometry through a deterministic channel router so the
+legs follow charted or mapped water, then checks every leg and computes a fuel
+estimate in owned code. The safety check is worldwide: per leg it runs the union
+of every provider whose coverage reaches the leg, NOAA ENC charted depth, land,
+and point hazards in US waters, OpenSeaMap point hazards and an OpenStreetMap
+coastline land check worldwide, and EMODnet modeled depth in European seas. The
+feature is off until an OpenRouter key is configured, and the endpoint mounts
+only behind the shared admin gate. The contract is documented in
+[docs/route-draft-api.md](route-draft-api.md).
+
 ## Project structure
 
 A POI data source is an "input"; a SignalK consumer of POI data is an "output".
@@ -91,13 +103,17 @@ src/                      # TypeScript source
 │                          #   template, fetches, gunzips, and decodes the OpenMapTiles
 │                          #   water layer to lon/lat polygons
 ├── route-draft/         # The optional, admin-gated AI route-draft feature (server half):
-│                         #   endpoint.ts (parse, draft or optimize, safety-check, fuel),
-│                         #   safety-check.ts (worldwide per-leg provider resolution),
-│                         #   channel-router/ (deterministic water-following A*: the
-│                         #   vector-tile water source, nav-grid, astar, path-simplify,
-│                         #   orchestrator), providers/ (ENC and OpenSeaMap leg checks),
-│                         #   emodnet/ (European modeled depth), openrouter.ts, budget.ts,
-│                         #   fuel.ts, config.ts, and leg-geometry.ts
+│                         #   endpoint.ts (parse, draft or optimize, channel-route,
+│                         #   safety-check, fuel), safety-check.ts (the orchestrator over
+│                         #   the per-leg providers, with worldwide provider resolution),
+│                         #   providers/ (the per-leg data providers: provider.ts contract
+│                         #   and resolver, enc-provider, openseamap-provider,
+│                         #   emodnet-provider), emodnet/ (the European modeled-depth
+│                         #   client), channel-router/ (the deterministic water-following
+│                         #   router: channel-router orchestrator, tile-water-query,
+│                         #   nav-grid, astar, path-simplify, and the slice barrel),
+│                         #   openrouter.ts, budget.ts, fuel.ts, config.ts, and
+│                         #   leg-geometry.ts (the shared planar ring and polyline helpers)
 ├── outputs/              # SignalK consumers of POI data
 │   ├── output.ts          # The OutputModule and PositionScanContributor contracts
 │   ├── output-registry.ts # Holds the outputs, starts the enabled ones
@@ -107,7 +123,9 @@ src/                      # TypeScript source
 │   └── bridge-air-draft/  # The bridge air-draft check (proximity + route-ahead warning)
 ├── monitoring/           # position-monitor.ts: drives the per-tick scan
 ├── geo/                  # position-utilities.ts: bounding-box and great-circle helpers
-├── status/               # plugin-status.ts (per-source recorder), status-router.ts, status-types.ts
+├── status/               # plugin-status.ts (per-source recorder), status-router.ts,
+│                         #   admin-gate.ts (the shared admin gate the status and
+│                         #   route-draft routes mount behind), status-types.ts
 ├── shared/               # Source-agnostic helpers: types.ts (cross-module contracts;
 │                         #   skIcon is required on PoiSummary and PoiDetailView),
 │                         #   plugin-id.ts (id, repo URL, and shared User-Agent),
@@ -138,17 +156,20 @@ src/                      # TypeScript source
     ├── normalize-config.ts# Normalizes the raw config object
     ├── active-captain-poi-types.ts  # UI metadata: the ActiveCaptain POI-type groups
     ├── relative-time.ts   # ISO timestamp to a localized "N minutes ago" phrase
-    ├── styles.ts          # Inline style objects
-    ├── hooks/             # use-config, use-status, use-number-draft
+    ├── styles.ts          # The --ac-* design tokens and theme blocks
+    ├── unit-system.ts     # The display-units resolver keyed off the server unit preset
+    ├── hooks/             # use-config, use-status, use-theme, use-unit-system,
+    │                      #   use-number-draft, use-collapse-focus-restore
     └── components/        # StatusBar, FooterBar, DataSourcesSection (per-source
                            #   accordion shell), DataSourceCard (one collapsible card),
                            #   ActiveCaptainSource, OpenSeaMapSource, UscgLightListSource,
                            #   NoaaEncSource (card bodies), AlertsSection (the proximity,
-                           #   route-hazard, and bridge air-draft controls); and the
-                           #   per-field input
-                           #   components, including the shared NumberField,
-                           #   MinimumYearField (the per-source earliest-year
-                           #   filter), ProximityAlarmFields, and
+                           #   route-hazard, and bridge air-draft controls),
+                           #   RouteDraftingSection (the opt-in AI route-drafting card),
+                           #   ThemeToggle; and the per-field input components, including
+                           #   the shared NumberField, LengthField (the meters-backed,
+                           #   unit-aware wrapper), MinimumYearField (the per-source
+                           #   earliest-year filter), ProximityAlarmFields, and
                            #   RouteHazardScanFields
 test/                     # node:test suites, run through tsx
 dist/                     # Compiled plugin output (generated, not committed)
@@ -197,7 +218,7 @@ acquisition patterns a POI source can use:
 
 - **Periodic download with conditional GET.** `src/inputs/uscg-light-list/`
   fetches the full NAVCEN district file set on a background scheduler
-  (default every six hours), records HTTP `Last-Modified` and `ETag`
+  (default daily), records HTTP `Last-Modified` and `ETag`
   responses, and replays them as `If-Modified-Since` and `If-None-Match`
   headers on the next refresh. The parsed records land in an on-disk index
   under the plugin data directory, so list queries are served entirely from

@@ -29,8 +29,8 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- The notes-resource plugin status reads "1 point" or "N points" rather than
-  "N point(s) of interest".
+- The notes-resource plugin status reads "1 point of interest" or "N points of
+  interest" rather than a "point(s)" plural placeholder.
 - The Route drafting panel labels its propulsion control consistently for both
   sighted and screen-reader users.
 - The configuration panel cancels its in-flight unit-preference requests on

@@ -39,9 +39,11 @@ Before creating the GitHub release:
    two never drift. (A stale lockfile version is harmless to `npm ci`, which
    validates the dependency tree rather than the project version, but keeping
    them in step avoids confusion.)
-2. Add a new `### vX.Y.Z (YYYY/MM/DD) - <title>` entry at the top of
-   `CHANGELOG.md`, with an `<a id="vXYZ"></a>` anchor line directly above the
-   heading (digits only, no dots: `v0.5.0` -> `v050`).
+2. Add a new `## [X.Y.Z] - YYYY-MM-DD` entry at the top of `CHANGELOG.md`,
+   below any `## [Unreleased]` section, with an `<a id="vXYZ"></a>` anchor line
+   directly above the heading (digits only, no dots: `0.5.0` -> `v050`). Group
+   the changes under `### Added`, `### Changed`, `### Fixed`, and the other Keep
+   a Changelog subsections.
 3. Run the full local check, and confirm each command passes:
    ```bash
    npm run lint

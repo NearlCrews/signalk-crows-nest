@@ -2,7 +2,7 @@
 
 Enhancement opportunities for signalk-crows-nest beyond the
 original scope ("import ActiveCaptain points of interest as `notes` resources
-for chart display"). Produced by a four-expert review on 2026-05-22.
+for chart display").
 
 The original plugin is purely pull-driven and read-only. The largest
 opportunities come from making it position-aware and offline-capable.
@@ -68,8 +68,7 @@ terms-of-service exposure.
 
 ## Candidate data sources (researched 2026-05-30)
 
-A session review surfaced these as the strongest next sources, beyond the four
-that ship today:
+These are the strongest next sources, beyond the four that ship today:
 
 - **NOAA CO-OPS tide and current stations** as a first-class input, not just the
   Tier 2 nearest-station cross-reference: the free
