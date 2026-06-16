@@ -150,14 +150,23 @@ export function buildNavGrid (params: NavGridParams): NavGrid {
   // low-resolution shallow or zero-depth area never overrides a fine band's charted deep channel.
   const decidedByFinerBand = new Uint8Array(cols * rows)
   const bandTouched = new Uint8Array(cols * rows)
+  // Indices this band stamped, so propagating the finer-band decision and clearing
+  // bandTouched both run over the touched cells, not the whole grid, each band.
+  const bandTouchedList: number[] = []
+  const markTouched = (i: number): void => {
+    if (bandTouched[i] === 0) {
+      bandTouched[i] = 1
+      bandTouchedList.push(i)
+    }
+  }
   for (const band of bands) {
-    bandTouched.fill(0)
+    bandTouchedList.length = 0
     for (const area of band.depthAreas) {
       const drval1 = area.depthRange?.shallowMeters
       const tooShallow = drval1 === undefined || drval1 < contour
       const drying = drval1 !== undefined && drval1 < 0
       if (fillPolygonCells(area.rings, colF, rowF, cols, rows, (i) => {
-        bandTouched[i] = 1
+        markTouched(i)
         if (decidedByFinerBand[i] === 1) return
         covered[i] = 1
         if (tooShallow) blocked[i] = 1
@@ -168,7 +177,7 @@ export function buildNavGrid (params: NavGridParams): NavGrid {
     }
     for (const area of band.landAreas) {
       if (fillPolygonCells(area.rings, colF, rowF, cols, rows, (i) => {
-        bandTouched[i] = 1
+        markTouched(i)
         if (decidedByFinerBand[i] === 1) return
         blocked[i] = 1
         landMask[i] = 1
@@ -176,7 +185,10 @@ export function buildNavGrid (params: NavGridParams): NavGrid {
         return emptyGrid(bbox)
       }
     }
-    for (let i = 0; i < bandTouched.length; i += 1) if (bandTouched[i] === 1) decidedByFinerBand[i] = 1
+    for (const i of bandTouchedList) {
+      decidedByFinerBand[i] = 1
+      bandTouched[i] = 0
+    }
   }
 
   // OSM worldwide layer: water marks coverage only (depth-unknown, never blocks, so

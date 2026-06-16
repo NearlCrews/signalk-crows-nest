@@ -89,7 +89,7 @@ interface InAlarmEntry {
   name: string
   clearanceMeters: number
   airDraftMeters: number
-  distanceMeters: number
+  rangeMeters: number
 }
 
 /**
@@ -126,7 +126,7 @@ export function createBridgeClearanceAlarms (
   let airDraftAvailable: boolean | null = null
 
   function raise (poiId: string, entry: InAlarmEntry): void {
-    const { name, clearanceMeters, airDraftMeters, distanceMeters: distance } = entry
+    const { name, clearanceMeters, airDraftMeters, rangeMeters: distance } = entry
     const raisedAt = tracker.set(poiId, { name })
     const value: NotificationValue = {
       state: 'alarm',
@@ -195,7 +195,7 @@ export function createBridgeClearanceAlarms (
       if (!bridgeBlocksVessel(clearanceMeters, airDraftMeters, marginMeters)) {
         continue
       }
-      inAlarm.set(poi.id, { name: poi.name, clearanceMeters, airDraftMeters, distanceMeters: distance })
+      inAlarm.set(poi.id, { name: poi.name, clearanceMeters, airDraftMeters, rangeMeters: distance })
     }
 
     // Entry: a bridge now in alarm that was not already alarming.

@@ -16,7 +16,7 @@
  */
 
 import type * as React from 'react'
-import { memo } from 'react'
+import { memo, useMemo } from 'react'
 import type { Dispatch } from 'react'
 import type { ConfigAction } from '../config-reducer.js'
 import type { PluginConfig } from '../../shared/types.js'
@@ -67,7 +67,7 @@ interface Props {
  * on `PluginConfig` never reaches the field props.
  */
 export default memo(function RouteDraftingSection ({ state, dispatch }: Props): React.ReactElement {
-  const config = normalizeRouteDraftConfig(state)
+  const config = useMemo(() => normalizeRouteDraftConfig(state), [state])
   const enabled = config.routeDraftEnabled
 
   // Collapsed by default so the panel reads cleanly on open. The

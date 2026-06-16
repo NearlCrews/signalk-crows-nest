@@ -16,6 +16,7 @@
 
 import type { OverpassElement } from './overpass-client.js'
 import { tagValue, humanizeEnum, readFamilyTags, readLightTags } from './openseamap-detail.js'
+import type { FamilyTags, LightTags } from './openseamap-detail.js'
 import { humanizeLightCharacter } from '../../shared/light-character.js'
 import { pushSection } from '../../shared/normalized-detail.js'
 import type { NormalizedItem, NormalizedSection } from '../../shared/normalized-detail.js'
@@ -49,8 +50,7 @@ function pushMeasure (
  * Items for the family line (`seamark:<type>:category/colour/shape`). Mirrors
  * `buildFamilyLine`: the family key follows from the `seamark:type` value.
  */
-function familyItems (tags: Readonly<Record<string, string>>): NormalizedItem[] {
-  const family = readFamilyTags(tags)
+function familyItems (family: FamilyTags | null): NormalizedItem[] {
   if (family === null) return []
   const items: NormalizedItem[] = []
   if (family.category !== undefined) {
@@ -70,8 +70,7 @@ function familyItems (tags: Readonly<Record<string, string>>): NormalizedItem[] 
  * character is humanized, the colour and exhibition have their underscores
  * normalized, and the period (s), range (NM), and height (m) are measures.
  */
-function lightItems (tags: Readonly<Record<string, string>>): NormalizedItem[] {
-  const light = readLightTags(tags)
+function lightItems (light: LightTags): NormalizedItem[] {
   const items: NormalizedItem[] = []
   if (light.character !== undefined) {
     items.push({ label: 'Character', value: humanizeLightCharacter(light.character), kind: 'text' })
@@ -106,11 +105,15 @@ function noteItems (tags: Readonly<Record<string, string>>): NormalizedItem[] {
 }
 
 /** Build the normalized detail sections for an OpenSeaMap element. */
-export function buildOpenSeaMapSections (element: OverpassElement): NormalizedSection[] {
+export function buildOpenSeaMapSections (
+  element: OverpassElement,
+  family: FamilyTags | null = readFamilyTags(element.tags),
+  light: LightTags = readLightTags(element.tags)
+): NormalizedSection[] {
   const { tags } = element
   const sections: NormalizedSection[] = []
-  pushSection(sections, 'feature', 'Feature', familyItems(tags))
-  pushSection(sections, 'light', 'Light', lightItems(tags))
+  pushSection(sections, 'feature', 'Feature', familyItems(family))
+  pushSection(sections, 'light', 'Light', lightItems(light))
   pushSection(sections, 'notes', 'Notes', noteItems(tags))
   return sections
 }

@@ -14,7 +14,7 @@
 
 import { LRUCache } from 'lru-cache'
 import type { OverpassClient, OverpassElement } from './overpass-client.js'
-import { renderOpenSeaMapDetail } from './openseamap-detail.js'
+import { renderOpenSeaMapDetail, readFamilyTags, readLightTags } from './openseamap-detail.js'
 import { buildOpenSeaMapSections } from './openseamap-sections.js'
 import { elementMarking, seamarkRegex } from './seamark-mapping.js'
 import {
@@ -73,6 +73,10 @@ function toOverpassTypedId (id: string): string {
 /** Build the source-agnostic detail view for an element. */
 function toDetailView (element: OverpassElement): PoiDetailView {
   const { type, skIcon } = elementMarking(element.tags)
+  // Read the family and light tags once and hand them to both the HTML renderer
+  // and the section builder, rather than each re-reading them off the element.
+  const family = readFamilyTags(element.tags)
+  const light = readLightTags(element.tags)
   const view: PoiDetailView = {
     name: elementName(element, type),
     position: { ...element.position },
@@ -80,10 +84,10 @@ function toDetailView (element: OverpassElement): PoiDetailView {
     url: elementOsmUrl(element),
     source: OPENSEAMAP_SOURCE_ID,
     attribution: OPENSEAMAP_ATTRIBUTION,
-    description: renderOpenSeaMapDetail(element),
+    description: renderOpenSeaMapDetail(element, family, light),
     // Normalized detail alongside the HTML: a structured client renders these
     // sections natively, a generic client renders `description`.
-    sections: buildOpenSeaMapSections(element),
+    sections: buildOpenSeaMapSections(element, family, light),
     skIcon
   }
   if (element.timestamp !== undefined) view.timestamp = element.timestamp

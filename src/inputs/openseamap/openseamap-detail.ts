@@ -93,8 +93,7 @@ export function readLightTags (tags: Readonly<Record<string, string>>): LightTag
  * Compose a single descriptive line from the `seamark:light:*` family of
  * tags, or null when the element carries no light tags at all.
  */
-function buildLightLine (tags: Readonly<Record<string, string>>): string | null {
-  const light = readLightTags(tags)
+function buildLightLine (light: LightTags): string | null {
   const parts: string[] = []
   if (light.character !== undefined) {
     parts.push(humanizeLightCharacter(light.character))
@@ -141,8 +140,7 @@ function buildHeader (tags: Readonly<Record<string, string>>): string {
  * determined by the `seamark:type` value, so a single template fits every
  * family that follows the standard tagging convention.
  */
-function buildFamilyLine (tags: Readonly<Record<string, string>>): string | null {
-  const family = readFamilyTags(tags)
+function buildFamilyLine (family: FamilyTags | null): string | null {
   if (family === null) {
     return null
   }
@@ -168,18 +166,22 @@ function buildFamilyLine (tags: Readonly<Record<string, string>>): string | null
  * seamark tags that matter to a mariner; the technical OSM enums and the
  * verbose family-keyed tags are folded into one or two short sentences.
  */
-export function renderOpenSeaMapDetail (element: OverpassElement): string {
+export function renderOpenSeaMapDetail (
+  element: OverpassElement,
+  family: FamilyTags | null = readFamilyTags(element.tags),
+  light: LightTags = readLightTags(element.tags)
+): string {
   const tags = element.tags
   const blocks: string[] = []
 
   blocks.push(`<h4>${buildHeader(tags)}</h4>`)
 
-  const familyLine = buildFamilyLine(tags)
+  const familyLine = buildFamilyLine(family)
   if (familyLine !== null) {
     blocks.push(`<p>${escapeHtml(familyLine)}.</p>`)
   }
 
-  const lightLine = buildLightLine(tags)
+  const lightLine = buildLightLine(light)
   if (lightLine !== null) {
     blocks.push(labeledParagraph('Light', lightLine))
   }
