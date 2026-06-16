@@ -28,6 +28,9 @@ npm-debug.log*
 # Playwright MCP scratch directory (screenshots, snapshots, console logs)
 .playwright-mcp/
 
+# Scratch directory (throwaway harnesses, captured logs)
+tmp/
+
 # Editor directories and files
 .idea/
 .vscode/
