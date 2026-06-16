@@ -227,7 +227,11 @@ export async function routeChannel (
   const lastCell = routeCells[routeCells.length - 1]
   const goalPos = onMain(req.to) ? req.to : grid.cellCenter(lastCell[0], lastCell[1])
   const interior = routeCells.slice(1, -1).map(([c, r]) => grid.cellCenter(c, r))
-  const waypoints = [startPos, ...interior, goalPos]
+  // Decimate to TURNING points: the A* path and its repair trace the channel at cell resolution
+  // (a waypoint every cell at bends), which is far too dense for a usable route. Drop each waypoint
+  // whose removal still leaves the longer leg on water, so the result is the minimal set of turns
+  // that follow the channel. Endpoints are kept, and every surviving leg stays legSafe by construction.
+  const waypoints = decimateRoute([startPos, ...interior, goalPos], legSafe)
 
   if (!routeStaysOnWater(waypoints, enc, water, sampleSpacing, clipTolerance, req.deadlineMs)) {
     if (deps.logger !== undefined) {
@@ -453,6 +457,26 @@ function legStaysOnWater (
   if (!ok(a)) return false
   for (const s of sampleRhumbLeg(a, b, spacing)) if (!ok(s)) return false
   return ok(b)
+}
+
+/**
+ * Greedily drop interior waypoints to the minimal set of turning points: a waypoint is removed when
+ * the longer leg that skips it still stays on water (`legSafe`), so a dense cell-resolution trace
+ * becomes a handful of turns that still follow the channel. The two endpoints are always kept, and
+ * every surviving leg is legSafe by construction (the leg from the last kept point was checked safe on
+ * the step before each keep). One forward pass: O(waypoints) legSafe calls.
+ */
+function decimateRoute (waypoints: Position[], legSafe: (a: Position, b: Position) => boolean): Position[] {
+  if (waypoints.length <= 2) return waypoints
+  const kept: Position[] = [waypoints[0]]
+  let anchor = 0
+  for (let j = 1; j < waypoints.length - 1; j += 1) {
+    if (legSafe(waypoints[anchor], waypoints[j + 1])) continue // the leg skipping waypoint j stays on water
+    kept.push(waypoints[j])
+    anchor = j
+  }
+  kept.push(waypoints[waypoints.length - 1])
+  return kept
 }
 
 /**
