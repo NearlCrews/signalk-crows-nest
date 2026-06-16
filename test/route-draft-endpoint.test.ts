@@ -410,6 +410,27 @@ test('applyChannelRoute adds the depth caveat on a tile-water success', () => {
   assert.match(r.notes[0].message, /no depth|not depth-checked/i)
 })
 
+test('applyChannelRoute adds the border-crossing note on a borderFallback, naming the home country', () => {
+  const channel = [{ latitude: 1, longitude: 1 }, { latitude: 2, longitude: 2 }]
+  const r = applyChannelRoute([], { ok: true, waypoints: channel, usedTileWater: false, borderFallback: true }, 'United States of America')
+  assert.equal(r.notes.length, 1)
+  assert.match(r.notes[0].message, /inside United States of America/)
+  assert.match(r.notes[0].message, /crosses the international boundary/)
+})
+
+test('applyChannelRoute border note falls back to generic wording without a home name', () => {
+  const channel = [{ latitude: 1, longitude: 1 }, { latitude: 2, longitude: 2 }]
+  const r = applyChannelRoute([], { ok: true, waypoints: channel, usedTileWater: false, borderFallback: true })
+  assert.equal(r.notes.length, 1)
+  assert.match(r.notes[0].message, /within one country/)
+})
+
+test('applyChannelRoute emits both the depth caveat and the border note when both apply', () => {
+  const channel = [{ latitude: 1, longitude: 1 }, { latitude: 2, longitude: 2 }]
+  const r = applyChannelRoute([], { ok: true, waypoints: channel, usedTileWater: true, borderFallback: true }, 'Canada')
+  assert.equal(r.notes.length, 2)
+})
+
 test('applyChannelRoute keeps the route and notes geometry on every non-success', () => {
   const original = [{ latitude: 1, longitude: 1 }, { latitude: 2, longitude: 2 }]
   for (const reason of ['no-coverage', 'no-path', 'deadline', 'unsnappable', 'land-leg', 'fetch-failed', 'skipped'] as const) {

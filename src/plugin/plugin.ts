@@ -27,6 +27,7 @@ import { createEncDirectClient } from '../inputs/noaa-enc/enc-direct-client.js'
 import { createOverpassClient } from '../inputs/openseamap/overpass-client.js'
 import { createVectorTileClient, DEFAULT_TILE_STYLE_URL, type VectorTileClient } from '../inputs/vector-tiles/vector-tile-client.js'
 import { createTileWaterSource } from '../route-draft/channel-router/index.js'
+import { loadCountryBoundaries } from '../route-draft/country-boundaries.js'
 import type { OverpassClient } from '../inputs/openseamap/overpass-client.js'
 import { resolvePrimaryEndpoint } from '../shared/overpass-endpoints.js'
 import { normalizeRouteDraftConfig, routeDraftConfigSchema } from '../route-draft/config.js'
@@ -277,6 +278,9 @@ export function createPlugin (
     const tileClient = createVectorTileClient(DEFAULT_TILE_STYLE_URL, log)
     routeDraftTiles = tileClient
     const tileWater = createTileWaterSource(tileClient)
+    // Border-aware routing reads bundled country polygons; loaded once here, degrading to a no-op
+    // service on any asset problem so it never disables route drafting.
+    const boundaries = loadCountryBoundaries(log)
     const statePath = join(app.getDataDirPath(), 'route-draft-budget.json')
     BudgetTracker.load({
       maxPerDay: rd.routeDraftMaxCallsPerDay,
@@ -284,7 +288,7 @@ export function createPlugin (
       log
     }).then((budget) => {
       if (mine === routeDraftGeneration) {
-        routeDraftService = { llm, budget, enc, overpass, emodnet, tileWater, config: rd, models: modelsForRequest(rd.routeDraftModel) }
+        routeDraftService = { llm, budget, enc, overpass, emodnet, tileWater, boundaries, config: rd, models: modelsForRequest(rd.routeDraftModel) }
         routeDraftInitFailed = false
         app.debug(`${PLUGIN_NAME} route drafting ready`)
       }

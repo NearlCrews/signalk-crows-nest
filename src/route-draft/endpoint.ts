@@ -39,6 +39,7 @@ import type { LegFlag } from './safety-check.js'
 import { estimateFuel, routeDistanceMeters } from './fuel.js'
 import { routeChannel } from './channel-router/index.js'
 import type { ChannelDeclineReason, ChannelRouteResult, TileWaterSource } from './channel-router/index.js'
+import type { CountryBoundaries } from './country-boundaries.js'
 
 /**
  * Usage bands the depth check queries, finest first. Best-band picks the finest with coverage and,
@@ -200,6 +201,8 @@ export interface RouteDraftService {
   emodnet: EmodnetClient
   /** The worldwide vector-tile water source the channel router routes over (holds the tile cache). */
   tileWater: TileWaterSource
+  /** Country polygons for border-aware routing: keep a same-country route in its own waters. */
+  boundaries: CountryBoundaries
   /** The resolved route-draft configuration (vessel, fuel, and routing settings). */
   config: RouteDraftConfig
   /**
@@ -638,25 +641,35 @@ async function handleDraft (
   // Replace the model geometry with a deterministic water-following route where ENC or
   // OSM water coverage allows; otherwise keep the drafted or drawn route and note it.
   // The router is skipped when too little request budget remains for it plus the check.
+  // Border-aware routing: when the route starts and ends in the same country, block the other
+  // countries' waters so the path stays in that country's waters (a US Detroit River route stays out
+  // of Canada). Different-country or marine endpoints give no home, so nothing is blocked.
+  const startPos = { latitude: route.waypoints[0].latitude, longitude: route.waypoints[0].longitude }
+  const endPos = { latitude: route.waypoints[route.waypoints.length - 1].latitude, longitude: route.waypoints[route.waypoints.length - 1].longitude }
+  const homeCountry = service.boundaries.homeForRoute(startPos, endPos)
+
   const channelResult: ChannelRouteResult | { ok: false, reason: 'skipped' } =
     deadlineMs - Date.now() >= ROUTER_MIN_BUDGET_MS
       ? await routeChannel(
         { client: service.enc, queryChartedAreas, queryWater: service.tileWater.queryTileWater, bands: DEPTH_BANDS, logger },
         {
-          from: { latitude: route.waypoints[0].latitude, longitude: route.waypoints[0].longitude },
-          to: { latitude: route.waypoints[route.waypoints.length - 1].latitude, longitude: route.waypoints[route.waypoints.length - 1].longitude },
+          from: startPos,
+          to: endPos,
           draftMeters,
           safetyMarginMeters: config.routeDraftSafetyMarginMeters,
           standoffNm: config.routeDraftStandoffNm,
           ...(parsed.route !== undefined
             ? { corridor: parsed.route }
             : { bboxAnchors: route.waypoints.map((wp) => ({ latitude: wp.latitude, longitude: wp.longitude })) }),
+          ...(homeCountry !== undefined
+            ? { foreignRings: (bbox) => service.boundaries.foreignRings(homeCountry.id, bbox) }
+            : {}),
           signal: AbortSignal.timeout(Math.max(MS_PER_SECOND, deadlineMs - Date.now())),
           deadlineMs
         }
       )
       : { ok: false, reason: 'skipped' }
-  const channel = applyChannelRoute(route.waypoints, channelResult)
+  const channel = applyChannelRoute(route.waypoints, channelResult, homeCountry?.name)
   route.waypoints = channel.waypoints
 
   const positions: Position[] = route.waypoints.map((wp) => ({ latitude: wp.latitude, longitude: wp.longitude }))
@@ -734,13 +747,30 @@ type DraftWaypoint = { latitude: number, longitude: number, name?: string }
  */
 export function applyChannelRoute (
   waypoints: DraftWaypoint[],
-  result: ChannelRouteResult | { ok: false, reason: 'skipped' }
+  result: ChannelRouteResult | { ok: false, reason: 'skipped' },
+  homeName?: string
 ): { waypoints: DraftWaypoint[], notes: LegFlag[] } {
   if (result.ok) {
     const replaced = result.waypoints.map((p) => ({ latitude: p.latitude, longitude: p.longitude }))
-    return { waypoints: replaced, notes: result.usedTileWater ? [CHANNEL_TILE_WATER_CAVEAT] : [] }
+    const notes: LegFlag[] = []
+    if (result.usedTileWater) notes.push(CHANNEL_TILE_WATER_CAVEAT)
+    if (result.borderFallback === true) notes.push(borderFallbackNote(homeName))
+    return { waypoints: replaced, notes }
   }
   return { waypoints, notes: [{ kind: 'other', message: CHANNEL_NOTE_BY_REASON[result.reason] }] }
+}
+
+/**
+ * The note for a route that could not stay in one country's waters and crossed the international
+ * boundary. The router only blocks foreign water when the endpoints are in the same country, so a
+ * crossing here means no in-country water path existed; say so and point the navigator at the chart.
+ */
+function borderFallbackNote (homeName?: string): LegFlag {
+  const where = homeName !== undefined ? `inside ${homeName}` : 'within one country'
+  return {
+    kind: 'other',
+    message: `No water route stays ${where}, so this route crosses the international boundary into neighboring waters. Confirm the border crossing is intended, and verify every leg against the chart.`
+  }
 }
 
 /** Merge the channel notes onto the safety-check flags and order them. Exported for the seam tests. */
