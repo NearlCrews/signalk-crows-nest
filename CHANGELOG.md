@@ -19,10 +19,13 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Single-sourced several duplicated values: the ActiveCaptain point-of-interest
   base URL, the route-draft synthetic route id, and the OpenSeaMap two-tag name
   lookup each now live in one place.
-- Reduced per-call work on hot paths: the channel router builds its decimation
-  input in one pre-sized pass instead of three, the scanline rasterizer reuses a
-  single row buffer, and the notification-path and bbox-debounce sanitizers
-  hoist their regexes to module scope.
+- Reduced per-call work on several paths: the channel router builds its
+  decimation input in one pre-sized pass instead of three and propagates each
+  charted band's decision over only the cells it touched, the scanline
+  rasterizer reuses one row buffer, the OpenSeaMap detail tags are read once per
+  fetch and shared by the HTML and structured renderers, and the
+  notification-path and bbox-debounce sanitizers hoist their regexes to module
+  scope.
 - Removed the unused open-polyline coastline helpers from the route-draft leg
   geometry, left over after the land check moved to the vector-tile water
   outline.
@@ -35,6 +38,10 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   sighted and screen-reader users.
 - The configuration panel cancels its in-flight unit-preference requests on
   unmount, and rejects a non-object status response instead of committing it.
+- The route-draft default closest-hauled tacking angle is now 45 degrees off the
+  true wind, a realistic cruising pointing angle, rather than 100 degrees, which
+  had the model add tacks on legs a normal vessel would lay. It stays
+  user-configurable per vessel.
 
 <a id="v0100"></a>
 
