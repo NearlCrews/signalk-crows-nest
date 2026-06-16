@@ -56,11 +56,14 @@ const CORRIDOR_HALF_WIDTH_METERS = 0.25 * METERS_PER_NAUTICAL_MILE
  * the worldwide check runs a bounded set of upstream queries after it (each
  * Overpass query is itself capped, see the OpenSeaMap provider), so this leaves
  * room for the LLM plus a dense route's checked legs to finish rather than degrade
- * to an honest "not checked". It stays under the calling Binnacle webapp's own
- * request timeout (35 s), which must remain the larger of the two so the server
- * returns its result before the client gives up.
+ * to an honest "not checked". A channel-routed track that follows a winding river
+ * can run to fifty-plus legs, whose per-leg charted-depth checks need this much
+ * budget to complete; it is a ceiling, so a short route still returns quickly. It
+ * stays under the calling Binnacle webapp's own request timeout (55 s), which must
+ * remain the larger of the two so the server returns its result before the client
+ * gives up.
  */
-const REQUEST_DEADLINE_MS = 30_000
+const REQUEST_DEADLINE_MS = 50_000
 
 /** Output-token ceiling sized for a worst-case schema-conformant draft (waypoints, names, and a note). */
 const MAX_OUTPUT_TOKENS = 1500
