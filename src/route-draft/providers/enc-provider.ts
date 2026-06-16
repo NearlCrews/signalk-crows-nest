@@ -90,7 +90,7 @@ const HAZARD_LAYERS: readonly EncLayerKey[] = ['wreck', 'obstruction', 'rock']
 export interface EncProviderDeps {
   /** The ENC Direct client. Passed through to `queryChartedAreas` and `client.queryLayer`. */
   client: EncDirectClient
-  /** The charted depth-area and land-area query (one bounded call per leg per band). */
+  /** The charted depth-area and land-area query (one bounded call per band, route-wide, shared across legs). */
   queryChartedAreas: QueryChartedAreas
   /** The route-corridor point-hazard scan. */
   scanRouteCorridor: ScanRouteCorridor
@@ -197,9 +197,9 @@ async function queryLegBands (
 }> {
   const depth: Array<{ band: ScaleBand, areas: EncAreaPolygon[] }> = []
   const land: Array<{ band: ScaleBand, areas: EncAreaPolygon[] }> = []
-  // One bounded query per band per leg, the bands issued concurrently rather
-  // than awaited one after another. queryChartedAreas issues the Depth_Area and
-  // Land_Area requests together, so this is one charted-area call per band.
+  // One bounded query per band for the given bbox (the whole route bbox, fetched once and shared across
+  // legs), the bands issued concurrently rather than awaited one after another. queryChartedAreas issues
+  // the Depth_Area and Land_Area requests together, so this is one charted-area call per band.
   // Promise.all preserves input order, so the result stays finest-band-first.
   const perBand = await Promise.all(
     bands.map(async (band) => ({ band, areas: await deps.queryChartedAreas(deps.client, { band, bbox, signal }) }))
@@ -209,6 +209,57 @@ async function queryLegBands (
     land.push({ band, areas: areas.landAreas })
   }
   return { depth, land }
+}
+
+/** Axis-aligned bounds of a polygon's rings, for the per-leg spatial filter over the route-wide fetch. */
+function areaBounds (rings: number[][][]): Bbox {
+  let north = -Infinity
+  let south = Infinity
+  let east = -Infinity
+  let west = Infinity
+  for (const ring of rings) {
+    for (const [lon, lat] of ring) {
+      if (lat > north) north = lat
+      if (lat < south) south = lat
+      if (lon > east) east = lon
+      if (lon < west) west = lon
+    }
+  }
+  return { north, south, east, west }
+}
+
+/** True when two bboxes overlap (touching counts). */
+function bboxesOverlap (a: Bbox, b: Bbox): boolean {
+  return a.west <= b.east && a.east >= b.west && a.south <= b.north && a.north >= b.south
+}
+
+/** A charted area with its precomputed bounds, for the route-wide-fetch spatial filter. */
+interface IndexedArea { area: EncAreaPolygon, bounds: Bbox }
+/** One band's depth and land areas, each with bounds, from the route-wide fetch. */
+interface IndexedBand { band: ScaleBand, depth: IndexedArea[], land: IndexedArea[] }
+
+/** Index the route-wide bands by precomputing each area's bounds, so per-leg filtering is cheap. */
+function indexBands (bands: {
+  depth: Array<{ band: ScaleBand, areas: EncAreaPolygon[] }>
+  land: Array<{ band: ScaleBand, areas: EncAreaPolygon[] }>
+}): IndexedBand[] {
+  // depth and land are parallel arrays keyed by the same bands in the same order.
+  return bands.depth.map(({ band, areas }, i) => ({
+    band,
+    depth: areas.map((area) => ({ area, bounds: areaBounds(area.rings) })),
+    land: bands.land[i].areas.map((area) => ({ area, bounds: areaBounds(area.rings) }))
+  }))
+}
+
+/** The indexed route-wide bands narrowed to one leg's bbox, in the queryLegBands shape the checks read. */
+function bandsForLeg (indexed: IndexedBand[], legBounds: Bbox): {
+  depth: Array<{ band: ScaleBand, areas: EncAreaPolygon[] }>
+  land: Array<{ band: ScaleBand, areas: EncAreaPolygon[] }>
+} {
+  return {
+    depth: indexed.map(({ band, depth }) => ({ band, areas: depth.filter((x) => bboxesOverlap(x.bounds, legBounds)).map((x) => x.area) })),
+    land: indexed.map(({ band, land }) => ({ band, areas: land.filter((x) => bboxesOverlap(x.bounds, legBounds)).map((x) => x.area) }))
+  }
 }
 
 /** Nearest approach, in meters, from any land-area ring vertex to the leg. */
@@ -424,6 +475,19 @@ function addStandoffFlag (
  * land, and hazards dimensions over the US ENC coverage envelope.
  */
 export function createEncProvider (deps: EncProviderDeps): LegSafetyProvider {
+  // Fetch the route's charted areas ONCE for the whole route bbox and filter per leg, instead of one
+  // charted-area query per band per leg, which dominated the safety-check time on a dense channel-routed
+  // track (fifty-plus legs). Memoized within this route; a rejection is shared, so a failed fetch degrades
+  // every leg to not-checked together, bounded by one query set rather than one per leg.
+  let routeAreas: Promise<IndexedBand[]> | undefined
+  const loadRouteAreas = (params: LegCheckParams): Promise<IndexedBand[]> => {
+    if (routeAreas === undefined) {
+      const standoffMeters = metersFromNauticalMiles(params.standoffNm)
+      const bbox = routeBbox(params.waypoints, standoffMeters)
+      routeAreas = queryLegBands(deps, params.bands, bbox, params.signal).then(indexBands)
+    }
+    return routeAreas
+  }
   return {
     id: ENC_PROVIDER_ID,
     capabilities: new Set<Dimension>(['depth', 'land', 'hazards']),
@@ -445,10 +509,10 @@ export function createEncProvider (deps: EncProviderDeps): LegSafetyProvider {
       const standoffMeters = metersFromNauticalMiles(params.standoffNm)
       const minimalSafetyContourMeters = params.draftMeters + params.safetyMarginMeters
       const flags: LegFlag[] = []
-      const bbox = legBbox(from, to, standoffMeters)
-      // Let a charted-area query failure throw: the orchestrator distinguishes a
-      // leg that ran from one that failed, and emits the degrade note.
-      const legBands = await queryLegBands(deps, params.bands, bbox, params.signal)
+      // Let a charted-area query failure throw: the orchestrator distinguishes a leg that ran from one
+      // that failed, and emits the degrade note. The route-wide fetch is shared and filtered to this leg.
+      const indexed = await loadRouteAreas(params)
+      const legBands = bandsForLeg(indexed, legBbox(from, to, standoffMeters))
 
       const legPath = legPolyline(from, to, spacingMeters)
       const crossedDepth = crossedAreas(legPath, legBands.depth)

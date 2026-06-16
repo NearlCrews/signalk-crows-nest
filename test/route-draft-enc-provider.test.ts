@@ -272,12 +272,15 @@ test('best band takes the shallower DRVAL1 where bands overlap', async () => {
   assert.match(shallow!.message, /Harbor band/)
 })
 
-test('issues exactly one charted-area query per leg per band', async () => {
+test('fetches the charted areas once per band for the whole route, shared across legs', async () => {
   const { deps, chartedCalls } = makeDeps(() => ({ depthAreas: [depthArea(10)], landAreas: [] }))
-  // One leg checked at two bands: two charted-area queries.
+  const MID: Position = { latitude: 40.5, longitude: -74.05 }
+  // Two legs at two bands resolve to one charted-area query PER BAND for the route, not one per leg.
   const provider = createEncProvider(deps)
-  await provider.checkLeg(0, FROM, TO, params({ bands: ['harbour', 'coastal'] }))
-  assert.equal(chartedCalls.length, 2, 'expected 1 leg x 2 bands = 2 charted-area queries')
+  const p = params({ bands: ['harbour', 'coastal'], waypoints: [FROM, MID, TO] })
+  await provider.checkLeg(0, FROM, MID, p)
+  await provider.checkLeg(1, MID, TO, p)
+  assert.equal(chartedCalls.length, 2, 'one route-wide fetch per band, shared across both legs (not per leg)')
   assert.equal(chartedCalls.filter((c) => c.band === 'harbour').length, 1)
   assert.equal(chartedCalls.filter((c) => c.band === 'coastal').length, 1)
 })
