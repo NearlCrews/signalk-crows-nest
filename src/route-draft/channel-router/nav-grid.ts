@@ -137,6 +137,10 @@ export function buildNavGrid (params: NavGridParams): NavGrid {
   const contour = draftMeters + safetyMarginMeters
   const covered = new Uint8Array(cols * rows)
   const blocked = new Uint8Array(cols * rows)
+  // Cells that are charted LAND (ENC land, an ENC drying area, OSM land, or a tile-water island hole),
+  // the obstacles the full-resolution re-check tests a leg against. The navigable region is eroded one
+  // cell off these below, so the A* path keeps clearance from the shore.
+  const landMask = new Uint8Array(cols * rows)
   const overDeadline = (): boolean => deadlineMs !== undefined && Date.now() > deadlineMs
 
   // Rasterize the ENC bands FINEST FIRST. A Depth_Area marks coverage; it also blocks when its DRVAL1
@@ -151,11 +155,13 @@ export function buildNavGrid (params: NavGridParams): NavGrid {
     for (const area of band.depthAreas) {
       const drval1 = area.depthRange?.shallowMeters
       const tooShallow = drval1 === undefined || drval1 < contour
+      const drying = drval1 !== undefined && drval1 < 0
       if (fillPolygonCells(area.rings, colF, rowF, cols, rows, (i) => {
         bandTouched[i] = 1
         if (decidedByFinerBand[i] === 1) return
         covered[i] = 1
         if (tooShallow) blocked[i] = 1
+        if (drying) landMask[i] = 1
       }, deadlineMs)) {
         return emptyGrid(bbox)
       }
@@ -165,6 +171,7 @@ export function buildNavGrid (params: NavGridParams): NavGrid {
         bandTouched[i] = 1
         if (decidedByFinerBand[i] === 1) return
         blocked[i] = 1
+        landMask[i] = 1
       }, deadlineMs)) {
         return emptyGrid(bbox)
       }
@@ -183,8 +190,17 @@ export function buildNavGrid (params: NavGridParams): NavGrid {
     }
   }
   for (const poly of params.osmLand ?? []) {
-    if (fillPolygonCells(poly.rings, colF, rowF, cols, rows, (i) => { blocked[i] = 1 }, deadlineMs)) {
+    if (fillPolygonCells(poly.rings, colF, rowF, cols, rows, (i) => { blocked[i] = 1; landMask[i] = 1 }, deadlineMs)) {
       return emptyGrid(bbox)
+    }
+  }
+  // Tile-water island HOLES are land: the water fill excludes them by even-odd (so they are uncovered,
+  // not navigable), but they must also mark landMask so the route keeps clearance from a small island.
+  for (const poly of params.osmWater ?? []) {
+    for (let h = 1; h < poly.rings.length; h += 1) {
+      if (fillPolygonCells([poly.rings[h]], colF, rowF, cols, rows, (i) => { landMask[i] = 1 }, deadlineMs)) {
+        return emptyGrid(bbox)
+      }
     }
   }
 
@@ -192,6 +208,32 @@ export function buildNavGrid (params: NavGridParams): NavGrid {
   let hasWater = false
   for (let i = 0; i < navigable.length; i += 1) {
     if (covered[i] === 1 && blocked[i] === 0) { navigable[i] = 1; hasWater = true }
+  }
+
+  // One-cell land clearance: drop a navigable cell orthogonally adjacent to charted land (the landMask),
+  // so the A* path stays a cell off the shore and a straight leg between two navigable cell centers
+  // cannot clip a sub-cell land sliver the full-resolution re-check would reject; it also absorbs small
+  // per-call differences in the ENC areas. The trade-off is that a channel narrower than about three
+  // cells is pinched to nothing here.
+  if (hasWater) {
+    const navBeforeErode = navigable.slice()
+    hasWater = false
+    for (let r = 0; r < rows; r += 1) {
+      if (overDeadline()) return emptyGrid(bbox)
+      for (let c = 0; c < cols; c += 1) {
+        const i = r * cols + c
+        if (navBeforeErode[i] === 0) continue
+        let nearLand = false
+        for (const [dc, dr] of ORTHO_NEIGHBORS) {
+          const nc = c + dc
+          const nr = r + dr
+          if (nc < 0 || nc >= cols || nr < 0 || nr >= rows) continue
+          if (landMask[nr * cols + nc] === 1) { nearLand = true; break }
+        }
+        if (nearLand) navigable[i] = 0
+        else hasWater = true
+      }
+    }
   }
 
   // Optimize corridor: restrict to cells within halfWidthMeters of the drawn polyline (planar distance).
