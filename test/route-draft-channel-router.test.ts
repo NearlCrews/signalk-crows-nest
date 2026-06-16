@@ -177,6 +177,15 @@ test('routeStaysOnWater rejects a leg that crosses a tile-water island hole (exa
   assert.equal(routeStaysOnWater(around, NO_ENC, water, SPACING), true)
 })
 
+test('routeStaysOnWater tolerates a sub-tolerance off-water clip but rejects a longer one', () => {
+  // A leg clipping a ~11 km island hole: strict (tolerance 0) rejects it, a generous tolerance keeps
+  // the route since the clip is below the grid resolution and the per-leg safety check flags real land.
+  const water: TileWater = { water: [ringWithHole(0, 0, 1, 1, 0.45, 0.45, 0.55, 0.55)] }
+  const across: Position[] = [{ latitude: 0.5, longitude: 0.1 }, { latitude: 0.5, longitude: 0.9 }]
+  assert.equal(routeStaysOnWater(across, NO_ENC, water, SPACING, 0), false)
+  assert.equal(routeStaysOnWater(across, NO_ENC, water, SPACING, 30000), true)
+})
+
 test('routeStaysOnWater rejects a leg that leaves the tile water (sampled coast)', () => {
   const water: TileWater = { water: [ring(0, 0, 1, 0.3)] } // water only in the south band
   const leaves: Position[] = [{ latitude: 0.1, longitude: 0.1 }, { latitude: 0.9, longitude: 0.9 }]

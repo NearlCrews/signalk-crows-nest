@@ -26,7 +26,7 @@ import type { ScaleBand } from '../../shared/scale-band.js'
 import type { Bbox, Logger, Position } from '../../shared/types.js'
 import { METERS_PER_NAUTICAL_MILE } from '../../shared/length.js'
 import { distanceMeters, sampleRhumbLeg } from '../../geo/position-utilities.js'
-import { pointInRings, routeBbox, segmentCrossesRings } from '../leg-geometry.js'
+import { pointInRings, routeBbox } from '../leg-geometry.js'
 import type { QueryChartedAreas } from '../safety-check.js'
 import { buildNavGrid, resolveGridSize, type NavGrid } from './nav-grid.js'
 import { findPath } from './astar.js'
@@ -182,9 +182,12 @@ export async function routeChannel (
 
   const contour = req.draftMeters + req.safetyMarginMeters
   const sampleSpacing = Math.min(grid.cellMeters / 2, SAMPLE_CAP_METERS)
-  const landRings = landRingsOf(enc, water)
+  // A leg may run off water for up to one cell: a sub-cell clip is below the grid's resolution, so it
+  // is tolerated here (the per-leg safety check still flags any real land crossing) rather than
+  // discarding the whole route over a sliver the grid cannot resolve.
+  const clipTolerance = grid.cellMeters
   const legSafe = (a: Position, b: Position): boolean =>
-    legStaysOnWater(a, b, enc, water, sampleSpacing, landRings)
+    legStaysOnWater(a, b, enc, water, sampleSpacing, clipTolerance)
 
   // Simplify the A* centerline to turning points, then repair: a simplified leg that
   // would cross land or leave water (an RDP chord cutting a concave shore) is replaced by
@@ -226,22 +229,14 @@ export async function routeChannel (
   const interior = routeCells.slice(1, -1).map(([c, r]) => grid.cellCenter(c, r))
   const waypoints = [startPos, ...interior, goalPos]
 
-  if (!routeStaysOnWater(waypoints, enc, water, sampleSpacing, req.deadlineMs)) {
+  if (!routeStaysOnWater(waypoints, enc, water, sampleSpacing, clipTolerance, req.deadlineMs)) {
     if (deps.logger !== undefined) {
       const overDeadline = req.deadlineMs !== undefined && Date.now() > req.deadlineMs
-      const reCheckLandRings = landRingsOf(enc, water)
-      let detail = 'no failing leg found'
-      for (let i = 0; i + 1 < waypoints.length; i += 1) {
-        const a = waypoints[i]
-        const b = waypoints[i + 1]
-        const xCross = reCheckLandRings.some((rings) => segmentCrossesRings([a.longitude, a.latitude], [b.longitude, b.latitude], rings))
-        let sampledOff = false
-        for (const s of [a, ...sampleRhumbLeg(a, b, Math.max(1, sampleSpacing)), b]) {
-          if (!navigableAt(s.longitude, s.latitude, enc, water)) { sampledOff = true; break }
-        }
-        if (xCross || sampledOff) { detail = `leg ${i}/${waypoints.length - 1} exactCross=${xCross} sampledOff=${sampledOff}`; break }
+      let failLeg = -1
+      for (let i = 0; i + 1 < waypoints.length && failLeg < 0; i += 1) {
+        if (!legStaysOnWater(waypoints[i], waypoints[i + 1], enc, water, sampleSpacing, clipTolerance)) failLeg = i
       }
-      deps.logger.debug(`channel-router diag: decline land-leg at re-check, ${waypoints.length}wp, overDeadline=${overDeadline}, ${detail} (${elapsed()}ms)`)
+      deps.logger.debug(`channel-router diag: decline land-leg at re-check, ${waypoints.length}wp, overDeadline=${overDeadline}, failingLeg=${failLeg}/${waypoints.length - 1}, tolerance=${Math.round(clipTolerance)}m (${elapsed()}ms)`)
     }
     return { ok: false, reason: 'land-leg' }
   }
@@ -414,23 +409,6 @@ function inEncDeep (lon: number, lat: number, charted: ChartedAreas, contour: nu
 }
 
 /**
- * The land rings a route must not cross, for the EXACT crossing test: ENC `Land_Area`
- * polygons, ENC drying areas (charted `DRVAL1 < 0`, treated as land), and the HOLE
- * rings of tile-water polygons (islands fully within a tile). Tile-water OUTER rings
- * are deliberately NOT included: they include the tile-clip seam, so an exact test
- * against them would false-positive on a leg crossing a tile boundary; the coast and
- * seam islands are caught by the sampled navigability test instead. Built once per
- * route so a caller checking many legs does not rebuild it.
- */
-function landRingsOf (charted: ChartedAreas, water: TileWater): number[][][][] {
-  const drying = charted.depthAreas
-    .filter((a) => { const d = a.depthRange?.shallowMeters; return d !== undefined && d < 0 })
-    .map((a) => a.rings)
-  const islandHoles = water.water.filter((p) => p.rings.length > 1).map((p) => p.rings.slice(1))
-  return [...charted.landAreas.map((a) => a.rings), ...drying, ...islandHoles]
-}
-
-/**
  * Whether a point is ON NAVIGABLE WATER for the re-check. The re-check verifies the route stays on
  * water and does not cross land or leave the water; it does NOT require the water to be deep enough,
  * because depth is the safety check's job (it flags every charted-shallow leg with its DRVAL1 and
@@ -454,24 +432,27 @@ function navigableAt (lon: number, lat: number, charted: ChartedAreas, water: Ti
 }
 
 /**
- * True when a single final leg stays on navigable water: it crosses no exact land ring
- * (ENC land, ENC drying, a tile-water island hole), and every sampled point along it is
- * navigable at full resolution. The exact test catches a thin island the sampling could
- * straddle; the sampled test catches a real coast or a tile-seam island (where the
- * point is outside all water) and treats a tile boundary as in-water.
+ * True when a single final leg stays on navigable water. The leg is sampled, and it fails only when it
+ * runs OFF water (ENC land, an ENC drying area, a tile-water island hole, or outside all water) for a
+ * CONTINUOUS stretch longer than `toleranceMeters`. A shorter off-water run is a sub-cell clip below
+ * the grid's resolution: it is tolerated here and left to the per-leg safety check to flag any real
+ * land crossing, rather than discarding an otherwise-good water route over a sliver the grid cannot
+ * resolve. A pure cell-resolution router cannot keep every leg exactly off a sub-cell shoreline jut.
  */
 function legStaysOnWater (
   a: Position, b: Position, charted: ChartedAreas, water: TileWater,
-  sampleSpacingMeters: number, landRings: number[][][][]
+  sampleSpacingMeters: number, toleranceMeters: number
 ): boolean {
-  const aPt = [a.longitude, a.latitude]
-  const bPt = [b.longitude, b.latitude]
-  if (landRings.some((rings) => segmentCrossesRings(aPt, bPt, rings))) return false
-  if (!navigableAt(a.longitude, a.latitude, charted, water)) return false
-  for (const s of sampleRhumbLeg(a, b, Math.max(1, sampleSpacingMeters))) {
-    if (!navigableAt(s.longitude, s.latitude, charted, water)) return false
+  const spacing = Math.max(1, sampleSpacingMeters)
+  let offRun = 0
+  const ok = (p: Position): boolean => {
+    if (navigableAt(p.longitude, p.latitude, charted, water)) { offRun = 0; return true }
+    offRun += 1
+    return offRun * spacing <= toleranceMeters
   }
-  return navigableAt(b.longitude, b.latitude, charted, water)
+  if (!ok(a)) return false
+  for (const s of sampleRhumbLeg(a, b, spacing)) if (!ok(s)) return false
+  return ok(b)
 }
 
 /**
@@ -484,14 +465,14 @@ export function routeStaysOnWater (
   charted: ChartedAreas,
   water: TileWater,
   sampleSpacingMeters: number,
+  toleranceMeters = 0,
   deadlineMs?: number
 ): boolean {
-  const landRings = landRingsOf(charted, water)
   for (let i = 0; i + 1 < waypoints.length; i += 1) {
     // Bail to a decline if the synchronous re-check runs past the deadline, rather than
     // overrunning into the safety check's budget. A declined route is the safe outcome.
     if (deadlineMs !== undefined && Date.now() > deadlineMs) return false
-    if (!legStaysOnWater(waypoints[i], waypoints[i + 1], charted, water, sampleSpacingMeters, landRings)) {
+    if (!legStaysOnWater(waypoints[i], waypoints[i + 1], charted, water, sampleSpacingMeters, toleranceMeters)) {
       return false
     }
   }
