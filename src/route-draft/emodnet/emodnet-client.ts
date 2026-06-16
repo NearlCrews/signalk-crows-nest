@@ -58,8 +58,13 @@ export function createEmodnetClient (deps: EmodnetClientDeps = {}): EmodnetClien
         throw new Error('EMODnet depth_profile returned non-JSON')
       }
       if (!Array.isArray(raw)) throw new Error('EMODnet depth_profile did not return an array')
-      const samples = raw.filter(isFiniteNumber)
-      const hadNull = raw.some((v) => v === null)
+      // One pass collects the finite samples and notes any null gap, rather than two traversals.
+      let hadNull = false
+      const samples: number[] = []
+      for (const v of raw) {
+        if (v === null) hadNull = true
+        else if (isFiniteNumber(v)) samples.push(v)
+      }
       return { samples, hadGap: hadNull && samples.length > 0 }
     }
   }

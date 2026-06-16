@@ -73,7 +73,12 @@ export const MIN_SAFETY_MARGIN_METERS = 0
 /** Ceiling on the safety margin, in meters. */
 export const MAX_SAFETY_MARGIN_METERS = 20
 
-/** Default closest-hauled tacking angle, in degrees off the true wind. */
+/**
+ * Default closest-hauled tacking angle, in degrees off the true wind: the prompt
+ * tells the model that a leg within this angle of dead upwind needs explicit
+ * tacks (see endpoint.ts). User-configurable per vessel in the Route drafting
+ * panel card, so this is only the starting value.
+ */
 export const DEFAULT_TACKING_ANGLE_DEG = 100
 
 /** Floor on the tacking angle, in degrees. Below this no real hull points. */
@@ -180,7 +185,7 @@ export const ROUTE_DRAFT_CONFIG_KEYS_WITNESS: RouteDraftKeysOnWire = true
 
 /** Resolve the stored propulsion value, falling back to the default on anything unknown. */
 export function resolvePropulsion (raw: unknown): RouteDraftPropulsion {
-  return raw === 'sail' || raw === 'power' || raw === 'motorsail' ? raw : DEFAULT_PROPULSION
+  return PROPULSION_CHOICES.find((choice) => choice.value === raw)?.value ?? DEFAULT_PROPULSION
 }
 
 /**

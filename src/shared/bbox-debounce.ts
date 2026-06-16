@@ -157,11 +157,15 @@ export interface BboxDebounceCache<T> {
  * bbox-plus-remainder. Backslashes inside the discriminator are escaped first
  * to keep the escaping unambiguous.
  */
+// Hoisted so the per-refresh `bboxKey` does not rebuild the escape patterns each call.
+const EXTRA_KEY_BACKSLASH = /\\/g
+const EXTRA_KEY_PIPE = /\|/g
+
 function bboxKey (bbox: Bbox, extraKey?: string): string {
   const base =
     `${bbox.south.toFixed(4)}_${bbox.west.toFixed(4)}_${bbox.north.toFixed(4)}_${bbox.east.toFixed(4)}`
   if (extraKey === undefined) return base
-  const escaped = extraKey.replace(/\\/g, '\\\\').replace(/\|/g, '\\|')
+  const escaped = extraKey.replace(EXTRA_KEY_BACKSLASH, '\\\\').replace(EXTRA_KEY_PIPE, '\\|')
   return `${base}|${escaped}`
 }
 

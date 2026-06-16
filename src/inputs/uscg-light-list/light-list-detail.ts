@@ -59,7 +59,7 @@ function humanizeColor (token: string): string {
 export function humanizeLightChar (raw: string): string {
   const tokens = raw.trim().split(/\s+/)
   const parts: string[] = []
-  if (tokens.length > 0 && tokens[0] !== '') {
+  if (tokens[0] !== '') {
     parts.push(humanizeLightCharacter(tokens[0]))
   }
   if (tokens.length > 1) {

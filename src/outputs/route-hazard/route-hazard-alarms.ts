@@ -24,7 +24,7 @@
 
 import { emitNotification, type NotificationValue } from '../../shared/notification-path.js'
 import { createNotificationTracker, type NotificationTrackerApp } from '../../shared/notification-tracker.js'
-import { formatMeters } from '../../shared/bridge-clearance.js'
+import { formatClearanceMeters } from '../../shared/bridge-clearance.js'
 import { METERS_PER_KM } from '../../shared/length.js'
 import { toFiniteNumber } from '../../shared/numbers.js'
 import { MINUTES_PER_HOUR, SECONDS_PER_MINUTE } from '../../shared/time.js'
@@ -155,9 +155,9 @@ export function createRouteHazardAlarms (app: RouteAlarmApp): RouteHazardAlarms 
     if (verdict === undefined) {
       return base
     }
-    const clearance = formatMeters(verdict.clearanceMeters)
-    const airDraft = formatMeters(verdict.airDraftMeters)
-    const margin = formatMeters(verdict.marginMeters)
+    const clearance = formatClearanceMeters(verdict.clearanceMeters)
+    const airDraft = formatClearanceMeters(verdict.airDraftMeters)
+    const margin = formatClearanceMeters(verdict.marginMeters)
     return `${base}: clearance ${clearance} m is at or below your air draft ${airDraft} m (+${margin} m margin)`
   }
 
@@ -180,6 +180,12 @@ export function createRouteHazardAlarms (app: RouteAlarmApp): RouteHazardAlarms 
     corridorPois: CorridorPoi[],
     tooLow: ReadonlyMap<string, BridgeClearanceVerdict> = NO_CLEARANCE_VERDICTS
   ): void {
+    // No route ahead: clear any still-active alarm and skip the per-tick map
+    // allocation, mirroring the proximity alarm's empty-list guard.
+    if (corridorPois.length === 0) {
+      tracker.clearStale([])
+      return
+    }
     // The points flagged on this tick, keyed by id. The route-corridor scan
     // already deduplicates by id, but a defensive Map keeps the entry-and-exit
     // diff sound even if it did not.

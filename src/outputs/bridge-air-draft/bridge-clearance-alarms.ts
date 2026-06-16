@@ -27,7 +27,7 @@
 
 import { emitNotification, type NotificationValue } from '../../shared/notification-path.js'
 import { createNotificationTracker, type NotificationTrackerApp } from '../../shared/notification-tracker.js'
-import { bridgeBlocksVessel, formatMeters } from '../../shared/bridge-clearance.js'
+import { bridgeBlocksVessel, formatClearanceMeters } from '../../shared/bridge-clearance.js'
 import { hysteresisThreshold } from '../../shared/proximity-radius.js'
 import { distanceMeters } from '../../geo/position-utilities.js'
 import type { BridgeClearanceResolver } from './bridge-clearance-resolver.js'
@@ -132,15 +132,15 @@ export function createBridgeClearanceAlarms (
       state: 'alarm',
       method: ['visual', 'sound'],
       message:
-        `Bridge "${name}" clearance ${formatMeters(clearanceMeters)} m is at or below ` +
-        `your air draft ${formatMeters(airDraftMeters)} m (+${formatMeters(marginMeters)} m margin), ` +
+        `Bridge "${name}" clearance ${formatClearanceMeters(clearanceMeters)} m is at or below ` +
+        `your air draft ${formatClearanceMeters(airDraftMeters)} m (+${formatClearanceMeters(marginMeters)} m margin), ` +
         `${Math.round(distance)} m away`,
       createdAt: raisedAt
     }
     emitNotification(app, NOTIFICATION_PATH_PREFIX, poiId, value, SOURCE_SUFFIX)
     app.debug(
       `Bridge clearance alarm raised for bridge ${poiId} ("${name}"): ` +
-      `clearance ${formatMeters(clearanceMeters)} m vs air draft ${formatMeters(airDraftMeters)} m ` +
+      `clearance ${formatClearanceMeters(clearanceMeters)} m vs air draft ${formatClearanceMeters(airDraftMeters)} m ` +
       `at ${Math.round(distance)} m`
     )
   }
@@ -150,7 +150,7 @@ export function createBridgeClearanceAlarms (
     const available = airDraftMeters !== null
     if (available !== airDraftAvailable) {
       app.debug(airDraftMeters !== null
-        ? `Bridge air-draft check active: comparing bridge clearances against ${formatMeters(airDraftMeters)} m air draft`
+        ? `Bridge air-draft check active: comparing bridge clearances against ${formatClearanceMeters(airDraftMeters)} m air draft`
         : 'Bridge air-draft check inert: no design.airHeight and no configured fallback air draft')
       airDraftAvailable = available
     }

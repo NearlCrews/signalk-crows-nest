@@ -489,7 +489,7 @@ async function runLeg (
       logger?.error(`leg ${leg} ${provider.id} charted-area query failed: ${String(error)}`)
       return {
         provider,
-        flags: [{ leg, kind: 'other', message: 'depth not checked for this leg: charted query failed' } as LegFlag]
+        flags: [{ leg, kind: 'other', message: 'depth not checked for this leg: charted query failed' }]
       }
     }
   }))

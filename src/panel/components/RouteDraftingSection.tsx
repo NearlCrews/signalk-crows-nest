@@ -138,7 +138,7 @@ export default memo(function RouteDraftingSection ({ state, dispatch }: Props): 
         <div style={S.labelledInputRow}>
           <span style={S.label}>Propulsion</span>
           <SegmentedControl
-            legend='Vessel propulsion'
+            legend='Propulsion'
             choices={PROPULSION_CHOICES}
             value={config.routeDraftPropulsion}
             onChange={(propulsion) => dispatch({ type: 'setRouteDraftPropulsion', propulsion })}

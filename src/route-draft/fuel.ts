@@ -185,7 +185,9 @@ export function estimateFuel (
   if (fuelAboardLiters !== undefined) {
     estimate.aboardL = fuelAboardLiters
     // Hold back the reserve before comparing, then express the surplus or
-    // shortfall as a percent of need. An estimate, never a guarantee.
+    // shortfall as a percent of need. The clamp is defensive: callers pass a
+    // normalized config, but the fuel math must never see an out-of-range
+    // reserve. An estimate, never a guarantee.
     const usableAboard = fuelAboardLiters * (1 - clampNumber(reservePercent, 0, 100, 0) / 100)
     if (neededL > 0) {
       estimate.marginPct = Math.round(((usableAboard - neededL) / neededL) * 100)

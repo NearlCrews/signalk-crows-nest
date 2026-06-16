@@ -7,6 +7,7 @@ import {
   type OpenRouterConfig
 } from '../src/route-draft/openrouter.js'
 import { jsonResponse, silentLog, withMockFetch } from './helpers.js'
+import { PLUGIN_ID, PLUGIN_REPO_URL } from '../src/shared/plugin-id.js'
 
 /**
  * A base client config. `random` is pinned so the (unexercised here) backoff
@@ -18,8 +19,8 @@ const baseConfig: OpenRouterConfig = {
   baseUrl: 'https://openrouter.test/api/v1',
   model: 'google/gemini-2.5-flash',
   requestTimeoutMs: 1000,
-  referer: 'https://github.com/NearlCrews/signalk-crows-nest',
-  title: 'signalk-crows-nest',
+  referer: PLUGIN_REPO_URL,
+  title: PLUGIN_ID,
   random: () => 0
 }
 

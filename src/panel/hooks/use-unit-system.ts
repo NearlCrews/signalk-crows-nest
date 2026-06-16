@@ -18,13 +18,23 @@ export function useUnitSystem (): UnitSystem {
   const [system, setSystem] = useState<UnitSystem>('metric')
 
   useEffect(() => {
+    const controller = new AbortController()
     let canceled = false
-    // fetchLengthUnitSystem never rejects: every failure resolves to metric,
-    // so the promise can be left unhandled.
-    fetchLengthUnitSystem((url, init) => fetch(url, init)).then((resolved) => {
+    // fetchLengthUnitSystem never rejects: every failure resolves to metric, so
+    // the promise can be left unhandled. The controller cancels the in-flight
+    // requests on unmount, merged with each request's own timeout signal.
+    fetchLengthUnitSystem((url, init) => fetch(url, {
+      ...init,
+      signal: init?.signal !== undefined
+        ? AbortSignal.any([init.signal, controller.signal])
+        : controller.signal
+    })).then((resolved) => {
       if (!canceled) setSystem(resolved)
     })
-    return () => { canceled = true }
+    return () => {
+      canceled = true
+      controller.abort()
+    }
   }, [])
 
   return system

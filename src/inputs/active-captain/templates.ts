@@ -137,8 +137,11 @@ export const CONTACT_PARTIAL = `<hr/>
     {{#if (safeWebsite website)}}\u{1F310} <a href="{{safeWebsite website}}" rel="noopener noreferrer">{{website}}</a><br/>{{/if}}
 </div>`
 
+/** Base URL of a public ActiveCaptain point-of-interest page, completed with an id. */
+export const ACTIVE_CAPTAIN_POI_BASE_URL = 'https://activecaptain.garmin.com/en-US/pois/'
+
 /** Review partial: aggregate rating and a link to the reviews page. */
-export const REVIEW_PARTIAL = '{{averageRating}}/5 \u{2B50} from <a href="https://activecaptain.garmin.com/en-US/pois/{{id}}/Reviews">({{numberOfReviews}} reviews)</a>'
+export const REVIEW_PARTIAL = `{{averageRating}}/5 \u{2B50} from <a href="${ACTIVE_CAPTAIN_POI_BASE_URL}{{id}}/Reviews">({{numberOfReviews}} reviews)</a>`
 
 /**
  * Featured-review partial: one highlighted user review. Context is the review

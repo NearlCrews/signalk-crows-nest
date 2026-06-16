@@ -43,8 +43,11 @@ export interface NotificationValue {
  * same notification path and silently overwrite each other's raise / clear
  * bookkeeping. A guaranteed `_` fallback prevents that.
  */
+/** Characters not safe in a SignalK notification path segment, hoisted so the per-tick `sanitizePoiId` does not rebuild it. */
+const UNSAFE_ID_CHARS = /[^A-Za-z0-9_-]/g
+
 export function sanitizePoiId (poiId: string): string {
-  const sanitized = poiId.replace(/[^A-Za-z0-9_-]/g, '_')
+  const sanitized = poiId.replace(UNSAFE_ID_CHARS, '_')
   return sanitized.length > 0 ? sanitized : '_'
 }
 

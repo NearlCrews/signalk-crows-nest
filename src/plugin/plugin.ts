@@ -286,7 +286,7 @@ export function createPlugin (
       if (mine === routeDraftGeneration) {
         routeDraftService = { llm, budget, enc, overpass, emodnet, tileWater, config: rd, models: modelsForRequest(rd.routeDraftModel) }
         routeDraftInitFailed = false
-        app.debug("Crow's Nest route drafting ready")
+        app.debug(`${PLUGIN_NAME} route drafting ready`)
       }
     }).catch((err) => {
       // Configured but failed to start: record it so the endpoint reports a start failure, not "not configured".
@@ -387,7 +387,7 @@ export function createPlugin (
       // Log the outputs that actually started, not merely the enabled ones, so
       // an output whose start() threw and was isolated by the registry is not
       // reported as started.
-      app.debug(`Crow's Nest started outputs: ${startedIds.join(', ') || '(none)'}`)
+      app.debug(`${PLUGIN_NAME} started outputs: ${startedIds.join(', ') || '(none)'}`)
 
       // The registry reports the enabled outputs whose start() threw and was
       // isolated, so the admin UI surfaces a plugin error rather than the bland
@@ -410,7 +410,7 @@ export function createPlugin (
           poiTypes: ensurePoiTypes(poiTypes, requiredTypes)
         })
         if (contributors.length > 0) {
-          app.debug(`Crow's Nest position monitor driving ${contributors.length} position-driven output(s)`)
+          app.debug(`${PLUGIN_NAME} position monitor driving ${contributors.length} position-driven output(s)`)
         }
       } catch (error) {
         // The position-driven outputs are started but, without the monitor,

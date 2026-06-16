@@ -69,7 +69,11 @@ export function useStatus (): UseStatusResult {
           ])
         })
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        const body = await response.json() as StatusSnapshot
+        const parsed: unknown = await response.json()
+        if (typeof parsed !== 'object' || parsed === null) {
+          throw new Error('status response was not a JSON object')
+        }
+        const body = parsed as StatusSnapshot
         if (!canceled.current) {
           // Skip the state update when the payload is byte-identical to the
           // last one committed, so a downstream useMemo keyed on `status`

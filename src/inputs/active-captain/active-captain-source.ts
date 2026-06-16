@@ -22,6 +22,7 @@ import { createPoiCache } from './poi-cache.js'
 import { createPoiStore } from './poi-store.js'
 import type { PoiStore } from './poi-store.js'
 import { parseApiDate, renderDescription } from './poi-detail-renderer.js'
+import { ACTIVE_CAPTAIN_POI_BASE_URL } from './templates.js'
 import { buildActiveCaptainSections } from './active-captain-sections.js'
 import { bridgeHeightToMeters } from './bridge-clearance.js'
 import { filterByRating } from './rating-filter.js'
@@ -44,12 +45,9 @@ import { ACTIVE_CAPTAIN_SOURCE_ID } from '../../shared/source-ids.js'
  */
 const ACTIVE_CAPTAIN_ATTRIBUTION = 'Data from Garmin ActiveCaptain'
 
-/** Public ActiveCaptain page for a point of interest, by id. */
-const POI_PAGE_URL_PREFIX = 'https://activecaptain.garmin.com/en-US/pois/'
-
 /** Build the public ActiveCaptain page URL for a point of interest id. */
-function poiPageUrl (id: string | number): string {
-  return `${POI_PAGE_URL_PREFIX}${id}`
+function poiPageUrl (id: string): string {
+  return `${ACTIVE_CAPTAIN_POI_BASE_URL}${id}`
 }
 
 /** HTTP status for a point of interest that does not exist. */

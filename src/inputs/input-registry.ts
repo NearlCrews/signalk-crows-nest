@@ -188,7 +188,7 @@ export function createInputRegistry (
           // recording: a fulfilled source records its own list fetch, a
           // rejected source records its own error, a timed-out source is
           // recorded as skipped.
-          results.forEach((result, index) => {
+          for (const [index, result] of results.entries()) {
             const sourceId = sourceIds[index]
             if (result.status === 'fulfilled') {
               if (result.value.kind === 'timeout') {
@@ -197,7 +197,7 @@ export function createInputRegistry (
                   sourceId,
                   `list request exceeded ${Math.round(perSourceListTimeoutMs / MS_PER_SECOND)}s; result will appear on next refresh`
                 )
-                return
+                continue
               }
               anyOk = true
               // A source that gated itself out (recordSkipped) returns []
@@ -229,7 +229,7 @@ export function createInputRegistry (
               context.status.recordError(
                 sourceId, `List from "${sourceId}" failed: ${String(result.reason)}`)
             }
-          })
+          }
           if (!anyOk && !anyTimeout) {
             throw new Error('Every POI source failed the list request')
           }
@@ -243,10 +243,13 @@ export function createInputRegistry (
           // Split on the FIRST hyphen only: a raw id (an OSM id such as
           // `node_987654`) can itself contain hyphens or underscores. The
           // shared splitter returns null for a leading or absent hyphen, which
-          // resolves to no source and the same "No source" error below.
+          // throws the same "No source" error as an unknown prefix below.
           const split = splitOnFirstSeparator(id, '-')
-          const source = split === null ? undefined : sources.get(split.prefix)
-          if (source === undefined || split === null) {
+          if (split === null) {
+            throw new Error(`No source for resource id "${id}"`)
+          }
+          const source = sources.get(split.prefix)
+          if (source === undefined) {
             throw new Error(`No source for resource id "${id}"`)
           }
           return await source.getDetails(split.remainder)

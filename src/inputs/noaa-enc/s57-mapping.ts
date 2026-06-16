@@ -275,7 +275,7 @@ export const LAYER_SK_ICON = 'hazard'
  * `day` is left undefined for the six-character form. Anything else (null,
  * non-string, wrong length, non-numeric digits) returns `undefined`.
  */
-export function parseSordat (raw: unknown): { year: number, month: number, day?: number } | undefined {
+function parseSordat (raw: unknown): { year: number, month: number, day?: number } | undefined {
   if (typeof raw !== 'string') return undefined
   const trimmed = raw.trim()
   if (trimmed.length !== 6 && trimmed.length !== 8) return undefined

@@ -70,7 +70,7 @@ function buildMethods (context: OutputContext): ResourceProviderMethods {
         app.setPluginError(message)
         throw error
       }
-      app.setPluginStatus(`${entities.length} point(s) of interest from the last search`)
+      app.setPluginStatus(`${entities.length} ${entities.length === 1 ? 'point' : 'points'} of interest from the last search`)
 
       const resources: Record<string, unknown> = {}
       for (const entity of entities) {

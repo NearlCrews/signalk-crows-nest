@@ -365,8 +365,10 @@ function dedupeSameSource (
     if (kept !== undefined) {
       // Collapse this duplicate into the kept survivor, folding its clearance
       // so the survivor keeps the most conservative clearance the pair
-      // reported. Only write a defined result, so a pair that both lack a
-      // clearance leaves the field absent rather than present-undefined.
+      // reported. `kept` was already pushed to `out` on the iteration that
+      // placed it, so this mutates the already-emitted survivor in place. Only
+      // write a defined result, so a pair that both lack a clearance leaves the
+      // field absent rather than present-undefined.
       const folded = minClearance(kept.verticalClearanceMeters, poi.verticalClearanceMeters)
       if (folded !== undefined) {
         kept.verticalClearanceMeters = folded

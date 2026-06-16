@@ -2,22 +2,16 @@
  * Planar leg-vs-area geometry shared by the route-draft safety providers.
  *
  * The ring helpers (closed rings, wrapping the last vertex to the first) serve
- * the ENC depth-area and land-area polygons. The open-polyline helpers added
- * for the OpenSeaMap coastline check do NOT wrap, because an OSM coastline way
- * is an open line, not a closed ring. Both share the segmentsCross and orient2D
- * primitives so the two cannot drift.
+ * the ENC depth-area and land-area polygons, sharing the segmentsCross and
+ * orient2D primitives.
  *
  * All inputs are GeoJSON [lon, lat] arrays (longitude is x, latitude is y),
  * matching the EncAreaPolygon ring shape. Tests at degree scale over short
  * coastal legs make a spherical correction unnecessary.
  */
 
-import { distanceMeters, initialBearingRad, positionToBbox, projectPointOntoLeg, rhumbDistanceMeters, sampleRhumbLeg, unionBbox } from '../geo/position-utilities.js'
-import { isFiniteNumber } from '../shared/numbers.js'
+import { distanceMeters, positionToBbox, sampleRhumbLeg, unionBbox } from '../geo/position-utilities.js'
 import type { Bbox, Position } from '../shared/types.js'
-
-/** Sub-points per coastline segment when sampling its approach to a leg, including both endpoints. */
-const DENSIFY_STEPS = 20
 
 /**
  * True when `[lon, lat]` lies inside the polygon `rings` (outer ring with holes)
@@ -134,50 +128,4 @@ export function routeBbox (waypoints: Position[], halfWidthMeters: number): Bbox
     bbox = unionBbox(bbox, positionToBbox(waypoints[i], halfWidthMeters))
   }
   return bbox
-}
-
-/** True when the leg [from, to] crosses any segment of any open polyline. */
-export function polylineCrossesLeg (from: Position, to: Position, lines: number[][][]): boolean {
-  const a = [from.longitude, from.latitude]
-  const b = [to.longitude, to.latitude]
-  for (const line of lines) {
-    for (let i = 0; i + 1 < line.length; i += 1) {
-      if (segmentsCross(a, b, line[i], line[i + 1])) return true
-    }
-  }
-  return false
-}
-
-/**
- * Nearest approach, in meters, from the leg to any open-polyline segment. Unlike
- * the ring helper this samples each coastline segment (densified to bounded
- * sub-points) so a long sparse segment passing close to the leg is not missed.
- * Returns undefined when no segment sub-point projects onto the on-leg span.
- */
-export function nearestPolylineApproachMeters (
-  from: Position, to: Position, lines: number[][][]
-): number | undefined {
-  const bearing = initialBearingRad(from, to)
-  const legLengthMeters = rhumbDistanceMeters(from, to)
-  let nearest: number | undefined
-  for (const line of lines) {
-    for (let i = 0; i + 1 < line.length; i += 1) {
-      const a = line[i]
-      const b = line[i + 1]
-      // Densify the segment into DENSIFY_STEPS + 1 points inline, so a long sparse segment passing
-      // close to the leg is not missed, without allocating a sub-point array per segment.
-      for (let s = 0; s <= DENSIFY_STEPS; s += 1) {
-        const t = s / DENSIFY_STEPS
-        const lon = a[0] + (b[0] - a[0]) * t
-        const lat = a[1] + (b[1] - a[1]) * t
-        const projection = projectPointOntoLeg(from, to, { latitude: lat, longitude: lon }, bearing)
-        const along = projection.alongTrackMeters
-        const cross = Math.abs(projection.crossTrackMeters)
-        if (!isFiniteNumber(along) || !isFiniteNumber(cross)) continue
-        if (along < 0 || along > legLengthMeters) continue
-        if (nearest === undefined || cross < nearest) nearest = cross
-      }
-    }
-  }
-  return nearest
 }

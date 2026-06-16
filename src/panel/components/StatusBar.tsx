@@ -127,8 +127,8 @@ export default memo(function StatusBar ({ status, lastUpdatedMs, onJumpToSource 
       {recentErrors.length > 0
         ? (
           <ul style={S.statusErrors} aria-label='Recent errors'>
-            {recentErrors.map(({ at, message, source }) => (
-              <li key={`${at}-${source ?? ''}-${message}`} style={S.statusErrorItem}>
+            {recentErrors.map(({ at, message, source }, index) => (
+              <li key={`${at}-${source ?? ''}-${message}-${index}`} style={S.statusErrorItem}>
                 <span style={S.statusErrorTime}>{relativeTime(at)}</span>
                 {source !== undefined && onJumpToSource !== undefined
                   ? (

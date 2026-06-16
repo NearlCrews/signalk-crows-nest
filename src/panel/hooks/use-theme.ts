@@ -14,8 +14,7 @@ export type ThemeChoice = 'auto' | 'light' | 'dark' | 'night'
 
 const STORAGE_KEY = 'ac-theme'
 
-const VALID_CHOICES: ReadonlyArray<ThemeChoice> = ['auto', 'light', 'dark', 'night']
-const VALID_CHOICES_SET: ReadonlySet<string> = new Set(VALID_CHOICES)
+const VALID_CHOICES_SET: ReadonlySet<string> = new Set<ThemeChoice>(['auto', 'light', 'dark', 'night'])
 
 function readStoredChoice (): ThemeChoice {
   try {

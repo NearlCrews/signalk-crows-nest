@@ -68,11 +68,12 @@ function toAreaPolygon (
   feature: EncFeature & { geometry: EncPolygonGeometry },
   depthRange?: DepthRange
 ): EncAreaPolygon {
-  return {
+  const area: EncAreaPolygon = {
     rings: feature.geometry.coordinates,
-    properties: feature.properties,
-    ...(depthRange !== undefined ? { depthRange } : {})
+    properties: feature.properties
   }
+  if (depthRange !== undefined) area.depthRange = depthRange
+  return area
 }
 
 /**

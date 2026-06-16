@@ -18,6 +18,7 @@
  */
 
 import { clampNumber, positiveFiniteNumber, roundTo, toFiniteNumber } from './numbers.js'
+import { boundedNumberSchema } from './config-schema.js'
 
 /** SignalK self path carrying the vessel air draft (height above waterline), in meters. */
 const SELF_AIR_HEIGHT_PATH = 'design.airHeight'
@@ -126,7 +127,7 @@ export function bridgeBlocksVessel (
  * route-hazard clearance clause so the two messages format clearances
  * identically.
  */
-export function formatMeters (meters: number): string {
+export function formatClearanceMeters (meters: number): string {
   return roundTo(meters, 1).toString()
 }
 
@@ -145,11 +146,5 @@ export function vesselAirDraftSchema (title: string): Record<string, unknown> {
 
 /** Config-schema fragment for the clearance-margin field, in meters. */
 export function clearanceMarginSchema (title: string): Record<string, unknown> {
-  return {
-    type: 'number',
-    title,
-    default: DEFAULT_CLEARANCE_MARGIN_METERS,
-    minimum: MIN_CLEARANCE_MARGIN_METERS,
-    maximum: MAX_CLEARANCE_MARGIN_METERS
-  }
+  return boundedNumberSchema(title, DEFAULT_CLEARANCE_MARGIN_METERS, MIN_CLEARANCE_MARGIN_METERS, MAX_CLEARANCE_MARGIN_METERS)
 }

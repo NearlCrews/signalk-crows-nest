@@ -61,7 +61,7 @@ import type {
   RoutePolyline
 } from '../../shared/types.js'
 import type { LegFlag, LegCheckParams, ScanRouteCorridor } from '../safety-check.js'
-import { hazardDedupeKey, OPENSEAMAP_PRECEDENCE, OPENSEAMAP_PROVIDER_ID } from './provider.js'
+import { hazardDedupeKey, OPENSEAMAP_PRECEDENCE, OPENSEAMAP_PROVIDER_ID, ROUTE_DRAFT_ID } from './provider.js'
 import type {
   Dimension,
   LegRef,
@@ -309,7 +309,7 @@ export function createOpenSeaMapProvider (deps: OpenSeaMapProviderDeps): LegSafe
       if (hazards.summaries.length === 0) return flags
 
       const route: RoutePolyline = {
-        routeId: 'route-draft',
+        routeId: ROUTE_DRAFT_ID,
         vesselPosition: null,
         waypoints
       }

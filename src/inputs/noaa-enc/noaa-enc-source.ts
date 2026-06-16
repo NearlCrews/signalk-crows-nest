@@ -96,14 +96,17 @@ function featureObjectId (feature: EncFeature): number | undefined {
   return typeof fromProps === 'number' ? fromProps : undefined
 }
 
+/** The hazard layer keys a summary id can carry, the subset of EncLayerKey this source publishes. */
+const HAZARD_LAYER_KEYS = ['wreck', 'obstruction', 'rock'] as const
+
 /** Parse a summary id back into `(layerKey, objectId)` for a getById call. */
 function parseSummaryId (id: string): { layerKey: EncLayerKey, objectId: number } | undefined {
   const split = splitOnFirstUnderscore(id)
   if (split === null) return undefined
-  const layerKey = split.prefix as EncLayerKey
-  if (layerKey !== 'wreck' && layerKey !== 'obstruction' && layerKey !== 'rock') {
-    return undefined
-  }
+  // Validate the prefix positively so it is narrowed by the find, never cast unchecked: a future
+  // EncLayerKey member is then not silently admitted as a hazard layer here.
+  const layerKey = HAZARD_LAYER_KEYS.find((key) => key === split.prefix)
+  if (layerKey === undefined) return undefined
   const objectId = Number.parseInt(split.remainder, 10)
   return Number.isFinite(objectId) ? { layerKey, objectId } : undefined
 }

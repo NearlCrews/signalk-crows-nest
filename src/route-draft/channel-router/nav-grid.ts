@@ -14,7 +14,7 @@ const MAX_CELL_METERS = 250
 /** Check the deadline this often during the synchronous passes. */
 const DEADLINE_CHECK_CELLS = 8192
 /** Orthogonal neighbor offsets for the clearance BFS, hoisted so the loop does not rebuild them per cell. */
-const ORTHO_NEIGHBORS: ReadonlyArray<readonly [number, number]> = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+export const ORTHO_NEIGHBORS: ReadonlyArray<readonly [number, number]> = [[1, 0], [-1, 0], [0, 1], [0, -1]]
 
 /** A polygon as GeoJSON `[lon, lat]` rings (outer first, then holes); the shape both sources share. */
 export interface RingPolygon {
@@ -323,10 +323,12 @@ function fillPolygonCells (
   }
   rMin = Math.max(0, rMin)
   rMax = Math.min(rows - 1, rMax)
+  // Reused across rows (cleared each iteration) so the scanline does not allocate a fresh array per row.
+  const xs: number[] = []
   for (let row = rMin; row <= rMax; row += 1) {
     if (((row - rMin) & 255) === 0 && deadlineMs !== undefined && Date.now() > deadlineMs) return true
     const y = row + 0.5
-    const xs: number[] = []
+    xs.length = 0
     for (const [x0, y0, x1, y1] of edges) {
       if ((y0 > y) === (y1 > y)) continue
       xs.push(x0 + ((y - y0) / (y1 - y0)) * (x1 - x0))

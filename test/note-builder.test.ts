@@ -6,12 +6,11 @@ import {
   type NoteResourceInput
 } from '../src/outputs/notes-resource/note-builder.js'
 import { NORMALIZED_DETAIL_SCHEMA_VERSION } from '../src/shared/normalized-detail.js'
+import { PLUGIN_ID, PLUGIN_REPO_URL } from '../src/shared/plugin-id.js'
 
 const SAMPLE_URL = 'https://activecaptain.garmin.com/en-US/pois/7'
 const SAMPLE_SOURCE = 'activecaptain'
 const SAMPLE_ATTRIBUTION = 'Data from Garmin ActiveCaptain'
-const PLUGIN_ID = 'signalk-crows-nest'
-const PLUGIN_REPO_URL = 'https://github.com/NearlCrews/signalk-crows-nest'
 
 /** Build a NoteResourceInput for the fixture POI, with overrides merged on top. */
 function input (overrides: Partial<NoteResourceInput> = {}): NoteResourceInput {

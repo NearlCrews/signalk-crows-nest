@@ -68,7 +68,7 @@ import type {
   QueryChartedAreas,
   ScanRouteCorridor
 } from '../safety-check.js'
-import { ENC_PRECEDENCE, ENC_PROVIDER_ID, hazardDedupeKey } from './provider.js'
+import { ENC_PRECEDENCE, ENC_PROVIDER_ID, hazardDedupeKey, ROUTE_DRAFT_ID } from './provider.js'
 import type {
   Dimension,
   LegRef,
@@ -558,7 +558,7 @@ export function createEncProvider (deps: EncProviderDeps): LegSafetyProvider {
       if (hazards.summaries.length === 0) return flags
 
       const route: RoutePolyline = {
-        routeId: 'route-draft',
+        routeId: ROUTE_DRAFT_ID,
         vesselPosition: null,
         waypoints
       }

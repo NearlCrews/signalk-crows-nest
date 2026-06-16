@@ -101,6 +101,9 @@ function parseFeature (
     source: USCG_LIGHT_LIST_SOURCE_ID,
     inactive: isWireTruthy(properties.INACTIVE)
   }
+  // aidType is read above for the name fallback; set it here so copyOptionalProperties
+  // does not read AID_TYPE a second time.
+  if (aidType !== undefined) record.aidType = aidType
   copyOptionalProperties(properties, record)
   return record
 }
@@ -143,8 +146,6 @@ function copyOptionalProperties (
   if (sound !== undefined) record.soundEmitterType = sound
   const racon = presentString(properties.RACON_MORSE_CHARACTER)
   if (racon !== undefined) record.racon = racon
-  const aidType = presentString(properties.AID_TYPE)
-  if (aidType !== undefined) record.aidType = aidType
   const aidSubtype = presentString(properties.AID_SUBTYPE)
   if (aidSubtype !== undefined) record.aidSubtype = aidSubtype
   const remark = presentString(properties.REMARK)

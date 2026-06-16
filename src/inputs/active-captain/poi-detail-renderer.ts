@@ -79,6 +79,9 @@ function isPositiveNumber (value: number | undefined): boolean {
   return typeof value === 'number' && value > 0
 }
 
+/** A zone-less ActiveCaptain timestamp (date and strict two-digit time, optional fractional tail). */
+const API_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/
+
 /**
  * Parse an ActiveCaptain timestamp. The API returns timestamps with no time
  * zone (for example "2025-08-11T18:51:51.442"), which JavaScript would read as
@@ -90,7 +93,7 @@ function isPositiveNumber (value: number | undefined): boolean {
  */
 export function parseApiDate (value: unknown): Date {
   let text = String(value)
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(text)) {
+  if (API_DATE_PATTERN.test(text)) {
     text += 'Z'
   }
   return new Date(text)

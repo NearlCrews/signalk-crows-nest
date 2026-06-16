@@ -3,8 +3,8 @@
  *
  * Extracted from `openseamap-source.ts` so the route-draft OpenSeaMap
  * provider can reuse the same mapping without a second copy. Besides
- * {@link toSummary}, the lower-level building blocks ({@link elementId},
- * {@link elementOsmUrl}, {@link elementName}, {@link attachClearance}, and the
+ * {@link toSummary}, the lower-level building blocks ({@link elementOsmUrl},
+ * {@link elementName}, {@link attachClearance}, and the
  * {@link OPENSEAMAP_ATTRIBUTION} credit) are exported individually so the
  * detail view and other consumers can reuse each piece.
  */
@@ -12,7 +12,7 @@
 import type { OverpassElement } from './overpass-client.js'
 import { elementMarking } from './seamark-mapping.js'
 import { parseOsmClearanceMeters } from './clearance.js'
-import { tagValue } from './openseamap-detail.js'
+import { nameFromTags } from './openseamap-detail.js'
 import type { PoiSummary, PoiType } from '../../shared/types.js'
 import { OPENSEAMAP_SOURCE_ID } from '../../shared/source-ids.js'
 
@@ -33,7 +33,7 @@ const OSM_ELEMENT_URL_PREFIX = 'https://www.openstreetmap.org/'
  * `/` inside the id silently splits the path and the resource 404s. The
  * underscore is URL-safe and the alarm path sanitizer already accepts it.
  */
-export function elementId (element: OverpassElement): string {
+function elementId (element: OverpassElement): string {
   return `${element.type}_${element.id}`
 }
 
@@ -49,7 +49,7 @@ export function elementOsmUrl (element: OverpassElement): string {
  * blank title, matching the detail renderer's header behaviour.
  */
 export function elementName (element: OverpassElement, type: PoiType): string {
-  const name = tagValue(element.tags, 'name') ?? tagValue(element.tags, 'seamark:name')
+  const name = nameFromTags(element.tags)
   return name ?? `Unnamed ${type.toLowerCase()}`
 }
 

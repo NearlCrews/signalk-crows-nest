@@ -50,6 +50,9 @@ export const ENC_PROVIDER_ID = 'enc'
 export const EMODNET_PROVIDER_ID = 'emodnet'
 export const OPENSEAMAP_PROVIDER_ID = 'openseamap'
 
+/** Synthetic route id the providers stamp on the RoutePolyline they hand the corridor scanner. */
+export const ROUTE_DRAFT_ID = 'route-draft'
+
 /** A covered leg with its global index and endpoints, handed to checkHazards. */
 export interface LegRef {
   leg: number

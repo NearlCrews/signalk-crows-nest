@@ -211,11 +211,11 @@ self-contained module registered on one line in `src/index.ts`.
     a collapsed depth note for any dimension no responsible provider verified,
     and synthesizes the route-level EMODnet awareness note when EMODnet was the
     effective depth provider on any leg; it states the charted value and never a
-    bare verdict), `leg-geometry.ts` (the planar ring and open-polyline
-    helpers shared by the providers: `pointInRings`, `segmentCrossesRings`, and
-    the open-polyline `polylineCrossesLeg` and `nearestPolylineApproachMeters`
-    coastline helpers, plus `legBbox`, `routeBbox`, `cumulativeLegStartMeters`,
-    and `legForAlongTrack`), and `endpoint.ts` (the `POST /api/route-draft`
+    bare verdict), `leg-geometry.ts` (the planar ring helpers shared by the
+    providers: `pointInRings`, `segmentCrossesRings`, `legBbox`, `routeBbox`,
+    `cumulativeLegStartMeters`, and `legForAlongTrack`; the coastline land check
+    reads the vector-tile water outline, not an open coastline polyline), and
+    `endpoint.ts` (the `POST /api/route-draft`
     handler that asks the model for turning waypoints, optionally re-routes the
     geometry through the channel router, then disposes every flag and number in
     owned code; the model proposes, this code disposes. It also serves the
@@ -455,8 +455,8 @@ self-contained module registered on one line in `src/index.ts`.
     formatter the route-draft ENC and OpenSeaMap standoff messages read),
     `bridge-clearance.ts` (the bridge air-draft comparison: `readVesselAirDraft`
     reads `design.airHeight` then a config fallback, `bridgeBlocksVessel` plus
-    the margin bounds and `clampClearanceMargin`, the `formatMeters` message
-    helper, and the config-fragment builders; pure and panel-bundle-safe),
+    the margin bounds and `clampClearanceMargin`, the `formatClearanceMeters`
+    message helper, and the config-fragment builders; pure and panel-bundle-safe),
     `proximity-radius.ts` (the vessel-proximity alarm geometry shared by the two
     proximity outputs, the two alarm modules, and the panel: the radius bounds,
     `clampProximityAlarmRadius`, `proximityRadiusSchema`,

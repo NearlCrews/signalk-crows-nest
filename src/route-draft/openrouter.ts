@@ -357,7 +357,7 @@ export class OpenRouterClient {
  * timeout abort) becomes a transient retry signal.
  */
 function transportRetry (args: CompleteArgs, err: unknown): Attempt {
-  if (args.abortSignal?.aborted === true) throw err
+  if (args.abortSignal?.aborted) throw err
   const message = err instanceof Error ? err.message : String(err)
   return {
     kind: 'retry',

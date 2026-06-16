@@ -117,6 +117,11 @@ function buildLightLine (tags: Readonly<Record<string, string>>): string | null 
   return parts.length > 0 ? parts.join(', ') : null
 }
 
+/** A display name for an element: its `name` tag, then `seamark:name`, else undefined. */
+export function nameFromTags (tags: Readonly<Record<string, string>>): string | undefined {
+  return tagValue(tags, 'name') ?? tagValue(tags, 'seamark:name')
+}
+
 /** Header label for an element: the type label plus its name, if any. */
 function buildHeader (tags: Readonly<Record<string, string>>): string {
   const type = tagValue(tags, 'seamark:type')?.toLowerCase()
@@ -124,7 +129,7 @@ function buildHeader (tags: Readonly<Record<string, string>>): string {
   const label = (type !== undefined ? seamarkLabel(type) : undefined) ??
     (leisure === 'marina' ? seamarkLabel('marina') : undefined) ??
     'OpenSeaMap feature'
-  const name = tagValue(tags, 'name') ?? tagValue(tags, 'seamark:name')
+  const name = nameFromTags(tags)
   return name !== undefined
     ? `${escapeHtml(label)}: ${escapeHtml(name)}`
     : escapeHtml(label)

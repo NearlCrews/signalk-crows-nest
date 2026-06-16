@@ -11,6 +11,31 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Renamed the bridge-clearance message formatter to `formatClearanceMeters`,
+  resolving a name collision with the shared `formatMeters` that formatted the
+  same value with a different number of decimals.
+- Single-sourced several duplicated values: the ActiveCaptain point-of-interest
+  base URL, the route-draft synthetic route id, and the OpenSeaMap two-tag name
+  lookup each now live in one place.
+- Reduced per-call work on hot paths: the channel router builds its decimation
+  input in one pre-sized pass instead of three, the scanline rasterizer reuses a
+  single row buffer, and the notification-path and bbox-debounce sanitizers
+  hoist their regexes to module scope.
+- Removed the unused open-polyline coastline helpers from the route-draft leg
+  geometry, left over after the land check moved to the vector-tile water
+  outline.
+
+### Fixed
+
+- The notes-resource plugin status reads "1 point" or "N points" rather than
+  "N point(s) of interest".
+- The Route drafting panel labels its propulsion control consistently for both
+  sighted and screen-reader users.
+- The configuration panel cancels its in-flight unit-preference requests on
+  unmount, and rejects a non-object status response instead of committing it.
+
 <a id="v0100"></a>
 
 ## [0.10.0] - 2026-06-14

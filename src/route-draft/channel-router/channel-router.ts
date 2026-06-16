@@ -28,7 +28,7 @@ import { METERS_PER_NAUTICAL_MILE } from '../../shared/length.js'
 import { distanceMeters, sampleRhumbLeg } from '../../geo/position-utilities.js'
 import { pointInRings, routeBbox } from '../leg-geometry.js'
 import type { QueryChartedAreas } from '../safety-check.js'
-import { buildNavGrid, resolveGridSize, type NavGrid } from './nav-grid.js'
+import { buildNavGrid, resolveGridSize, ORTHO_NEIGHBORS, type NavGrid } from './nav-grid.js'
 import { findPath } from './astar.js'
 import { simplifyPath } from './path-simplify.js'
 import type { TileWater } from './tile-water-query.js'
@@ -199,7 +199,17 @@ export async function routeChannel (
   // up to the cell cap; this avoids a string allocation per cell.
   const indexByCell = new Map<number, number>()
   cells.forEach((c, i) => indexByCell.set(c[0] + c[1] * grid.cols, i))
-  const keptIdx = simplified.map((c) => indexByCell.get(c[0] + c[1] * grid.cols) ?? 0)
+  const keptIdx: number[] = []
+  for (const c of simplified) {
+    const idx = indexByCell.get(c[0] + c[1] * grid.cols)
+    if (idx === undefined) {
+      // Invariant: simplifyPath returns a subset of `cells`, so every simplified point is in the map.
+      // Treat the impossible miss as a safe decline, never a silent route through cells[0].
+      deps.logger?.debug('channel-router diag: decline, simplified cell not on the A* path')
+      return { ok: false, reason: 'land-leg' }
+    }
+    keptIdx.push(idx)
+  }
   const routeCells: Array<[number, number]> = [cells[keptIdx[0]]]
   for (let k = 1; k < keptIdx.length; k += 1) {
     if (req.deadlineMs !== undefined && Date.now() > req.deadlineMs) {
@@ -226,12 +236,20 @@ export async function routeChannel (
   const startPos = onMain(req.from) ? req.from : grid.cellCenter(routeCells[0][0], routeCells[0][1])
   const lastCell = routeCells[routeCells.length - 1]
   const goalPos = onMain(req.to) ? req.to : grid.cellCenter(lastCell[0], lastCell[1])
-  const interior = routeCells.slice(1, -1).map(([c, r]) => grid.cellCenter(c, r))
+  // Build the route positions in one pre-sized pass: the pinned endpoints, else each cell center.
+  // This avoids a slice, an interior map, and a spread, three path-length arrays where one suffices,
+  // which matters at the cell cap on a memory-constrained server.
+  const routePositions: Position[] = new Array(routeCells.length)
+  routePositions[0] = startPos
+  routePositions[routeCells.length - 1] = goalPos
+  for (let i = 1; i < routeCells.length - 1; i += 1) {
+    routePositions[i] = grid.cellCenter(routeCells[i][0], routeCells[i][1])
+  }
   // Decimate to TURNING points: the A* path and its repair trace the channel at cell resolution
   // (a waypoint every cell at bends), which is far too dense for a usable route. Drop each waypoint
   // whose removal still leaves the longer leg on water, so the result is the minimal set of turns
   // that follow the channel. Endpoints are kept, and every surviving leg stays legSafe by construction.
-  const waypoints = decimateRoute([startPos, ...interior, goalPos], legSafe)
+  const waypoints = decimateRoute(routePositions, legSafe)
 
   if (!routeStaysOnWater(waypoints, enc, water, sampleSpacing, clipTolerance, req.deadlineMs)) {
     if (deps.logger !== undefined) {
@@ -267,9 +285,6 @@ async function fetchEncAreas (
   return ok
 }
 
-/** Orthogonal neighbor offsets, hoisted so the component flood does not rebuild them per cell. */
-const ORTHO: ReadonlyArray<readonly [number, number]> = [[1, 0], [-1, 0], [0, 1], [0, -1]]
-
 /**
  * A mask of the 4-connected navigable cells reachable from `seed`. 4-connectivity is a subset of the
  * A* moves (orthogonal steps never corner-cut), so any masked cell is A*-reachable from the seed.
@@ -287,7 +302,7 @@ function componentFrom (grid: NavGrid, seed: [number, number]): Uint8Array {
     const i = queue[head++]
     const r = Math.floor(i / cols)
     const c = i - r * cols
-    for (const [dc, dr] of ORTHO) {
+    for (const [dc, dr] of ORTHO_NEIGHBORS) {
       const nc = c + dc
       const nr = r + dr
       if (nc < 0 || nc >= cols || nr < 0 || nr >= rows) continue
@@ -329,7 +344,7 @@ function largestNavigableComponent (grid: NavGrid): Uint8Array {
       size += 1
       const r = Math.floor(i / cols)
       const c = i - r * cols
-      for (const [dc, dr] of ORTHO) {
+      for (const [dc, dr] of ORTHO_NEIGHBORS) {
         const nc = c + dc
         const nr = r + dr
         if (nc < 0 || nc >= cols || nr < 0 || nr >= rows) continue
