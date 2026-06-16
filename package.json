@@ -17,6 +17,7 @@
     "build:icons": "node scripts/copy-icons.mjs",
     "watch:panel": "webpack --watch --mode development --config webpack.config.cjs",
     "clean": "node scripts/clean.mjs",
+    "build:boundaries": "node scripts/build-boundaries.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.panel.json && tsc --noEmit -p tsconfig.test.json",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
