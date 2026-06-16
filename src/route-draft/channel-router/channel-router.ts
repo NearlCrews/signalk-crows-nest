@@ -28,7 +28,7 @@ import { METERS_PER_NAUTICAL_MILE } from '../../shared/length.js'
 import { distanceMeters, sampleRhumbLeg } from '../../geo/position-utilities.js'
 import { pointInRings, routeBbox } from '../leg-geometry.js'
 import type { QueryChartedAreas } from '../safety-check.js'
-import { buildNavGrid, resolveGridSize, ORTHO_NEIGHBORS, type NavGrid } from './nav-grid.js'
+import { buildNavGrid, resolveGridSize, ORTHO_NEIGHBORS, type NavGrid, type RingPolygon } from './nav-grid.js'
 import { findPath } from './astar.js'
 import { simplifyPath } from './path-simplify.js'
 import type { TileWater } from './tile-water-query.js'
@@ -47,7 +47,7 @@ export type ChannelDeclineReason =
 
 /** The result of {@link routeChannel}: the water route, or the reason it could not build one. */
 export type ChannelRouteResult =
-  | { ok: true, waypoints: Position[], usedTileWater: boolean }
+  | { ok: true, waypoints: Position[], usedTileWater: boolean, borderFallback?: boolean }
   | { ok: false, reason: ChannelDeclineReason }
 
 /** Injected collaborators; both queries are injected so a test runs without live HTTP. */
@@ -75,6 +75,11 @@ export interface ChannelRouteRequest {
   corridor?: Position[]
   /** Anchors that size the route bbox; the LLM's full waypoint list for a draft. Defaults to the corridor or the endpoints. */
   bboxAnchors?: Position[]
+  /**
+   * Border-aware routing: given the route bbox, the foreign-country water rings to block so a
+   * same-country route stays in its own waters. Called with the router's own padded bbox.
+   */
+  foreignRings?: (bbox: Bbox) => RingPolygon[]
   /** Max distance an endpoint may be snapped to navigable water; defaults below. */
   maxSnapMeters?: number
   /** Deadline signal, threaded into the upstream fetches. */
@@ -105,6 +110,8 @@ const SIMPLIFY_EPSILON_CELLS = 1.5
 const SIMPLIFY_EPSILON_METERS = 50
 /** Re-check sampling spacing cap, in meters, so a coarsened grid does not widen the sampling past it. */
 const SAMPLE_CAP_METERS = 30
+/** Minimum remaining budget to attempt the unconstrained fallback after an in-country route failed. */
+const ROUTER_FALLBACK_MIN_MS = 2000
 
 /**
  * Compute a water-following route from `from` to `to`. Returns the turning waypoints
@@ -152,118 +159,133 @@ export async function routeChannel (
   const water: TileWater = tile ?? { water: [] }
   if (enc.depthAreas.length === 0 && water.water.length === 0) return { ok: false, reason: 'no-coverage' }
 
-  const grid = buildNavGrid({
-    bbox,
-    chartedBands: bands,
-    osmWater: water.water,
-    draftMeters: req.draftMeters,
-    safetyMarginMeters: req.safetyMarginMeters,
-    standoffMeters: req.standoffNm * METERS_PER_NAUTICAL_MILE,
-    ...(req.corridor !== undefined ? { corridor: { polyline: req.corridor, halfWidthMeters: CORRIDOR_HALF_WIDTH_METERS } } : {}),
-    ...(req.deadlineMs !== undefined ? { deadlineMs: req.deadlineMs } : {})
-  })
-  deps.logger?.debug(`channel-router diag: bands=${bands.length} encAreas=${enc.depthAreas.length}d/${enc.landAreas.length}L tile=${water.water.length} grid=${grid.cols}x${grid.rows}@${grid.cellMeters}m hasWater=${grid.hasWater} (${elapsed()}ms)`)
-  if (!grid.hasWater) return { ok: false, reason: 'no-coverage' }
+  // Build the grid and route across it, optionally blocking foreign water. Defined as a closure so the
+  // border fallback can run it again without the block, reusing the fetched ENC bands and tile water.
+  const attempt = (foreignBlock: RingPolygon[]): ChannelRouteResult => {
+    const grid = buildNavGrid({
+      bbox,
+      chartedBands: bands,
+      osmWater: water.water,
+      draftMeters: req.draftMeters,
+      safetyMarginMeters: req.safetyMarginMeters,
+      standoffMeters: req.standoffNm * METERS_PER_NAUTICAL_MILE,
+      ...(req.corridor !== undefined ? { corridor: { polyline: req.corridor, halfWidthMeters: CORRIDOR_HALF_WIDTH_METERS } } : {}),
+      ...(foreignBlock.length > 0 ? { foreignBlock } : {}),
+      ...(req.deadlineMs !== undefined ? { deadlineMs: req.deadlineMs } : {})
+    })
+    deps.logger?.debug(`channel-router diag: bands=${bands.length} encAreas=${enc.depthAreas.length}d/${enc.landAreas.length}L tile=${water.water.length} foreign=${foreignBlock.length} grid=${grid.cols}x${grid.rows}@${grid.cellMeters}m hasWater=${grid.hasWater} (${elapsed()}ms)`)
+    if (!grid.hasWater) return { ok: false, reason: 'no-coverage' }
 
-  const maxSnap = req.maxSnapMeters ?? DEFAULT_MAX_SNAP_METERS
-  const snapped = snapEndpoints(grid, req.from, req.to, maxSnap)
-  if ('reason' in snapped) {
-    deps.logger?.debug(`channel-router diag: decline ${snapped.reason} at snap (${elapsed()}ms)`)
-    return { ok: false, reason: snapped.reason }
-  }
-  const { start, goal, comp: mainWater } = snapped
+    const maxSnap = req.maxSnapMeters ?? DEFAULT_MAX_SNAP_METERS
+    const snapped = snapEndpoints(grid, req.from, req.to, maxSnap)
+    if ('reason' in snapped) {
+      deps.logger?.debug(`channel-router diag: decline ${snapped.reason} at snap (${elapsed()}ms)`)
+      return { ok: false, reason: snapped.reason }
+    }
+    const { start, goal, comp: mainWater } = snapped
 
-  const pathStatus = { timedOut: false }
-  const cells = findPath(grid, start, goal, req.deadlineMs, pathStatus)
-  if (cells === undefined) {
-    deps.logger?.debug(`channel-router diag: decline ${pathStatus.timedOut ? 'deadline' : 'no-path'} at A* (${elapsed()}ms)`)
-    return { ok: false, reason: pathStatus.timedOut ? 'deadline' : 'no-path' }
-  }
+    const pathStatus = { timedOut: false }
+    const cells = findPath(grid, start, goal, req.deadlineMs, pathStatus)
+    if (cells === undefined) {
+      deps.logger?.debug(`channel-router diag: decline ${pathStatus.timedOut ? 'deadline' : 'no-path'} at A* (${elapsed()}ms)`)
+      return { ok: false, reason: pathStatus.timedOut ? 'deadline' : 'no-path' }
+    }
 
-  const contour = req.draftMeters + req.safetyMarginMeters
-  const sampleSpacing = Math.min(grid.cellMeters / 2, SAMPLE_CAP_METERS)
-  // A leg may run off water for up to one cell: a sub-cell clip is below the grid's resolution, so it
-  // is tolerated here (the per-leg safety check still flags any real land crossing) rather than
-  // discarding the whole route over a sliver the grid cannot resolve.
-  const clipTolerance = grid.cellMeters
-  const legSafe = (a: Position, b: Position): boolean =>
-    legStaysOnWater(a, b, enc, water, sampleSpacing, clipTolerance)
+    const contour = req.draftMeters + req.safetyMarginMeters
+    const sampleSpacing = Math.min(grid.cellMeters / 2, SAMPLE_CAP_METERS)
+    // A leg may run off water for up to one cell: a sub-cell clip is below the grid's resolution, so it
+    // is tolerated here (the per-leg safety check still flags any real land crossing) rather than
+    // discarding the whole route over a sliver the grid cannot resolve.
+    const clipTolerance = grid.cellMeters
+    const legSafe = (a: Position, b: Position): boolean =>
+      legStaysOnWater(a, b, enc, water, sampleSpacing, clipTolerance)
 
-  // Simplify the A* centerline to turning points, then repair: a simplified leg that
-  // would cross land or leave water (an RDP chord cutting a concave shore) is replaced by
-  // the A* sub-path it spanned, which is land-safe at cell resolution. So the router
-  // rounds an island rather than declining on a simplification artifact.
-  const epsilon = Math.min(SIMPLIFY_EPSILON_CELLS, SIMPLIFY_EPSILON_METERS / grid.cellMeters)
-  const simplified = simplifyPath(cells, epsilon)
-  // A collision-free integer key (col + row * cols) instead of a string, since the A* path can be
-  // up to the cell cap; this avoids a string allocation per cell.
-  const indexByCell = new Map<number, number>()
-  cells.forEach((c, i) => indexByCell.set(c[0] + c[1] * grid.cols, i))
-  const keptIdx: number[] = []
-  for (const c of simplified) {
-    const idx = indexByCell.get(c[0] + c[1] * grid.cols)
-    if (idx === undefined) {
+    // Simplify the A* centerline to turning points, then repair: a simplified leg that
+    // would cross land or leave water (an RDP chord cutting a concave shore) is replaced by
+    // the A* sub-path it spanned, which is land-safe at cell resolution. So the router
+    // rounds an island rather than declining on a simplification artifact.
+    const epsilon = Math.min(SIMPLIFY_EPSILON_CELLS, SIMPLIFY_EPSILON_METERS / grid.cellMeters)
+    const simplified = simplifyPath(cells, epsilon)
+    // A collision-free integer key (col + row * cols) instead of a string, since the A* path can be
+    // up to the cell cap; this avoids a string allocation per cell.
+    const indexByCell = new Map<number, number>()
+    cells.forEach((c, i) => indexByCell.set(c[0] + c[1] * grid.cols, i))
+    const keptIdx: number[] = []
+    for (const c of simplified) {
+      const idx = indexByCell.get(c[0] + c[1] * grid.cols)
+      if (idx === undefined) {
       // Invariant: simplifyPath returns a subset of `cells`, so every simplified point is in the map.
       // Treat the impossible miss as a safe decline, never a silent route through cells[0].
-      deps.logger?.debug('channel-router diag: decline, simplified cell not on the A* path')
-      return { ok: false, reason: 'land-leg' }
-    }
-    keptIdx.push(idx)
-  }
-  const routeCells: Array<[number, number]> = [cells[keptIdx[0]]]
-  for (let k = 1; k < keptIdx.length; k += 1) {
-    if (req.deadlineMs !== undefined && Date.now() > req.deadlineMs) {
-      deps.logger?.debug(`channel-router diag: decline land-leg at repair deadline (${elapsed()}ms)`)
-      return { ok: false, reason: 'land-leg' }
-    }
-    const p = keptIdx[k - 1]
-    const q = keptIdx[k]
-    if (legSafe(grid.cellCenter(cells[p][0], cells[p][1]), grid.cellCenter(cells[q][0], cells[q][1]))) {
-      routeCells.push(cells[q])
-    } else {
-      for (let m = p + 1; m <= q; m += 1) routeCells.push(cells[m])
-    }
-  }
-
-  // Pin the requested endpoints when they sit on the main channel (the navigator chose them), else the
-  // snapped cell center. Checking the main component, not just navigability, matters when the requested
-  // point is in a disconnected pocket: pinning to it there would make the first leg jump across the gap
-  // to where A* actually started, which the re-check would then reject.
-  const onMain = (p: Position): boolean => {
-    const [c, r] = grid.cellOf(p)
-    return grid.isNavigable(c, r) && mainWater[r * grid.cols + c] === 1
-  }
-  const startPos = onMain(req.from) ? req.from : grid.cellCenter(routeCells[0][0], routeCells[0][1])
-  const lastCell = routeCells[routeCells.length - 1]
-  const goalPos = onMain(req.to) ? req.to : grid.cellCenter(lastCell[0], lastCell[1])
-  // Build the route positions in one pre-sized pass: the pinned endpoints, else each cell center.
-  // This avoids a slice, an interior map, and a spread, three path-length arrays where one suffices,
-  // which matters at the cell cap on a memory-constrained server.
-  const routePositions: Position[] = new Array(routeCells.length)
-  routePositions[0] = startPos
-  routePositions[routeCells.length - 1] = goalPos
-  for (let i = 1; i < routeCells.length - 1; i += 1) {
-    routePositions[i] = grid.cellCenter(routeCells[i][0], routeCells[i][1])
-  }
-  // Decimate to TURNING points: the A* path and its repair trace the channel at cell resolution
-  // (a waypoint every cell at bends), which is far too dense for a usable route. Drop each waypoint
-  // whose removal still leaves the longer leg on water, so the result is the minimal set of turns
-  // that follow the channel. Endpoints are kept, and every surviving leg stays legSafe by construction.
-  const waypoints = decimateRoute(routePositions, legSafe)
-
-  if (!routeStaysOnWater(waypoints, enc, water, sampleSpacing, clipTolerance, req.deadlineMs)) {
-    if (deps.logger !== undefined) {
-      const overDeadline = req.deadlineMs !== undefined && Date.now() > req.deadlineMs
-      let failLeg = -1
-      for (let i = 0; i + 1 < waypoints.length && failLeg < 0; i += 1) {
-        if (!legStaysOnWater(waypoints[i], waypoints[i + 1], enc, water, sampleSpacing, clipTolerance)) failLeg = i
+        deps.logger?.debug('channel-router diag: decline, simplified cell not on the A* path')
+        return { ok: false, reason: 'land-leg' }
       }
-      deps.logger.debug(`channel-router diag: decline land-leg at re-check, ${waypoints.length}wp, overDeadline=${overDeadline}, failingLeg=${failLeg}/${waypoints.length - 1}, tolerance=${Math.round(clipTolerance)}m (${elapsed()}ms)`)
+      keptIdx.push(idx)
     }
-    return { ok: false, reason: 'land-leg' }
+    const routeCells: Array<[number, number]> = [cells[keptIdx[0]]]
+    for (let k = 1; k < keptIdx.length; k += 1) {
+      if (req.deadlineMs !== undefined && Date.now() > req.deadlineMs) {
+        deps.logger?.debug(`channel-router diag: decline land-leg at repair deadline (${elapsed()}ms)`)
+        return { ok: false, reason: 'land-leg' }
+      }
+      const p = keptIdx[k - 1]
+      const q = keptIdx[k]
+      if (legSafe(grid.cellCenter(cells[p][0], cells[p][1]), grid.cellCenter(cells[q][0], cells[q][1]))) {
+        routeCells.push(cells[q])
+      } else {
+        for (let m = p + 1; m <= q; m += 1) routeCells.push(cells[m])
+      }
+    }
+
+    // Pin the requested endpoints when they sit on the main channel (the navigator chose them), else the
+    // snapped cell center. Checking the main component, not just navigability, matters when the requested
+    // point is in a disconnected pocket: pinning to it there would make the first leg jump across the gap
+    // to where A* actually started, which the re-check would then reject.
+    const onMain = (p: Position): boolean => {
+      const [c, r] = grid.cellOf(p)
+      return grid.isNavigable(c, r) && mainWater[r * grid.cols + c] === 1
+    }
+    const startPos = onMain(req.from) ? req.from : grid.cellCenter(routeCells[0][0], routeCells[0][1])
+    const lastCell = routeCells[routeCells.length - 1]
+    const goalPos = onMain(req.to) ? req.to : grid.cellCenter(lastCell[0], lastCell[1])
+    // Build the route positions in one pre-sized pass: the pinned endpoints, else each cell center.
+    // This avoids a slice, an interior map, and a spread, three path-length arrays where one suffices,
+    // which matters at the cell cap on a memory-constrained server.
+    const routePositions: Position[] = new Array(routeCells.length)
+    routePositions[0] = startPos
+    routePositions[routeCells.length - 1] = goalPos
+    for (let i = 1; i < routeCells.length - 1; i += 1) {
+      routePositions[i] = grid.cellCenter(routeCells[i][0], routeCells[i][1])
+    }
+    // Decimate to TURNING points: the A* path and its repair trace the channel at cell resolution
+    // (a waypoint every cell at bends), which is far too dense for a usable route. Drop each waypoint
+    // whose removal still leaves the longer leg on water, so the result is the minimal set of turns
+    // that follow the channel. Endpoints are kept, and every surviving leg stays legSafe by construction.
+    const waypoints = decimateRoute(routePositions, legSafe)
+
+    if (!routeStaysOnWater(waypoints, enc, water, sampleSpacing, clipTolerance, req.deadlineMs)) {
+      if (deps.logger !== undefined) {
+        const overDeadline = req.deadlineMs !== undefined && Date.now() > req.deadlineMs
+        let failLeg = -1
+        for (let i = 0; i + 1 < waypoints.length && failLeg < 0; i += 1) {
+          if (!legStaysOnWater(waypoints[i], waypoints[i + 1], enc, water, sampleSpacing, clipTolerance)) failLeg = i
+        }
+        deps.logger.debug(`channel-router diag: decline land-leg at re-check, ${waypoints.length}wp, overDeadline=${overDeadline}, failingLeg=${failLeg}/${waypoints.length - 1}, tolerance=${Math.round(clipTolerance)}m (${elapsed()}ms)`)
+      }
+      return { ok: false, reason: 'land-leg' }
+    }
+    deps.logger?.debug(`channel-router diag: OK ${waypoints.length}wp (${elapsed()}ms)`)
+    return { ok: true, waypoints, usedTileWater: usedTileWater(waypoints, enc, water, contour, sampleSpacing) }
   }
-  deps.logger?.debug(`channel-router diag: OK ${waypoints.length}wp (${elapsed()}ms)`)
-  return { ok: true, waypoints, usedTileWater: usedTileWater(waypoints, enc, water, contour, sampleSpacing) }
+
+  const foreignBlock = req.foreignRings?.(bbox) ?? []
+  const primary = attempt(foreignBlock)
+  if (primary.ok || foreignBlock.length === 0) return primary
+  // The in-country attempt failed; fall back to the unconstrained route (reusing the fetched data) so a
+  // route is still returned, flagged so the caller notes the border crossing. Skip the retry if too
+  // little budget remains for a second build and route.
+  if (req.deadlineMs !== undefined && req.deadlineMs - Date.now() < ROUTER_FALLBACK_MIN_MS) return primary
+  const fallback = attempt([])
+  return fallback.ok ? { ...fallback, borderFallback: true } : fallback
 }
 
 /**

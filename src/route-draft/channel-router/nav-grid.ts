@@ -42,6 +42,11 @@ export interface NavGridParams {
    * that is not modeled as a hole still blocks.
    */
   osmLand?: RingPolygon[]
+  /**
+   * Foreign-country water to block for a same-country route (border-aware routing). It blocks like
+   * land but is NOT a physical shore, so it does not earn the one-cell shore erosion (see the pass).
+   */
+  foreignBlock?: RingPolygon[]
   draftMeters: number
   safetyMarginMeters: number
   /** Desired offing in meters for the soft mid-channel cost; 0 disables the standoff bias. */
@@ -203,6 +208,17 @@ export function buildNavGrid (params: NavGridParams): NavGrid {
   }
   for (const poly of params.osmLand ?? []) {
     if (fillPolygonCells(poly.rings, colF, rowF, cols, rows, (i) => { blocked[i] = 1; landMask[i] = 1 }, deadlineMs)) {
+      return emptyGrid(bbox)
+    }
+  }
+  // Foreign-water block (border-aware routing): keep a same-country route in its own waters. The
+  // border is a jurisdictional line, not a physical shore, so this stamps blocked only and NOT
+  // landMask: the one-cell shore erosion below must not eat the home-side channel a cell off the
+  // border, which would pinch a narrow river to nothing. Stamping blocked before the navigable
+  // derivation also makes the foreign water seed the standoff BFS, biasing the route toward mid-channel
+  // on the home side.
+  for (const poly of params.foreignBlock ?? []) {
+    if (fillPolygonCells(poly.rings, colF, rowF, cols, rows, (i) => { blocked[i] = 1 }, deadlineMs)) {
       return emptyGrid(bbox)
     }
   }
