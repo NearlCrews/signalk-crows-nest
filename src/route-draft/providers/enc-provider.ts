@@ -26,6 +26,8 @@
  */
 
 import {
+  bboxesOverlap,
+  boundsOfRings,
   initialBearingRad,
   projectPointOntoLeg,
   rhumbDistanceMeters
@@ -211,28 +213,6 @@ async function queryLegBands (
   return { depth, land }
 }
 
-/** Axis-aligned bounds of a polygon's rings, for the per-leg spatial filter over the route-wide fetch. */
-function areaBounds (rings: number[][][]): Bbox {
-  let north = -Infinity
-  let south = Infinity
-  let east = -Infinity
-  let west = Infinity
-  for (const ring of rings) {
-    for (const [lon, lat] of ring) {
-      if (lat > north) north = lat
-      if (lat < south) south = lat
-      if (lon > east) east = lon
-      if (lon < west) west = lon
-    }
-  }
-  return { north, south, east, west }
-}
-
-/** True when two bboxes overlap (touching counts). */
-function bboxesOverlap (a: Bbox, b: Bbox): boolean {
-  return a.west <= b.east && a.east >= b.west && a.south <= b.north && a.north >= b.south
-}
-
 /** A charted area with its precomputed bounds, for the route-wide-fetch spatial filter. */
 interface IndexedArea { area: EncAreaPolygon, bounds: Bbox }
 /** One band's depth and land areas, each with bounds, from the route-wide fetch. */
@@ -246,8 +226,8 @@ function indexBands (bands: {
   // depth and land are parallel arrays keyed by the same bands in the same order.
   return bands.depth.map(({ band, areas }, i) => ({
     band,
-    depth: areas.map((area) => ({ area, bounds: areaBounds(area.rings) })),
-    land: bands.land[i].areas.map((area) => ({ area, bounds: areaBounds(area.rings) }))
+    depth: areas.map((area) => ({ area, bounds: boundsOfRings(area.rings) })),
+    land: bands.land[i].areas.map((area) => ({ area, bounds: boundsOfRings(area.rings) }))
   }))
 }
 

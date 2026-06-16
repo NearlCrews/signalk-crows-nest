@@ -441,3 +441,30 @@ export function unionBbox (a: Bbox, b: Bbox): Bbox {
     west: Math.min(a.west, b.west)
   }
 }
+
+/** Axis-aligned bounds of a polygon's rings (GeoJSON [lon, lat] arrays). */
+export function boundsOfRings (rings: number[][][]): Bbox {
+  let north = -Infinity
+  let south = Infinity
+  let east = -Infinity
+  let west = Infinity
+  for (const ring of rings) {
+    for (const [lon, lat] of ring) {
+      if (lat > north) north = lat
+      if (lat < south) south = lat
+      if (lon > east) east = lon
+      if (lon < west) west = lon
+    }
+  }
+  return { north, south, east, west }
+}
+
+/** True when two bboxes overlap (touching counts). */
+export function bboxesOverlap (a: Bbox, b: Bbox): boolean {
+  return a.west <= b.east && a.east >= b.west && a.south <= b.north && a.north >= b.south
+}
+
+/** True when a bbox contains the point (touching counts). */
+export function bboxContainsPoint (b: Bbox, lon: number, lat: number): boolean {
+  return lon >= b.west && lon <= b.east && lat >= b.south && lat <= b.north
+}
