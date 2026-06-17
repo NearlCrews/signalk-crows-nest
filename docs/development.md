@@ -55,8 +55,10 @@ The plugin ships its own configuration panel: a federated React app, loaded by
 the Signal K admin UI through Module Federation, that replaces the generated
 settings form with a live status section and grouped POI-type toggles.
 
-The plugin also hosts an optional, admin-gated AI route-draft feature under
-`src/route-draft/`. It asks OpenRouter for a passage's turning waypoints,
+The plugin also hosts an optional, admin-gated, beta AI route-draft feature under
+`src/route-draft/`. The feature is in beta and cannot guarantee accuracy, so
+every drafted route is a draft to verify against the official charts before use.
+It asks OpenRouter for a passage's turning waypoints,
 optionally re-routes the geometry through a deterministic channel router so the
 legs follow charted or mapped water, then checks every leg and computes a fuel
 estimate in owned code. The safety check is worldwide: per leg it runs the union

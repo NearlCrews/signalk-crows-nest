@@ -10,8 +10,8 @@ plugin. It imports points of interest from multiple marine data sources
 Light List of US Aids to Navigation, and the NOAA ENC Direct database of
 wrecks, obstructions, and underwater rocks) and exposes them as Signal K
 `notes` resources so chart plotters such as Freeboard-SK can display them. It
-also hosts an optional, admin-gated AI route-draft endpoint (the server-side
-half of Binnacle's AI route drafting): it asks OpenRouter for a passage's
+also hosts an optional, admin-gated, beta AI route-draft endpoint (the
+server-side half of Binnacle's AI route drafting): it asks OpenRouter for a passage's
 turning waypoints, optionally re-routes the geometry through a deterministic
 channel router so the legs follow charted or mapped water, then checks every
 leg in owned code and computes a deterministic fuel estimate. The safety check
@@ -19,7 +19,9 @@ is worldwide, resolving data providers per leg by the union of every provider
 whose coverage envelope reaches the leg: NOAA ENC charted depth, land, and
 point hazards in US waters, EMODnet modeled depth in European seas, and an
 OpenStreetMap coastline land check plus OpenSeaMap point hazards worldwide. The
-AI piece is entirely opt-in and off until an OpenRouter key is configured.
+AI piece is entirely opt-in and off until an OpenRouter key is configured. It is
+in beta and cannot guarantee accuracy: every drafted route is a draft to verify
+against the official charts before use.
 
 ## Architecture rule: ONE plugin, modular files
 
@@ -236,8 +238,13 @@ self-contained module registered on one line in `src/index.ts`.
     navigator never mistakes a straight AI line for a vetted one).
     - `providers/` - the per-leg data providers the orchestrator runs.
       `provider.ts` (the `LegSafetyProvider` contract, the precedence
-      constants, the provider-id constants, the `resolveProviders` per-leg
-      region resolver, and the shared `hazardDedupeKey`), `enc-provider.ts`
+      constants, the provider-id constants, the `ROUTE_DRAFT_ID` synthetic
+      route id, the `resolveProviders` per-leg region resolver, the shared
+      `hazardDedupeKey`, and the shared `corridorHazardFlags` helper that
+      stitches a provider's covered legs into one polyline, scans the corridor,
+      and maps each matched hazard to its global leg index, so the ENC and
+      OpenSeaMap hazard sweeps differ only in how they fetch and word their
+      hazards), `enc-provider.ts`
       (the NOAA ENC provider: charted depth-area contours, charted land, and
       charted point hazards in US waters), `openseamap-provider.ts` (the
       worldwide OpenSeaMap provider: rock, wreck, and obstruction seamark point
@@ -275,7 +282,9 @@ self-contained module registered on one line in `src/index.ts`.
       border, with a standoff cost ramp toward the desired
       offing), `astar.ts` (the grid A* with a binary min-heap), `path-simplify.ts`
       (the pure Ramer-Douglas-Peucker reduction of the A* centerline to turning
-      points), and `index.ts` (the slice's barrel, exporting `routeChannel`,
+      points, walked over an explicit index-range stack rather than by recursion
+      so a long winding centerline of thousands of cells cannot overflow the call
+      stack; the output is identical to the recursive form), and `index.ts` (the slice's barrel, exporting `routeChannel`,
       `routeStaysOnWater`, and `createTileWaterSource` with their types).
   - `outputs/` - SignalK consumers of POI data.
     - `output.ts` - the `OutputModule`, `OutputHandle`, `OutputContext`, and
@@ -437,7 +446,10 @@ self-contained module registered on one line in `src/index.ts`.
     not-checked message share),
     `debug.ts` (the `debugIsEnabled` guard that reads the npm `debug`
     logger's live `enabled` flag so hot paths skip building log arguments
-    while debug is off), `cache.ts`
+    while debug is off, plus `appLogger`, which adapts a SignalK app to the
+    project `Logger` surface in one place so the route-draft endpoint and the
+    channel router share one adapter rather than each building their own),
+    `cache.ts`
     (the `MAX_POI_CACHE_ENTRIES` and `MAX_BBOX_CACHE_ENTRIES` ceilings
     shared by the per-source detail and bbox caches),
     `relative-time-format.ts` (the `formatRelativeDelta` unit-stepping the

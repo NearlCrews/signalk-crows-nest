@@ -23,14 +23,21 @@ proximity, route-corridor, and bridge air-draft alarms.
 
 ## What's new in 0.10.0
 
-AI route drafting arrives, it follows the water, and its safety check covers
-routes worldwide.
+AI route drafting arrives as a beta feature, it follows the water, and its
+safety check covers routes worldwide.
 
-- **AI route drafting (optional, admin only, off until you set a key).** A
+> **AI route drafting is in beta.** It cannot guarantee accuracy. The model can
+> place a waypoint in error and the safety check runs on generalized and modeled
+> data, not on certified charts. Treat every drafted route as a suggestion only,
+> and verify it against the official charts and your primary instruments before
+> you navigate it. Never follow a drafted route on the AI's word alone.
+
+- **AI route drafting (beta, optional, admin only, off until you set a key).** A
   new `POST /api/route-draft` endpoint turns a plain-language passage
   request into a drafted route: the model proposes the turning waypoints,
   then owned code checks every leg and adds a deterministic fuel estimate.
-  A new Route drafting panel card holds the masked OpenRouter key, the
+  Every drafted route is a draft to verify on the chart before use. A new
+  Route drafting panel card holds the masked OpenRouter key, the
   model, a daily call cap, and the vessel, fuel, and routing inputs.
 - **Channel routing that follows the water.** Where charted depth (US ENC)
   or mapped water covers the passage, the endpoint replaces the model's
@@ -96,8 +103,10 @@ air-draft check).
   at or below the vessel air draft (`design.airHeight` or a configured
   fallback) plus a safety margin, both as a proximity alarm as the vessel
   nears a too-low bridge and as a clearance-specific route warning ahead.
-- **AI route drafting (optional, admin only, off until you set a key)**:
-  turn a plain-language passage request into a drafted route. With an
+- **AI route drafting (beta, optional, admin only, off until you set a key)**:
+  turn a plain-language passage request into a drafted route. This feature is
+  in beta: it cannot guarantee accuracy, so every drafted route is a draft you
+  must verify against the official charts before you navigate it. With an
   OpenRouter key configured, the plugin asks the model for the turning
   waypoints, then checks every leg in owned code and adds a deterministic
   fuel estimate. Where charted depth (US ENC) or mapped water covers the
@@ -234,10 +243,11 @@ The panel has these areas:
    alarm is enabled): the proximity-alarm, route-corridor scan, and
    bridge air-draft check controls, each in its own fieldset with an
    opt-in toggle and its numeric settings.
-5. **Route drafting section** (optional, admin only, off until you set a
+5. **Route drafting section** (beta, optional, admin only, off until you set a
    key): a master enable, the masked OpenRouter key and model, a daily call
    cap, and the vessel, fuel, and routing inputs, with the rarely-changed
-   tuning tucked under an Advanced disclosure.
+   tuning tucked under an Advanced disclosure. The drafted route is in beta and
+   is a draft to verify against the official charts before use.
 
 Per-source enable toggles live on each card's header, alongside the
 disclosure chevron. Each card carries a small live-status pill on the
@@ -256,7 +266,7 @@ on the next request.
 - [Notes-resource integration guide](docs/notes-resource-format.md): the
   wire format and the normalized detail schema for client developers
 - [Route-draft API guide](docs/route-draft-api.md): the contract for the
-  optional AI route-draft endpoint, for client integrators
+  optional, beta AI route-draft endpoint, for client integrators
 - [Architecture notes](CLAUDE.md): project layout and module map
 - [Changelog](CHANGELOG.md)
 - [Contributing](.github/CONTRIBUTING.md)

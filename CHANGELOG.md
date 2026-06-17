@@ -13,7 +13,9 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- Border-aware route drafting. When a drafted route's start and destination are in the same country,
+- Border-aware route drafting (part of the beta AI route-drafting feature; still
+  a draft to verify against the official charts before use). When a drafted
+  route's start and destination are in the same country,
   the channel router keeps the path in that country's waters instead of taking the shortest water path
   across an international border, so a Detroit River route between two US points stays out of Canadian
   water. Where no in-country water route exists it still returns the crossing route, with a note that it
@@ -39,6 +41,17 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Removed the unused open-polyline coastline helpers from the route-draft leg
   geometry, left over after the land check moved to the vector-tile water
   outline.
+- The ENC and OpenSeaMap route-draft hazard sweeps now share one
+  `corridorHazardFlags` helper that stitches the covered legs, scans the
+  corridor, and maps each matched hazard to its leg, so the two providers differ
+  only in how they fetch and word their hazards and the leg-mapping cannot drift
+  between them.
+- Single-sourced the route-draft logger: the endpoint and the channel router
+  adapt the SignalK app to the project logger through one shared `appLogger`
+  helper instead of building the same adapter object in each place.
+- The OpenSeaMap route-draft land check precomputes each water polygon's bounding
+  box once and skips the full ring scan for a sampled point outside that box, so a
+  leg sampled at fine spacing over many water polygons does far less work.
 
 ### Fixed
 
@@ -63,24 +76,43 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   true wind, a realistic cruising pointing angle, rather than 100 degrees, which
   had the model add tacks on legs a normal vessel would lay. It stays
   user-configurable per vessel.
+- The channel router's path simplification no longer risks a stack overflow on a
+  long winding route. The Ramer-Douglas-Peucker reduction of the A* centerline,
+  which can run to thousands of cells, now walks an explicit stack instead of
+  recursing, so a deeply winding path cannot exhaust the call stack. The output is
+  identical to the recursive form.
+- The vector-tile water source no longer collaterally fails concurrent tile
+  fetches when one caller's deadline aborts. The shared resolution of the tile-URL
+  template is bounded by the client's own request timeout and stop controller, not
+  by any one caller's abort signal, so one route's deadline can no longer cancel
+  the template lookup that other concurrent routes are awaiting. Each caller's
+  signal still bounds its own tile fetch.
+- The route-draft bbox tile splitter now rejects a non-positive or non-finite span
+  rather than looping forever, and the shared abort-signal combiner now rejects an
+  all-undefined call rather than returning a signal that never aborts, turning two
+  latent ways to leave the event loop hung into loud errors.
 
 <a id="v0100"></a>
 
 ## [0.10.0] - 2026-06-14
 
-The plugin gains an optional, admin-gated AI route-draft endpoint whose safety
-check covers routes worldwide, plus the charted-depth capability that backs it.
+The plugin gains an optional, admin-gated, beta AI route-draft endpoint whose
+safety check covers routes worldwide, plus the charted-depth capability that
+backs it. AI route drafting is in beta: it cannot guarantee accuracy, so every
+drafted route must be verified against the official charts before it is used for
+navigation.
 
 ### Added
 
-- **AI route drafting (optional, admin only, off until an OpenRouter key is
+- **AI route drafting (beta, optional, admin only, off until an OpenRouter key is
   set).** A new `POST /api/route-draft` endpoint turns a plain-language passage
   request into a drafted route: OpenRouter proposes the turning waypoints, then
   owned code checks every leg, resolving data providers per leg by the union of
   every provider whose coverage reaches the leg, and computes a deterministic
-  fuel estimate. The route is always a draft the navigator verifies on the chart
-  before saving, and the depth check reads the charted depth-AREA contour, not
-  the depth at every point. A new Route drafting panel card configures the masked
+  fuel estimate. This feature is in beta and cannot guarantee accuracy: the route
+  is always a draft the navigator verifies against the official charts before
+  saving, and the depth check reads the charted depth-AREA contour, not the depth
+  at every point. A new Route drafting panel card configures the masked
   OpenRouter key, the model, a daily call cap, and the vessel, fuel, and routing
   inputs.
 - **Optimize a drawn route.** `POST /api/route-draft` now also accepts an optional

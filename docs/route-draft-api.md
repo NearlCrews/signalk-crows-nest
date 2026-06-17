@@ -5,6 +5,14 @@ This document explains how to use the AI route-draft endpoint that
 writing a client (such as Binnacle) that calls the endpoint. It is a contract
 and behavior reference, not a tutorial on the plugin internals.
 
+> **Beta feature.** AI route drafting is in beta. It cannot guarantee accuracy:
+> the model can place a waypoint in error, and the safety check runs on
+> generalized and modeled data, not on certified charts. A drafted route is
+> always a suggestion to verify against the official charts and the primary
+> instruments before it is used for navigation. A client must present every
+> drafted route this way and must never imply that the route is safe to follow on
+> the AI's word alone.
+
 ## What the endpoint does
 
 `POST /api/route-draft` turns a plain-language passage request into a drafted
