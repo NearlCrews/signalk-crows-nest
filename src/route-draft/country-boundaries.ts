@@ -9,7 +9,16 @@
  *
  * The polygons partition only inland and boundary-lake water (the Great Lakes and their connecting
  * rivers); marine water is in no polygon, so a coastal point classifies as undefined and a coastal
- * route is never constrained. A misclassification only ever turns the constraint off, which is safe.
+ * route is never constrained.
+ *
+ * On a connecting river the navigable channel IS the international boundary, so a route endpoint there
+ * sits within about a kilometer of the line and can classify to either side. When the two endpoints
+ * classify differently or to undefined, the same-country gate reads no home and nothing is blocked
+ * (safe). When both happen to classify to the SAME neighbor, the home is read as that neighbor and the
+ * in-country attempt blocks the wrong water; the channel router then finds no in-country route and falls
+ * back to the unconstrained one, so the rendered route is still correct. The only artifacts are a
+ * possible cross-border note and one wasted routing attempt on a route that begins on the boundary
+ * itself; reliable home detection for such a route is not achievable from point classification alone.
  */
 
 import { existsSync, readFileSync } from 'node:fs'
