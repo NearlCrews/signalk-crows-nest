@@ -9,10 +9,74 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 > development milestones that preceded this publication. Their content is
 > incorporated into the 0.4.2 release.
 
-## [Unreleased]
+<a id="v0100"></a>
+
+## [0.10.0] - 2026-06-17
+
+The plugin gains an optional, admin-gated, beta AI route-draft endpoint whose
+safety check covers routes worldwide, plus the charted-depth capability that
+backs it. AI route drafting is in beta: it cannot guarantee accuracy, so every
+drafted route must be verified against the official charts before it is used for
+navigation.
 
 ### Added
 
+- **AI route drafting (beta, optional, admin only, off until an OpenRouter key is
+  set).** A new `POST /api/route-draft` endpoint turns a plain-language passage
+  request into a drafted route: OpenRouter proposes the turning waypoints, then
+  owned code checks every leg, resolving data providers per leg by the union of
+  every provider whose coverage reaches the leg, and computes a deterministic
+  fuel estimate. This feature is in beta and cannot guarantee accuracy: the route
+  is always a draft the navigator verifies against the official charts before
+  saving, and the depth check reads the charted depth-AREA contour, not the depth
+  at every point. A new Route drafting panel card configures the masked
+  OpenRouter key, the model, a daily call cap, and the vessel, fuel, and routing
+  inputs.
+- **Optimize a drawn route.** `POST /api/route-draft` now also accepts an optional
+  `route`, the navigator's drawn waypoints. When present, the endpoint refines that
+  route instead of drafting from words: it keeps the drawn start and destination,
+  moves and adds turning waypoints only as needed to clear the charted and modeled
+  hazards with the standoff, and runs the same worldwide per-leg safety check and
+  fuel estimate. The plain-language prompt becomes an optional one-line hint, and
+  the response carries an `optimized` marker so a client can confirm the route was
+  consumed. Documented in `docs/route-draft-api.md`.
+- **Channel routing follows the water.** Where charted depth (US ENC) or mapped
+  water covers the passage, the endpoint replaces the model's straight legs with a
+  deterministic water-following route computed in owned code (a depth-aware
+  navigable grid plus A* over it), so the drafted waypoints follow the channel
+  rather than cutting across land. Mapped water is read from vector tiles, the
+  OpenStreetMap-derived water layer the chart base map renders, where each water
+  body is a pre-clipped polygon and an island is a hole in it; because the tiles
+  are pre-clipped, big water and coastline-bounded bodies route worldwide, inland
+  or on the coast. The grid avoids charted and mapped land, including the island
+  holes, and the returned route is re-checked at full polygon resolution so a
+  returned channel route never crosses land. Where no coverage is available, where
+  the passage is too large to cover within the tile budget, or where routing is
+  skipped to leave the safety check time, the model or drawn geometry is kept and a
+  route-level note says which. A route built on a mapped water outline carries an
+  explicit depth-unverified caveat, since tile water is generalized for display and
+  carries no depth.
+- **Worldwide route-draft safety check.** The check now covers routes worldwide,
+  not US ENC waters alone. Per leg it runs the union of every applicable
+  provider: NOAA ENC charted depth-area contours, charted land, and charted
+  point hazards in US waters; OpenSeaMap rock, wreck, and obstruction point
+  hazards and an OpenStreetMap coastline land check worldwide; and EMODnet
+  modeled depth, awareness-grade and referenced to Lowest Astronomical Tide
+  (LAT), explicitly not charted, in European seas. Every dimension is either
+  checked with its value and datum stated or flagged explicitly as not checked,
+  never silently passed, and where providers overlap, ENC charted depth and land
+  win and hazards charted by more than one source are flagged once. The check is
+  fully automatic, with no new panel configuration. EMODnet bathymetry is used
+  under CC-BY 4.0 attribution, and the OpenStreetMap coastline under ODbL.
+- The NOAA ENC input gained a charted `Depth_Area` and `Land_Area` polygon
+  query that the route-draft depth check reads as an internal capability. The
+  check spans the harbour through general usage bands, so harbour and river
+  passages are covered, not only open-coast ones.
+- The route-draft endpoint reports each OpenRouter failure with guidance the
+  operator can act on: an invalid or missing key points at the plugin key, an
+  empty credit balance points at the OpenRouter dashboard, and a moderation or
+  permission block is reported as a refused request to rephrase. A moderation
+  block is no longer mislabeled as an authentication error.
 - Border-aware route drafting (part of the beta AI route-drafting feature; still
   a draft to verify against the official charts before use). When a drafted
   route's start and destination are in the same country,
@@ -25,6 +89,30 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The configuration panel is decluttered with progressive disclosure: each data
+  source card now shows only its import choice by default (POI types, seamark
+  groups, or scale band and layers), with the refresh cadence, year filter,
+  merge radius, cache duration, and Overpass endpoint tucked under a per-card
+  Advanced section. The Route drafting section gains the same treatment, and its
+  field name now leads its hint visually. New shared `Fieldset` and `Disclosure`
+  panel primitives back the grouping.
+- The Alerts and Route drafting sections now start collapsed, so the panel opens
+  compact and the operator expands a section when wanted. The Data sources
+  section still defaults open.
+- The route-draft endpoint and the status route now share one admin gate that
+  fails closed: if the server admin middleware cannot be installed, neither
+  route mounts, so the budget-spending endpoint is never left ungated.
+- The configured OpenRouter model now leads each request, with the known-good
+  models as fallback, and the configured closest-hauled tacking angle now
+  reaches the model for a sailing vessel, so both settings take effect rather
+  than being inert.
+- The route-draft check now scans point hazards across every configured scale
+  band, deduped by charted position, so a hazard charted only at a coarser band
+  is still flagged, matching the depth sweep.
+- A drafted waypoint far outside the requested chart window is dropped as a
+  hallucination, an unexpected server error no longer reflects its internal
+  detail to the caller, and the daily call cap, which counts failed attempts
+  too, now says so in the panel.
 - Renamed the bridge-clearance message formatter to `formatClearanceMeters`,
   resolving a name collision with the shared `formatMeters` that formatted the
   same value with a different number of decimals.
@@ -91,102 +179,6 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   rather than looping forever, and the shared abort-signal combiner now rejects an
   all-undefined call rather than returning a signal that never aborts, turning two
   latent ways to leave the event loop hung into loud errors.
-
-<a id="v0100"></a>
-
-## [0.10.0] - 2026-06-14
-
-The plugin gains an optional, admin-gated, beta AI route-draft endpoint whose
-safety check covers routes worldwide, plus the charted-depth capability that
-backs it. AI route drafting is in beta: it cannot guarantee accuracy, so every
-drafted route must be verified against the official charts before it is used for
-navigation.
-
-### Added
-
-- **AI route drafting (beta, optional, admin only, off until an OpenRouter key is
-  set).** A new `POST /api/route-draft` endpoint turns a plain-language passage
-  request into a drafted route: OpenRouter proposes the turning waypoints, then
-  owned code checks every leg, resolving data providers per leg by the union of
-  every provider whose coverage reaches the leg, and computes a deterministic
-  fuel estimate. This feature is in beta and cannot guarantee accuracy: the route
-  is always a draft the navigator verifies against the official charts before
-  saving, and the depth check reads the charted depth-AREA contour, not the depth
-  at every point. A new Route drafting panel card configures the masked
-  OpenRouter key, the model, a daily call cap, and the vessel, fuel, and routing
-  inputs.
-- **Optimize a drawn route.** `POST /api/route-draft` now also accepts an optional
-  `route`, the navigator's drawn waypoints. When present, the endpoint refines that
-  route instead of drafting from words: it keeps the drawn start and destination,
-  moves and adds turning waypoints only as needed to clear the charted and modeled
-  hazards with the standoff, and runs the same worldwide per-leg safety check and
-  fuel estimate. The plain-language prompt becomes an optional one-line hint, and
-  the response carries an `optimized` marker so a client can confirm the route was
-  consumed. Documented in `docs/route-draft-api.md`.
-- **Channel routing follows the water.** Where charted depth (US ENC) or mapped
-  water covers the passage, the endpoint replaces the model's straight legs with a
-  deterministic water-following route computed in owned code (a depth-aware
-  navigable grid plus A* over it), so the drafted waypoints follow the channel
-  rather than cutting across land. Mapped water is read from vector tiles, the
-  OpenStreetMap-derived water layer the chart base map renders, where each water
-  body is a pre-clipped polygon and an island is a hole in it; because the tiles
-  are pre-clipped, big water and coastline-bounded bodies route worldwide, inland
-  or on the coast. The grid avoids charted and mapped land, including the island
-  holes, and the returned route is re-checked at full polygon resolution so a
-  returned channel route never crosses land. Where no coverage is available, where
-  the passage is too large to cover within the tile budget, or where routing is
-  skipped to leave the safety check time, the model or drawn geometry is kept and a
-  route-level note says which. A route built on a mapped water outline carries an
-  explicit depth-unverified caveat, since tile water is generalized for display and
-  carries no depth.
-- **Worldwide route-draft safety check.** The check now covers routes worldwide,
-  not US ENC waters alone. Per leg it runs the union of every applicable
-  provider: NOAA ENC charted depth-area contours, charted land, and charted
-  point hazards in US waters; OpenSeaMap rock, wreck, and obstruction point
-  hazards and an OpenStreetMap coastline land check worldwide; and EMODnet
-  modeled depth, awareness-grade and referenced to Lowest Astronomical Tide
-  (LAT), explicitly not charted, in European seas. Every dimension is either
-  checked with its value and datum stated or flagged explicitly as not checked,
-  never silently passed, and where providers overlap, ENC charted depth and land
-  win and hazards charted by more than one source are flagged once. The check is
-  fully automatic, with no new panel configuration. EMODnet bathymetry is used
-  under CC-BY 4.0 attribution, and the OpenStreetMap coastline under ODbL.
-- The NOAA ENC input gained a charted `Depth_Area` and `Land_Area` polygon
-  query that the route-draft depth check reads as an internal capability. The
-  check spans the harbour through general usage bands, so harbour and river
-  passages are covered, not only open-coast ones.
-- The route-draft endpoint reports each OpenRouter failure with guidance the
-  operator can act on: an invalid or missing key points at the plugin key, an
-  empty credit balance points at the OpenRouter dashboard, and a moderation or
-  permission block is reported as a refused request to rephrase. A moderation
-  block is no longer mislabeled as an authentication error.
-
-### Changed
-
-- The configuration panel is decluttered with progressive disclosure: each data
-  source card now shows only its import choice by default (POI types, seamark
-  groups, or scale band and layers), with the refresh cadence, year filter,
-  merge radius, cache duration, and Overpass endpoint tucked under a per-card
-  Advanced section. The Route drafting section gains the same treatment, and its
-  field name now leads its hint visually. New shared `Fieldset` and `Disclosure`
-  panel primitives back the grouping.
-- The Alerts and Route drafting sections now start collapsed, so the panel opens
-  compact and the operator expands a section when wanted. The Data sources
-  section still defaults open.
-- The route-draft endpoint and the status route now share one admin gate that
-  fails closed: if the server admin middleware cannot be installed, neither
-  route mounts, so the budget-spending endpoint is never left ungated.
-- The configured OpenRouter model now leads each request, with the known-good
-  models as fallback, and the configured closest-hauled tacking angle now
-  reaches the model for a sailing vessel, so both settings take effect rather
-  than being inert.
-- The route-draft check now scans point hazards across every configured scale
-  band, deduped by charted position, so a hazard charted only at a coarser band
-  is still flagged, matching the depth sweep.
-- A drafted waypoint far outside the requested chart window is dropped as a
-  hallucination, an unexpected server error no longer reflects its internal
-  detail to the caller, and the daily call cap, which counts failed attempts
-  too, now says so in the panel.
 
 ### Internal
 
