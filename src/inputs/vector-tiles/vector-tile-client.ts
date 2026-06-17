@@ -66,16 +66,18 @@ export interface VectorTileClient {
   close: () => void
 }
 
-/** Read the tile-URL template from a style's vector source TileJSON. */
+/**
+ * Read the tile-URL template from a style's vector source TileJSON. Intentionally takes no caller
+ * signal: it runs as a shared one-shot bounded by the http client's own timeout and stop controller.
+ */
 async function resolveTemplate (
   fetchJson: (url: string, signal?: AbortSignal) => Promise<unknown>,
-  styleUrl: string,
-  signal?: AbortSignal
+  styleUrl: string
 ): Promise<string> {
-  const style = await fetchJson(styleUrl, signal) as { sources?: Record<string, { type?: string, url?: string }> }
+  const style = await fetchJson(styleUrl) as { sources?: Record<string, { type?: string, url?: string }> }
   const source = Object.values(style.sources ?? {}).find((s) => s?.type === 'vector' && typeof s.url === 'string')
   if (source?.url === undefined) throw new Error('vector-tile style has no vector source with a TileJSON url')
-  const tileJson = await fetchJson(source.url, signal) as { tiles?: unknown }
+  const tileJson = await fetchJson(source.url) as { tiles?: unknown }
   const template = Array.isArray(tileJson.tiles) ? tileJson.tiles[0] : undefined
   if (typeof template !== 'string' || !template.includes('{z}')) {
     throw new Error('vector-tile TileJSON has no usable tile template')
@@ -155,10 +157,14 @@ export function createVectorTileClient (
   // Resolve the template once, sharing one in-flight resolution across concurrent callers
   // (a whole tile batch can 404 at once when a build ages out). The memo clears on
   // settle: success leaves `template` set so later callers short-circuit, failure clears
-  // `templatePromise` so a retry re-attempts.
-  async function ensureTemplate (signal?: AbortSignal): Promise<string> {
+  // `templatePromise` so a retry re-attempts. The shared resolution deliberately does NOT
+  // take a caller's signal: it is bounded by the http client's own request timeout and
+  // plugin-stop controller, so one caller's deadline aborting cannot collaterally fail the
+  // other concurrent callers awaiting the same template. Each caller's signal still bounds
+  // its own tile fetch.
+  async function ensureTemplate (): Promise<string> {
     if (template !== undefined) return template
-    templatePromise ??= resolveTemplate(fetchJson, styleUrl, signal)
+    templatePromise ??= resolveTemplate(fetchJson, styleUrl)
       .then((t) => { template = t; return t })
       .finally(() => { templatePromise = undefined })
     return templatePromise
@@ -174,14 +180,14 @@ export function createVectorTileClient (
     z: number, x: number, y: number, layerName: string, signal?: AbortSignal
   ): Promise<TileGeometry[]> {
     const decoder = await loadDecoder()
-    const tmpl = await ensureTemplate(signal)
+    const tmpl = await ensureTemplate()
     try {
       return decodeLayer(decoder, await fetchTileBytes(tileUrl(tmpl, z, x, y), signal), z, x, y, layerName)
     } catch (error) {
       // A 404 means the cached build path aged out: re-resolve once and retry.
       if (error instanceof HttpError && error.status === 404) {
         invalidateTemplate(tmpl)
-        const fresh = await ensureTemplate(signal)
+        const fresh = await ensureTemplate()
         return decodeLayer(decoder, await fetchTileBytes(tileUrl(fresh, z, x, y), signal), z, x, y, layerName)
       }
       throw error

@@ -15,6 +15,10 @@
  */
 export function combineAbortSignals (signals: Array<AbortSignal | undefined>): AbortSignal {
   const defined = signals.filter((signal): signal is AbortSignal => signal !== undefined)
+  // An all-undefined call would yield AbortSignal.any([]), a signal that never aborts, silently
+  // leaving the request with no timeout or cancellation. Every caller passes at least one signal, so
+  // make a future all-undefined caller a loud error rather than a silent permanently-in-flight fetch.
+  if (defined.length === 0) throw new Error('combineAbortSignals: at least one signal must be defined')
   if (defined.length === 1) return defined[0]
   return AbortSignal.any(defined)
 }

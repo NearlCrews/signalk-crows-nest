@@ -8,11 +8,18 @@ export function simplifyPath (
   points: ReadonlyArray<[number, number]>,
   epsilon: number
 ): Array<[number, number]> {
-  if (points.length < 3) return points.map((p) => [p[0], p[1]])
-  // Recurse over index bounds rather than array slices: each split keeps its lo endpoint, the final
-  // hi endpoint is appended once, so no intermediate sub-arrays are allocated per recursion level.
-  const out: Array<[number, number]> = []
-  const recurse = (lo: number, hi: number): void => {
+  const n = points.length
+  if (n < 3) return points.map((p) => [p[0], p[1]])
+  // Iterative Douglas-Peucker over an explicit stack of index ranges, marking the points to keep, so a
+  // long winding path (the A* centerline can run to thousands of cells) cannot overflow the call stack
+  // the way recursion would. The kept set is the two endpoints plus every split point (the farthest
+  // interior point beyond epsilon from its chord), collected in index order: identical to the recursion.
+  const keep = new Uint8Array(n)
+  keep[0] = 1
+  keep[n - 1] = 1
+  const stack: Array<[number, number]> = [[0, n - 1]]
+  while (stack.length > 0) {
+    const [lo, hi] = stack.pop() as [number, number]
     const [ax, ay] = points[lo]
     const [bx, by] = points[hi]
     const dx = bx - ax
@@ -29,13 +36,12 @@ export function simplifyPath (
       }
     }
     if (far > epsilon && farIdx !== -1) {
-      recurse(lo, farIdx)
-      recurse(farIdx, hi)
-    } else {
-      out.push([ax, ay])
+      keep[farIdx] = 1
+      stack.push([lo, farIdx])
+      stack.push([farIdx, hi])
     }
   }
-  recurse(0, points.length - 1)
-  out.push([points[points.length - 1][0], points[points.length - 1][1]])
+  const out: Array<[number, number]> = []
+  for (let i = 0; i < n; i += 1) if (keep[i] === 1) out.push([points[i][0], points[i][1]])
   return out
 }

@@ -12,6 +12,11 @@ import type { Bbox } from './types.js'
  * east >= west), which is what `positionToBbox` and `unionBbox` produce.
  */
 export function tileBbox (bbox: Bbox, maxSpanDegrees: number): Bbox[] {
+  // A non-positive or non-finite span would make the tile counts Infinity and the loops never end,
+  // so reject it loudly rather than hang the event loop. Every caller passes a positive constant.
+  if (!(maxSpanDegrees > 0) || !Number.isFinite(maxSpanDegrees)) {
+    throw new Error(`tileBbox: maxSpanDegrees must be a positive finite number, got ${maxSpanDegrees}`)
+  }
   const tiles: Bbox[] = []
   const latCount = Math.max(1, Math.ceil((bbox.north - bbox.south) / maxSpanDegrees))
   const lonCount = Math.max(1, Math.ceil((bbox.east - bbox.west) / maxSpanDegrees))
