@@ -7,7 +7,12 @@
 import type { Position } from './types.js'
 import { isInUsWaters } from './us-waters.js'
 
-/** True when a leg endpoint is inside the (generous) US ENC coverage envelope. */
+/**
+ * True when a leg endpoint is inside the (generous) US ENC coverage envelope. ENC coverage equals US
+ * waters today, so this delegates, but it is a deliberate seam, not a redundant wrapper: it names the
+ * ENC-coverage concept the route-draft resolver reads, and is where the two would diverge if NOAA ENC
+ * ever covered more or less than the outbound-HTTP gate's US-waters envelope.
+ */
 export function isInEncCoverage (position: Position): boolean {
   return isInUsWaters(position)
 }

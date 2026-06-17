@@ -25,7 +25,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { RingPolygon } from './channel-router/nav-grid.js'
 import { pointInRings } from './leg-geometry.js'
-import { bboxContainsPoint, bboxesOverlap, boundsOfRings } from '../geo/position-utilities.js'
+import { bboxContainsPoint, bboxesOverlap, boundsOfRings, unionBbox } from '../geo/position-utilities.js'
 import type { Bbox, Logger, Position } from '../shared/types.js'
 
 export interface Country {
@@ -68,14 +68,7 @@ const NOOP: CountryBoundaries = {
 }
 
 function featureBbox (polys: BoundaryPolygon[]): Bbox {
-  let { north, south, east, west } = polys[0].bbox
-  for (const p of polys) {
-    if (p.bbox.north > north) north = p.bbox.north
-    if (p.bbox.south < south) south = p.bbox.south
-    if (p.bbox.east > east) east = p.bbox.east
-    if (p.bbox.west < west) west = p.bbox.west
-  }
-  return { north, south, east, west }
+  return polys.reduce((acc, p) => unionBbox(acc, p.bbox), polys[0].bbox)
 }
 
 interface RawFeature {

@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createOverpassClient, type RateLimitOptions } from '../src/inputs/openseamap/overpass-client.js'
 import type { Bbox } from '../src/shared/types.js'
-import { jsonResponse, silentLog } from './helpers.js'
+import { jsonResponse, silentLog, withMockFetch } from './helpers.js'
 
 /** Fast rate-limit settings so the retry tests do not sleep for whole seconds. */
 const fastLimits: Partial<RateLimitOptions> = {
@@ -14,31 +14,6 @@ const fastLimits: Partial<RateLimitOptions> = {
 
 const endpoint = 'https://overpass.test/api/interpreter'
 const sampleBbox: Bbox = { north: 1, south: 0, east: 1, west: 0 }
-
-/**
- * Swap in a stubbed global fetch for the duration of fn, then restore it. The
- * stub records every call's init so tests can assert on the request.
- */
-async function withMockFetch (
-  handler: (callIndex: number, init?: RequestInit, url?: string) => Response | Promise<Response>,
-  fn: (calls: { count: number, lastInit?: RequestInit, urls: string[] }) => Promise<void>
-): Promise<void> {
-  const original = globalThis.fetch
-  const calls: { count: number, lastInit?: RequestInit, urls: string[] } = { count: 0, urls: [] }
-  globalThis.fetch = (async (url: unknown, init?: RequestInit): Promise<Response> => {
-    const callIndex = calls.count
-    calls.count++
-    calls.lastInit = init
-    const urlString = String(url)
-    calls.urls.push(urlString)
-    return handler(callIndex, init, urlString)
-  }) as typeof fetch
-  try {
-    await fn(calls)
-  } finally {
-    globalThis.fetch = original
-  }
-}
 
 test('listPointsOfInterest renders the bbox in south,west,north,east order', async () => {
   await withMockFetch(

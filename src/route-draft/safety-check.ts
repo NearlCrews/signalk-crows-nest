@@ -144,7 +144,7 @@ export type ScanRouteCorridor = (input: RouteCorridorScanInput) => CorridorPoi[]
 export interface LegCheckDeps {
   /** The ENC Direct client. Passed through to `queryChartedAreas` and `client.queryLayer`. */
   client: EncDirectClient
-  /** The charted depth-area and land-area query (one bounded call per leg per band). */
+  /** The charted depth-area and land-area query (one bounded call per band, route-wide, shared across legs). */
   queryChartedAreas: QueryChartedAreas
   /** The Overpass client the worldwide OpenSeaMap provider queries through for point hazards. */
   overpass: OverpassClient

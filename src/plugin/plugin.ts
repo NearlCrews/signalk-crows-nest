@@ -20,19 +20,18 @@ import { createPluginStatus } from '../status/plugin-status.js'
 import { createStatusRouter } from '../status/status-router.js'
 import { buildPoiTypesString, ensurePoiTypes } from '../shared/poi-type-selection.js'
 import { PLUGIN_ID, PLUGIN_REPO_URL } from '../shared/plugin-id.js'
+import { appLogger } from '../shared/debug.js'
 import type { Logger, PluginConfig } from '../shared/types.js'
 import { join } from 'node:path'
 import type { IRouter } from 'express'
 import { createEncDirectClient } from '../inputs/noaa-enc/enc-direct-client.js'
-import { createOverpassClient } from '../inputs/openseamap/overpass-client.js'
+import { createOverpassClient, type OverpassClient } from '../inputs/openseamap/overpass-client.js'
 import { createVectorTileClient, DEFAULT_TILE_STYLE_URL, type VectorTileClient } from '../inputs/vector-tiles/vector-tile-client.js'
 import { createTileWaterSource } from '../route-draft/channel-router/index.js'
 import { loadCountryBoundaries } from '../route-draft/country-boundaries.js'
-import type { OverpassClient } from '../inputs/openseamap/overpass-client.js'
 import { resolvePrimaryEndpoint } from '../shared/overpass-endpoints.js'
 import { normalizeRouteDraftConfig, routeDraftConfigSchema } from '../route-draft/config.js'
-import { createRouteDraftRouter, modelsForRequest } from '../route-draft/endpoint.js'
-import type { RouteDraftService } from '../route-draft/endpoint.js'
+import { createRouteDraftRouter, modelsForRequest, type RouteDraftService } from '../route-draft/endpoint.js'
 import { createEmodnetClient } from '../route-draft/emodnet/emodnet-client.js'
 import { OpenRouterClient } from '../route-draft/openrouter.js'
 import { BudgetTracker } from '../route-draft/budget.js'
@@ -49,6 +48,9 @@ const OPEN_API = {
     version: '1.0.0',
     description: 'Internal status API plus the optional AI route-draft endpoint.'
   },
+  // The plugin router mounts under /plugins/signalk-crows-nest, so the paths below resolve there; this
+  // servers entry makes the rendered Swagger docs point at the reachable URLs rather than the bare paths.
+  servers: [{ url: '/plugins/signalk-crows-nest' }],
   paths: {
     '/api/status': {
       get: {
@@ -267,7 +269,7 @@ export function createPlugin (
     // Like the ENC client it is a stateless one-shot client holding no sockets
     // between calls, so it needs no close on teardown.
     const emodnet = createEmodnetClient()
-    const log: Logger = { debug: (m) => { app.debug(m) }, error: (m) => { app.error(m) } }
+    const log: Logger = appLogger(app)
     // The worldwide OpenSeaMap leg check queries through this Overpass client.
     // The default endpoint suffices (no per-source config here); the lighter
     // minDelayMs keeps the bounded per-route burst inside the request deadline.
@@ -293,9 +295,13 @@ export function createPlugin (
         app.debug(`${PLUGIN_NAME} route drafting ready`)
       }
     }).catch((err) => {
-      // Configured but failed to start: record it so the endpoint reports a start failure, not "not configured".
-      if (mine === routeDraftGeneration) routeDraftInitFailed = true
-      app.error(`Cannot load the route-draft budget: ${String(err)}`)
+      // Configured but failed to start: record it so the endpoint reports a start failure, not "not
+      // configured". Skip both the flag and the log on a stale generation (a teardown or newer start
+      // already moved on), so a rapid restart does not record or log an orphaned load's failure.
+      if (mine === routeDraftGeneration) {
+        routeDraftInitFailed = true
+        app.error(`Cannot load the route-draft budget: ${String(err)}`)
+      }
     })
   }
 
@@ -339,7 +345,7 @@ export function createPlugin (
       // diagnosable from the server log alone.
       const poiTypes = buildPoiTypesString(config)
       app.debug(
-        `Crow's Nest starting: caching duration ${config.cachingDurationMinutes} minutes, ` +
+        `${PLUGIN_NAME} starting: caching duration ${config.cachingDurationMinutes} minutes, ` +
         `POI types ${poiTypes ?? '(none selected)'}`
       )
 

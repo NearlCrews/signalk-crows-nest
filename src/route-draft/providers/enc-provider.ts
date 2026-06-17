@@ -33,9 +33,7 @@ import {
   rhumbDistanceMeters
 } from '../../geo/position-utilities.js'
 import {
-  cumulativeLegStartMeters,
   legBbox,
-  legForAlongTrack,
   legPolyline,
   pointInRings,
   routeBbox,
@@ -58,11 +56,9 @@ import { isInEncCoverage } from '../../shared/regions.js'
 import { SCALE_BAND_LABELS } from '../../shared/scale-band.js'
 import type {
   Bbox,
-  CorridorPoi,
   Logger,
   Position,
-  PoiSummary,
-  RoutePolyline
+  PoiSummary
 } from '../../shared/types.js'
 import type {
   LegFlag,
@@ -70,7 +66,7 @@ import type {
   QueryChartedAreas,
   ScanRouteCorridor
 } from '../safety-check.js'
-import { ENC_PRECEDENCE, ENC_PROVIDER_ID, hazardDedupeKey, ROUTE_DRAFT_ID } from './provider.js'
+import { corridorHazardFlags, ENC_PRECEDENCE, ENC_PROVIDER_ID, hazardDedupeKey } from './provider.js'
 import type {
   Dimension,
   LegRef,
@@ -519,8 +515,7 @@ export function createEncProvider (deps: EncProviderDeps): LegSafetyProvider {
      * leg index. On a hazard query rejection, emit the existing degrade note.
      */
     async checkHazards (legs: LegRef[], params: LegCheckParams): Promise<LegFlag[]> {
-      const flags: LegFlag[] = []
-      if (legs.length === 0) return flags
+      if (legs.length === 0) return []
       const corridorHalfWidthMeters = params.corridorHalfWidthMeters
       // The route polyline for the corridor scan is the covered legs' endpoints,
       // each leg's start followed by the final leg's end.
@@ -532,42 +527,24 @@ export function createEncProvider (deps: EncProviderDeps): LegSafetyProvider {
       } catch (error) {
         // At error level so a persistent ENC hazard-service outage is visible in normal logs, not only with debug on.
         deps.logger?.error(`route hazard query failed: ${String(error)}`)
-        flags.push({ kind: 'other', message: 'point hazards not checked: charted query failed' })
-        return flags
+        return [{ kind: 'other', message: 'point hazards not checked: charted query failed' }]
       }
-      if (hazards.summaries.length === 0) return flags
+      if (hazards.summaries.length === 0) return []
 
-      const route: RoutePolyline = {
-        routeId: ROUTE_DRAFT_ID,
-        vesselPosition: null,
-        waypoints
-      }
-      const corridorPois: CorridorPoi[] = deps.scanRouteCorridor({
-        route,
-        pois: hazards.summaries,
-        corridorHalfWidthMeters
-      })
-      // Built once: the cumulative great-circle distance to each leg's start, the
-      // same measure scanRouteCorridor uses for alongTrackDistanceMeters, so a
-      // hazard maps to the right leg and the leg lengths are not re-summed per POI.
-      const legStartMeters = cumulativeLegStartMeters(waypoints)
-      for (const poi of corridorPois) {
+      // The shared corridor scan maps each matched POI to a global leg; this provider supplies the ENC
+      // wording and the cross-provider dedupe key (layer type plus charted position), so the same hazard
+      // OpenSeaMap reports collapses to one flag with the ENC reading kept. The orchestrator strips the
+      // transient hazardKey before returning. A POI with no resolved feature is skipped.
+      return corridorHazardFlags(legs, waypoints, hazards.summaries, deps.scanRouteCorridor, corridorHalfWidthMeters, (poi, globalLeg) => {
         const feature = hazards.features.get(poi.id)
-        if (feature === undefined) continue
-        // legForAlongTrack returns the LOCAL index into this covered-leg run;
-        // legs[local].leg maps it back to the global route leg index.
-        flags.push({
-          leg: legs[legForAlongTrack(legStartMeters, poi.alongTrackDistanceMeters)].leg,
+        if (feature === undefined) return undefined
+        return {
+          leg: globalLeg,
           kind: 'hazard',
           message: hazardMessage(feature.layerKey, feature.properties),
-          // The shared cross-provider dedupe key, keyed on the layer type and the
-          // charted position, so the same hazard the OpenSeaMap provider reports
-          // collapses to one flag with the ENC reading kept. The orchestrator
-          // strips this transient field before returning.
           hazardKey: hazardDedupeKey(feature.layerKey, poi.position)
-        })
-      }
-      return flags
+        }
+      })
     }
   }
 }

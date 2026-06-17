@@ -10,8 +10,18 @@
  * message is never lost.
  */
 
+import type { Logger } from './types.js'
+
 /** True when the given `app.debug` logger is currently enabled. */
 export function debugIsEnabled (debug: unknown): boolean {
   const enabled = (debug as { enabled?: unknown })?.enabled
   return typeof enabled === 'boolean' ? enabled : true
+}
+
+/**
+ * Adapt a SignalK app (or anything with `debug` and `error` string methods) to the project's
+ * {@link Logger} surface, normalizing each to a one-argument call that discards any return value.
+ */
+export function appLogger (app: { debug: (message: string) => void, error: (message: string) => void }): Logger {
+  return { debug: (m) => { app.debug(m) }, error: (m) => { app.error(m) } }
 }

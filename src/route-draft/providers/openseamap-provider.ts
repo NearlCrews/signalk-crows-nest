@@ -41,9 +41,8 @@
 
 import { combineAbortSignals } from '../../shared/abort.js'
 import { tileBbox } from '../../shared/bbox-tiles.js'
+import { bboxContainsPoint, boundsOfRings } from '../../geo/position-utilities.js'
 import {
-  cumulativeLegStartMeters,
-  legForAlongTrack,
   legPolyline,
   pointInRings,
   routeBbox
@@ -54,14 +53,12 @@ import { MAX_BBOX_SPAN_DEGREES, type OverpassClient } from '../../inputs/opensea
 import type { QueryTileWater, TileWater } from '../channel-router/index.js'
 import type {
   Bbox,
-  CorridorPoi,
   Logger,
   Position,
-  PoiSummary,
-  RoutePolyline
+  PoiSummary
 } from '../../shared/types.js'
 import type { LegFlag, LegCheckParams, ScanRouteCorridor } from '../safety-check.js'
-import { hazardDedupeKey, OPENSEAMAP_PRECEDENCE, OPENSEAMAP_PROVIDER_ID, ROUTE_DRAFT_ID } from './provider.js'
+import { corridorHazardFlags, hazardDedupeKey, OPENSEAMAP_PRECEDENCE, OPENSEAMAP_PROVIDER_ID } from './provider.js'
 import type {
   Dimension,
   LegRef,
@@ -142,8 +139,11 @@ function legRunsOverLand (
   spacingMeters: number,
   toleranceMeters: number
 ): boolean {
+  // Precompute each water polygon's bbox once: the leg is sampled at fine spacing, so a sample outside a
+  // polygon's extent can skip the full ring scan rather than walk every polygon's vertices per sample.
+  const indexed = water.water.map((w) => ({ rings: w.rings, bbox: boundsOfRings(w.rings) }))
   const onWater = (lon: number, lat: number): boolean =>
-    water.water.some((w) => pointInRings(lon, lat, w.rings))
+    indexed.some((w) => bboxContainsPoint(w.bbox, lon, lat) && pointInRings(lon, lat, w.rings))
   let offRun = 0
   for (const [lon, lat] of legPolyline(from, to, spacingMeters)) {
     if (onWater(lon, lat)) {
@@ -295,8 +295,7 @@ export function createOpenSeaMapProvider (deps: OpenSeaMapProviderDeps): LegSafe
      * explicit hazards-not-checked note.
      */
     async checkHazards (legs: LegRef[], params: LegCheckParams): Promise<LegFlag[]> {
-      const flags: LegFlag[] = []
-      if (legs.length === 0) return flags
+      if (legs.length === 0) return []
       const corridorHalfWidthMeters = params.corridorHalfWidthMeters
       // The route polyline for the corridor scan is the covered legs' endpoints,
       // each leg's start followed by the final leg's end. The precondition on
@@ -309,42 +308,23 @@ export function createOpenSeaMapProvider (deps: OpenSeaMapProviderDeps): LegSafe
         hazards = await queryHazards(deps.client, routeBbox(waypoints, corridorHalfWidthMeters), signal)
       } catch (error) {
         deps.logger?.debug(`OpenSeaMap route hazard query failed: ${String(error)}`)
-        flags.push({ kind: 'other', message: 'point hazards not checked: the OpenStreetMap query failed' })
-        return flags
+        return [{ kind: 'other', message: 'point hazards not checked: the OpenStreetMap query failed' }]
       }
-      if (hazards.summaries.length === 0) return flags
+      if (hazards.summaries.length === 0) return []
 
-      const route: RoutePolyline = {
-        routeId: ROUTE_DRAFT_ID,
-        vesselPosition: null,
-        waypoints
-      }
-      const corridorPois: CorridorPoi[] = deps.scanRouteCorridor({
-        route,
-        pois: hazards.summaries,
-        corridorHalfWidthMeters
-      })
-      // Built once: the cumulative great-circle distance to each leg's start, the
-      // same measure scanRouteCorridor uses for alongTrackDistanceMeters, so a
-      // hazard maps to the right leg and the leg lengths are not re-summed per POI.
-      const legStartMeters = cumulativeLegStartMeters(waypoints)
-      for (const poi of corridorPois) {
+      // The shared corridor scan maps each matched POI to a global leg; this provider supplies the OSM
+      // wording and the cross-provider dedupe key (seamark type word plus charted position), matching the
+      // ENC provider so the same hazard both report collapses to one flag with the ENC reading kept. The
+      // orchestrator strips the transient hazardKey before returning.
+      return corridorHazardFlags(legs, waypoints, hazards.summaries, deps.scanRouteCorridor, corridorHalfWidthMeters, (poi, globalLeg) => {
         const typeWord = hazards.typeWord.get(poi.id) ?? 'hazard'
-        // legForAlongTrack returns the LOCAL index into this covered-leg run;
-        // legs[local].leg maps it back to the global route leg index.
-        flags.push({
-          leg: legs[legForAlongTrack(legStartMeters, poi.alongTrackDistanceMeters)].leg,
+        return {
+          leg: globalLeg,
           kind: 'hazard',
           message: `OpenStreetMap-charted ${typeWord} within the leg corridor`,
-          // The shared cross-provider dedupe key, keyed on the seamark type word
-          // and the charted position, matching the ENC provider so the same
-          // hazard both report collapses to one flag (the ENC reading is kept,
-          // since ENC has precedence). The orchestrator strips this transient
-          // field before returning.
           hazardKey: hazardDedupeKey(typeWord, poi.position)
-        })
-      }
-      return flags
+        }
+      })
     }
   }
 }

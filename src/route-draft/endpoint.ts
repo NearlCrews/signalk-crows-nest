@@ -20,6 +20,7 @@ import type { ServerAPI } from '@signalk/server-api'
 import { ensureApiAdminGate } from '../status/admin-gate.js'
 import { finiteOrUndefined, isFiniteNumber } from '../shared/numbers.js'
 import { presentString } from '../shared/strings.js'
+import { appLogger } from '../shared/debug.js'
 import { METERS_PER_NAUTICAL_MILE } from '../shared/length.js'
 import { MS_PER_SECOND } from '../shared/time.js'
 import { toPosition } from '../geo/position-utilities.js'
@@ -50,6 +51,12 @@ const DEPTH_BANDS: ScaleBand[] = ['harbour', 'approach', 'coastal', 'general']
 
 /** Half-width of the point-hazard corridor either side of a leg, about a quarter nautical mile. */
 const CORRIDOR_HALF_WIDTH_METERS = 0.25 * METERS_PER_NAUTICAL_MILE
+
+/** Liters per cubic meter, for converting SI tank volumes to the liters the fuel estimate uses. */
+const LITERS_PER_CUBIC_METER = 1000
+
+/** A clean Position copy, dropping any extra fields (a name or note) a drafted waypoint may carry. */
+const toLatLon = (p: Position): Position => ({ latitude: p.latitude, longitude: p.longitude })
 
 /**
  * Whole-request deadline, split across the LLM call and the safety check. The
@@ -334,14 +341,14 @@ function readFuelAboardLiters (app: ServerAPI): number | undefined {
     const tank = node as Record<string, unknown>
     const currentVolume = leafNumber(tank.currentVolume)
     if (currentVolume !== undefined) {
-      liters += currentVolume * 1000
+      liters += currentVolume * LITERS_PER_CUBIC_METER
       found = true
       continue
     }
     const capacity = leafNumber(tank.capacity)
     const currentLevel = leafNumber(tank.currentLevel)
     if (capacity !== undefined && currentLevel !== undefined) {
-      liters += capacity * currentLevel * 1000
+      liters += capacity * currentLevel * LITERS_PER_CUBIC_METER
       found = true
     }
   }
@@ -595,8 +602,9 @@ async function handleDraft (
       // No provider require_parameters filter: OpenRouter does not advertise the Anthropic models as
       // supporting strict response_format, so require_parameters returns 404 (no endpoints) and a
       // configured Opus or Claude model silently falls back to Gemini. Without the filter OpenRouter
-      // routes to a provider that honors the schema (verified live for Opus and Gemini), and the parser
-      // is the backstop if a provider ever ignores it and returns prose.
+      // routes to a provider that honors the schema (verified live for Opus and Gemini), so
+      // parseDraftedRoute is the SOLE schema enforcement here: it drops any waypoint that is not a valid
+      // in-bounds coordinate, so a provider ignoring the schema yields a no-route decline, never a bad route.
       temperature: parsed.route !== undefined ? ROUTE_OPTIMIZE_TEMPERATURE : ROUTE_DRAFT_TEMPERATURE,
       maxTokens: MAX_OUTPUT_TOKENS,
       abortSignal: AbortSignal.timeout(Math.max(MS_PER_SECOND, deadlineMs - Date.now()))
@@ -635,7 +643,7 @@ async function handleDraft (
   if (parsed.route !== undefined) anchorRouteEndpoints(route.waypoints, parsed.route)
 
   // One logger and one draft figure for both the channel router and the safety check.
-  const logger = { debug: (m: string) => { app.debug(m) }, error: (m: string) => { app.error(m) } }
+  const logger = appLogger(app)
   const draftMeters = resolveDraftMeters(app, config)
 
   // Replace the model geometry with a deterministic water-following route where ENC or
@@ -644,8 +652,8 @@ async function handleDraft (
   // Border-aware routing: when the route starts and ends in the same country, block the other
   // countries' waters so the path stays in that country's waters (a US Detroit River route stays out
   // of Canada). Different-country or marine endpoints give no home, so nothing is blocked.
-  const startPos = { latitude: route.waypoints[0].latitude, longitude: route.waypoints[0].longitude }
-  const endPos = { latitude: route.waypoints[route.waypoints.length - 1].latitude, longitude: route.waypoints[route.waypoints.length - 1].longitude }
+  const startPos = toLatLon(route.waypoints[0])
+  const endPos = toLatLon(route.waypoints[route.waypoints.length - 1])
   const homeCountry = service.boundaries.homeForRoute(startPos, endPos)
 
   const channelResult: ChannelRouteResult | { ok: false, reason: 'skipped' } =
@@ -660,7 +668,7 @@ async function handleDraft (
           standoffNm: config.routeDraftStandoffNm,
           ...(parsed.route !== undefined
             ? { corridor: parsed.route }
-            : { bboxAnchors: route.waypoints.map((wp) => ({ latitude: wp.latitude, longitude: wp.longitude })) }),
+            : { bboxAnchors: route.waypoints.map(toLatLon) }),
           ...(homeCountry !== undefined
             ? { foreignRings: (bbox) => service.boundaries.foreignRings(homeCountry.id, bbox) }
             : {}),
@@ -672,7 +680,7 @@ async function handleDraft (
   const channel = applyChannelRoute(route.waypoints, channelResult, homeCountry?.name)
   route.waypoints = channel.waypoints
 
-  const positions: Position[] = route.waypoints.map((wp) => ({ latitude: wp.latitude, longitude: wp.longitude }))
+  const positions: Position[] = route.waypoints.map(toLatLon)
 
   // The deterministic safety check, bounded by the remaining request budget. If
   // it overruns, the route still returns with an honest "not checked" flag, and
@@ -751,7 +759,7 @@ export function applyChannelRoute (
   homeName?: string
 ): { waypoints: DraftWaypoint[], notes: LegFlag[] } {
   if (result.ok) {
-    const replaced = result.waypoints.map((p) => ({ latitude: p.latitude, longitude: p.longitude }))
+    const replaced = result.waypoints.map(toLatLon)
     const notes: LegFlag[] = []
     if (result.usedTileWater) notes.push(CHANNEL_TILE_WATER_CAVEAT)
     if (result.borderFallback === true) notes.push(borderFallbackNote(homeName))

@@ -136,7 +136,9 @@ export default memo(function RouteDraftingSection ({ state, dispatch }: Props): 
         hint='Sets the minimal safe depth the charted depth-area check flags a leg against, and the point of sail for a sailing draft.'
       >
         <div style={S.labelledInputRow}>
-          <span style={S.label}>Propulsion</span>
+          {/* The SegmentedControl carries its own visually-hidden legend, so the visible label is
+              decorative for sighted users and hidden from assistive tech to avoid a double announce. */}
+          <span style={S.label} aria-hidden='true'>Propulsion</span>
           <SegmentedControl
             legend='Propulsion'
             choices={PROPULSION_CHOICES}
@@ -217,7 +219,7 @@ export default memo(function RouteDraftingSection ({ state, dispatch }: Props): 
           <NumberField
             id='ac-route-draft-burn'
             label='Burn at cruise (liters per hour)'
-            hint='Fuel consumed per hour at cruise speed, in liters. Stored in liters; the fuel estimate works in liters. Leave at 0 to disable the fuel estimate.'
+            hint='Fuel consumed per hour at cruise speed. Leave at 0 to disable the fuel estimate.'
             value={config.routeDraftBurnLitersPerHour}
             onChange={(litersPerHour) => dispatch({ type: 'setRouteDraftBurnLitersPerHour', litersPerHour })}
             min={MIN_BURN_LITERS_PER_HOUR}

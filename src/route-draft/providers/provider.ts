@@ -8,8 +8,9 @@
  * dimensions a responsible provider actually verified.
  */
 
-import type { LegFlag, LegCheckParams } from '../safety-check.js'
-import type { Position } from '../../shared/types.js'
+import type { LegFlag, LegCheckParams, ScanRouteCorridor } from '../safety-check.js'
+import type { CorridorPoi, PoiSummary, Position, RoutePolyline } from '../../shared/types.js'
+import { cumulativeLegStartMeters, legForAlongTrack } from '../leg-geometry.js'
 
 /** Whether a responsible provider returned data for a dimension, or none. */
 export type Coverage = 'data' | 'nodata'
@@ -135,4 +136,32 @@ export function resolveProviders (
  */
 export function hazardDedupeKey (typeWord: string, position: Position): string {
   return `${typeWord.toLowerCase()}:${position.latitude.toFixed(4)}:${position.longitude.toFixed(4)}`
+}
+
+/**
+ * Map a hazard provider's POI summaries onto leg flags: stitch the covered legs into one polyline, scan
+ * its corridor, then build a flag for each matched POI via `toFlag`, translating the POI's along-track
+ * distance to the global leg index. Shared by the ENC and OpenSeaMap hazard sweeps, which differ only in
+ * how they fetch the summaries and how they word each flag (`toFlag` returns undefined to skip a POI).
+ * The caller passes the already-built `waypoints` (it needs them for the fetch bbox) so they are not
+ * rebuilt here. `legStartMeters` is the cumulative great-circle distance to each leg's start, the same
+ * measure `scanRouteCorridor` uses, so a hazard maps to the right leg without re-summing leg lengths per POI.
+ */
+export function corridorHazardFlags (
+  legs: LegRef[],
+  waypoints: Position[],
+  summaries: PoiSummary[],
+  scanRouteCorridor: ScanRouteCorridor,
+  corridorHalfWidthMeters: number,
+  toFlag: (poi: CorridorPoi, globalLeg: number) => LegFlag | undefined
+): LegFlag[] {
+  const route: RoutePolyline = { routeId: ROUTE_DRAFT_ID, vesselPosition: null, waypoints }
+  const corridorPois = scanRouteCorridor({ route, pois: summaries, corridorHalfWidthMeters })
+  const legStartMeters = cumulativeLegStartMeters(waypoints)
+  const flags: LegFlag[] = []
+  for (const poi of corridorPois) {
+    const flag = toFlag(poi, legs[legForAlongTrack(legStartMeters, poi.alongTrackDistanceMeters)].leg)
+    if (flag !== undefined) flags.push(flag)
+  }
+  return flags
 }

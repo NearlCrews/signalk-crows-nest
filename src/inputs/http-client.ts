@@ -264,7 +264,10 @@ export function createHttpClient (
         // the request. A caller-supplied `init.signal` (a route-draft deadline,
         // say) is folded in too when present, so all three can cancel an
         // in-flight fetch. When the caller passes none, the behavior is exactly
-        // the prior two-signal combine.
+        // the prior two-signal combine. The `?? undefined` is load-bearing:
+        // RequestInit.signal is `AbortSignal | null | undefined` and
+        // combineAbortSignals filters only `undefined`, so a raw null would reach
+        // AbortSignal.any and throw; do not simplify it away.
         const response = await fetch(url, {
           ...init,
           signal: combineAbortSignals([
