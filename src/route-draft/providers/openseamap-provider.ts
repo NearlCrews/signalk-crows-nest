@@ -90,6 +90,12 @@ const OSM_CAPABILITIES: ReadonlySet<Dimension> = new Set<Dimension>(['land', 'ha
  * query must not consume the whole request budget and time out the entire safety
  * check, dropping the other providers' results with it. When it fires, the hazard
  * contribution degrades honestly to not-checked.
+ *
+ * Kept short (fast-fail) on purpose: raising it to 12s in testing only added
+ * latency without lowering the not-checked rate, because the public Overpass
+ * endpoint's reliability, not this cap, drives whether the sweep completes. A
+ * snappy response with an honest "point hazards not checked" note beats a slow
+ * one when Overpass is having a bad period.
  */
 const OSM_QUERY_TIMEOUT_MS = 6000
 
