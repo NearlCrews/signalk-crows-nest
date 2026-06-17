@@ -25,7 +25,7 @@ import type { ChartedAreas } from '../../inputs/noaa-enc/depth-area-query.js'
 import type { ScaleBand } from '../../shared/scale-band.js'
 import type { Bbox, Logger, Position } from '../../shared/types.js'
 import { METERS_PER_NAUTICAL_MILE } from '../../shared/length.js'
-import { distanceMeters, sampleRhumbLeg } from '../../geo/position-utilities.js'
+import { bboxContainsPoint, boundsOfRings, distanceMeters, sampleRhumbLeg, unionBbox } from '../../geo/position-utilities.js'
 import { pointInRings, routeBbox } from '../leg-geometry.js'
 import type { QueryChartedAreas } from '../safety-check.js'
 import { buildNavGrid, resolveGridSize, ORTHO_NEIGHBORS, type NavGrid, type RingPolygon } from './nav-grid.js'
@@ -159,6 +159,12 @@ export async function routeChannel (
   const water: TileWater = tile ?? { water: [] }
   if (enc.depthAreas.length === 0 && water.water.length === 0) return { ok: false, reason: 'no-coverage' }
 
+  // One bbox index over the route's physical water (charted areas plus tile water), shared by both
+  // attempts. The foreign block is jurisdictional and lives only in the grid, so the water re-check is
+  // identical for the in-country attempt and the unconstrained fallback; building the index once keeps
+  // the per-sample leg checks cheap and avoids recomputing every polygon bbox on the fallback.
+  const index = buildWaterIndex(enc, water)
+
   // Build the grid and route across it, optionally blocking foreign water. Defined as a closure so the
   // border fallback can run it again without the block, reusing the fetched ENC bands and tile water.
   const attempt = (foreignBlock: RingPolygon[]): ChannelRouteResult => {
@@ -197,8 +203,12 @@ export async function routeChannel (
     // is tolerated here (the per-leg safety check still flags any real land crossing) rather than
     // discarding the whole route over a sliver the grid cannot resolve.
     const clipTolerance = grid.cellMeters
+    // The repair and decimate passes check legs against the router's own grid (O(cells crossed)), not the
+    // full-resolution polygons: the grid carries the one-cell shore erosion, and routeLegsOnWater below is
+    // the polygon honesty backstop over the final waypoints. This is what keeps decimate fast on a
+    // dense-coverage bbox, where a per-sample polygon scan over ~1000 ENC areas was the timeout.
     const legSafe = (a: Position, b: Position): boolean =>
-      legStaysOnWater(a, b, enc, water, sampleSpacing, clipTolerance)
+      legOnGrid(grid, a, b, sampleSpacing)
 
     // Simplify the A* centerline to turning points, then repair: a simplified leg that
     // would cross land or leave water (an RDP chord cutting a concave shore) is replaced by
@@ -260,21 +270,21 @@ export async function routeChannel (
     // (a waypoint every cell at bends), which is far too dense for a usable route. Drop each waypoint
     // whose removal still leaves the longer leg on water, so the result is the minimal set of turns
     // that follow the channel. Endpoints are kept, and every surviving leg stays legSafe by construction.
-    const waypoints = decimateRoute(routePositions, legSafe)
+    const waypoints = decimateRoute(routePositions, legSafe, req.deadlineMs)
 
-    if (!routeStaysOnWater(waypoints, enc, water, sampleSpacing, clipTolerance, req.deadlineMs)) {
+    if (!routeLegsOnWater(waypoints, index, sampleSpacing, clipTolerance, req.deadlineMs)) {
       if (deps.logger !== undefined) {
         const overDeadline = req.deadlineMs !== undefined && Date.now() > req.deadlineMs
         let failLeg = -1
         for (let i = 0; i + 1 < waypoints.length && failLeg < 0; i += 1) {
-          if (!legStaysOnWater(waypoints[i], waypoints[i + 1], enc, water, sampleSpacing, clipTolerance)) failLeg = i
+          if (!legStaysOnWater(waypoints[i], waypoints[i + 1], index, sampleSpacing, clipTolerance)) failLeg = i
         }
         deps.logger.debug(`channel-router diag: decline land-leg at re-check, ${waypoints.length}wp, overDeadline=${overDeadline}, failingLeg=${failLeg}/${waypoints.length - 1}, tolerance=${Math.round(clipTolerance)}m (${elapsed()}ms)`)
       }
       return { ok: false, reason: 'land-leg' }
     }
     deps.logger?.debug(`channel-router diag: OK ${waypoints.length}wp (${elapsed()}ms)`)
-    return { ok: true, waypoints, usedTileWater: usedTileWater(waypoints, enc, water, contour, sampleSpacing) }
+    return { ok: true, waypoints, usedTileWater: usedTileWater(waypoints, index, contour, sampleSpacing, req.deadlineMs) }
   }
 
   const foreignBlock = req.foreignRings?.(bbox) ?? []
@@ -440,13 +450,104 @@ function snapToWater (grid: NavGrid, p: Position, maxSnapMeters: number, inCompo
   return undefined
 }
 
-/** True when a point is inside an ENC depth area charted deep enough (defined `DRVAL1 >= contour`). */
-function inEncDeep (lon: number, lat: number, charted: ChartedAreas, contour: number): boolean {
-  return charted.depthAreas.some((area) => {
-    if (!pointInRings(lon, lat, area.rings)) return false
-    const drval1 = area.depthRange?.shallowMeters
-    return drval1 !== undefined && drval1 >= contour
+/** A tile-water or ENC land polygon with its precomputed outer-extent bbox. */
+interface IndexedPoly { rings: number[][][], bbox: Bbox }
+/** An ENC depth-area polygon with its bbox and decoded `DRVAL1` (shallowMeters), undefined when unknown. */
+interface IndexedDepth extends IndexedPoly { shallowMeters: number | undefined }
+
+/** True when a point lies inside a bbox-indexed polygon: the cheap bbox reject, then the exact ray cast. */
+function pointInIndexedPoly (poly: IndexedPoly, lon: number, lat: number): boolean {
+  return bboxContainsPoint(poly.bbox, lon, lat) && pointInRings(lon, lat, poly.rings)
+}
+
+const EMPTY_CANDIDATES: number[] = []
+
+/**
+ * A uniform-grid spatial index over a set of bbox-bearing polygons: each bucket lists the polygons whose
+ * bbox overlaps it, so a per-point lookup tests only the handful of polygons in that point's bucket
+ * instead of the whole set. A polygon that contains a point necessarily overlaps the point's bucket, so
+ * the lookup misses nothing: it is exact, just fast. This is what keeps the navigability re-checks inside
+ * the deadline in dense ENC coverage (a Chesapeake or Great Lakes bbox returns 1000-2000 depth and land
+ * areas, and the decimate, repair, and re-check passes sample tens of thousands of points).
+ */
+interface SpatialBuckets {
+  west: number
+  north: number
+  invLon: number
+  invLat: number
+  /** Buckets per axis; the grid is square, so this is both the column and the row count. */
+  side: number
+  cells: number[][]
+}
+const EMPTY_BUCKETS: SpatialBuckets = { west: 0, north: 0, invLon: 0, invLat: 0, side: 0, cells: [] }
+
+function buildBuckets (items: ReadonlyArray<{ bbox: Bbox }>, union: Bbox): SpatialBuckets {
+  const lonSpan = union.east - union.west
+  const latSpan = union.north - union.south
+  if (items.length === 0 || !(lonSpan > 0) || !(latSpan > 0)) return EMPTY_BUCKETS
+  // About sqrt(n) buckets per axis caps both the grid memory and the average bucket occupancy.
+  const side = Math.min(64, Math.max(1, Math.round(Math.sqrt(items.length))))
+  const invLon = side / lonSpan
+  const invLat = side / latSpan
+  const cells: number[][] = Array.from({ length: side * side }, () => [])
+  const clamp = (v: number): number => v < 0 ? 0 : v > side - 1 ? side - 1 : v
+  items.forEach((it, idx) => {
+    const c0 = clamp(Math.floor((it.bbox.west - union.west) * invLon))
+    const c1 = clamp(Math.floor((it.bbox.east - union.west) * invLon))
+    const r0 = clamp(Math.floor((union.north - it.bbox.north) * invLat))
+    const r1 = clamp(Math.floor((union.north - it.bbox.south) * invLat))
+    for (let r = r0; r <= r1; r += 1) for (let c = c0; c <= c1; c += 1) cells[r * side + c].push(idx)
   })
+  return { west: union.west, north: union.north, invLon, invLat, side, cells }
+}
+
+/** The candidate polygon indices for a point: its bucket's list, or none when the point is outside the index. */
+function bucketAt (b: SpatialBuckets, lon: number, lat: number): number[] {
+  if (b.side === 0) return EMPTY_CANDIDATES
+  const c = Math.floor((lon - b.west) * b.invLon)
+  const r = Math.floor((b.north - lat) * b.invLat)
+  if (c < 0 || c >= b.side || r < 0 || r >= b.side) return EMPTY_CANDIDATES
+  return b.cells[r * b.side + c]
+}
+
+/**
+ * A spatial index over a route's charted areas and tile water, built ONCE per route and shared by both
+ * border attempts. Each category carries its polygons and a bucket grid for fast point lookup.
+ */
+interface WaterIndex {
+  land: IndexedPoly[]
+  depth: IndexedDepth[]
+  tile: IndexedPoly[]
+  landB: SpatialBuckets
+  depthB: SpatialBuckets
+  tileB: SpatialBuckets
+}
+
+function buildWaterIndex (charted: ChartedAreas, water: TileWater): WaterIndex {
+  const land = charted.landAreas.map((a) => ({ rings: a.rings, bbox: boundsOfRings(a.rings) }))
+  const depth = charted.depthAreas.map((a) => ({ rings: a.rings, bbox: boundsOfRings(a.rings), shallowMeters: a.depthRange?.shallowMeters }))
+  const tile = water.water.map((w) => ({ rings: w.rings, bbox: boundsOfRings(w.rings) }))
+  // The index covers at least one polygon here (the caller declines no-coverage before building it), so
+  // the reduce always has a seed; the degenerate box is a defensive fallback that buildBuckets no-ops on.
+  const bboxes = [...land, ...depth, ...tile].map((p) => p.bbox)
+  const union = bboxes.length > 0 ? bboxes.reduce(unionBbox) : { north: 0, south: 0, east: 0, west: 0 }
+  return {
+    land,
+    depth,
+    tile,
+    landB: buildBuckets(land, union),
+    depthB: buildBuckets(depth, union),
+    tileB: buildBuckets(tile, union)
+  }
+}
+
+/** True when a point is inside an ENC depth area charted deep enough (defined `DRVAL1 >= contour`). */
+function inEncDeep (lon: number, lat: number, index: WaterIndex, contour: number): boolean {
+  for (const i of bucketAt(index.depthB, lon, lat)) {
+    const a = index.depth[i]
+    if (a.shallowMeters !== undefined && a.shallowMeters >= contour && pointInIndexedPoly(a, lon, lat)) return true
+  }
+  return false
 }
 
 /**
@@ -459,17 +560,41 @@ function inEncDeep (lon: number, lat: number, charted: ChartedAreas, contour: nu
  * all water (a coast or an uncharted gap); a point in any other ENC depth area or in tile water is on
  * water. A tile-water route still earns the depth-unverified caveat via {@link usedTileWater}.
  */
-function navigableAt (lon: number, lat: number, charted: ChartedAreas, water: TileWater): boolean {
-  if (charted.landAreas.some((a) => pointInRings(lon, lat, a.rings))) return false
+function navigableAt (lon: number, lat: number, index: WaterIndex): boolean {
+  for (const i of bucketAt(index.landB, lon, lat)) {
+    if (pointInIndexedPoly(index.land[i], lon, lat)) return false
+  }
   let inEncWater = false
-  for (const area of charted.depthAreas) {
-    if (!pointInRings(lon, lat, area.rings)) continue
-    const drval1 = area.depthRange?.shallowMeters
-    if (drval1 !== undefined && drval1 < 0) return false // drying: exposed at low tide, treat as land
+  for (const i of bucketAt(index.depthB, lon, lat)) {
+    const a = index.depth[i]
+    if (!pointInIndexedPoly(a, lon, lat)) continue
+    if (a.shallowMeters !== undefined && a.shallowMeters < 0) return false // drying: exposed at low tide, treat as land
     inEncWater = true
   }
   if (inEncWater) return true
-  return water.water.some((w) => pointInRings(lon, lat, w.rings))
+  for (const i of bucketAt(index.tileB, lon, lat)) {
+    if (pointInIndexedPoly(index.tile[i], lon, lat)) return true
+  }
+  return false
+}
+
+/**
+ * True when the straight leg between two positions stays on navigable GRID cells. This is the router's
+ * INTERNAL leg check, used by the repair and decimate passes, which only need the router's own
+ * cell-resolution model. It is O(cells crossed): far cheaper than the full-resolution polygon test
+ * {@link legStaysOnWater}, which runs once over the final waypoints as the honesty backstop. The grid
+ * already carries a one-cell shore erosion, so a grid-clear leg keeps clearance from land; a per-sample
+ * polygon scan over the ~1000 ENC areas a dense bbox returns was the source of the decimate timeout.
+ */
+function legOnGrid (grid: NavGrid, a: Position, b: Position, sampleSpacingMeters: number): boolean {
+  const spacing = Math.max(1, sampleSpacingMeters)
+  const onCell = (p: Position): boolean => {
+    const [c, r] = grid.cellOf(p)
+    return grid.isNavigable(c, r)
+  }
+  if (!onCell(a)) return false
+  for (const s of sampleRhumbLeg(a, b, spacing)) if (!onCell(s)) return false
+  return onCell(b)
 }
 
 /**
@@ -481,13 +606,13 @@ function navigableAt (lon: number, lat: number, charted: ChartedAreas, water: Ti
  * resolve. A pure cell-resolution router cannot keep every leg exactly off a sub-cell shoreline jut.
  */
 function legStaysOnWater (
-  a: Position, b: Position, charted: ChartedAreas, water: TileWater,
+  a: Position, b: Position, index: WaterIndex,
   sampleSpacingMeters: number, toleranceMeters: number
 ): boolean {
   const spacing = Math.max(1, sampleSpacingMeters)
   let offRun = 0
   const ok = (p: Position): boolean => {
-    if (navigableAt(p.longitude, p.latitude, charted, water)) { offRun = 0; return true }
+    if (navigableAt(p.longitude, p.latitude, index)) { offRun = 0; return true }
     offRun += 1
     return offRun * spacing <= toleranceMeters
   }
@@ -503,12 +628,21 @@ function legStaysOnWater (
  * every surviving leg is legSafe by construction (the leg from the last kept point was checked safe on
  * the step before each keep). One forward pass: O(waypoints) legSafe calls.
  */
-function decimateRoute (waypoints: Position[], legSafe: (a: Position, b: Position) => boolean): Position[] {
+function decimateRoute (
+  waypoints: Position[], legSafe: (a: Position, b: Position) => boolean, deadlineMs?: number
+): Position[] {
   if (waypoints.length <= 2) return waypoints
   const kept: Position[] = [waypoints[0]]
   let anchor = 0
   for (let j = 1; j < waypoints.length - 1; j += 1) {
-    if (legSafe(waypoints[anchor], waypoints[j + 1])) continue // the leg skipping waypoint j stays on water
+    // Stop decimating once the deadline passes, keeping the rest of the (still-valid, cell-resolution)
+    // trace, rather than running each remaining legSafe sample past the budget. The re-check that
+    // follows sees the deadline and declines cleanly, so this only bounds wasted work, never the result.
+    if (deadlineMs !== undefined && Date.now() > deadlineMs) {
+      for (let k = j; k < waypoints.length - 1; k += 1) kept.push(waypoints[k])
+      break
+    }
+    if (legSafe(waypoints[anchor], waypoints[j + 1])) continue
     kept.push(waypoints[j])
     anchor = j
   }
@@ -529,11 +663,18 @@ export function routeStaysOnWater (
   toleranceMeters = 0,
   deadlineMs?: number
 ): boolean {
+  return routeLegsOnWater(waypoints, buildWaterIndex(charted, water), sampleSpacingMeters, toleranceMeters, deadlineMs)
+}
+
+/** {@link routeStaysOnWater} over a prebuilt index, so the router reuses the one index it built per route. */
+function routeLegsOnWater (
+  waypoints: Position[], index: WaterIndex, sampleSpacingMeters: number, toleranceMeters: number, deadlineMs?: number
+): boolean {
   for (let i = 0; i + 1 < waypoints.length; i += 1) {
     // Bail to a decline if the synchronous re-check runs past the deadline, rather than
     // overrunning into the safety check's budget. A declined route is the safe outcome.
     if (deadlineMs !== undefined && Date.now() > deadlineMs) return false
-    if (!legStaysOnWater(waypoints[i], waypoints[i + 1], charted, water, sampleSpacingMeters, toleranceMeters)) {
+    if (!legStaysOnWater(waypoints[i], waypoints[i + 1], index, sampleSpacingMeters, toleranceMeters)) {
       return false
     }
   }
@@ -548,14 +689,17 @@ export function routeStaysOnWater (
  * tile-water fill of an ENC gap) is never presented as depth-checked.
  */
 function usedTileWater (
-  waypoints: Position[], charted: ChartedAreas, water: TileWater, contour: number, sampleSpacingMeters: number
+  waypoints: Position[], index: WaterIndex, contour: number, sampleSpacingMeters: number, deadlineMs?: number
 ): boolean {
-  if (water.water.length === 0) return false
+  if (index.tile.length === 0) return false
   const spacing = Math.max(1, sampleSpacingMeters)
   const onTileWater = (p: Position): boolean =>
-    !inEncDeep(p.longitude, p.latitude, charted, contour) &&
-    water.water.some((w) => pointInRings(p.longitude, p.latitude, w.rings))
+    !inEncDeep(p.longitude, p.latitude, index, contour) &&
+    bucketAt(index.tileB, p.longitude, p.latitude).some((i) => pointInIndexedPoly(index.tile[i], p.longitude, p.latitude))
   for (let i = 0; i + 1 < waypoints.length; i += 1) {
+    // Past the deadline, keep the depth-unverified caveat (the conservative direction) rather than
+    // spending more budget proving it; this only ever runs on an already-successful re-check.
+    if (deadlineMs !== undefined && Date.now() > deadlineMs) return true
     const a = waypoints[i]
     const b = waypoints[i + 1]
     if (onTileWater(a) || onTileWater(b)) return true

@@ -42,6 +42,17 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- AI route drafting no longer hangs or times out on a route over dense charted
+  coverage (a Great Lakes or Chesapeake bounding box returns one to two thousand
+  charted areas). The channel router's navigability checks scanned every polygon
+  per sampled point with no spatial index, and the route-decimation pass had no
+  deadline check, so the synchronous work could run for minutes past the request
+  deadline, blocking the server and keeping it busy after the client gave up. The
+  router now indexes the charted and water polygons in a per-route spatial grid,
+  checks its internal legs against its own navigable grid, and bounds the
+  decimation pass by the deadline. A 15-route Great Lakes sweep that previously
+  ran two to five minutes per route, or timed out, now returns in eight to thirty
+  seconds.
 - The notes-resource plugin status reads "1 point of interest" or "N points of
   interest" rather than a "point(s)" plural placeholder.
 - The Route drafting panel labels its propulsion control consistently for both
