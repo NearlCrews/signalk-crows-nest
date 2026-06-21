@@ -366,6 +366,10 @@ self-contained module registered on one line in `src/index.ts`.
     it), `abort.ts` (the `combineAbortSignals` helper, shared by the queued HTTP
     client and the OpenRouter client, that folds an optional caller signal into
     an `AbortSignal.any` and returns the lone signal when only one is defined),
+    `concurrency.ts` (the `mapWithConcurrency` bounded-concurrency fan-out, a
+    shared-cursor worker pool that runs an async operation over a list with a
+    small number in flight and returns the results in input order, shared by the
+    route-draft leg-safety check and the USCG Light List refresh),
     `bbox-debounce.ts`
     (the per-source geographic stale-while-revalidate cache, which snaps each
     viewport to a coarse tile so a small pan reuses the previous fetch, serves

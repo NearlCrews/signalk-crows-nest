@@ -9,6 +9,27 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 > development milestones that preceded this publication. Their content is
 > incorporated into the 0.4.2 release.
 
+<a id="v0101"></a>
+
+## [0.10.1] - 2026-06-21
+
+A quality-only pass that dedupes a few shared helpers and trims some
+small redundancies. No behavior change, no new configuration; existing
+setups are unaffected.
+
+### Internal
+
+- Extracted the bounded-concurrency worker pool that the route-draft
+  leg-safety check and the USCG Light List refresh each hand-rolled into a
+  single shared `mapWithConcurrency` helper, and routed both through it.
+- Shared the isometric-latitude formula and its east-west epsilon across
+  the two loxodrome helpers, the latitude/longitude validity guards and the
+  range clamp through the canonical finite-number helpers, and the
+  covered-legs-to-waypoints stitch across the two route-draft hazard
+  providers. Folded the channel router's water-index bounding-box union into
+  one pass, collapsed the dedupe radius's min clamps, and dropped a needless
+  panel memo and an orphaned comment.
+
 <a id="v0100"></a>
 
 ## [0.10.0] - 2026-06-17
