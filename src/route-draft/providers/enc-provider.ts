@@ -66,7 +66,7 @@ import type {
   QueryChartedAreas,
   ScanRouteCorridor
 } from '../safety-check.js'
-import { corridorHazardFlags, ENC_PRECEDENCE, ENC_PROVIDER_ID, hazardDedupeKey } from './provider.js'
+import { corridorHazardFlags, ENC_PRECEDENCE, ENC_PROVIDER_ID, hazardDedupeKey, legsToWaypoints } from './provider.js'
 import type {
   Dimension,
   LegRef,
@@ -519,7 +519,7 @@ export function createEncProvider (deps: EncProviderDeps): LegSafetyProvider {
       const corridorHalfWidthMeters = params.corridorHalfWidthMeters
       // The route polyline for the corridor scan is the covered legs' endpoints,
       // each leg's start followed by the final leg's end.
-      const waypoints: Position[] = [legs[0].from, ...legs.map((ref) => ref.to)]
+      const waypoints = legsToWaypoints(legs)
 
       let hazards: EncHazardScan
       try {

@@ -52,6 +52,7 @@ import type {
   Position
 } from '../shared/types.js'
 import { capitalizeFirst } from '../shared/strings.js'
+import { mapWithConcurrency } from '../shared/concurrency.js'
 import type { EmodnetClient } from './emodnet/emodnet-client.js'
 import { createEmodnetProvider } from './providers/emodnet-provider.js'
 import { createEncProvider } from './providers/enc-provider.js'
@@ -275,17 +276,10 @@ export async function runOrchestrator (
   // each leg's outcome in leg order for a deterministic result.
   const legCount = waypoints.length - 1
   const checkStarted = Date.now()
-  const outcomes: LegOutcome[] = new Array(legCount)
-  let nextLeg = 0
-  async function runWorker (): Promise<void> {
-    while (nextLeg < legCount) {
-      const leg = nextLeg
-      nextLeg += 1
-      outcomes[leg] = await runLeg(providers, leg, waypoints[leg], waypoints[leg + 1], params, logger)
-    }
-  }
-  await Promise.all(
-    Array.from({ length: Math.min(LEG_QUERY_CONCURRENCY, legCount) }, runWorker)
+  const outcomes = await mapWithConcurrency(
+    Array.from({ length: legCount }, (_, leg) => leg),
+    LEG_QUERY_CONCURRENCY,
+    (leg) => runLeg(providers, leg, waypoints[leg], waypoints[leg + 1], params, logger)
   )
 
   // Per-leg depth-authority pass, then flatten each leg's surviving contributions

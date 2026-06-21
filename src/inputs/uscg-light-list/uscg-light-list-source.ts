@@ -23,6 +23,7 @@ import type { Bbox, PoiDetailView, PoiSummary, Position } from '../../shared/typ
 import { shouldSkipOutsideUsWaters } from '../../shared/us-waters.js'
 import { openSeaMapMarkerUrl } from '../../shared/map-link.js'
 import { filterByMinimumYear } from '../../shared/year-filter.js'
+import { mapWithConcurrency } from '../../shared/concurrency.js'
 import type { PluginStatus } from '../../status/plugin-status.js'
 
 import { USCG_LIGHT_LIST_SOURCE_ID } from '../../shared/source-ids.js'
@@ -123,29 +124,18 @@ export function createUscgLightListSource (
     }
     // Concurrency-capped fan-out: a small worker pool pulls (district, page)
     // pairs off the shared cursor until the table is drained. Per-page
-    // errors are recorded onto the status by refreshOnePage and do not
-    // abort the rest of the pass.
-    let next = 0
-    const workers: Array<Promise<void>> = []
-    const limit = Math.min(REFRESH_CONCURRENCY, DISTRICT_PAGES.length)
-    for (let i = 0; i < limit; i += 1) {
-      workers.push((async () => {
-        for (;;) {
-          const index = next++
-          if (index >= DISTRICT_PAGES.length) return
-          const [district, page] = DISTRICT_PAGES[index]
-          try {
-            await refreshOnePage(district, page)
-          } catch (error) {
-            status.recordError(
-              USCG_LIGHT_LIST_SOURCE_ID,
-              `Refresh worker failed for ${district}_${page}: ${String(error)}`
-            )
-          }
-        }
-      })())
-    }
-    await Promise.all(workers)
+    // errors are recorded onto the status here and do not abort the rest of
+    // the pass.
+    await mapWithConcurrency(DISTRICT_PAGES, REFRESH_CONCURRENCY, async ([district, page]) => {
+      try {
+        await refreshOnePage(district, page)
+      } catch (error) {
+        status.recordError(
+          USCG_LIGHT_LIST_SOURCE_ID,
+          `Refresh worker failed for ${district}_${page}: ${String(error)}`
+        )
+      }
+    })
     // The store no-ops this flush if the run has been closed mid-refresh, so a
     // torn-down run cannot write over a freshly started one at the same dir.
     await store.flush()

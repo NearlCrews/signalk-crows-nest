@@ -58,7 +58,7 @@ import type {
   PoiSummary
 } from '../../shared/types.js'
 import type { LegFlag, LegCheckParams, ScanRouteCorridor } from '../safety-check.js'
-import { corridorHazardFlags, hazardDedupeKey, OPENSEAMAP_PRECEDENCE, OPENSEAMAP_PROVIDER_ID } from './provider.js'
+import { corridorHazardFlags, hazardDedupeKey, legsToWaypoints, OPENSEAMAP_PRECEDENCE, OPENSEAMAP_PROVIDER_ID } from './provider.js'
 import type {
   Dimension,
   LegRef,
@@ -300,7 +300,7 @@ export function createOpenSeaMapProvider (deps: OpenSeaMapProviderDeps): LegSafe
       // The route polyline for the corridor scan is the covered legs' endpoints,
       // each leg's start followed by the final leg's end. The precondition on
       // checkHazards guarantees this is a contiguous run.
-      const waypoints: Position[] = [legs[0].from, ...legs.map((ref) => ref.to)]
+      const waypoints = legsToWaypoints(legs)
 
       let hazards: OsmHazardScan
       try {

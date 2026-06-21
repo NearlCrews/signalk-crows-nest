@@ -65,8 +65,8 @@ export function clampNumber (
   fallback: number,
   truncate = false
 ): number {
-  if (typeof raw !== 'number' || !Number.isFinite(raw)) return fallback
-  let value = raw
+  let value = toFiniteNumber(raw)
+  if (value === null) return fallback
   if (value < min) value = min
   else if (value > max) value = max
   return truncate ? Math.trunc(value) : value
@@ -98,18 +98,12 @@ export function positiveCappedNumber (raw: unknown, max: number, fallback: numbe
 
 /** True when `value` is a finite latitude in the standard `[-90, 90]` range. */
 export function isValidLatitude (value: unknown): value is number {
-  return typeof value === 'number' &&
-    Number.isFinite(value) &&
-    value >= -90 &&
-    value <= 90
+  return isFiniteNumber(value) && value >= -90 && value <= 90
 }
 
 /** True when `value` is a finite longitude in the standard `[-180, 180]` range. */
 export function isValidLongitude (value: unknown): value is number {
-  return typeof value === 'number' &&
-    Number.isFinite(value) &&
-    value >= -180 &&
-    value <= 180
+  return isFiniteNumber(value) && value >= -180 && value <= 180
 }
 
 /**

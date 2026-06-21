@@ -399,10 +399,6 @@ export function createPlugin (
       // reported as started.
       app.debug(`${PLUGIN_NAME} started outputs: ${startedIds.join(', ') || '(none)'}`)
 
-      // The registry reports the enabled outputs whose start() threw and was
-      // isolated, so the admin UI surfaces a plugin error rather than the bland
-      // "Ready" status that would mask a dead output.
-
       // The position monitor always starts, because the US-only inputs read
       // through its `getCurrentPosition` getter to skip outbound HTTP outside
       // US waters even when no position-driven output is enabled. The output

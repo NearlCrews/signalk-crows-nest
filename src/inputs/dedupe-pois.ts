@@ -173,7 +173,7 @@ export type DedupeRadiusSpec = number | ReadonlyMap<string, number>
 /** Resolve the radius for one source from the (number or map) spec. */
 function radiusFor (source: string, spec: DedupeRadiusSpec): number {
   const raw = typeof spec === 'number' ? spec : (spec.get(source) ?? DEFAULT_DEDUPE_RADIUS_METERS)
-  return raw < MIN_DEDUPE_RADIUS_METERS ? MIN_DEDUPE_RADIUS_METERS : raw
+  return Math.max(MIN_DEDUPE_RADIUS_METERS, raw)
 }
 
 /**
@@ -184,13 +184,13 @@ function radiusFor (source: string, spec: DedupeRadiusSpec): number {
  */
 function gridRadius (spec: DedupeRadiusSpec): number {
   if (typeof spec === 'number') {
-    return spec < MIN_DEDUPE_RADIUS_METERS ? MIN_DEDUPE_RADIUS_METERS : spec
+    return Math.max(MIN_DEDUPE_RADIUS_METERS, spec)
   }
   let max = DEFAULT_DEDUPE_RADIUS_METERS
   for (const value of spec.values()) {
     if (value > max) max = value
   }
-  return max < MIN_DEDUPE_RADIUS_METERS ? MIN_DEDUPE_RADIUS_METERS : max
+  return Math.max(MIN_DEDUPE_RADIUS_METERS, max)
 }
 
 /**

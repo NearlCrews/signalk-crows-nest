@@ -528,9 +528,12 @@ function buildWaterIndex (charted: ChartedAreas, water: TileWater): WaterIndex {
   const depth = charted.depthAreas.map((a) => ({ rings: a.rings, bbox: boundsOfRings(a.rings), shallowMeters: a.depthRange?.shallowMeters }))
   const tile = water.water.map((w) => ({ rings: w.rings, bbox: boundsOfRings(w.rings) }))
   // The index covers at least one polygon here (the caller declines no-coverage before building it), so
-  // the reduce always has a seed; the degenerate box is a defensive fallback that buildBuckets no-ops on.
-  const bboxes = [...land, ...depth, ...tile].map((p) => p.bbox)
-  const union = bboxes.length > 0 ? bboxes.reduce(unionBbox) : { north: 0, south: 0, east: 0, west: 0 }
+  // the union always has a seed; the degenerate box is a defensive fallback that buildBuckets no-ops on.
+  let union: Bbox | null = null
+  for (const group of [land, depth, tile]) {
+    for (const p of group) union = union === null ? p.bbox : unionBbox(union, p.bbox)
+  }
+  union ??= { north: 0, south: 0, east: 0, west: 0 }
   return {
     land,
     depth,

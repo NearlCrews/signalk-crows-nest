@@ -5,7 +5,6 @@
  */
 
 import type * as React from 'react'
-import { useMemo } from 'react'
 import { SEAMARK_GROUP_REFS } from '../../shared/seamark-groups.js'
 import { S } from '../styles.js'
 import Fieldset from './Fieldset.js'
@@ -19,7 +18,7 @@ interface Props {
 
 /** The seamark feature-group checkboxes shown in the OpenSeaMap card body. */
 export default function SeamarkGroups ({ selected, onToggle }: Props): React.ReactElement {
-  const selectedSet = useMemo(() => new Set(selected), [selected])
+  const selectedSet = new Set(selected)
   return (
     <div style={S.groupsSection}>
       <Fieldset title='Feature groups to import'>

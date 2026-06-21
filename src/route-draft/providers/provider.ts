@@ -139,6 +139,15 @@ export function hazardDedupeKey (typeWord: string, position: Position): string {
 }
 
 /**
+ * Stitch a contiguous run of covered legs into the polyline its waypoints form:
+ * the first leg's start followed by every leg's end. Both hazard providers build
+ * this to size their fetch bbox and feed `corridorHazardFlags`, so it lives once.
+ */
+export function legsToWaypoints (legs: LegRef[]): Position[] {
+  return [legs[0].from, ...legs.map((ref) => ref.to)]
+}
+
+/**
  * Map a hazard provider's POI summaries onto leg flags: stitch the covered legs into one polyline, scan
  * its corridor, then build a flag for each matched POI via `toFlag`, translating the POI's along-track
  * distance to the global leg index. Shared by the ENC and OpenSeaMap hazard sweeps, which differ only in

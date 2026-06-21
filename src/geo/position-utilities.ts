@@ -228,6 +228,22 @@ function wrapDeltaLongitudeRad (deltaLongitude: number): number {
 }
 
 /**
+ * Isometric (Mercator-stretched) latitude `ln(tan(pi/4 + lat/2))` in radians.
+ * The loxodrome helpers (`rhumbDistanceMeters`, `sampleRhumbLeg`) both walk this
+ * stretched latitude, so the one formula lives here.
+ */
+function isometricLatitudeRad (latitudeRad: number): number {
+  return Math.log(Math.tan(Math.PI / 4 + latitudeRad / 2))
+}
+
+/**
+ * Below this isometric-latitude change a leg is treated as east-west: the
+ * isometric-latitude difference is ~0, so the meridional scale falls back to the
+ * parallel's `cos(latitude)` to avoid a 0/0. Shared by both loxodrome helpers.
+ */
+const EAST_WEST_ISOMETRIC_EPSILON = 1e-12
+
+/**
  * Rhumb-line (loxodromic) distance between two positions, in meters.
  *
  * A rhumb line is a path of constant compass bearing. It is the line a chart
@@ -254,13 +270,11 @@ export function rhumbDistanceMeters (from: Position, to: Position): number {
   const deltaLatitude = latitudeTo - latitudeFrom
   const deltaLongitude = wrapDeltaLongitudeRad(toRadians(to.longitude - from.longitude))
 
-  const deltaIsometricLatitude = Math.log(
-    Math.tan(Math.PI / 4 + latitudeTo / 2) / Math.tan(Math.PI / 4 + latitudeFrom / 2)
-  )
+  const deltaIsometricLatitude = isometricLatitudeRad(latitudeTo) - isometricLatitudeRad(latitudeFrom)
   // q is the meridional scale. On an east-west leg the isometric-latitude
   // change is zero, so fall back to cos(latitude) (the parallel's scale) to
   // avoid a 0/0; the two agree in the limit.
-  const q = Math.abs(deltaIsometricLatitude) > 1e-12
+  const q = Math.abs(deltaIsometricLatitude) > EAST_WEST_ISOMETRIC_EPSILON
     ? deltaLatitude / deltaIsometricLatitude
     : Math.cos(latitudeFrom)
 
@@ -310,12 +324,11 @@ export function sampleRhumbLeg (from: Position, to: Position, spacingMeters: num
   const deltaLatitude = latitudeTo - latitudeFrom
   const deltaLongitude = wrapDeltaLongitudeRad(toRadians(to.longitude - from.longitude))
 
-  const isometricFrom = Math.log(Math.tan(Math.PI / 4 + latitudeFrom / 2))
-  const isometricTo = Math.log(Math.tan(Math.PI / 4 + latitudeTo / 2))
-  const deltaIsometricLatitude = isometricTo - isometricFrom
+  const isometricFrom = isometricLatitudeRad(latitudeFrom)
+  const deltaIsometricLatitude = isometricLatitudeRad(latitudeTo) - isometricFrom
 
   const longitudeFrom = toRadians(from.longitude)
-  const eastWest = Math.abs(deltaIsometricLatitude) <= 1e-12
+  const eastWest = Math.abs(deltaIsometricLatitude) <= EAST_WEST_ISOMETRIC_EPSILON
   // Off the east-west case, longitude advances linearly with isometric latitude,
   // so the meters-per-isometric ratio is loop-invariant; hoist it once.
   const lonPerIso = eastWest ? 0 : deltaLongitude / deltaIsometricLatitude
@@ -335,7 +348,7 @@ export function sampleRhumbLeg (from: Position, to: Position, spacingMeters: num
     if (eastWest) {
       longitudeRad = longitudeFrom + fraction * deltaLongitude
     } else {
-      const isometricStep = Math.log(Math.tan(Math.PI / 4 + latitudeRad / 2))
+      const isometricStep = isometricLatitudeRad(latitudeRad)
       longitudeRad = longitudeFrom + lonPerIso * (isometricStep - isometricFrom)
     }
 
