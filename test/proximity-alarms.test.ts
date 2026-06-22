@@ -130,11 +130,11 @@ test('applies a hysteresis band: an active alarm holds until past the exit radiu
   alarms.evaluate(ORIGIN, [hazard])
   assert.equal(captured.length, 1, 'the alarm is raised on entry')
 
-  // 550 m away: outside the raise radius but inside the wider clear radius.
+  // 650 m away: outside the raise radius but inside the wider clear radius.
   alarms.evaluate(northOfOrigin(650), [hazard])
   assert.equal(captured.length, 1, 'the alarm holds inside the hysteresis band')
 
-  // 700 m away: past the clear radius, so the alarm clears.
+  // 800 m away: past the clear radius, so the alarm clears.
   alarms.evaluate(northOfOrigin(800), [hazard])
   assert.equal(captured.length, 2)
   assert.equal(captured[1].value.state, 'normal')

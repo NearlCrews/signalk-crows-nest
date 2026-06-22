@@ -9,6 +9,43 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 > development milestones that preceded this publication. Their content is
 > incorporated into the 0.4.2 release.
 
+<a id="v0102"></a>
+
+## [0.10.2] - 2026-06-21
+
+A maintainer hardening pass: a full-codebase review by a team of twelve
+focused expert reviewers, one per subsystem, fixed two edge-case routing
+bugs, shrank the configuration panel's browser bundle, and tightened a
+handful of types, comments, and tests. No configuration changes, and no new
+dependencies; existing setups are unaffected.
+
+### Fixed
+
+- **Channel router: decline instead of returning a one-waypoint route.**
+  When a drafted or drawn route's start and end snapped to the same
+  navigable grid cell (a closed loop, or two near-identical drawn
+  waypoints), the router could return a degenerate single-waypoint
+  "success" with no legs to safety-check. It now declines cleanly so the
+  caller keeps the original geometry and attaches the channel-unavailable
+  note.
+- **OpenSeaMap Overpass client: stop endpoint failover on a caller abort.**
+  When the route-draft deadline aborted an in-flight Overpass query, the
+  client would still fail over and issue fresh requests to every configured
+  fallback mirror for a check no one was waiting on. An aborted caller
+  signal now stops failover at once.
+
+### Internal
+
+- **Smaller configuration-panel bundle.** Split the bbox-debounce refresh
+  bounds into a dependency-free module so the React panel no longer pulls
+  the node-only `lru-cache` library into the browser bundle.
+- Made the EMODnet leg-safety client's injected-transport type track the
+  real one-shot GET signature, gave the USCG `NAME` wire field its honest
+  nullable type, guarded the bundled country-boundary asset against a
+  malformed-shape feature, and named the failing tile in the vector-tile
+  gunzip error. Added regression tests for both fixes above and corrected a
+  comment drift in the proximity-alarm tests.
+
 <a id="v0101"></a>
 
 ## [0.10.1] - 2026-06-21

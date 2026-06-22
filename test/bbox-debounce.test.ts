@@ -11,14 +11,14 @@
 
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { createBboxDebounceCache } from '../src/shared/bbox-debounce.js'
 import {
   clampBboxDebounceSeconds,
-  createBboxDebounceCache,
   DEFAULT_ACTIVE_CAPTAIN_DEBOUNCE_SECONDS,
   DEFAULT_NOAA_ENC_DEBOUNCE_SECONDS,
   MAX_BBOX_DEBOUNCE_SECONDS,
   MIN_BBOX_DEBOUNCE_SECONDS
-} from '../src/shared/bbox-debounce.js'
+} from '../src/shared/bbox-debounce-bounds.js'
 import type { Bbox } from '../src/shared/types.js'
 import { flush } from './helpers.js'
 

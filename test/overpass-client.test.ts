@@ -296,6 +296,28 @@ test('the fallback is not tried when the primary succeeds', async () => {
   )
 })
 
+test('a caller abort stops endpoint failover instead of trying the next mirror', async () => {
+  await withMockFetch(
+    (_callIndex, init) => {
+      if (init?.signal?.aborted === true) {
+        throw new DOMException('The operation was aborted', 'AbortError')
+      }
+      return jsonResponse({ elements: [] })
+    },
+    async (calls) => {
+      // The abandoned route-draft check fires its deadline signal: the first mirror's request rejects
+      // on the aborted signal and failover must stop at once, never issuing a fresh request to the
+      // remaining mirror for a check no one is waiting on.
+      const client = createOverpassClient(failoverEndpoints, silentLog, { ...fastLimits, maxRetries: 0 })
+      await assert.rejects(
+        () => client.listPointsOfInterest(sampleBbox, '^(rock)$', AbortSignal.abort()),
+        (error: unknown) => error instanceof DOMException && error.name === 'AbortError'
+      )
+      assert.equal(calls.count, 1, 'an aborted caller signal must not fail over to the mirror')
+    }
+  )
+})
+
 test('the query rejects when every endpoint fails', async () => {
   await withMockFetch(
     () => jsonResponse({ error: 'forbidden' }, 403),

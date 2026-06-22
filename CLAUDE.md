@@ -377,7 +377,8 @@ self-contained module registered on one line in `src/index.ts`.
     collapses a concurrent same-tile burst into one upstream request, and
     prefetches the neighbor tile in the background when a small viewport
     approaches a tile edge, so a vessel underway crosses the grid cliff onto
-    a warm tile; plus the canonical
+    a warm tile; it depends on the node-only `lru-cache`), `bbox-debounce-bounds.ts`
+    (the dependency-free, browser-safe companion holding the canonical
     `MIN_BBOX_DEBOUNCE_SECONDS` / `MAX_BBOX_DEBOUNCE_SECONDS` bounds, the
     per-source defaults (`DEFAULT_ACTIVE_CAPTAIN_DEBOUNCE_SECONDS`,
     `DEFAULT_OPENSEAMAP_DEBOUNCE_SECONDS`,
@@ -385,7 +386,10 @@ self-contained module registered on one line in `src/index.ts`.
     update rate), the `clampBboxDebounceSeconds` helper (its per-source
     fallback argument is required, so no layer can silently inherit another
     source's cadence), and the `refreshSecondsSchema` config-fragment builder
-    the at-runtime inputs share), `map-link.ts` (the OpenSeaMap-marker fallback deep link
+    the at-runtime inputs share; split out of `bbox-debounce.ts` so the
+    panel imports the bounds without pulling `lru-cache` into the browser
+    bundle. Every consumer, node and panel alike, imports the bounds from
+    this module directly, mirroring the sibling bounds modules), `map-link.ts` (the OpenSeaMap-marker fallback deep link
     USCG Light List and NOAA ENC popups use, since neither upstream
     viewer supports per-feature deep links), `html-escape.ts` (the
     shared `escapeHtml` helper every source's detail renderer consumes,

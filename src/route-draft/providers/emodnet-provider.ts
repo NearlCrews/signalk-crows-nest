@@ -31,7 +31,7 @@
 
 import { isInEmodnetCoverage } from '../../shared/regions.js'
 import { formatMeters } from '../../shared/format-meters.js'
-import type { EmodnetClient } from '../emodnet/emodnet-client.js'
+import type { EmodnetClient, EmodnetProfile } from '../emodnet/emodnet-client.js'
 import type { Logger, Position } from '../../shared/types.js'
 import type { LegFlag, LegCheckParams } from '../safety-check.js'
 import { EMODNET_PRECEDENCE, EMODNET_PROVIDER_ID } from './provider.js'
@@ -80,7 +80,7 @@ export function createEmodnetProvider (deps: EmodnetProviderDeps): LegSafetyProv
     ): Promise<LegProviderResult> {
       const flags: LegFlag[] = []
 
-      let profile
+      let profile: EmodnetProfile
       try {
         profile = await deps.client.depthProfile(from, to, params.signal)
       } catch (error) {

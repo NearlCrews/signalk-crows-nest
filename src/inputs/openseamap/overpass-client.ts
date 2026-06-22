@@ -398,6 +398,9 @@ export function createOverpassClient (
         return await attemptRawQuery(endpoint, query, errorPrefix, signal)
       } catch (error) {
         lastError = error
+        // A caller abort (the route-draft deadline) must stop failover at once: trying the next
+        // mirror would issue fresh upstream requests for a check that has already been abandoned.
+        if (signal?.aborted === true) throw error
         if (i < endpointList.length - 1) {
           log.debug(
             `Overpass endpoint ${endpoint} failed (${String(error)}); ` +

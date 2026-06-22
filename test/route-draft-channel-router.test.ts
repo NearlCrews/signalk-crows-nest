@@ -91,6 +91,18 @@ test('routeChannel declines no-path for disconnected basins', async () => {
   assert.deepEqual(r, { ok: false, reason: 'no-path' })
 })
 
+test('routeChannel declines no-path when both endpoints snap to one cell', async () => {
+  // A closed-loop or near-identical drawn route: from and to land in the same grid cell. A* would
+  // return a single-cell path that would otherwise propagate as a degenerate one-waypoint "success"
+  // with no legs to safety-check, so the router must decline instead.
+  const water: TileWater = { water: [ring(0, 0, 0.3, 0.3)] }
+  const here: Position = { latitude: 0.15, longitude: 0.15 }
+  const r = await routeChannel(deps(NO_ENC, water), { from: here, to: here, ...base, bboxAnchors: [{ latitude: 0.02, longitude: 0.02 }, { latitude: 0.28, longitude: 0.28 }] })
+  assert.equal(r.ok, false)
+  if (r.ok) return
+  assert.equal(r.reason, 'no-path')
+})
+
 test('routeChannel declines unsnappable when the endpoints are far from water', async () => {
   const charted: ChartedAreas = { depthAreas: [encBox(0.13, 0.13, 0.17, 0.17, 10)], landAreas: [] }
   const r = await routeChannel(deps(charted), { from: { latitude: 0, longitude: 0 }, to: { latitude: 0.3, longitude: 0.3 }, ...base, maxSnapMeters: 1 })

@@ -111,7 +111,14 @@ async function loadDecoder (): Promise<Decoder> {
 /** Decode a tile body (gunzipped when gzip-magic is present) into one layer's polygon geometries. */
 function decodeLayer (decoder: Decoder, bytes: Uint8Array, z: number, x: number, y: number, layerName: string): TileGeometry[] {
   if (bytes.length === 0) return []
-  const buf = bytes[0] === 0x1f && bytes[1] === 0x8b ? new Uint8Array(gunzipSync(bytes)) : bytes
+  let buf: Uint8Array
+  try {
+    buf = bytes[0] === 0x1f && bytes[1] === 0x8b ? new Uint8Array(gunzipSync(bytes)) : bytes
+  } catch (error) {
+    // Corrupt gzip (a truncated download or CDN bit-rot) throws synchronously here; name the
+    // tile in the message so the caller's log points at the bad tile rather than a bare decode panic.
+    throw new Error(`vector-tile gunzip failed for ${z}/${x}/${y}: ${String(error)}`)
+  }
   const layer = new decoder.VectorTile(new decoder.PbfReader(buf)).layers[layerName]
   if (layer === undefined) return []
   const out: TileGeometry[] = []

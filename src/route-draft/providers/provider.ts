@@ -142,6 +142,9 @@ export function hazardDedupeKey (typeWord: string, position: Position): string {
  * Stitch a contiguous run of covered legs into the polyline its waypoints form:
  * the first leg's start followed by every leg's end. Both hazard providers build
  * this to size their fetch bbox and feed `corridorHazardFlags`, so it lives once.
+ *
+ * Precondition: `legs` is non-empty (it indexes `legs[0]`); both call sites guard
+ * an empty run before calling.
  */
 export function legsToWaypoints (legs: LegRef[]): Position[] {
   return [legs[0].from, ...legs.map((ref) => ref.to)]

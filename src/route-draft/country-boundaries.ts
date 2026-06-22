@@ -91,6 +91,11 @@ export function countryBoundariesFrom (rawFeatures: unknown): CountryBoundaries 
       if (geom.type === 'Polygon') rawPolys = [geom.coordinates as number[][][]]
       else if (geom.type === 'MultiPolygon') rawPolys = geom.coordinates as number[][][][]
       if (rawPolys === undefined || rawPolys.length === 0) continue
+      // Guard the asset's shape: a malformed-but-parseable geometry (coordinates present but not the
+      // expected nested arrays) must not reach boundsOfRings or, later, the per-request pointInRings in
+      // classify. Skip such a feature so it degrades to its own omission, never a NaN bbox or a thrown
+      // 500 per draft. The bundled asset is well-formed; this protects against a packaging fault.
+      if (!Array.isArray(rawPolys) || !rawPolys.every((rings) => Array.isArray(rings) && rings.every((ring) => Array.isArray(ring)))) continue
       const polys = rawPolys.map((rings) => ({ rings, bbox: boundsOfRings(rings) }))
       features.push({ id, name: f.properties?.name ?? id, polys, bbox: featureBbox(polys) })
     }

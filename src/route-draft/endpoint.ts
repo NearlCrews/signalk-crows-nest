@@ -677,6 +677,10 @@ async function handleDraft (
         }
       )
       : { ok: false, reason: 'skipped' }
+  // On a channel success this replaces the parser-clamped (<= MAX_WAYPOINTS) model output with the
+  // router's own turning points. That cap is only a leash on the model's hallucinated waypoint count;
+  // a winding-river channel route can legitimately exceed it, so the returned route is NOT bounded by
+  // MAX_WAYPOINTS, and the router owns the geometry from here on.
   const channel = applyChannelRoute(route.waypoints, channelResult, homeCountry?.name)
   route.waypoints = channel.waypoints
 

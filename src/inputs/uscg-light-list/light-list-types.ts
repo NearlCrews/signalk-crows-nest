@@ -26,7 +26,9 @@ export interface LightListFeature {
 /** Every wire property the USCG MSI feed publishes that the plugin reads. */
 export interface LightListProperties {
   LIGHT_LIST_NUMBER: number
-  NAME: string
+  // The wire ships an absent name as an explicit null; the parser routes it through
+  // presentString and falls back to an "Unnamed ..." label, so the type stays honest.
+  NAME?: string | null
   DECIMAL_LATITUDE: number
   DECIMAL_LONGITUDE: number
   LIGHT_CHAR?: string | null

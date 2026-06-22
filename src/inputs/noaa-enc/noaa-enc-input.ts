@@ -18,7 +18,7 @@ import {
   clampBboxDebounceSeconds,
   DEFAULT_NOAA_ENC_DEBOUNCE_SECONDS,
   refreshSecondsSchema
-} from '../../shared/bbox-debounce.js'
+} from '../../shared/bbox-debounce-bounds.js'
 import { cappedDedupeRadius } from '../../shared/dedupe-radius.js'
 import { NOAA_ENC_SOURCE_ID } from '../../shared/source-ids.js'
 import type { PluginConfig } from '../../shared/types.js'

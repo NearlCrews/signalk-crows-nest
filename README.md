@@ -21,9 +21,13 @@ proximity, route-corridor, and bridge air-draft alarms.
 > safety-of-life navigation: always cross-check against official charts and
 > your primary instruments.
 
-## What's new in 0.10.0
+## What's new in 0.10.2
 
-AI route drafting arrives as a beta feature, it follows the water, and its
+A maintainer hardening pass: a full-codebase review by a team of twelve
+focused expert reviewers fixed two edge-case routing bugs and shrank the
+configuration panel's browser bundle, with no configuration changes (see the
+[changelog](CHANGELOG.md#v0102)). The headline of the 0.10 line remains **AI
+route drafting** (beta), introduced in 0.10.0: it follows the water, and its
 safety check covers routes worldwide.
 
 > **AI route drafting is in beta.** It cannot guarantee accuracy. The model can
@@ -186,6 +190,41 @@ Crow's Nest is one plugin built from focused modules:
 - **Tested on `node:test`** via `tsx`, with ESLint 9 and neostandard.
 
 See the [architecture notes](CLAUDE.md) for the full module map.
+
+## Signal K paths
+
+Crow's Nest is a well-behaved Signal K citizen: it reads a few `vessels.self`
+paths and the Course API, and it writes only `notes` resources and
+notifications under its own branch. All values are SI units (position in
+decimal degrees, distances and heights in meters).
+
+**Reads (from `vessels.self`):**
+
+- `navigation.position` — the viewport centre for POI fetches, the US-waters
+  gate on the US-only feeds, and the proximity and route scans.
+- `navigation.speedOverGround` — ETA math in the route-corridor scan.
+- `design.airHeight` — the vessel air draft for the bridge-clearance check
+  (a configured fallback is used only when this path is absent).
+- `design.draft` (`value.maximum`) — the vessel draft for the AI route-draft
+  depth check, when the panel's draft field is left at 0.
+- The **Course API** active route — the route-corridor hazard scan reads the
+  active route to look ahead along the planned track.
+
+**Writes:**
+
+- `resources/notes` — every imported POI is published as a Signal K `note`
+  resource (with the source-agnostic structured detail on
+  `properties.crowsNest` alongside the HTML description) so chart plotters such
+  as Freeboard-SK can display it.
+- `notifications.navigation.crowsNest.hazard.<id>` — proximity hazard alarms.
+- `notifications.navigation.crowsNest.route.<id>` — route-corridor hazard
+  alarms (including the too-low-bridge verdict).
+- `notifications.navigation.crowsNest.bridgeClearance.<id>` — bridge
+  air-draft alarms.
+
+The plugin also serves an admin-gated `GET` status endpoint and the optional,
+admin-gated `POST /api/route-draft` endpoint (off until an OpenRouter key is
+set); see [the route-draft API notes](docs/route-draft-api.md).
 
 ## Requirements
 

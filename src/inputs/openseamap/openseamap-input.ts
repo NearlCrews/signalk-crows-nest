@@ -16,7 +16,7 @@ import {
   clampBboxDebounceSeconds,
   DEFAULT_OPENSEAMAP_DEBOUNCE_SECONDS,
   refreshSecondsSchema
-} from '../../shared/bbox-debounce.js'
+} from '../../shared/bbox-debounce-bounds.js'
 import { cappedDedupeRadius } from '../../shared/dedupe-radius.js'
 import { SEAMARK_GROUP_IDS } from '../../shared/seamark-groups.js'
 import { OPENSEAMAP_SOURCE_ID } from '../../shared/source-ids.js'

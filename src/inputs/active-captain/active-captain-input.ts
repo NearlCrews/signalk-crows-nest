@@ -16,7 +16,7 @@ import {
   clampBboxDebounceSeconds,
   DEFAULT_ACTIVE_CAPTAIN_DEBOUNCE_SECONDS,
   refreshSecondsSchema
-} from '../../shared/bbox-debounce.js'
+} from '../../shared/bbox-debounce-bounds.js'
 import { ACTIVE_CAPTAIN_SOURCE_ID } from '../../shared/source-ids.js'
 import { clampMinimumRating, minimumRatingSchema } from '../../shared/rating.js'
 import { cacheDurationSchema, clampCacheDurationMinutes } from '../../shared/cache-duration.js'

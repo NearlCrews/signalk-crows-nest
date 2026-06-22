@@ -11,7 +11,7 @@ import type * as React from 'react'
 import {
   MAX_BBOX_DEBOUNCE_SECONDS,
   MIN_BBOX_DEBOUNCE_SECONDS
-} from '../../shared/bbox-debounce.js'
+} from '../../shared/bbox-debounce-bounds.js'
 import NumberField from './NumberField.js'
 
 interface Props {

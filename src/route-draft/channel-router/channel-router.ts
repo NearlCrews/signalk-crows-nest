@@ -190,6 +190,15 @@ export async function routeChannel (
     }
     const { start, goal, comp: mainWater } = snapped
 
+    // Both endpoints can snap to one cell when they sit within a cell of each other (a closed-loop
+    // route, or two near-identical drawn waypoints). A* would then return a single-cell path, which
+    // would propagate as a degenerate one-waypoint "success" with no legs to safety-check. Decline so
+    // the caller keeps the original geometry and attaches the channel-unavailable note instead.
+    if (start[0] === goal[0] && start[1] === goal[1]) {
+      deps.logger?.debug(`channel-router diag: decline no-path, start and goal snap to one cell (${elapsed()}ms)`)
+      return { ok: false, reason: 'no-path' }
+    }
+
     const pathStatus = { timedOut: false }
     const cells = findPath(grid, start, goal, req.deadlineMs, pathStatus)
     if (cells === undefined) {

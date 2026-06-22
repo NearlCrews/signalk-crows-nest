@@ -26,7 +26,7 @@ import {
   DEFAULT_ACTIVE_CAPTAIN_DEBOUNCE_SECONDS,
   DEFAULT_NOAA_ENC_DEBOUNCE_SECONDS,
   DEFAULT_OPENSEAMAP_DEBOUNCE_SECONDS
-} from '../shared/bbox-debounce.js'
+} from '../shared/bbox-debounce-bounds.js'
 import { normalizeRouteDraftConfig } from '../route-draft/config.js'
 
 /**
@@ -153,7 +153,7 @@ export function normalizeConfig (configuration: unknown): PluginConfig {
 
   // Per-bbox debounce windows, with each source's own default (30 s for
   // ActiveCaptain, longer for the slower-moving upstreams). Delegated to the
-  // shared clamp in src/shared/bbox-debounce.ts.
+  // shared clamp in src/shared/bbox-debounce-bounds.ts.
   config.openSeaMapRefreshSeconds = clampBboxDebounceSeconds(
     raw.openSeaMapRefreshSeconds, DEFAULT_OPENSEAMAP_DEBOUNCE_SECONDS
   )

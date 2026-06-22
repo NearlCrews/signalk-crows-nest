@@ -6,7 +6,7 @@
  * referenced to LAT. WKT axis order is longitude then latitude.
  */
 
-import { requestText, type OneShotResponse } from '../../inputs/http-one-shot.js'
+import { requestText } from '../../inputs/http-one-shot.js'
 import { isFiniteNumber } from '../../shared/numbers.js'
 import { PLUGIN_USER_AGENT } from '../../shared/plugin-id.js'
 import { MS_PER_SECOND } from '../../shared/time.js'
@@ -35,7 +35,8 @@ export interface EmodnetClient {
 }
 
 export interface EmodnetClientDeps {
-  requestText?: (url: string, headers: Record<string, string>, timeoutMs: number, label: string, signal?: AbortSignal) => Promise<OneShotResponse>
+  // Mirror the real one-shot GET so the test stub cannot drift from its signature.
+  requestText?: typeof requestText
 }
 
 function lonLat (p: Position): string {
