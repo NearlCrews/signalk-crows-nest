@@ -84,6 +84,11 @@ export default function PluginConfigurationPanel ({ configuration, save }: Props
   // inequality against the last-saved snapshot is a sound dirty check.
   const dirty = state !== savedState
 
+  // The plugin has never been saved when the admin UI passes null or undefined.
+  // Save must stay enabled in that state so the user can persist defaults to
+  // enable the plugin without making a throwaway edit first.
+  const unconfigured = configuration == null
+
   // Warn before a tab close or reload while edits are unsaved, so a
   // fat-fingered close cannot silently lose in-progress configuration.
   useEffect(() => {
@@ -143,6 +148,7 @@ export default function PluginConfigurationPanel ({ configuration, save }: Props
         <RouteDraftingSection state={state} dispatch={dispatch} />
         <FooterBar
           dirty={dirty}
+          unconfigured={unconfigured}
           justSavedAt={justSavedAt}
           onSave={handleSave}
           onDiscard={handleDiscard}
