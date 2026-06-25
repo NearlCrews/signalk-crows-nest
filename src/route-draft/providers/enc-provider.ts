@@ -350,6 +350,9 @@ async function queryHazards (
     for (const feature of response.features) {
       const summary = hazardSummary(layerKey, feature)
       if (summary === null) continue
+      // In-band dedupe keys to six decimals (sub-meter): only an exact-duplicate
+      // feature returned twice by one band collapses here. The coarser four-decimal
+      // cross-provider `hazardDedupeKey` is a separate, deliberately looser scope.
       const dedupeKey = `${layerKey}:${summary.position.latitude.toFixed(6)}:${summary.position.longitude.toFixed(6)}`
       if (seen.has(dedupeKey)) continue
       seen.add(dedupeKey)

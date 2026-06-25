@@ -59,7 +59,9 @@ export function createEmodnetClient (deps: EmodnetClientDeps = {}): EmodnetClien
         throw new Error('EMODnet depth_profile returned non-JSON')
       }
       if (!Array.isArray(raw)) throw new Error('EMODnet depth_profile did not return an array')
-      // One pass collects the finite samples and notes any null gap, rather than two traversals.
+      // One pass collects the finite samples and notes any null gap, rather than two
+      // traversals. An all-null profile reports hadGap=false (no data, not a partial
+      // gap), since the `&& samples.length > 0` guard below requires real samples.
       let hadNull = false
       const samples: number[] = []
       for (const v of raw) {

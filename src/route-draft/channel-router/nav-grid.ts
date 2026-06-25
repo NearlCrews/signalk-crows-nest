@@ -108,6 +108,9 @@ export function resolveGridSize (bbox: Bbox, targetCellMeters?: number): GridSiz
   let cell = targetCellMeters ?? DEFAULT_CELL_METERS
   let cols = Math.max(1, Math.ceil(widthMeters / cell))
   let rows = Math.max(1, Math.ceil(heightMeters / cell))
+  // Coarsen the cell geometrically until the grid fits the cap: 1.5x per step
+  // converges in a few iterations while keeping resolution near the cap rather
+  // than overshooting it the way a 2x step would.
   while (cols * rows > MAX_CELLS) {
     cell *= 1.5
     cols = Math.max(1, Math.ceil(widthMeters / cell))
@@ -362,6 +365,8 @@ function fillPolygonCells (
       xs.push(x0 + ((y - y0) / (y1 - y0)) * (x1 - x0))
     }
     xs.sort((a, b) => a - b)
+    // Fill the columns whose cell CENTER (col + 0.5) falls inside each crossing
+    // pair, hence the -0.5 shift: ceil for the left edge, floor for the right.
     for (let k = 0; k + 1 < xs.length; k += 2) {
       const cStart = Math.max(0, Math.ceil(xs[k] - 0.5))
       const cEnd = Math.min(cols - 1, Math.floor(xs[k + 1] - 0.5))
