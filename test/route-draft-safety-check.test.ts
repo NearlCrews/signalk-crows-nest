@@ -408,6 +408,55 @@ test('the deadline abort cancels every in-flight provider, ENC and the land quer
   )
 })
 
+test('a thrown depth provider falls to depth-not-checked, never a misleading per-leg note', async () => {
+  // ENC throws (a transient outage), OSM still covers land on the same leg. Depth
+  // must fall to the collapsed not-checked note, land must stay covered by OSM,
+  // and the old hardcoded, mislabeled per-leg "charted query failed" flag is gone.
+  const throwingDepth: LegSafetyProvider = {
+    id: 'enc',
+    capabilities: new Set<Dimension>(['depth', 'land']),
+    precedence: 0,
+    coversLeg: () => true,
+    checkLeg: async () => { throw new Error('ENC Direct HTTP 503') }
+  }
+  const land: LegSafetyProvider = {
+    id: 'osm',
+    capabilities: new Set<Dimension>(['land', 'hazards']),
+    precedence: 20,
+    coversLeg: () => true,
+    checkLeg: async (): Promise<LegProviderResult> => ({ flags: [], coverage: { land: 'data' } })
+  }
+  const result = await runOrchestrator([throwingDepth, land], [FROM, TO], params())
+  assert.equal(result.checked, true, 'OSM returned data, so the check ran')
+  assert.ok(result.flags.some((f) => /depth not checked/i.test(f.message)), 'the thrown sole depth provider falls to not-checked')
+  assert.equal(result.flags.some((f) => /land not checked/i.test(f.message)), false, 'OSM covers land, so land is not flagged not-checked')
+  assert.equal(result.flags.some((f) => /charted query failed/i.test(f.message)), false, 'no mislabeled per-leg charted-failure flag')
+})
+
+test('a thrown sole land provider yields a land-not-checked note, never a silent pass', async () => {
+  // Both providers throw on the leg. The capability-keyed not-checked pass must
+  // still speak for BOTH dimensions: a failed sole land provider cannot leave the
+  // leg silently passing land, the false-safe the old depth-only catch flag left.
+  const throwingDepth: LegSafetyProvider = {
+    id: 'enc',
+    capabilities: new Set<Dimension>(['depth']),
+    precedence: 0,
+    coversLeg: () => true,
+    checkLeg: async () => { throw new Error('depth down') }
+  }
+  const throwingLand: LegSafetyProvider = {
+    id: 'osm',
+    capabilities: new Set<Dimension>(['land']),
+    precedence: 20,
+    coversLeg: () => true,
+    checkLeg: async () => { throw new Error('land down') }
+  }
+  const result = await runOrchestrator([throwingDepth, throwingLand], [FROM, TO], params())
+  assert.equal(result.checked, false, 'no provider returned data')
+  assert.ok(result.flags.some((f) => /depth not checked/i.test(f.message)), 'depth is flagged not-checked')
+  assert.ok(result.flags.some((f) => /land not checked/i.test(f.message)), 'land is flagged not-checked, never silently passed')
+})
+
 test('non-contiguous ENC coverage runs the hazard sweep once per contiguous US run, not across the gap', async () => {
   // A route US, then foreign, then US. ENC covers a leg when either endpoint is
   // in US waters, so the only ENC-uncovered leg is the middle one with both

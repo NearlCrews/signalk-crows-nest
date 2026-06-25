@@ -241,6 +241,9 @@ interface ProviderContribution {
   coverage?: LegDimensionCoverage
 }
 
+/** True when a contribution returned data: its checkLeg did not throw (a throw leaves coverage undefined). */
+const contributionRan = (c: ProviderContribution): boolean => c.coverage !== undefined
+
 /** One leg's resolved providers and each one's contribution. */
 interface LegOutcome {
   contributions: ProviderContribution[]
@@ -357,7 +360,15 @@ export async function runOrchestrator (
   for (const dimension of LEG_DIMENSIONS) {
     const unownedLegs: number[] = []
     for (let leg = 0; leg < legCount; leg += 1) {
-      if (!outcomes[leg].active.some((p) => p.capabilities.has(dimension))) {
+      // Owned only by a provider that actually RETURNED data. A provider that
+      // threw keeps coverage undefined, so it is not counted here and its
+      // dimension falls to not-checked rather than silently passing on its
+      // still-present active entry. A successful but no-data provider keeps
+      // coverage defined and self-emits its own no-data note, so it still counts
+      // (no double note).
+      if (!outcomes[leg].contributions.some(
+        (c) => contributionRan(c) && c.provider.capabilities.has(dimension)
+      )) {
         unownedLegs.push(leg)
       }
     }
@@ -480,13 +491,16 @@ async function runLeg (
     } catch (error) {
       logger?.debug(`check-timing: leg ${leg} ${provider.id} checkLeg FAILED ${Date.now() - started}ms`)
       // At error level so a persistent provider outage is visible in normal logs; the leg still degrades to a not-checked flag.
-      logger?.error(`leg ${leg} ${provider.id} charted-area query failed: ${String(error)}`)
-      return {
-        provider,
-        flags: [{ leg, kind: 'other', message: 'depth not checked for this leg: charted query failed' }]
-      }
+      logger?.error(`leg ${leg} ${provider.id} checkLeg failed: ${String(error)}`)
+      // No per-leg flag here. A thrown provider keeps coverage undefined, so the
+      // capability-keyed not-checked pass above speaks for each dimension it could
+      // not verify, in one collapsed note. The old hardcoded "depth not checked:
+      // charted query failed" flag mislabeled a modeled (EMODnet) or land-only
+      // (OpenSeaMap) provider's failure as a charted depth miss, and left a failed
+      // sole land provider's leg with no land-not-checked note at all.
+      return { provider, flags: [] }
     }
   }))
-  const anyRan = contributions.some((c) => c.coverage !== undefined)
+  const anyRan = contributions.some(contributionRan)
   return { contributions, active, anyRan }
 }
