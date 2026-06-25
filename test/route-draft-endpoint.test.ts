@@ -229,6 +229,33 @@ test('parseDraftedRoute keeps a legitimate just-off-window waypoint within the m
   assert.equal(route.waypoints.length, 2)
 })
 
+test('parseDraftedRoute keeps waypoints inside an antimeridian-crossing window', () => {
+  // west 160, east -160 wraps the antimeridian; both points sit in the window.
+  const route = parseDraftedRoute(
+    draft([
+      { latitude: 5, longitude: 170 },
+      { latitude: 15, longitude: -170 }
+    ]),
+    [160, 0, -160, 20]
+  )
+  assert.ok(route !== undefined)
+  assert.equal(route.waypoints.length, 2, 'both in-window points survive the wrap-aware bound')
+})
+
+test('parseDraftedRoute drops a hallucination far from an antimeridian-crossing window', () => {
+  // The middle point at longitude 0 is the far side of the planet from the window.
+  const route = parseDraftedRoute(
+    draft([
+      { latitude: 5, longitude: 170 },
+      { latitude: 10, longitude: 0 },
+      { latitude: 15, longitude: -170 }
+    ]),
+    [160, 0, -160, 20]
+  )
+  assert.ok(route !== undefined)
+  assert.equal(route.waypoints.length, 2, 'the far-off-window point is dropped, not let through')
+})
+
 test('parseDraftedRoute caps the waypoint count and slices an over-long name', () => {
   const many = Array.from({ length: 40 }, (_, i) => ({
     latitude: 42.4 + i * 0.001,

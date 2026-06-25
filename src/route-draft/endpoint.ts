@@ -438,9 +438,11 @@ interface DraftedRoute {
  * True when `[lat, lon]` lies within the requested chart window expanded by a
  * generous margin (the window's own span on each side, at least one degree), so
  * a legitimate just-off-screen turn survives while a hallucinated point far from
- * the requested area is dropped. The longitude bound is skipped when the window
- * wraps the antimeridian (west > east), where a plain comparison would wrongly
- * reject valid points.
+ * the requested area is dropped. The longitude test is wrap-aware: a window that
+ * crosses the antimeridian (west > east) is unwrapped before the compare and the
+ * point is judged by true angular distance from the window center, so a point
+ * near +/-180 is kept while a far-off hallucination is still dropped (the old
+ * skip-longitude-when-wrapped path let any longitude through).
  */
 function withinRequestBounds (
   lat: number,
@@ -451,10 +453,15 @@ function withinRequestBounds (
   const latHi = Math.max(south, north)
   const latMargin = Math.max(latHi - latLo, 1)
   if (lat < latLo - latMargin || lat > latHi + latMargin) return false
-  if (west <= east) {
-    const lonMargin = Math.max(east - west, 1)
-    if (lon < west - lonMargin || lon > east + lonMargin) return false
-  }
+  // Unwrap to a single ascending span (east + 360 when the window wraps the
+  // antimeridian), then compare by angular distance from the center so the margin
+  // behaves identically wrapped or not.
+  const lonHi = west <= east ? east : east + 360
+  const lonSpan = lonHi - west
+  const lonCenter = (west + lonHi) / 2
+  const lonMargin = Math.max(lonSpan, 1)
+  const lonDelta = Math.abs(((lon - lonCenter + 540) % 360) - 180)
+  if (lonDelta > lonSpan / 2 + lonMargin) return false
   return true
 }
 
@@ -766,7 +773,7 @@ export function applyChannelRoute (
     const replaced = result.waypoints.map(toLatLon)
     const notes: LegFlag[] = []
     if (result.usedTileWater) notes.push(CHANNEL_TILE_WATER_CAVEAT)
-    if (result.borderFallback === true) notes.push(borderFallbackNote(homeName))
+    if (result.borderFallback) notes.push(borderFallbackNote(homeName))
     return { waypoints: replaced, notes }
   }
   return { waypoints, notes: [{ kind: 'other', message: CHANNEL_NOTE_BY_REASON[result.reason] }] }
