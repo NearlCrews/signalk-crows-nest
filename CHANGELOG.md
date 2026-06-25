@@ -13,13 +13,25 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-A small hardening pass on top of 0.10.2: two route-draft boundary fixes, a
+A hardening pass on top of 0.10.2: route-draft safety and boundary fixes, a
 first-run Save fix in the admin panel, and a refresh of the development
 dependencies. No configuration changes, and no runtime dependencies changed;
 existing setups are unaffected.
 
 ### Fixed
 
+- **Route draft: flag every unverified dimension when a safety provider fails.**
+  When a leg's safety provider errored, the check emitted a single depth-worded
+  note and still treated that provider as having covered its dimensions, so a
+  failure of the worldwide land provider on a leg could leave land unverified yet
+  unflagged. The check now counts only providers that returned data, so every
+  dimension a failed provider could not verify is called out explicitly, and the
+  mislabeled per-leg note is gone.
+- **Route draft: warn when a long AI route is truncated to the waypoint cap.** A
+  model route with more turning waypoints than the cap keeps could stop short of
+  the destination with no warning. The model is now told the cap so it
+  self-limits and still reaches the end, and a kept straight route that was
+  truncated carries an explicit caveat.
 - **Route draft: drop a hallucinated waypoint near the antimeridian.** The
   trust-boundary check that discards a model waypoint far outside the
   requested chart window skipped its longitude test entirely when the window
@@ -50,6 +62,11 @@ existing setups are unaffected.
   navigable-grid cell-coarsening growth factor, the EMODnet all-null gap case,
   and why the in-band and cross-provider hazard-dedupe keys round to different
   precisions.
+- Added orchestrator tests for a failed depth provider and a failed sole land
+  provider, and parser tests for the route-truncation marker. Documented that the
+  ENC standoff check samples land-area ring vertices, a standoff advisory rather
+  than a crossing test (land crossings are caught separately, so an
+  under-measured standoff is never a false safe).
 
 <a id="v0102"></a>
 
