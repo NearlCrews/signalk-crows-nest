@@ -149,6 +149,19 @@ const MAX_NAME = 80
 const MAX_NOTE = 600
 
 /**
+ * The caveat attached when the model proposed more turning waypoints than the cap
+ * keeps AND the channel router did not replace the geometry (a channel route
+ * reaches the destination by construction). Without it a truncated straight route
+ * could stop short of the destination with no warning.
+ */
+const ROUTE_TRUNCATED_NOTE: LegFlag = {
+  kind: 'other',
+  message:
+    `The AI proposed more turning waypoints than the ${MAX_WAYPOINTS} kept, so this route may stop ` +
+    'short of the destination. Verify the full passage on the chart, or draft it in shorter sections.'
+}
+
+/**
  * The structured-output schema, kept strict-clean so every provider's strict mode
  * accepts it, not just Gemini's. Rules learned from live cross-provider testing:
  * every property appears in `required` (an optional value is nullable rather than
@@ -368,7 +381,9 @@ const SYSTEM_PROMPT = [
   'single dead-upwind leg, emit explicit tack waypoints instead, and note when a leg requires',
   'tacking. Return as many turning waypoints as the route needs to keep every leg on the water, not',
   'a minimal set; a downstream densifier only interpolates the straight legs, it cannot route around',
-  'land. Put your brief rationale in note.'
+  `land. Use at most ${MAX_WAYPOINTS} turning waypoints; if the passage would need more, keep the most`,
+  'important bends along with the start and the destination so the route still reaches its end. Put',
+  'your brief rationale in note.'
 ].join(' ')
 
 /** Serialize a position as `latitude, longitude` at five decimals, the form both prompt paths use. */
@@ -432,6 +447,8 @@ interface DraftedRoute {
   name?: string
   note: string
   confidence?: 'high' | 'low'
+  /** The model returned more valid waypoints than the cap, so the kept route may stop short. */
+  truncated?: boolean
 }
 
 /**
@@ -488,16 +505,22 @@ export function parseDraftedRoute (
   const r = raw as Record<string, unknown>
   if (!Array.isArray(r.waypoints)) return undefined
   const waypoints: DraftedRoute['waypoints'] = []
+  let truncated = false
   for (const item of r.waypoints) {
     const position = toPosition(item)
     if (position === null) continue
     if (!withinRequestBounds(position.latitude, position.longitude, bounds)) continue
+    if (waypoints.length >= MAX_WAYPOINTS) {
+      // A valid, in-bounds waypoint beyond the cap: the route is longer than the
+      // cap keeps, so the returned route may stop short of the destination.
+      truncated = true
+      break
+    }
     const wp = item as Record<string, unknown>
     waypoints.push({
       ...position,
       ...(typeof wp.name === 'string' ? { name: wp.name.slice(0, MAX_WAYPOINT_NAME) } : {})
     })
-    if (waypoints.length >= MAX_WAYPOINTS) break
   }
   if (waypoints.length < 2) return undefined
   const destination =
@@ -511,7 +534,8 @@ export function parseDraftedRoute (
     note: typeof r.note === 'string' ? r.note.slice(0, MAX_NOTE) : '',
     ...(typeof r.name === 'string' ? { name: r.name.slice(0, MAX_NAME) } : {}),
     ...(destination !== undefined ? { destination } : {}),
-    ...(r.confidence === 'high' || r.confidence === 'low' ? { confidence: r.confidence } : {})
+    ...(r.confidence === 'high' || r.confidence === 'low' ? { confidence: r.confidence } : {}),
+    ...(truncated ? { truncated: true } : {})
   }
 }
 
@@ -690,6 +714,13 @@ async function handleDraft (
   // MAX_WAYPOINTS, and the router owns the geometry from here on.
   const channel = applyChannelRoute(route.waypoints, channelResult, homeCountry?.name)
   route.waypoints = channel.waypoints
+
+  // A model route longer than the waypoint cap was truncated by the parser. The
+  // channel router, when it ran, replaced the geometry with its own track that
+  // reaches the destination, so the caveat only applies to a kept straight route.
+  if (route.truncated === true && channelResult.ok !== true) {
+    channel.notes.push(ROUTE_TRUNCATED_NOTE)
+  }
 
   const positions: Position[] = route.waypoints.map(toLatLon)
 

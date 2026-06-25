@@ -266,6 +266,19 @@ test('parseDraftedRoute caps the waypoint count and slices an over-long name', (
   assert.ok(route !== undefined)
   assert.equal(route.waypoints.length, 25, 'the count is capped at the schema maximum')
   assert.equal(route.waypoints[0].name?.length, 60, 'a waypoint name is sliced to the schema maximum')
+  assert.equal(route.truncated, true, 'an over-cap route is flagged truncated so the caller can caveat it')
+})
+
+test('parseDraftedRoute leaves truncated unset for a route within the cap', () => {
+  const route = parseDraftedRoute(
+    draft([
+      { latitude: 42.4, longitude: -70.9 },
+      { latitude: 42.7, longitude: -70.8 }
+    ]),
+    BOUNDS
+  )
+  assert.ok(route !== undefined)
+  assert.equal(route.truncated, undefined, 'a within-cap route is not flagged truncated')
 })
 
 test('parseDraftedRoute tolerates the null optional fields the cross-provider schema can emit', () => {
