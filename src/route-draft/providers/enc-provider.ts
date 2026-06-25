@@ -238,7 +238,15 @@ function bandsForLeg (indexed: IndexedBand[], legBounds: Bbox): {
   }
 }
 
-/** Nearest approach, in meters, from any land-area ring vertex to the leg. */
+/**
+ * Nearest approach, in meters, from any land-area ring VERTEX to the leg. This
+ * samples ring vertices, not ring edges, so a close pass between two distant
+ * vertices on a long straight edge can read farther than the true separation. It
+ * is a standoff advisory, not a crossing test: an actual land crossing is caught
+ * separately by segmentCrossesRings, so an under-measured standoff never becomes a
+ * false safe. Charted land rings are densely sampled, so the vertex set tracks the
+ * true outline closely in practice.
+ */
 function nearestLandApproachMeters (
   from: Position,
   to: Position,
