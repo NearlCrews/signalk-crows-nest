@@ -77,10 +77,13 @@ export function pickZoom (bbox: Bbox): number | undefined {
 /** The integer `{ x, y }` tiles covering a bbox at zoom `z`. */
 export function tilesForBbox (bbox: Bbox, z: number): Array<{ x: number, y: number }> {
   const scale = 2 ** z
-  const xMin = lonToTile(bbox.west, scale)
-  const xMax = lonToTile(bbox.east, scale)
-  const yMin = latToTile(bbox.north, scale)
-  const yMax = latToTile(bbox.south, scale)
+  // Clamp to the valid tile range: an edge exactly at +180 lon (or a pole-ward
+  // lat) maps to `scale`, one past the last tile, which would request a tile that
+  // does not exist.
+  const xMin = Math.max(0, lonToTile(bbox.west, scale))
+  const xMax = Math.min(scale - 1, lonToTile(bbox.east, scale))
+  const yMin = Math.max(0, latToTile(bbox.north, scale))
+  const yMax = Math.min(scale - 1, latToTile(bbox.south, scale))
   const tiles: Array<{ x: number, y: number }> = []
   for (let x = xMin; x <= xMax; x += 1) {
     for (let y = yMin; y <= yMax; y += 1) {
