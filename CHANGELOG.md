@@ -9,15 +9,56 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 > development milestones that preceded this publication. Their content is
 > incorporated into the 0.4.2 release.
 
+<a id="unreleased"></a>
+
+## [Unreleased]
+
+A small hardening pass on top of 0.10.2: two route-draft boundary fixes, a
+first-run Save fix in the admin panel, and a refresh of the development
+dependencies. No configuration changes, and no runtime dependencies changed;
+existing setups are unaffected.
+
+### Fixed
+
+- **Route draft: drop a hallucinated waypoint near the antimeridian.** The
+  trust-boundary check that discards a model waypoint far outside the
+  requested chart window skipped its longitude test entirely when the window
+  crossed the antimeridian (west longitude greater than east), so a point
+  anywhere along that latitude band could slip through. The check is now
+  wrap-aware and judges every waypoint by its true angular distance from the
+  window center, so a just-off-screen turn still survives while a far-off
+  hallucination is dropped.
+- **Channel router: never request a water tile past the map edge.** A routing
+  window whose eastern or pole-ward edge landed exactly on a tile boundary
+  (longitude or latitude at the +/-180 or pole extreme) could compute a tile
+  index one past the last real tile. The tile range is now clamped to the
+  valid grid, so the water fetch never asks for a tile that does not exist.
+- **Admin panel: allow Save on an as-yet-unconfigured plugin.** Save was
+  disabled until the plugin already had a stored configuration, which blocked
+  writing the defaults needed to enable it the first time. Save is now
+  available so the defaults can be saved to turn the plugin on.
+
+### Internal
+
+- Brought the development dependencies current: `@signalk/server-api` 2.25 to
+  2.28, `webpack` 5.107 to 5.108, and `@types/node` to 25.9.4. No runtime
+  dependencies changed and `npm audit` stays clean. ESLint stays on 9 (the
+  neostandard flat config peers to `eslint ^9`) and Babel stays on 7
+  deliberately.
+- Added regression tests for the wrap-aware antimeridian waypoint check, and
+  documented the previously implicit grid-rasterization cell-center shift, the
+  navigable-grid cell-coarsening growth factor, the EMODnet all-null gap case,
+  and why the in-band and cross-provider hazard-dedupe keys round to different
+  precisions.
+
 <a id="v0102"></a>
 
 ## [0.10.2] - 2026-06-21
 
-A maintainer hardening pass: a full-codebase review by a team of twelve
-focused expert reviewers, one per subsystem, fixed two edge-case routing
-bugs, shrank the configuration panel's browser bundle, and tightened a
-handful of types, comments, and tests. No configuration changes, and no new
-dependencies; existing setups are unaffected.
+A maintainer hardening pass that fixed two edge-case routing bugs, shrank the
+configuration panel's browser bundle, and tightened a handful of types,
+comments, and tests. No configuration changes, and no new dependencies;
+existing setups are unaffected.
 
 ### Fixed
 
