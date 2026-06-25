@@ -21,14 +21,16 @@ proximity, route-corridor, and bridge air-draft alarms.
 > safety-of-life navigation: always cross-check against official charts and
 > your primary instruments.
 
-## What's new in 0.10.2
+## What's new in 0.10.3
 
-A maintainer hardening pass: a full-codebase review by a team of twelve
-focused expert reviewers fixed two edge-case routing bugs and shrank the
-configuration panel's browser bundle, with no configuration changes (see the
-[changelog](CHANGELOG.md#v0102)). The headline of the 0.10 line remains **AI
-route drafting** (beta), introduced in 0.10.0: it follows the water, and its
-safety check covers routes worldwide.
+A safety and hardening pass: the route-draft safety check now flags every
+dimension a failed data provider could not verify rather than letting one slip
+through, a long AI route that would overflow the waypoint cap is held to the cap
+instead of silently stopping short, two route-boundary edge cases near the
+antimeridian and the map edge are fixed, and the development dependencies are
+current (see the [changelog](CHANGELOG.md#v0103)). The headline of the 0.10 line
+remains **AI route drafting** (beta), introduced in 0.10.0: it follows the water,
+and its safety check covers routes worldwide.
 
 > **AI route drafting is in beta.** It cannot guarantee accuracy. The model can
 > place a waypoint in error and the safety check runs on generalized and modeled

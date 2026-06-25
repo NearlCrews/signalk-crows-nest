@@ -9,9 +9,9 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 > development milestones that preceded this publication. Their content is
 > incorporated into the 0.4.2 release.
 
-<a id="unreleased"></a>
+<a id="v0103"></a>
 
-## [Unreleased]
+## [0.10.3] - 2026-06-25
 
 A hardening pass on top of 0.10.2: route-draft safety and boundary fixes, a
 first-run Save fix in the admin panel, and a refresh of the development
