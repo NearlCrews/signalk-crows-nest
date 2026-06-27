@@ -90,7 +90,7 @@ function resolveExplicitBbox (raw: unknown): Bbox | null {
  * The `notes` resource provider receives the request query as loosely typed
  * key/value pairs. Two forms are supported: an explicit `bbox` (a four-number
  * GeoJSON bounding box), and the `position` + `distance`
- * form chart plotters send, where `position` is the search center and
+ * form chartplotters send, where `position` is the search center and
  * `distance` is the radius in meters. Returns null when the query does not
  * carry enough information to build a box.
  */

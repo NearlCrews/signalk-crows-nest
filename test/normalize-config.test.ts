@@ -310,7 +310,7 @@ test('normalizeConfig defaults the NOAA ENC options for an empty config', () => 
   assert.equal(config.noaaEncScaleBand, DEFAULT_SCALE_BAND)
   assert.equal(config.noaaEncIncludeWrecks, true)
   assert.equal(config.noaaEncIncludeObstructions, true)
-  // Rocks default off so a coastal-band query does not flood the chart plotter.
+  // Rocks default off so a coastal-band query does not flood the chartplotter.
   assert.equal(config.noaaEncIncludeRocks, false)
 })
 

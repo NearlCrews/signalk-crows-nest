@@ -77,7 +77,7 @@ Signal K is an open marine data standard that streams a boat's navigation,
 environment, and AIS data over a single API. Crow's Nest is a Signal K
 server plugin that fills the chart around that data: it imports points of
 interest from four sources, merges duplicates into one corroborated marker,
-and serves them as standard `notes` resources that chart plotters such as
+and serves them as standard `notes` resources that chartplotters such as
 [Freeboard-SK](https://github.com/SignalK/freeboard-sk) display natively.
 
 It is built for life on a boat: details are cached on disk so the chart
@@ -140,7 +140,7 @@ air-draft check).
   carries a presentation-neutral `properties.crowsNest` view of the same
   detail alongside the HTML, documented in the
   [notes-resource integration guide](docs/notes-resource-format.md), so a
-  richer chart plotter can render the sections natively and skip the HTML.
+  richer chartplotter can render the sections natively and skip the HTML.
 - **Persistent, offline caching.** ActiveCaptain details live in a 30-day
   on-disk store with stale-on-error fallback; the USCG Light List index is
   sharded on disk and queried through an in-memory spatial tile index for
@@ -216,7 +216,7 @@ decimal degrees, distances and heights in meters).
 
 - `resources/notes` — every imported POI is published as a Signal K `note`
   resource (with the source-agnostic structured detail on
-  `properties.crowsNest` alongside the HTML description) so chart plotters such
+  `properties.crowsNest` alongside the HTML description) so chartplotters such
   as Freeboard-SK can display it.
 - `notifications.navigation.crowsNest.hazard.<id>` — proximity hazard alarms.
 - `notifications.navigation.crowsNest.route.<id>` — route-corridor hazard
@@ -234,7 +234,7 @@ set); see [the route-draft API notes](docs/route-draft-api.md).
   position source (a GPS) attached to `vessels.self`. The `notes`
   resources and the notifications work on any 2.x server.
 - Node.js 20.3 or newer.
-- A chart plotter that consumes Signal K `notes` resources. Freeboard-SK
+- A chartplotter that consumes Signal K `notes` resources. Freeboard-SK
   is the reference consumer; any client that reads `notes` resources will
   see the markers, including [Binnacle](https://github.com/NearlCrews/signalk-binnacle),
   which renders the structured detail natively.

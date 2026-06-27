@@ -6,7 +6,7 @@
  *
  * The bar reports source HEALTH, not the count returned by the most
  * recent list call. The count is just "what fell inside the
- * chart-plotter's last bounding-box query" and is meaningless until
+ * chartplotter's last bounding-box query" and is meaningless until
  * the chart is panned, so showing it here (or in the per-card pill)
  * reads as misleading.
  */

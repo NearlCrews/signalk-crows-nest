@@ -5,7 +5,7 @@
 - Confirm the plugin is enabled in the Signal K admin UI under Server ->
   Plugin Config.
 - Confirm your Signal K server has a position source (a GPS). The plugin
-  serves POIs for the map region the chart plotter asks about; with no
+  serves POIs for the map region the chartplotter asks about; with no
   position, Freeboard-SK has no region to request.
 - Open Freeboard-SK and make sure the `notes` layer is switched on in its
   layer controls.
@@ -21,7 +21,7 @@
   returns nothing.
 - Enable the plugin's debug log (see below) and watch for
   `Incoming request to list note resources`. If that line never appears, the
-  chart plotter is not querying the `notes` resource type at all.
+  chartplotter is not querying the `notes` resource type at all.
 
 ## Enabling debug logging
 

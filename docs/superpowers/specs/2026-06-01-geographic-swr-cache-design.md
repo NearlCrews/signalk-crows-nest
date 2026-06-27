@@ -2,7 +2,7 @@
 
 Date: 2026-06-01
 Status: approved, ready to implement
-Goal: cut the delay in getting notes (POIs) onto the chart plotter, for three
+Goal: cut the delay in getting notes (POIs) onto the chartplotter, for three
 observed pains: panning/zooming to a new area, cold start, and slow-source lag.
 
 ## Problem

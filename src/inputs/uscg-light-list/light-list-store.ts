@@ -50,7 +50,7 @@ const PAGES_DIRNAME = 'pages'
 /**
  * Tile cell size, in tenths of a degree, used by the in-memory spatial index.
  * Roughly 11 km at the equator and tighter at higher latitudes; large enough
- * that a typical chart-plotter bbox lies inside a handful of tiles, small
+ * that a typical chartplotter bbox lies inside a handful of tiles, small
  * enough that each tile holds a tractable number of records.
  */
 const TILE_CELLS_PER_DEGREE = 10

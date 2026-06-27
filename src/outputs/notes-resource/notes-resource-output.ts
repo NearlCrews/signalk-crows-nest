@@ -2,7 +2,7 @@
  * Notes-resource output.
  *
  * Registers the SignalK `notes` resource provider that exposes points of
- * interest to chart plotters. It lists POIs through the aggregate source and
+ * interest to chartplotters. It lists POIs through the aggregate source and
  * renders detail descriptions. It declares no configuration of its own.
  *
  * The resource provider is registered on every plugin start; the SignalK

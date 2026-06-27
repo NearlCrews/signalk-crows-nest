@@ -77,7 +77,7 @@ and is unit-testable in isolation. The `PoiSource` interface in
   the source produces: the ActiveCaptain POI page for AC, the OpenStreetMap
   element page (`https://www.openstreetmap.org/<type>/<id>`) for OpenSeaMap.
 - The note's `properties` object gains `source` (the slug) and `attribution`
-  (a human-readable credit string). `properties` is free-form; chart plotters
+  (a human-readable credit string). `properties` is free-form; chartplotters
   ignore unknown keys.
 - Detail rendering stays source-specific (ActiveCaptain's section-based HTML
   renderer is intrinsically AC-shaped; OpenSeaMap gets its own simpler

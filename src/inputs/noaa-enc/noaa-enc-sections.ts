@@ -3,7 +3,7 @@
  *
  * Turns a raw ENC Direct feature (its layer key plus the S-57 `properties`
  * bag the ArcGIS service emits) into the source-agnostic
- * {@link NormalizedSection}[] a structured chart plotter renders, carried on
+ * {@link NormalizedSection}[] a structured chartplotter renders, carried on
  * the note's `properties.crowsNest.sections` alongside the HTML description.
  *
  * It mirrors the same S-57 attributes `enc-direct-detail.ts`'s HTML renderer

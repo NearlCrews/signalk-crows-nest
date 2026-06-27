@@ -2,7 +2,7 @@
  * Normalized-section builder for an ActiveCaptain point of interest.
  *
  * Turns the structured {@link PoiDetails} into the source-agnostic
- * {@link NormalizedSection}[] a structured chart plotter renders, carried on the
+ * {@link NormalizedSection}[] a structured chartplotter renders, carried on the
  * note's `properties.crowsNest.sections` alongside the HTML description.
  *
  * It mirrors the content of `poi-detail-renderer.ts`'s Handlebars output

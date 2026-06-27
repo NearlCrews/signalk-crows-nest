@@ -1,8 +1,8 @@
 # Notes resource format (integration guide)
 
 How `signalk-crows-nest` publishes points of interest as Signal K `notes`
-resources, and how a chart-plotter client should consume them. This is the
-reference for building a consumer (for example a custom chart plotter such as
+resources, and how a chartplotter client should consume them. This is the
+reference for building a consumer (for example a custom chartplotter such as
 signalk-binnacle): it describes the wire shape, the additive normalized-detail
 schema, and exactly how to render it.
 

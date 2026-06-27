@@ -27,7 +27,7 @@
  *   source contributed. The names differ by one letter on purpose: each
  *   means a different thing.
  * - `properties.plugin` and `properties.pluginRepo` ride on every note so a
- *   chart-plotter UI can render a "plugin home" link from structured fields
+ *   chartplotter UI can render a "plugin home" link from structured fields
  *   rather than depend on an inline footer in the description.
  * - `properties.crowsNest` (`{ schemaVersion, type, sections }`) carries the
  *   normalized detail a structured client renders natively, alongside the HTML
@@ -134,7 +134,7 @@ export function buildNoteResource (input: NoteResourceInput): Record<string, unk
   }
   // Guard `url` against the empty string like `description` below: a defensive
   // source that returned `''` instead of a real link would otherwise ship
-  // `url: ""`, and a chart plotter rendering a "more info" link from it lands
+  // `url: ""`, and a chartplotter rendering a "more info" link from it lands
   // nowhere. Every current source supplies a real URL, so this only matters
   // defensively. `url` is optional on the SignalK `Note` interface.
   if (url.length > 0) {

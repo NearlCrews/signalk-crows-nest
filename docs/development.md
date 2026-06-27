@@ -37,7 +37,7 @@ The plugin imports points of interest (POIs) from multiple marine data sources
 (Garmin ActiveCaptain, OpenSeaMap via the OpenStreetMap Overpass API, the USCG
 Light List of US Aids to Navigation, and NOAA ENC Direct's authoritative US
 wrecks, obstructions, and underwater rocks) and exposes them as Signal K
-`notes` resources, so chart plotters such as Freeboard-SK can render them as
+`notes` resources, so chartplotters such as Freeboard-SK can render them as
 an extra chart layer.
 
 When the Signal K resources API receives a `notes` query, the plugin resolves

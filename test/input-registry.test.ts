@@ -308,7 +308,7 @@ test('listPointsOfInterest times out a slow source, ships the others, and record
 test('listPointsOfInterest does not throw when every source times out', async () => {
   // If every source times out, the aggregate ships an empty partial result
   // rather than rejecting: the background fetches keep running and the
-  // chart plotter's next refresh will see their populated bbox-debounce
+  // chartplotter's next refresh will see their populated bbox-debounce
   // caches.
   const stuck = stubModule('stuck', true, stubSource('stuck', {
     list: () => new Promise<PoiSummary[]>(() => {})
@@ -327,7 +327,7 @@ test('listPointsOfInterest does not throw when every source times out', async ()
 test('listPointsOfInterest clones each summary position so a downstream mutation does not corrupt the cached entry', async () => {
   // The bbox-debounce caches share the same PoiSummary[] across hits, so the
   // aggregate must clone each `position` object when it rewrites the id;
-  // otherwise a chart-plotter consumer that mutates `note.position` (a
+  // otherwise a chartplotter consumer that mutates `note.position` (a
   // projection step, say) would silently corrupt the cached entry for the
   // next caller.
   const sharedPosition = { latitude: 12.34, longitude: 56.78 }

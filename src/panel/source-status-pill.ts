@@ -49,7 +49,7 @@ export function pillContent (status: SourceStatus, variant: PillVariant): PillCo
   }
   const fetch = status.lastListFetch as Exclude<SourceStatus['lastListFetch'], null>
   // The pill reports source HEALTH, not the count from the last fetch:
-  // the count is just "what fell inside the chart-plotter's most recent
+  // the count is just "what fell inside the chartplotter's most recent
   // bounding-box query", which is meaningless until you pan the chart.
   // A user who sees "✓ 0 POI" on every source could reasonably think
   // nothing is selected, when in fact the sources are healthy and the

@@ -100,7 +100,7 @@ export default function NoaaEncSource ({ state, dispatch }: Props): React.ReactE
         )}
         <p style={S.hintBelow}>
           Underwater rocks default off because a coastal-band query can
-          return tens of thousands of rocks, which slows the chart plotter
+          return tens of thousands of rocks, which slows the chartplotter
           and obscures other hazards.
         </p>
       </Fieldset>

@@ -9,7 +9,7 @@
  * `../shared/types.js`. Parsing the raw SignalK
  * `ResourceProviderMethods.listResources` query into a center `Position` and a
  * distance is the job of `src/outputs/notes-resource/resource-query.ts`; that
- * module supports the `position` plus `distance` form the chart plotter sends.
+ * module supports the `position` plus `distance` form the chartplotter sends.
  */
 
 import { isValidLatitude, isValidLongitude } from '../shared/numbers.js'

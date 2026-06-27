@@ -116,7 +116,7 @@ test('elementMarking resolves the icon from seamark:type, then leisure=marina, t
 
 test('every fetched seamark type has a specific PoiType and Freeboard icon mapping', () => {
   // Drift between what the Overpass query fetches, what flows through the
-  // plugin as a PoiType, and what the chart plotter renders is invisible at
+  // plugin as a PoiType, and what the chartplotter renders is invisible at
   // run time: a missing entry silently falls back to Unknown or the generic
   // notice-to-mariners icon. This test catches that drift at test time, so a
   // contributor adding a seamark to a group must also extend the PoiType and

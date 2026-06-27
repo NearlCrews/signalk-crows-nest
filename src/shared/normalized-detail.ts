@@ -2,7 +2,7 @@
  * Normalized point-of-interest detail schema.
  *
  * A source-agnostic, presentation-neutral structure for the rich per-source
- * detail a chart plotter shows when a marker is opened. It is "the popup, as
+ * detail a chartplotter shows when a marker is opened. It is "the popup, as
  * data": a list of titled sections, each a list of labeled items, so a modern
  * client (for example signalk-binnacle) can render the detail natively rather
  * than parse the rendered HTML description.

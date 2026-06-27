@@ -24,7 +24,7 @@ import type { PoiSummary } from '../shared/types.js'
  * timeout caps the aggregate's perceived latency at this value: the fast
  * sources ship immediately and the slow source's HTTP keeps running in the
  * background, so its bbox-debounce cache fills and its POIs appear on the
- * chart plotter's next refresh.
+ * chartplotter's next refresh.
  *
  * Chosen to be longer than a healthy ActiveCaptain/NOAA ENC round-trip
  * (typically under 2 s) but shorter than the Overpass tail-latency outliers
@@ -134,7 +134,7 @@ export function createInputRegistry (
           // listPointsOfInterest promise is left running, since its
           // bbox-debounce cache fetcher populates the cache on success; the
           // next aggregate call then hits the cache and the source's POIs
-          // appear on the chart plotter's next refresh.
+          // appear on the chartplotter's next refresh.
           const results = await Promise.allSettled(
             sourceList.map(async (s, i): Promise<SourceListOutcome> => {
               const fetchPromise = s.listPointsOfInterest(bbox, poiTypes)

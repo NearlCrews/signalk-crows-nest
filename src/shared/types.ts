@@ -132,7 +132,7 @@ export interface PoiSummary {
   /** Number of reviews behind the rating. */
   reviewCount?: number
   /**
-   * Chart-plotter icon hint, mapped to a Freeboard `:sk-${icon}` glyph.
+   * Chartplotter icon hint, mapped to a Freeboard `:sk-${icon}` glyph.
    * Freeboard only renders a fixed list of registered icons; an unknown name
    * silently falls back to a default yellow square. Required so every source
    * must pick a registered icon at construction time: ActiveCaptain maps every
@@ -195,7 +195,7 @@ export interface PoiDetailView {
   /** ISO-8601 UTC last-modified time, omitted when unknown. */
   timestamp?: string
   /**
-   * Chart-plotter icon hint, mapped to a Freeboard `:sk-${icon}` glyph. See
+   * Chartplotter icon hint, mapped to a Freeboard `:sk-${icon}` glyph. See
    * the matching {@link PoiSummary.skIcon} field for the contract.
    */
   skIcon: string

@@ -2,7 +2,7 @@
  * Normalized-section builder for a USCG Light List record.
  *
  * Turns the structured {@link LightListRecord} into the source-agnostic
- * {@link NormalizedSection}[] a structured chart plotter renders, carried on
+ * {@link NormalizedSection}[] a structured chartplotter renders, carried on
  * the note's `properties.crowsNest.sections` alongside the HTML description.
  *
  * It mirrors the content of `light-list-detail.ts`'s HTML renderer (same

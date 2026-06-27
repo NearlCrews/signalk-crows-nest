@@ -1332,7 +1332,7 @@ unregisters a plugin's resource providers on stop.
  * Notes-resource output.
  *
  * Registers the SignalK `notes` resource provider that exposes points of
- * interest to chart plotters. This is the ActiveCaptain-to-notes adapter: it
+ * interest to chartplotters. This is the ActiveCaptain-to-notes adapter: it
  * lists POIs through the aggregate source, applies the minimum-rating display
  * filter, and renders detail descriptions. It owns the `minimumRating` config
  * property, since that is a display filter on this output.

@@ -9,7 +9,7 @@ plugin. It imports points of interest from multiple marine data sources
 (Garmin ActiveCaptain, OpenSeaMap via the OpenStreetMap Overpass API, the USCG
 Light List of US Aids to Navigation, and the NOAA ENC Direct database of
 wrecks, obstructions, and underwater rocks) and exposes them as Signal K
-`notes` resources so chart plotters such as Freeboard-SK can display them. It
+`notes` resources so chartplotters such as Freeboard-SK can display them. It
 also hosts an optional, admin-gated, beta AI route-draft endpoint (the
 server-side half of Binnacle's AI route drafting): it asks OpenRouter for a passage's
 turning waypoints, optionally re-routes the geometry through a deterministic

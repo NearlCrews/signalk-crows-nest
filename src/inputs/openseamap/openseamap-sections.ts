@@ -2,7 +2,7 @@
  * Normalized-section builder for an OpenSeaMap (Overpass) element.
  *
  * Turns the curated OSM tags into the source-agnostic
- * {@link NormalizedSection}[] a structured chart plotter renders, carried on
+ * {@link NormalizedSection}[] a structured chartplotter renders, carried on
  * the note's `properties.crowsNest.sections` alongside the HTML description.
  *
  * It mirrors the content of `openseamap-detail.ts`'s HTML renderer (the same

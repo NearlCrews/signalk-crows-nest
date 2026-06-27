@@ -25,7 +25,7 @@
  *
  * Off-sentinel matches the rest of the codebase: `ttlSeconds <= 0` disables the
  * cache, and the raw viewport (no snap) is fetched on every call. The freshness
- * window is in seconds because the typical chart-plotter cadence is sub-minute.
+ * window is in seconds because the typical chartplotter cadence is sub-minute.
  *
  * The cache is per-source: ActiveCaptain, NOAA ENC, and OpenSeaMap each
  * instantiate their own. They share the `MAX_BBOX_CACHE_ENTRIES` ceiling
