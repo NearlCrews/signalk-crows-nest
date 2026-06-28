@@ -88,6 +88,9 @@ const ROUTER_MIN_BUDGET_MS = 12_000
 /** How long to wait for the companion bridge to report ready before falling back to the in-process router. */
 const COMPANION_READY_TIMEOUT_MS = 1500
 
+/** A channel-route outcome: the router result, or 'skipped' when too little budget remained to run it. */
+type ChannelRouteOutcome = ChannelRouteResult | { ok: false, reason: 'skipped' }
+
 /**
  * Pick the channel route: the companion bridge when present, else the in-process router. A null from the
  * companion (not ready, a transport failure, a timeout, or an untrusted result) falls back in-process, so
@@ -104,12 +107,12 @@ export async function resolveChannelRoute (opts: {
   minBudgetMs: number
   deadlineMs: number
   now?: () => number
-}): Promise<ChannelRouteResult | { ok: false, reason: 'skipped' }> {
+}): Promise<ChannelRouteOutcome> {
   const now = opts.now ?? Date.now
   if (opts.deadlineMs - now() < opts.minBudgetMs) return { ok: false, reason: 'skipped' }
   if (opts.bridge !== undefined) {
-    const callTimeoutMs = opts.deadlineMs - now()
-    const viaCompanion = await routeViaCompanion(opts.bridge, opts.req, opts.homeCountryId, opts.readyTimeoutMs, callTimeoutMs)
+    const callMs = opts.deadlineMs - now()
+    const viaCompanion = await routeViaCompanion(opts.bridge, opts.req, opts.homeCountryId, { readyMs: opts.readyTimeoutMs, callMs })
     if (viaCompanion !== null) return viaCompanion
   }
   if (opts.deadlineMs - now() < opts.minBudgetMs) return { ok: false, reason: 'skipped' }
@@ -826,7 +829,7 @@ type DraftWaypoint = { latitude: number, longitude: number, name?: string }
  */
 export function applyChannelRoute (
   waypoints: DraftWaypoint[],
-  result: ChannelRouteResult | { ok: false, reason: 'skipped' },
+  result: ChannelRouteOutcome,
   homeName?: string
 ): { waypoints: DraftWaypoint[], notes: LegFlag[] } {
   if (result.ok) {

@@ -34,45 +34,45 @@ test('toCompanionRequest with no home country sets borderAware false and omits h
 
 test('routeViaCompanion passes through a valid ok result', async () => {
   const bridge = { whenReady: async () => {}, routeOnWater: async () => ({ ok: true, waypoints: twoWaypoints, usedTileWater: true, borderFallback: false }) }
-  const r = await routeViaCompanion(bridge, baseReq as never, 'USA', 2000, 2000)
+  const r = await routeViaCompanion(bridge, baseReq as never, 'USA', { readyMs: 2000, callMs: 2000 })
   assert.deepEqual(r, { ok: true, waypoints: twoWaypoints, usedTileWater: true, borderFallback: false })
 })
 
 test('routeViaCompanion passes through a typed decline', async () => {
   const bridge = { whenReady: async () => {}, routeOnWater: async () => ({ ok: false, reason: 'no-coverage' }) }
-  assert.deepEqual(await routeViaCompanion(bridge, baseReq as never, undefined, 2000, 2000), { ok: false, reason: 'no-coverage' })
+  assert.deepEqual(await routeViaCompanion(bridge, baseReq as never, undefined, { readyMs: 2000, callMs: 2000 }), { ok: false, reason: 'no-coverage' })
 })
 
 test('routeViaCompanion returns null (fall back) on router-unavailable', async () => {
   const bridge = { whenReady: async () => {}, routeOnWater: async () => ({ ok: false, reason: 'router-unavailable' }) }
-  assert.equal(await routeViaCompanion(bridge, baseReq as never, undefined, 2000, 2000), null)
+  assert.equal(await routeViaCompanion(bridge, baseReq as never, undefined, { readyMs: 2000, callMs: 2000 }), null)
 })
 
 test('routeViaCompanion returns null on an unrecognized or malformed result', async () => {
   const bridge = { whenReady: async () => {}, routeOnWater: async () => ({ ok: false, reason: 'totally-bogus' }) }
-  assert.equal(await routeViaCompanion(bridge, baseReq as never, undefined, 2000, 2000), null)
+  assert.equal(await routeViaCompanion(bridge, baseReq as never, undefined, { readyMs: 2000, callMs: 2000 }), null)
   const bridge2 = { whenReady: async () => {}, routeOnWater: async () => ({ ok: true, waypoints: 'nope' }) }
-  assert.equal(await routeViaCompanion(bridge2, baseReq as never, undefined, 2000, 2000), null)
+  assert.equal(await routeViaCompanion(bridge2, baseReq as never, undefined, { readyMs: 2000, callMs: 2000 }), null)
 })
 
 test('routeViaCompanion returns null on a degenerate ok result of fewer than two waypoints', async () => {
   const bridge = { whenReady: async () => {}, routeOnWater: async () => ({ ok: true, waypoints: [{ latitude: 1, longitude: 2 }], usedTileWater: false, borderFallback: false }) }
-  assert.equal(await routeViaCompanion(bridge, baseReq as never, undefined, 2000, 2000), null)
+  assert.equal(await routeViaCompanion(bridge, baseReq as never, undefined, { readyMs: 2000, callMs: 2000 }), null)
 })
 
 test('routeViaCompanion returns null when whenReady rejects', async () => {
   const bridge = { whenReady: async () => { throw new Error('down') }, routeOnWater: async () => ({ ok: true, waypoints: twoWaypoints, usedTileWater: false, borderFallback: false }) }
-  assert.equal(await routeViaCompanion(bridge, baseReq as never, undefined, 2000, 2000), null)
+  assert.equal(await routeViaCompanion(bridge, baseReq as never, undefined, { readyMs: 2000, callMs: 2000 }), null)
 })
 
 test('routeViaCompanion returns null when whenReady never resolves before the ready timeout', async () => {
   const bridge = { whenReady: () => new Promise<void>(() => {}), routeOnWater: async () => ({ ok: true, waypoints: twoWaypoints, usedTileWater: false, borderFallback: false }) }
-  assert.equal(await routeViaCompanion(bridge, baseReq as never, undefined, 30, 2000), null)
+  assert.equal(await routeViaCompanion(bridge, baseReq as never, undefined, { readyMs: 30, callMs: 2000 }), null)
 })
 
 test('routeViaCompanion returns null when routeOnWater hangs past the call timeout', async () => {
   const bridge = { whenReady: async () => {}, routeOnWater: () => new Promise<unknown>(() => {}) }
-  assert.equal(await routeViaCompanion(bridge, baseReq as never, undefined, 2000, 30), null)
+  assert.equal(await routeViaCompanion(bridge, baseReq as never, undefined, { readyMs: 2000, callMs: 30 }), null)
 })
 
 test('getCompanionBridge reads the global key and ignores a non-bridge value', () => {

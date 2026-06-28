@@ -11,6 +11,7 @@
 
 import type { Position } from '../../shared/types.js'
 import type { ChannelRouteRequest, ChannelRouteResult, ChannelDeclineReason } from './channel-router.js'
+import { CHANNEL_DECLINE_REASONS } from './channel-router.js'
 import { withDeadline } from '../../shared/with-deadline.js'
 
 /** The global key the companion plugin installs its in-process bridge on. */
@@ -22,10 +23,9 @@ export interface RouteOnWaterBridge {
   routeOnWater: (request: unknown) => Promise<unknown>
 }
 
-/** The six typed decline reasons crows-nest understands; the bridge may also return the transport-only 'router-unavailable'. */
-const CHANNEL_REASONS: ReadonlySet<ChannelDeclineReason> = new Set<ChannelDeclineReason>([
-  'no-coverage', 'no-path', 'deadline', 'unsnappable', 'land-leg', 'fetch-failed'
-])
+/** The typed decline reasons crows-nest understands (single-sourced from the router); the bridge may also
+ * return the transport-only 'router-unavailable', which is not in this set and so falls back. */
+const CHANNEL_REASONS: ReadonlySet<ChannelDeclineReason> = new Set<ChannelDeclineReason>(CHANNEL_DECLINE_REASONS)
 
 function isBridge (v: unknown): v is RouteOnWaterBridge {
   return typeof v === 'object' && v !== null &&
@@ -92,14 +92,13 @@ export async function routeViaCompanion (
   bridge: RouteOnWaterBridge,
   req: ChannelRouteRequest,
   homeCountryId: string | undefined,
-  readyTimeoutMs: number,
-  callTimeoutMs: number
+  timeouts: { readyMs: number, callMs: number }
 ): Promise<ChannelRouteResult | null> {
-  const ready = await withDeadline(bridge.whenReady().then(() => true).catch(() => false), readyTimeoutMs, () => false)
+  const ready = await withDeadline(bridge.whenReady().then(() => true).catch(() => false), timeouts.readyMs, () => false)
   if (!ready) return null
   const raw = await withDeadline(
     bridge.routeOnWater(toCompanionRequest(req, homeCountryId)).catch(() => null),
-    callTimeoutMs, () => null
+    timeouts.callMs, () => null
   )
   return narrowResult(raw)
 }
