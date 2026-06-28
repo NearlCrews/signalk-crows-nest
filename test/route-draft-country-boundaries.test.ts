@@ -68,6 +68,16 @@ test('foreignRings excludes the home country', () => {
   assert.ok(!rings.some((r) => r.rings[0].some(([x]) => x === -2)))
 })
 
+test('the in-process admin-0 source covers no open-sea boundary water (the gap the companion EEZ source fills)', () => {
+  // The companion routes border-aware off the Marine Regions EEZ (open-sea maritime boundaries); the
+  // in-process path routes off admin-0 land, which partitions only land and boundary-lake water. A point
+  // in open Pacific water on the US/Canada maritime boundary is therefore in no admin-0 country, so the
+  // in-process border block is a no-op offshore. This characterizes (and locks) the accepted divergence:
+  // the companion newly blocks open-sea boundaries the built-in source never could.
+  const boundaries = loadCountryBoundaries()
+  assert.equal(boundaries.classify({ latitude: 48.0, longitude: -125.8 }), undefined)
+})
+
 test('homeForRoute returns the sovereign alpha-3, not the admin-0 unit code, for a territory', () => {
   // Two points inside Puerto Rico (admin-0 unit PRI, sovereign USA).
   const b = countryBoundariesFrom([{
