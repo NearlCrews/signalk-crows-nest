@@ -40,7 +40,9 @@ import { checkLegs } from './safety-check.js'
 import type { LegFlag } from './safety-check.js'
 import { estimateFuel, routeDistanceMeters } from './fuel.js'
 import { routeChannel } from './channel-router/index.js'
-import type { ChannelDeclineReason, ChannelRouteResult, TileWaterSource } from './channel-router/index.js'
+import type { ChannelDeclineReason, ChannelRouteRequest, ChannelRouteResult, TileWaterSource } from './channel-router/index.js'
+import { getCompanionBridge, routeViaCompanion } from './channel-router/companion-router.js'
+import type { RouteOnWaterBridge } from './channel-router/companion-router.js'
 import type { CountryBoundaries } from './country-boundaries.js'
 
 /**
@@ -83,6 +85,36 @@ const MAX_OUTPUT_TOKENS = 1500
  * geometry, with the channel-unavailable note attached.
  */
 const ROUTER_MIN_BUDGET_MS = 12_000
+/** How long to wait for the companion bridge to report ready before falling back to the in-process router. */
+const COMPANION_READY_TIMEOUT_MS = 1500
+
+/**
+ * Pick the channel route: the companion bridge when present, else the in-process router. A null from the
+ * companion (not ready, a transport failure, a timeout, or an untrusted result) falls back in-process, so
+ * the cutover is reversible and a down container degrades to the built-in path rather than failing the draft.
+ * The companion attempt is bounded by the remaining budget, and the budget is re-gated before the in-process
+ * fallback so a slow companion attempt cannot start the built-in router below ROUTER_MIN_BUDGET_MS.
+ */
+export async function resolveChannelRoute (opts: {
+  bridge: RouteOnWaterBridge | undefined
+  runInProcess: () => Promise<ChannelRouteResult>
+  req: ChannelRouteRequest
+  homeCountryId: string | undefined
+  readyTimeoutMs: number
+  minBudgetMs: number
+  deadlineMs: number
+  now?: () => number
+}): Promise<ChannelRouteResult | { ok: false, reason: 'skipped' }> {
+  const now = opts.now ?? Date.now
+  if (opts.deadlineMs - now() < opts.minBudgetMs) return { ok: false, reason: 'skipped' }
+  if (opts.bridge !== undefined) {
+    const callTimeoutMs = opts.deadlineMs - now()
+    const viaCompanion = await routeViaCompanion(opts.bridge, opts.req, opts.homeCountryId, opts.readyTimeoutMs, callTimeoutMs)
+    if (viaCompanion !== null) return viaCompanion
+  }
+  if (opts.deadlineMs - now() < opts.minBudgetMs) return { ok: false, reason: 'skipped' }
+  return opts.runInProcess()
+}
 
 /**
  * Route-level geometry note per channel-routing outcome, so the navigator always learns
@@ -673,27 +705,38 @@ async function handleDraft (
   const endPos = toLatLon(route.waypoints[route.waypoints.length - 1])
   const homeCountry = service.boundaries.homeForRoute(startPos, endPos)
 
-  const channelResult: ChannelRouteResult | { ok: false, reason: 'skipped' } =
-    deadlineMs - Date.now() >= ROUTER_MIN_BUDGET_MS
-      ? await routeChannel(
-        { client: service.enc, queryChartedAreas, queryWater: service.tileWater.queryTileWater, bands: DEPTH_BANDS, logger },
-        {
-          from: startPos,
-          to: endPos,
-          draftMeters,
-          safetyMarginMeters: config.routeDraftSafetyMarginMeters,
-          standoffNm: config.routeDraftStandoffNm,
-          ...(parsed.route !== undefined
-            ? { corridor: parsed.route }
-            : { bboxAnchors: route.waypoints.map(toLatLon) }),
-          ...(homeCountry !== undefined
-            ? { foreignRings: (bbox) => service.boundaries.foreignRings(homeCountry.id, bbox) }
-            : {}),
-          signal: AbortSignal.timeout(Math.max(MS_PER_SECOND, deadlineMs - Date.now())),
-          deadlineMs
-        }
-      )
-      : { ok: false, reason: 'skipped' }
+  // The serializable request shared by both paths. The companion path sends the sovereign country id
+  // (homeCountry.sovId) and lets the container compute foreign water from its EEZ source; the in-process
+  // path wraps this with the admin-0 foreignRings closure and an AbortSignal, neither of which serializes.
+  const baseChannelReq: ChannelRouteRequest = {
+    from: startPos,
+    to: endPos,
+    draftMeters,
+    safetyMarginMeters: config.routeDraftSafetyMarginMeters,
+    standoffNm: config.routeDraftStandoffNm,
+    ...(parsed.route !== undefined
+      ? { corridor: parsed.route }
+      : { bboxAnchors: route.waypoints.map(toLatLon) }),
+    deadlineMs
+  }
+  const channelResult = await resolveChannelRoute({
+    bridge: config.routeDraftUseCompanion ? getCompanionBridge() : undefined,
+    homeCountryId: homeCountry?.sovId,
+    req: baseChannelReq,
+    readyTimeoutMs: COMPANION_READY_TIMEOUT_MS,
+    minBudgetMs: ROUTER_MIN_BUDGET_MS,
+    deadlineMs,
+    runInProcess: () => routeChannel(
+      { client: service.enc, queryChartedAreas, queryWater: service.tileWater.queryTileWater, bands: DEPTH_BANDS, logger },
+      {
+        ...baseChannelReq,
+        ...(homeCountry !== undefined
+          ? { foreignRings: (bbox) => service.boundaries.foreignRings(homeCountry.id, bbox) }
+          : {}),
+        signal: AbortSignal.timeout(Math.max(MS_PER_SECOND, deadlineMs - Date.now()))
+      }
+    )
+  })
   // On a channel success this replaces the parser-clamped (<= MAX_WAYPOINTS) model output with the
   // router's own turning points. That cap is only a leash on the model's hallucinated waypoint count;
   // a winding-river channel route can legitimately exceed it, so the returned route is NOT bounded by

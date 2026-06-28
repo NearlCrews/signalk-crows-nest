@@ -1,12 +1,18 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { toCompanionRequest, routeViaCompanion, getCompanionBridge, COMPANION_BRIDGE_KEY } from '../src/route-draft/channel-router/companion-router.js'
+import { resolveChannelRoute } from '../src/route-draft/endpoint.js'
 
 const baseReq = {
-  from: { latitude: 37.8, longitude: -122.42 }, to: { latitude: 37.79, longitude: -122.39 },
-  draftMeters: 2, safetyMarginMeters: 0.5, standoffNm: 0.02,
+  from: { latitude: 37.8, longitude: -122.42 },
+  to: { latitude: 37.79, longitude: -122.39 },
+  draftMeters: 2,
+  safetyMarginMeters: 0.5,
+  standoffNm: 0.02,
   bboxAnchors: [{ latitude: 37.8, longitude: -122.42 }, { latitude: 37.79, longitude: -122.39 }],
-  foreignRings: () => [], signal: AbortSignal.timeout(1000), deadlineMs: Date.now() + 5000,
+  foreignRings: () => [],
+  signal: AbortSignal.timeout(1000),
+  deadlineMs: Date.now() + 5000,
 }
 const twoWaypoints = [{ latitude: 1, longitude: 2 }, { latitude: 1.1, longitude: 2.1 }]
 
@@ -78,4 +84,40 @@ test('getCompanionBridge reads the global key and ignores a non-bridge value', (
   g[COMPANION_BRIDGE_KEY] = { not: 'a bridge' }
   assert.equal(getCompanionBridge(), undefined)
   delete g[COMPANION_BRIDGE_KEY]
+})
+
+// --- resolveChannelRoute strategy (companion first, in-process fallback) ---
+const okBridge = { whenReady: async () => {}, routeOnWater: async () => ({ ok: true, waypoints: twoWaypoints, usedTileWater: false, borderFallback: false }) }
+const baseOpts = { req: baseReq as never, homeCountryId: 'USA', readyTimeoutMs: 2000, minBudgetMs: 12_000, deadlineMs: 100_000, now: () => 0 }
+
+test('resolveChannelRoute uses the companion when the bridge returns a result', async () => {
+  const r = await resolveChannelRoute({ ...baseOpts, bridge: okBridge, runInProcess: async () => { throw new Error('should not run') } })
+  assert.equal(r.ok, true)
+})
+
+test('resolveChannelRoute falls back to in-process when the bridge returns null', async () => {
+  const bridge = { whenReady: async () => {}, routeOnWater: async () => ({ ok: false, reason: 'router-unavailable' }) }
+  let ranInProcess = false
+  const r = await resolveChannelRoute({ ...baseOpts, bridge, runInProcess: async () => { ranInProcess = true; return { ok: false, reason: 'no-path' } } })
+  assert.equal(ranInProcess, true)
+  assert.deepEqual(r, { ok: false, reason: 'no-path' })
+})
+
+test('resolveChannelRoute uses in-process when the bridge is absent (flag off gives undefined)', async () => {
+  let ranInProcess = false
+  await resolveChannelRoute({ ...baseOpts, bridge: undefined, runInProcess: async () => { ranInProcess = true; return { ok: false, reason: 'no-coverage' } } })
+  assert.equal(ranInProcess, true)
+})
+
+test('resolveChannelRoute returns skipped when there is no budget up front', async () => {
+  const r = await resolveChannelRoute({ ...baseOpts, deadlineMs: 1000, now: () => 0, bridge: undefined, runInProcess: async () => { throw new Error('no') } })
+  assert.deepEqual(r, { ok: false, reason: 'skipped' })
+})
+
+test('resolveChannelRoute re-gates: a companion attempt that consumed the budget skips the in-process router', async () => {
+  const clock = [0, 0, 95_000]
+  let i = 0
+  const nullBridge = { whenReady: async () => {}, routeOnWater: async () => ({ ok: false, reason: 'router-unavailable' }) }
+  const r = await resolveChannelRoute({ ...baseOpts, deadlineMs: 100_000, now: () => clock[Math.min(i++, clock.length - 1)], bridge: nullBridge, runInProcess: async () => { throw new Error('should not run under budget') } })
+  assert.deepEqual(r, { ok: false, reason: 'skipped' })
 })
