@@ -172,7 +172,7 @@ test("schema is assembled from the registries' fragments", () => {
       'routeDraftMaxCallsPerDay', 'routeDraftPropulsion', 'routeDraftDraftMeters',
       'routeDraftSafetyMarginMeters', 'routeDraftTackingAngleDeg', 'routeDraftCruiseSpeedKn',
       'routeDraftBurnLitersPerHour', 'routeDraftReservePercent', 'routeDraftStandoffNm',
-      'routeDraftMaxLegNm'
+      'routeDraftMaxLegNm', 'routeDraftUseCompanion'
     ].sort(),
     'every input and output fragment, plus the route-draft fragment, is merged into the schema'
   )

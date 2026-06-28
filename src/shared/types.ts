@@ -366,4 +366,6 @@ export interface PluginConfig {
   routeDraftStandoffNm?: number
   /** Max leg length above which the prompt asks the model to add a turn, in nautical miles. */
   routeDraftMaxLegNm?: number
+  /** Route through the Binnacle Companion container when its in-process bridge is present. On by default. */
+  routeDraftUseCompanion?: boolean
 }

@@ -57,6 +57,7 @@ export type ConfigAction =
   | { type: 'setRouteDraftReservePercent', percent: number }
   | { type: 'setRouteDraftStandoffNm', nauticalMiles: number }
   | { type: 'setRouteDraftMaxLegNm', nauticalMiles: number }
+  | { type: 'setRouteDraftUseCompanion', enabled: boolean }
   | { type: 'discard', config: PluginConfig }
 
 /**
@@ -198,5 +199,7 @@ export function configReducer (state: PluginConfig, action: ConfigAction): Plugi
       return setField(state, 'routeDraftStandoffNm', action.nauticalMiles)
     case 'setRouteDraftMaxLegNm':
       return setField(state, 'routeDraftMaxLegNm', action.nauticalMiles)
+    case 'setRouteDraftUseCompanion':
+      return setField(state, 'routeDraftUseCompanion', action.enabled)
   }
 }

@@ -21,16 +21,13 @@ proximity, route-corridor, and bridge air-draft alarms.
 > safety-of-life navigation: always cross-check against official charts and
 > your primary instruments.
 
-## What's new in 0.10.3
+## What's new in 0.11.0
 
-A safety and hardening pass: the route-draft safety check now flags every
-dimension a failed data provider could not verify rather than letting one slip
-through, a long AI route that would overflow the waypoint cap is held to the cap
-instead of silently stopping short, two route-boundary edge cases near the
-antimeridian and the map edge are fixed, and the development dependencies are
-current (see the [changelog](CHANGELOG.md#v0103)). The headline of the 0.10 line
-remains **AI route drafting** (beta), introduced in 0.10.0: it follows the water,
-and its safety check covers routes worldwide.
+Route drafting can now offload its on-water routing to the Binnacle Companion
+container when it is installed, which keeps the heavy geometry off the Signal K
+server. The built-in router stays as an automatic fallback, so a standalone
+install is unchanged. This builds on **AI route drafting** (beta), introduced in
+the 0.10 line (see the [changelog](CHANGELOG.md#v0110)).
 
 > **AI route drafting is in beta.** It cannot guarantee accuracy. The model can
 > place a waypoint in error and the safety check runs on generalized and modeled
@@ -38,38 +35,18 @@ and its safety check covers routes worldwide.
 > and verify it against the official charts and your primary instruments before
 > you navigate it. Never follow a drafted route on the AI's word alone.
 
-- **AI route drafting (beta, optional, admin only, off until you set a key).** A
-  new `POST /api/route-draft` endpoint turns a plain-language passage
-  request into a drafted route: the model proposes the turning waypoints,
-  then owned code checks every leg and adds a deterministic fuel estimate.
-  Every drafted route is a draft to verify on the chart before use. A new
-  Route drafting panel card holds the masked OpenRouter key, the
-  model, a daily call cap, and the vessel, fuel, and routing inputs.
-- **Channel routing that follows the water.** Where charted depth (US ENC)
-  or mapped water covers the passage, the endpoint replaces the model's
-  straight legs with a deterministic water-following route computed in owned
-  code: a depth-aware navigable grid plus A* over it, reading charted depth
-  from US ENC or mapped water from vector tiles. The drafted waypoints follow
-  the channel rather than cutting across land, and the returned route is
-  re-checked at full polygon resolution so it never crosses land. A route
-  built on a mapped water outline carries an explicit depth-unverified caveat,
-  and where no coverage is available the model geometry is kept with a note
-  saying so.
-- **Optimize a drawn route.** `POST /api/route-draft` also accepts an
-  optional drawn `route`. When present, the endpoint refines that polyline
-  instead of drafting from words, anchors the result to the drawn start and
-  destination, runs the same worldwide safety check and fuel estimate, and
-  returns an `optimized` marker so a client can confirm the route was used.
-- **Worldwide safety check.** The route-draft check now covers routes
-  worldwide, resolving data providers per leg: NOAA ENC charted depth,
-  land, and point hazards in US waters, OpenSeaMap point hazards and an
-  OpenStreetMap coastline land check worldwide, and EMODnet modeled depth
-  (awareness-grade, referenced to Lowest Astronomical Tide) in European
-  seas. Every dimension is either checked with its value and datum stated
-  or flagged explicitly as not checked, never silently passed. The route is
-  always a draft you verify on the chart before saving.
+- **Route through the Binnacle Companion router when available.** When the
+  Binnacle Companion plugin is installed and its container is running, route
+  drafting sends the on-water routing to the container and uses the result, with
+  the built-in router as an automatic fallback when the companion is absent, not
+  ready, or unreachable. A new "Use Binnacle Companion router when available"
+  setting, on by default, controls it, and turning it off forces the built-in
+  router. Border-aware routing through the companion uses the maritime boundary
+  source, which covers the open-sea borders the built-in admin-0 source did not,
+  and does not cover the inland and river boundaries it did. Every drafted route
+  remains a draft you verify on the chart.
 
-See the [changelog](CHANGELOG.md#v0100) for the full list.
+See the [changelog](CHANGELOG.md#v0110) for the full list.
 
 ## What it does
 

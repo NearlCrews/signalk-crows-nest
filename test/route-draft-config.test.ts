@@ -42,6 +42,13 @@ test('an empty config normalizes to the documented defaults', () => {
   assert.equal(config.routeDraftReservePercent, DEFAULT_RESERVE_PERCENT)
   assert.equal(config.routeDraftStandoffNm, DEFAULT_STANDOFF_NM)
   assert.equal(config.routeDraftMaxLegNm, DEFAULT_MAX_LEG_NM)
+  assert.equal(config.routeDraftUseCompanion, true, 'companion routing on by default')
+})
+
+test('routeDraftUseCompanion defaults to true and respects an explicit false', () => {
+  assert.equal(normalizeRouteDraftConfig({}).routeDraftUseCompanion, true)
+  assert.equal(normalizeRouteDraftConfig({ routeDraftUseCompanion: false }).routeDraftUseCompanion, false)
+  assert.equal(normalizeRouteDraftConfig({ routeDraftUseCompanion: true }).routeDraftUseCompanion, true)
 })
 
 test('a non-object config normalizes to defaults rather than throwing', () => {
@@ -120,7 +127,8 @@ test('the schema fragment carries every namespaced key once', () => {
     'routeDraftBurnLitersPerHour',
     'routeDraftReservePercent',
     'routeDraftStandoffNm',
-    'routeDraftMaxLegNm'
+    'routeDraftMaxLegNm',
+    'routeDraftUseCompanion'
   ]
   assert.deepEqual(keys.sort(), [...expected].sort(), 'the fragment declares exactly the documented keys')
   assert.ok(keys.every((key) => key.startsWith('routeDraft')), 'every key is namespaced so it cannot collide')

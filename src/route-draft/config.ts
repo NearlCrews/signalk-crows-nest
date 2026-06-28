@@ -175,6 +175,8 @@ export interface RouteDraftConfig {
   routeDraftStandoffNm: number
   /** Max leg length above which the prompt asks the model to add a turn, in nautical miles. */
   routeDraftMaxLegNm: number
+  /** Route through the Binnacle Companion container when its in-process bridge is present. On by default; turn off to force the built-in router. */
+  routeDraftUseCompanion: boolean
 }
 
 // Compile-time guard: every RouteDraftConfig field must exist as an optional wire field on
@@ -230,7 +232,8 @@ export function normalizeRouteDraftConfig (raw: unknown): RouteDraftConfig {
     ),
     routeDraftMaxLegNm: clampNumber(
       c.routeDraftMaxLegNm, MIN_MAX_LEG_NM, MAX_MAX_LEG_NM, DEFAULT_MAX_LEG_NM
-    )
+    ),
+    routeDraftUseCompanion: c.routeDraftUseCompanion !== false
   }
 }
 
@@ -301,6 +304,11 @@ export function routeDraftConfigSchema (): Record<string, unknown> {
     routeDraftMaxLegNm: boundedNumberSchema(
       'Longest leg before the model is asked to add a turning waypoint, in nautical miles',
       DEFAULT_MAX_LEG_NM, MIN_MAX_LEG_NM, MAX_MAX_LEG_NM
-    )
+    ),
+    routeDraftUseCompanion: {
+      type: 'boolean',
+      title: 'Use the Binnacle Companion router when available (off forces the built-in router)',
+      default: true
+    }
   }
 }

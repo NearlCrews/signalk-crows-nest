@@ -36,14 +36,19 @@ import type { TileWater } from './tile-water-query.js'
 /** The tile-water query, matching {@link TileWaterSource.queryTileWater}; injected so tests stub it. */
 export type QueryTileWater = (bbox: Bbox, signal?: AbortSignal, logger?: Logger) => Promise<TileWater>
 
+/** Every typed reason the router could not produce a water route. The single source for the union below
+ * and for any runtime membership check (the companion bridge client narrows results against this list). */
+export const CHANNEL_DECLINE_REASONS = [
+  'no-coverage',
+  'no-path',
+  'deadline',
+  'unsnappable',
+  'land-leg',
+  'fetch-failed'
+] as const
+
 /** A typed reason the router could not produce a water route. */
-export type ChannelDeclineReason =
-  | 'no-coverage'
-  | 'no-path'
-  | 'deadline'
-  | 'unsnappable'
-  | 'land-leg'
-  | 'fetch-failed'
+export type ChannelDeclineReason = typeof CHANNEL_DECLINE_REASONS[number]
 
 /** The result of {@link routeChannel}: the water route, or the reason it could not build one. */
 export type ChannelRouteResult =

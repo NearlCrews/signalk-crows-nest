@@ -710,3 +710,17 @@ test('depth-authority: a lower depth provider is NOT suppressed when the higher 
   assert.ok(shallow.some((f) => /LOW shallow reading/.test(f.message)), 'the lower provider owns depth and its flag survives')
   assert.ok(shallow.some((f) => /HIGH no-data reading/.test(f.message)), 'the non-authoritative higher provider keeps its own flag')
 })
+
+test('a check whose depth source is unreachable emits the collapsed depth-not-checked note for every leg', async () => {
+  // ENC is the depth source on US legs; here it throws as if offline. OSM has no depth capability,
+  // so no depth source covers the legs and the orchestrator must emit the collapsed depth-not-checked
+  // note rather than let an offline draft read as depth-checked.
+  const enc = makeEnc(() => { throw new Error('ENC offline') })
+  const overpass = makeOverpass()
+  const w2: Position = { latitude: 40.65, longitude: -74.05 }
+  const result = await checkLegs(deps(enc, overpass), params({ waypoints: [FROM, TO, w2] }))
+  assert.equal(result.checked, true)
+  const note = result.flags.find((f) => /^Depth not checked on/.test(f.message))
+  assert.ok(note, 'every offline leg must carry the collapsed depth-not-checked note')
+  assert.match(note.message, /2 of 2 legs/)
+})

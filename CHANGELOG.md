@@ -9,6 +9,34 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 > development milestones that preceded this publication. Their content is
 > incorporated into the 0.4.2 release.
 
+<a id="v0110"></a>
+
+## [0.11.0] - 2026-06-27
+
+Route drafting can now offload its on-water routing to the Binnacle Companion
+container when it is installed, which keeps the heavy geometry off the Signal K
+server. The built-in router stays as an automatic fallback, so a standalone
+install is unchanged.
+
+### Added
+
+- **Route through the Binnacle Companion router when available.** When the
+  Binnacle Companion plugin is installed and its container is running, route
+  drafting sends the on-water routing to the container and uses the result, with
+  the built-in router as an automatic fallback when the companion is absent, not
+  ready, or unreachable. A new "Use Binnacle Companion router when available"
+  setting, on by default, controls this, and turning it off forces the built-in
+  router. The drafted route is a draft you verify on the chart either way.
+
+### Changed
+
+- **Border-aware routing uses the maritime boundary source when routing through
+  the companion.** The companion blocks foreign water using exclusive economic
+  zone boundaries, which cover the open-sea maritime borders the built-in admin-0
+  land source did not, and which do not cover the inland and river boundaries the
+  built-in source did. The built-in router, used when the companion is off or
+  absent, is unchanged.
+
 <a id="v0103"></a>
 
 ## [0.10.3] - 2026-06-25
