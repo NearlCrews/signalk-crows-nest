@@ -242,6 +242,20 @@ export default memo(function RouteDraftingSection ({ state, dispatch }: Props): 
           />
         </Fieldset>
         <Fieldset title='Routing'>
+          <label style={S.checkboxRow}>
+            <input
+              type='checkbox'
+              style={S.checkbox}
+              checked={config.routeDraftUseCompanion !== false}
+              disabled={!enabled}
+              onChange={(e) => dispatch({ type: 'setRouteDraftUseCompanion', enabled: e.target.checked })}
+            />
+            Route through Binnacle Companion
+          </label>
+          <p style={S.hintBelow}>
+            When the Binnacle Companion container is running, route geometry is computed there. Without it, the
+            built-in router is used. Either way the route is a draft you verify on the chart.
+          </p>
           <NumberField
             id='ac-route-draft-standoff'
             label='Standoff (nautical miles)'
