@@ -10,7 +10,7 @@
 // Run from the repo root:
 //   node scripts/build-boundaries.mjs /tmp/ne.geojson
 //
-// It strips each feature to { id, name } and simplifies with a zero-dependency, variable-tolerance
+// It strips each feature to { id, name, sovId } and simplifies with a zero-dependency, variable-tolerance
 // Douglas-Peucker: fine over the narrow US/Canada connecting rivers (so the boundary stays mid-channel)
 // and coarse elsewhere (a small worldwide bundle; a coarse coastline only ever turns the constraint
 // off, which is safe). No packages, so the build pulls in nothing unmaintained.
@@ -138,13 +138,29 @@ function processGeom (g) {
 }
 
 const fc = JSON.parse(readFileSync(SRC, 'utf8'))
+
+// First pass: map each Natural Earth sovereign group (SOV_A3, an NE code like "US1" or "DN1", NOT an ISO
+// code) to its sovereign's ISO 3166-1 alpha-3. The sovereign parent of a group is the feature whose
+// SOVEREIGNT equals its ADMIN (the self-governing state itself, e.g. "United States of America"); its
+// ADM0_A3 is the ISO alpha-3 ("USA", "DNK", "FRA"), which is the scheme the companion EEZ (iso_sov1) uses.
+const sovIso = new Map()
+for (const f of fc.features) {
+  const p = f.properties
+  if (p.SOV_A3 && p.SOVEREIGNT === p.ADMIN) sovIso.set(p.SOV_A3, p.ADM0_A3)
+}
+
 const features = []
 for (const f of fc.features) {
   const geom = processGeom(f.geometry)
   if (!geom) continue
   const id = f.properties.ADM0_A3 ?? f.properties.SOV_A3 ?? f.properties.NAME
   const name = f.properties.NAME ?? f.properties.ADMIN ?? id
-  features.push({ type: 'Feature', properties: { id, name }, geometry: geom })
+  // sovId is the sovereign ISO alpha-3: for a dependent or disputed territory it differs from the admin-0
+  // unit code in id (PRI -> USA, GUM -> USA, GRL -> DNK). The companion's EEZ border source keys on the
+  // sovereign code, so the caller sends sovId, not the unit id, as homeCountryId. Fall back to the unit
+  // code when the group has no detectable parent (a self-sovereign or disputed unit).
+  const sovId = sovIso.get(f.properties.SOV_A3) ?? f.properties.ADM0_A3 ?? id
+  features.push({ type: 'Feature', properties: { id, name, sovId }, geometry: geom })
 }
 const text = JSON.stringify({ type: 'FeatureCollection', features })
 writeFileSync(OUT, text)

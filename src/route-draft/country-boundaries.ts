@@ -29,8 +29,15 @@ import { bboxContainsPoint, bboxesOverlap, boundsOfRings, unionBbox } from '../g
 import type { Bbox, Logger, Position } from '../shared/types.js'
 
 export interface Country {
+  /** Admin-0 unit code (ISO alpha-3), used for classify, display, and the in-process foreignRings source. */
   id: string
   name: string
+  /**
+   * Sovereign ISO 3166-1 alpha-3 code (the `iso_sov1` scheme the companion EEZ boundaries use), which
+   * differs from `id` for dependent or disputed territories (PRI -> USA, GRL -> DNK). The companion's
+   * border source keys on this, so it is sent as homeCountryId.
+   */
+  sovId: string
 }
 
 export interface CountryBoundaries {
@@ -53,10 +60,11 @@ interface BoundaryPolygon {
   bbox: Bbox
 }
 
-/** A parsed country: its id and name, its polygons, and its overall bbox. */
+/** A parsed country: its id, name, sovereign code, its polygons, and its overall bbox. */
 interface BoundaryFeature {
   id: string
   name: string
+  sovId: string
   polys: BoundaryPolygon[]
   bbox: Bbox
 }
@@ -72,7 +80,7 @@ function featureBbox (polys: BoundaryPolygon[]): Bbox {
 }
 
 interface RawFeature {
-  properties?: { id?: string, name?: string }
+  properties?: { id?: string, name?: string, sovId?: string }
   geometry?: { type?: string, coordinates?: unknown }
 }
 
@@ -97,7 +105,9 @@ export function countryBoundariesFrom (rawFeatures: unknown): CountryBoundaries 
       // 500 per draft. The bundled asset is well-formed; this protects against a packaging fault.
       if (!Array.isArray(rawPolys) || !rawPolys.every((rings) => Array.isArray(rings) && rings.every((ring) => Array.isArray(ring)))) continue
       const polys = rawPolys.map((rings) => ({ rings, bbox: boundsOfRings(rings) }))
-      features.push({ id, name: f.properties?.name ?? id, polys, bbox: featureBbox(polys) })
+      // Fall back to the unit id when the asset predates the sovId field, so an old asset still routes
+      // (sovId === id is correct for every sovereign mainland state; only territories diverge).
+      features.push({ id, name: f.properties?.name ?? id, sovId: f.properties?.sovId ?? id, polys, bbox: featureBbox(polys) })
     }
   }
   if (features.length === 0) return NOOP
@@ -109,7 +119,7 @@ export function countryBoundariesFrom (rawFeatures: unknown): CountryBoundaries 
       // exclave (a separate polygon inside another country, paired with a hole there) classifies right.
       for (const poly of f.polys) {
         if (!bboxContainsPoint(poly.bbox, p.longitude, p.latitude)) continue
-        if (pointInRings(p.longitude, p.latitude, poly.rings)) return { id: f.id, name: f.name }
+        if (pointInRings(p.longitude, p.latitude, poly.rings)) return { id: f.id, name: f.name, sovId: f.sovId }
       }
     }
     return undefined

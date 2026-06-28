@@ -22,7 +22,8 @@ const FIXTURE = [
 
 test('classify attributes a point to its country', () => {
   const b = countryBoundariesFrom(FIXTURE)
-  assert.deepEqual(b.classify({ latitude: 0, longitude: -0.5 }), { id: 'AAA', name: 'Aaa' })
+  // The fixture carries no sovId, so it falls back to the unit id (correct for a sovereign mainland state).
+  assert.deepEqual(b.classify({ latitude: 0, longitude: -0.5 }), { id: 'AAA', name: 'Aaa', sovId: 'AAA' })
   assert.equal(b.classify({ latitude: 0, longitude: 1 })?.id, 'BBB')
 })
 
@@ -65,6 +66,18 @@ test('foreignRings excludes the home country', () => {
   // Both of BBB's polygons, and nothing of AAA (AAA's outer reaches lon -2, which BBB never does).
   assert.equal(rings.length, 2)
   assert.ok(!rings.some((r) => r.rings[0].some(([x]) => x === -2)))
+})
+
+test('homeForRoute returns the sovereign alpha-3, not the admin-0 unit code, for a territory', () => {
+  // Two points inside Puerto Rico (admin-0 unit PRI, sovereign USA).
+  const b = countryBoundariesFrom([{
+    properties: { id: 'PRI', sovId: 'USA', name: 'Puerto Rico' },
+    geometry: { type: 'Polygon', coordinates: [[[-67.3, 17.9], [-65.2, 17.9], [-65.2, 18.5], [-67.3, 18.5], [-67.3, 17.9]]] },
+  }])
+  const home = b.homeForRoute({ latitude: 18.2, longitude: -66.5 }, { latitude: 18.3, longitude: -66.0 })
+  assert.equal(home?.id, 'PRI') // unit code unchanged for classify and display
+  assert.equal(home?.sovId, 'USA') // sovereign code is what crosses to the container as homeCountryId
+  assert.match(home?.sovId ?? '', /^[A-Z]{3}$/)
 })
 
 test('homeForRoute returns the shared country, or undefined when the endpoints differ', () => {
