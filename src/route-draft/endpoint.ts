@@ -23,6 +23,7 @@ import { presentString } from '../shared/strings.js'
 import { appLogger } from '../shared/debug.js'
 import { METERS_PER_NAUTICAL_MILE } from '../shared/length.js'
 import { MS_PER_SECOND } from '../shared/time.js'
+import { withDeadline } from '../shared/with-deadline.js'
 import { toPosition } from '../geo/position-utilities.js'
 import type { Position } from '../shared/types.js'
 import type { EncDirectClient } from '../inputs/noaa-enc/enc-direct-client.js'
@@ -584,21 +585,6 @@ export function draftFailureMessage (err: OpenRouterError): string {
     if (err.status === 403) return 'The AI request was refused, possibly blocked by content moderation. Try rephrasing the passage request.'
   }
   return `The AI service failed: ${err.message}`
-}
-
-/** Race a promise against a deadline, resolving to `onTimeout()` if the deadline wins. */
-async function withDeadline<T> (work: Promise<T>, ms: number, onTimeout: () => T): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const timeout = new Promise<T>((resolve) => {
-    timer = setTimeout(() => resolve(onTimeout()), Math.max(0, ms))
-  })
-  try {
-    return await Promise.race([work, timeout])
-  } finally {
-    // The Promise executor runs synchronously, so timer is always set by here;
-    // clearTimeout also tolerates undefined, so the call needs no guard.
-    clearTimeout(timer)
-  }
 }
 
 async function handleDraft (
