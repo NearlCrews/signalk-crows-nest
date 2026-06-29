@@ -5,7 +5,7 @@
  * HTTP-date. Only an all-digits value is read as seconds, so a malformed
  * `"12abc"` is not silently accepted as `12`; anything else falls through to the
  * date branch, which yields `undefined` for an unparseable value. Shared by the
- * queued upstream HTTP client and the OpenRouter client so the two cannot drift.
+ * queued upstream HTTP client(s) for consistent Retry-After parsing.
  */
 
 import { MS_PER_SECOND } from './time.js'
