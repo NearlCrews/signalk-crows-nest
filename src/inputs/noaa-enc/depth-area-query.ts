@@ -1,11 +1,11 @@
 /**
  * Charted depth-area and land-area query over the NOAA ENC Direct client.
  *
- * The route-draft leg check needs the charted DEPTH AREA contours (`Depth_Area`,
- * carrying `DRVAL1`/`DRVAL2`) and the charted LAND AREAS (`Land_Area`) along a
- * leg, both POLYGON layers, as an internal capability. This is distinct from the
- * point hazard layers crows-nest publishes as POIs, so it lives in its own
- * module rather than in the POI input path.
+ * Reads the charted DEPTH AREA contours (`Depth_Area`, carrying `DRVAL1`/`DRVAL2`)
+ * and the charted LAND AREAS (`Land_Area`) for a given bbox, both POLYGON layers,
+ * as an internal capability. This is distinct from the point hazard layers
+ * crows-nest publishes as POIs, so it lives in its own module rather than in the
+ * POI input path.
  *
  * The query reuses the existing {@link EncDirectClient}: its `queryLayer`
  * already takes any `EncLayerKey` (now including `depthArea` and `land`),

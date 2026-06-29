@@ -305,9 +305,9 @@ test('a caller abort stops endpoint failover instead of trying the next mirror',
       return jsonResponse({ elements: [] })
     },
     async (calls) => {
-      // The abandoned route-draft check fires its deadline signal: the first mirror's request rejects
-      // on the aborted signal and failover must stop at once, never issuing a fresh request to the
-      // remaining mirror for a check no one is waiting on.
+      // A caller fires its deadline signal: the first mirror's request rejects on the aborted signal
+      // and failover must stop at once, never issuing a fresh request to the remaining mirror for
+      // a check no one is waiting on.
       const client = createOverpassClient(failoverEndpoints, silentLog, { ...fastLimits, maxRetries: 0 })
       await assert.rejects(
         () => client.listPointsOfInterest(sampleBbox, '^(rock)$', AbortSignal.abort()),

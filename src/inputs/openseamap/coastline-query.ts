@@ -1,5 +1,5 @@
 /**
- * natural=coastline Overpass query for the route-draft land check. An internal
+ * natural=coastline Overpass query for a bbox land check. An internal
  * capability, not published as POIs, mirroring how depth-area-query.ts sits
  * under inputs/noaa-enc. Tiles a wide bbox into sub-boxes no larger than the
  * Overpass client's clamp so coverage is never silently truncated.

@@ -9,8 +9,8 @@
  * holds: a route that cannot be gated fails CLOSED (unmounted) rather than
  * answering unauthenticated callers.
  *
- * The status route and the optional, budget-spending route-draft route both
- * gate the same path, so the gate logic lives here once. The gate is
+ * All plugin API routes gate the same path, so the gate logic lives here once.
+ * The gate is
  * path-scoped and the path is fixed for the life of the plugin, so calling
  * `addAdminMiddleware` more than once would stack duplicate gates on the same
  * path; the per-app guard installs it exactly once across enable, disable, and
