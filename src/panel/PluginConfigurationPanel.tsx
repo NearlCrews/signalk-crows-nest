@@ -4,10 +4,10 @@
  * react-jsonschema-form, passing the current configuration and a fire-and-forget
  * save callback.
  *
- * The panel is laid out in five zones: the status bar, the Data sources
- * accordion (one collapsible card per POI source), the Alerts section, the
- * Route drafting section, and the footer. The accordion keeps each source to a
- * single collapsed row by default, so adding sources does not clutter the panel.
+ * The panel is laid out in four zones: the status bar, the Data sources
+ * accordion (one collapsible card per POI source), the Alerts section, and the
+ * footer. The accordion keeps each source to a single collapsed row by default,
+ * so adding sources does not clutter the panel.
  */
 
 import type * as React from 'react'
@@ -16,7 +16,6 @@ import AlertsSection from './components/AlertsSection.js'
 import DataSourcesSection from './components/DataSourcesSection.js'
 import { sourceCardDomId } from './components/DataSourceCard.js'
 import FooterBar from './components/FooterBar.js'
-import RouteDraftingSection from './components/RouteDraftingSection.js'
 import StatusBar from './components/StatusBar.js'
 import ThemeToggle from './components/ThemeToggle.js'
 import { useConfig } from './hooks/use-config.js'
@@ -145,7 +144,6 @@ export default function PluginConfigurationPanel ({ configuration, save }: Props
           onToggleExpanded={toggleCard}
         />
         <AlertsSection state={state} dispatch={dispatch} />
-        <RouteDraftingSection state={state} dispatch={dispatch} />
         <FooterBar
           dirty={dirty}
           unconfigured={unconfigured}

@@ -1,6 +1,6 @@
 {
   "name": "signalk-crows-nest",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Imports Garmin ActiveCaptain, OpenSeaMap, USCG Light List, and NOAA ENC Direct points of interest as Signal K notes resources, with proximity, route-corridor, and bridge air-draft alarms.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -17,7 +17,6 @@
     "build:icons": "node scripts/copy-icons.mjs",
     "watch:panel": "webpack --watch --mode development --config webpack.config.cjs",
     "clean": "node scripts/clean.mjs",
-    "build:boundaries": "node scripts/build-boundaries.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.panel.json && tsc --noEmit -p tsconfig.test.json",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -82,10 +81,8 @@
     "url": "https://www.buymeacoffee.com/nearlcrews"
   },
   "dependencies": {
-    "@mapbox/vector-tile": "^3.0.0",
     "handlebars": "^4.7.9",
-    "lru-cache": "^11.5.1",
-    "pbf": "^5.1.0"
+    "lru-cache": "^11.5.1"
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",

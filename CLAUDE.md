@@ -10,18 +10,8 @@ plugin. It imports points of interest from multiple marine data sources
 Light List of US Aids to Navigation, and the NOAA ENC Direct database of
 wrecks, obstructions, and underwater rocks) and exposes them as Signal K
 `notes` resources so chartplotters such as Freeboard-SK can display them. It
-also hosts an optional, admin-gated, beta AI route-draft endpoint (the
-server-side half of Binnacle's AI route drafting): it asks OpenRouter for a passage's
-turning waypoints, optionally re-routes the geometry through a deterministic
-channel router so the legs follow charted or mapped water, then checks every
-leg in owned code and computes a deterministic fuel estimate. The safety check
-is worldwide, resolving data providers per leg by the union of every provider
-whose coverage envelope reaches the leg: NOAA ENC charted depth, land, and
-point hazards in US waters, EMODnet modeled depth in European seas, and an
-OpenStreetMap coastline land check plus OpenSeaMap point hazards worldwide. The
-AI piece is entirely opt-in and off until an OpenRouter key is configured. It is
-in beta and cannot guarantee accuracy: every drafted route is a draft to verify
-against the official charts before use.
+also runs three safety outputs: a proximity hazard alarm, a route-corridor
+hazard scan, and a bridge air-draft check.
 
 ## Architecture rule: ONE plugin, modular files
 
@@ -73,8 +63,7 @@ self-contained module registered on one line in `src/index.ts`.
     - `http-one-shot.ts` - the `requestText` one-shot GET shared by the two
       raw-client sources (USCG Light List and NOAA ENC Direct): it selects the
       `http`/`https` transport, buffers the body, aborts on a per-request
-      timeout, and honors an optional caller `AbortSignal` (the route-draft
-      deadline uses it to cancel an abandoned ENC query), leaving each caller
+      timeout, and honors an optional caller `AbortSignal`, leaving each caller
       its own status and JSON handling. Those two feeds are low-volume and
       deliberately skip the queue and retry of `http-client.ts`.
     - `dedupe-pois.ts` - merges non-base POIs that duplicate an ActiveCaptain
@@ -115,14 +104,10 @@ self-contained module registered on one line in `src/index.ts`.
       `http-client.ts`, with the required `User-Agent`; it takes an ordered
       endpoint list, a primary plus any configured fallback mirrors, and fails
       over to the next on a failure so a single instance outage does not take
-      the source offline. Besides the POI list query (`listPointsOfInterest`, the
-      route-draft OpenSeaMap hazard provider reuses it with a hard-coded hazard
-      regex), it exposes `listCoastlineWays` for the route-draft coastline land
-      check, plus the `MAX_BBOX_SPAN_DEGREES` clamp and the `CoastlineWay` wire
-      type that consumer reads; every query threads an optional `AbortSignal` so
-      an abandoned check cancels its in-flight requests. The channel router no
-      longer reads water from Overpass: its water source is vector tiles (see
-      `inputs/vector-tiles/` and `route-draft/channel-router/tile-water-query.ts`)),
+      the source offline. It exposes `listPointsOfInterest`, `listCoastlineWays`,
+      the `MAX_BBOX_SPAN_DEGREES` clamp, and the `CoastlineWay` wire type; every
+      query threads an optional `AbortSignal` so an abandoned check cancels its
+      in-flight requests),
       `seamark-mapping.ts` (one table mapping every `seamark:type` value to
       the plugin's `PoiType` union, a Freeboard-registered `:sk-` icon, and a
       plain-English label in lockstep, with isolated-danger marks rendered as
@@ -131,20 +116,17 @@ self-contained module registered on one line in `src/index.ts`.
       detail renderer), `clearance.ts` (parses the OSM vertical-clearance tags for the
       bridge air-draft check), `openseamap-sections.ts` (the
       normalized-detail section builder), `element-summary.ts` (the shared
-      element-to-`PoiSummary` mapper extracted from the source so the
-      route-draft OpenSeaMap provider reuses the same icon, type, and name
-      logic), and `coastline-query.ts` (the tiled `natural=coastline` Overpass
-      query the route-draft land check consumes as an internal capability; it
-      lives here because it reuses the Overpass client, mirroring how
-      `depth-area-query.ts` sits under `inputs/noaa-enc`, and tiles a wide bbox
-      so the client's center clamp never silently truncates coverage).
+      element-to-`PoiSummary` mapper extracted from the source so the icon,
+      type, and name logic lives once), and `coastline-query.ts` (the tiled
+      `natural=coastline` Overpass query; it lives here because it reuses the
+      Overpass client and tiles a wide bbox so the client's center clamp never
+      silently truncates coverage).
     - `uscg-light-list/` - the USCG Light List input (US Aids to Navigation,
       US-only, defaults off): `uscg-light-list-input.ts` (the `InputModule`
       with the periodic refresh scheduler), `uscg-light-list-source.ts` (the
       `PoiSource` adapter over the client and store, with a position-gated
-      `refreshAll` that iterates the pinned 62 (district, page) pairs (locked
-      to the live NAVCEN coverage by a test) and skips outbound HTTP when the
-      vessel is outside US waters),
+      `refreshAll` that iterates the pinned 62 (district, page) pairs and
+      skips outbound HTTP when the vessel is outside US waters),
       `light-list-client.ts` (the NAVCEN HTTP client built on
       `http-one-shot.ts`, with conditional-GET via `If-Modified-Since` and
       `If-None-Match`), `light-list-store.ts` (the persistent on-disk index
@@ -175,117 +157,11 @@ self-contained module registered on one line in `src/index.ts`.
       helper that turns a hazard's category into its dangerous or
       non-dangerous status, and `encDepthLabel`, the datum-tagged
       least-depth or charted-depth label shared by the HTML renderer and the
-      section builder. There are no numeric CATWRK/CATOBS enum tables because
-      the wire serves those fields as decoded strings, plus `decodeDepthRange`
-      and the `DepthRange` type for the route-draft depth check, and the
-      `depthArea`/`land` polygon layer ids the same check reads),
+      section builder),
       `enc-direct-detail.ts` (the plain-English S-57 HTML detail renderer),
       `noaa-enc-sections.ts` (the normalized-detail section builder), and
       `depth-area-query.ts` (the charted `Depth_Area` and `Land_Area` polygon
-      query the route-draft leg check consumes as an internal capability, built
-      on the same `EncDirectClient`; not published as POIs).
-    - `vector-tiles/` - the vector-tile client for the channel router's water
-      source: `vector-tile-client.ts` resolves the versioned tile-URL template
-      from the style's TileJSON, fetches a tile, gunzips and decodes the
-      OpenMapTiles `water` layer with the Mapbox Vector Tile stack, and returns
-      one layer's polygon geometries in lon/lat. It serves the channel router,
-      not a POI source, so it publishes no POIs.
-  - `route-draft/` - the optional, admin-gated AI route-draft feature (the
-    server-side half of Binnacle's AI route drafting, opt-in and off until an
-    OpenRouter key is set). The safety check is worldwide: it resolves data
-    providers per leg by the union of every provider whose coverage envelope
-    reaches the leg, then states each dimension's value and datum or flags it
-    explicitly as not checked, never silently passing. `config.ts` (the
-    `RouteDraftConfig` type, the bounds, defaults, clamps, and the
-    config-schema fragment, following the shared bounds-module pattern),
-    `openrouter.ts` (the OpenRouter chat-completions client with structured
-    outputs, model fallback, retry with backoff, and typed terminal errors),
-    `budget.ts` (the per-UTC-day call cap, persisted to the plugin data dir,
-    that bounds calls not dollars), `fuel.ts` (the deterministic rhumb-distance
-    and fuel estimate, honest about its flat head-sea derate and refusing to
-    fabricate a sail burn), `safety-check.ts` (the ORCHESTRATOR over the
-    leg-safety providers: it resolves each leg's provider set as the union of
-    intersecting coverage envelopes, runs the bounded-concurrency leg pool,
-    applies a precedence-based depth authority so the highest-precedence depth
-    provider that returned data owns the leg, sweeps hazards per provider over
-    each contiguous run of covered legs, dedupes hazards cross-provider by
-    rounded position and type, emits a capability-keyed "not checked" flag with
-    a collapsed depth note for any dimension no responsible provider verified,
-    and synthesizes the route-level EMODnet awareness note when EMODnet was the
-    effective depth provider on any leg; it states the charted value and never a
-    bare verdict), `leg-geometry.ts` (the planar ring helpers shared by the
-    providers: `pointInRings`, `segmentCrossesRings`, `legBbox`, `routeBbox`,
-    `cumulativeLegStartMeters`, and `legForAlongTrack`; the coastline land check
-    reads the vector-tile water outline, not an open coastline polyline),
-    `country-boundaries.ts` (border-aware routing: a bundled, simplified admin-0
-    country partition, read once at start and degrading to a no-op if absent, that
-    classifies a point's country, gates a route as same-country via `homeForRoute`,
-    and yields the other countries' water rings overlapping a route bbox so the
-    channel router blocks foreign water and a same-country route stays in its own
-    waters; it partitions only inland and boundary-lake water, so marine and
-    different-country routes are unconstrained), and
-    `endpoint.ts` (the `POST /api/route-draft`
-    handler that asks the model for turning waypoints, optionally re-routes the
-    geometry through the channel router, then disposes every flag and number in
-    owned code; the model proposes, this code disposes. It also serves the
-    optimize variant: when the request carries a drawn `route`, it refines that
-    polyline instead of drafting from words, anchors the result's endpoints to
-    the drawn start and end, and returns an `optimized` marker. It attaches one
-    route-level geometry note: an OSM-water depth caveat when the channel route
-    followed a mapped water outline that carries no depth, or a
-    channel-unavailable note when routing did not run (no coverage, declined, or
-    skipped for budget) and the straight model or drawn geometry was kept, so a
-    navigator never mistakes a straight AI line for a vetted one).
-    - `providers/` - the per-leg data providers the orchestrator runs.
-      `provider.ts` (the `LegSafetyProvider` contract, the precedence
-      constants, the provider-id constants, the `ROUTE_DRAFT_ID` synthetic
-      route id, the `resolveProviders` per-leg region resolver, the shared
-      `hazardDedupeKey`, and the shared `corridorHazardFlags` helper that
-      stitches a provider's covered legs into one polyline, scans the corridor,
-      and maps each matched hazard to its global leg index, so the ENC and
-      OpenSeaMap hazard sweeps differ only in how they fetch and word their
-      hazards), `enc-provider.ts`
-      (the NOAA ENC provider: charted depth-area contours, charted land, and
-      charted point hazards in US waters), `openseamap-provider.ts` (the
-      worldwide OpenSeaMap provider: rock, wreck, and obstruction seamark point
-      hazards and an OpenStreetMap coastline land check on every leg), and
-      `emodnet-provider.ts` (the European EMODnet provider: modeled depth,
-      awareness-grade and referenced to Lowest Astronomical Tide, never charted,
-      gated to the European envelope).
-    - `emodnet/` - `emodnet-client.ts` (the GET-only EMODnet depth-profile
-      client built on `http-one-shot.ts`; it lives here, not under `inputs/`,
-      because EMODnet has no POI-source counterpart, mirroring how
-      `depth-area-query.ts` sits under `inputs/noaa-enc`).
-    - `channel-router/` - the deterministic water-following router the endpoint
-      runs before the safety check to replace the model's straight legs with a
-      route that follows charted or mapped water where coverage allows; it owns
-      the geometry on the water while the model owns only the endpoints and the
-      intent. `channel-router.ts` (the orchestrator: it sizes and validates the
-      route bbox, declining a cross-antimeridian or oversized window before any
-      fetch, fetches the ENC charted areas per band and the vector-tile water
-      concurrently, builds the navigable grid, snaps the endpoints to
-      water, runs A*, simplifies the path, re-validates every final leg at
-      polygon resolution, and returns the turning waypoints or a typed decline
-      reason; it never verifies depth for tile water, so the caller flags a
-      tile-water success as depth-unverified), `tile-water-query.ts` (the
-      worldwide water source: it picks a zoom, enumerates the Web-Mercator tiles
-      covering the bbox, reads the pre-clipped OpenMapTiles `water` layer through
-      the vector-tile client, and returns water polygons with islands as holes,
-      caching decoded tiles in an LRU; it lives here, not under `inputs/`, because
-      the tile math and assembly are channel-router concerns, while the HTTP and
-      decode live in `inputs/vector-tiles/vector-tile-client.ts`), `nav-grid.ts`
-      (the depth-aware navigable grid via scanline rasterization: a cell is
-      navigable only where ENC charts it deep enough or tile water maps water, and
-      any ENC land, ENC drying, or tile-water island hole blocks; a foreign-country
-      water block for border-aware routing stamps blocked but NOT the shore mask, so
-      the one-cell shore erosion does not pinch a narrow home channel a cell off the
-      border, with a standoff cost ramp toward the desired
-      offing), `astar.ts` (the grid A* with a binary min-heap), `path-simplify.ts`
-      (the pure Ramer-Douglas-Peucker reduction of the A* centerline to turning
-      points, walked over an explicit index-range stack rather than by recursion
-      so a long winding centerline of thousands of cells cannot overflow the call
-      stack; the output is identical to the recursive form), and `index.ts` (the slice's barrel, exporting `routeChannel`,
-      `routeStaysOnWater`, and `createTileWaterSource` with their types).
+      query built on the same `EncDirectClient`; not published as POIs).
   - `outputs/` - SignalK consumers of POI data.
     - `output.ts` - the `OutputModule`, `OutputHandle`, `OutputContext`, and
       `PositionScanContributor` contracts an output implements.
@@ -323,17 +199,14 @@ self-contained module registered on one line in `src/index.ts`.
     position-driven outputs' scan contributors.
   - `geo/` - `position-utilities.ts`: geo helpers (`toPosition` parsing,
     position to bounding box, great-circle `distanceMeters`, `unionBbox`,
-    `projectPointOntoLeg` for corridor geometry, and the rhumb-line
-    `rhumbDistanceMeters` and `sampleRhumbLeg` the route-draft leg check samples
-    along).
+    and `projectPointOntoLeg` for corridor geometry).
   - `status/` - `plugin-status.ts` (records request outcomes, produces a
     `StatusSnapshot`), `status-router.ts` (Express router that serves the
     snapshot behind the shared admin gate), `admin-gate.ts` (the
     `ensureApiAdminGate` helper that installs the server admin middleware on the
-    plugin's `/api` subtree once per app and reports whether it holds, so both
-    the status route and the budget-spending route-draft route mount only when
-    gated and otherwise fail closed), and `status-types.ts` (the
-    `StatusSnapshot` type, shared by plugin and panel).
+    plugin's `/api` subtree once per app and reports whether it holds, so the
+    status route mounts only when gated and otherwise fails closed), and
+    `status-types.ts` (the `StatusSnapshot` type, shared by plugin and panel).
   - `shared/` - source-agnostic contracts and helpers shared across the
     plugin: `types.ts` (the cross-module type contracts; ActiveCaptain-only
     wire types live next to the ActiveCaptain input, not here),
@@ -357,19 +230,15 @@ self-contained module registered on one line in `src/index.ts`.
     Switzerland-only extract), `us-waters.ts` (the `isInUsWaters` gate plus the
     `shouldSkipOutsideUsWaters` helper the US-only inputs call to skip
     outbound HTTP, and record the skip, when the vessel is outside US
-    waters), `regions.ts` (the route-draft coverage-envelope predicates
-    `isInEncCoverage` and `isInEmodnetCoverage` the per-leg provider resolver
-    reads, kept out of `us-waters.ts` so the route-draft region concept does not
-    couple to that input gate), `bbox-tiles.ts` (the `tileBbox` splitter that
-    breaks a wide bbox into sub-boxes within a span so the route-draft Overpass
-    queries cover a box completely rather than letting the client clamp truncate
-    it), `abort.ts` (the `combineAbortSignals` helper, shared by the queued HTTP
-    client and the OpenRouter client, that folds an optional caller signal into
-    an `AbortSignal.any` and returns the lone signal when only one is defined),
+    waters), `bbox-tiles.ts` (the `tileBbox` splitter that breaks a wide bbox
+    into sub-boxes within a span), `abort.ts` (the `combineAbortSignals`
+    helper, shared by the queued HTTP client, that folds an optional caller
+    signal into an `AbortSignal.any` and returns the lone signal when only one
+    is defined),
     `concurrency.ts` (the `mapWithConcurrency` bounded-concurrency fan-out, a
     shared-cursor worker pool that runs an async operation over a list with a
     small number in flight and returns the results in input order, shared by the
-    route-draft leg-safety check and the USCG Light List refresh),
+    USCG Light List refresh),
     `bbox-debounce.ts`
     (the per-source geographic stale-while-revalidate cache, which snaps each
     viewport to a coarse tile so a small pan reuses the previous fetch, serves
@@ -380,221 +249,111 @@ self-contained module registered on one line in `src/index.ts`.
     a warm tile; it depends on the node-only `lru-cache`), `bbox-debounce-bounds.ts`
     (the dependency-free, browser-safe companion holding the canonical
     `MIN_BBOX_DEBOUNCE_SECONDS` / `MAX_BBOX_DEBOUNCE_SECONDS` bounds, the
-    per-source defaults (`DEFAULT_ACTIVE_CAPTAIN_DEBOUNCE_SECONDS`,
-    `DEFAULT_OPENSEAMAP_DEBOUNCE_SECONDS`,
-    `DEFAULT_NOAA_ENC_DEBOUNCE_SECONDS`, each sized to its upstream's real
-    update rate), the `clampBboxDebounceSeconds` helper (its per-source
-    fallback argument is required, so no layer can silently inherit another
-    source's cadence), and the `refreshSecondsSchema` config-fragment builder
-    the at-runtime inputs share; split out of `bbox-debounce.ts` so the
-    panel imports the bounds without pulling `lru-cache` into the browser
-    bundle. Every consumer, node and panel alike, imports the bounds from
-    this module directly, mirroring the sibling bounds modules), `map-link.ts` (the OpenSeaMap-marker fallback deep link
-    USCG Light List and NOAA ENC popups use, since neither upstream
-    viewer supports per-feature deep links), `html-escape.ts` (the
-    shared `escapeHtml` helper every source's detail renderer consumes,
-    so the four metacharacters plus the apostrophe are escaped from one
-    place, plus `labeledParagraph`, the `<p><strong>Label:</strong>
-    value.</p>` builder the structured detail renderers share),
-    `url-safety.ts` (the `safeLinkUrl` scheme allowlist both the
-    Handlebars detail templates and the structured section builders gate a
-    link value through, so a `javascript:` value cannot reach either the
-    HTML popup or a structured client as a clickable anchor),
-    `notification-path.ts` (builds path-safe SignalK notification
-    deltas, shared by the alarm outputs, with a `sourceSuffix` arg so
-    proximity and route alarms get distinct `$source` brands),
+    per-source defaults, the `clampBboxDebounceSeconds` helper, and the
+    `refreshSecondsSchema` config-fragment builder the at-runtime inputs share;
+    split out of `bbox-debounce.ts` so the panel imports the bounds without
+    pulling `lru-cache` into the browser bundle), `map-link.ts` (the
+    OpenSeaMap-marker fallback deep link USCG Light List and NOAA ENC popups
+    use), `html-escape.ts` (the shared `escapeHtml` helper every source's
+    detail renderer consumes, plus `labeledParagraph`, the
+    `<p><strong>Label:</strong> value.</p>` builder the structured detail
+    renderers share), `url-safety.ts` (the `safeLinkUrl` scheme allowlist both
+    the Handlebars detail templates and the structured section builders gate a
+    link value through), `notification-path.ts` (builds path-safe SignalK
+    notification deltas, shared by the alarm outputs, with a `sourceSuffix`
+    arg so proximity and route alarms get distinct `$source` brands),
     `notification-tracker.ts` (raise/clear bookkeeping shared by the
     proximity, route-hazard, and bridge air-draft outputs, keyed by the
     sanitized POI id so the in-memory and on-wire identities cannot drift,
-    with a `clearStale` sweep that sanitizes the still-active ids into the
-    same key space so a clear-and-re-raise chatter on a safety alarm is
-    impossible by construction; the tracker also owns the episode clock,
-    stamping `raisedAt` on the first `set` and preserving it across
-    refreshes so every delta of one alarm episode carries the same
-    `createdAt`),
+    with a `clearStale` sweep and an episode clock that stamps `raisedAt` on
+    the first `set` and preserves it across refreshes),
     `year-filter.ts` (the `filterByMinimumYear` helper plus the shared
-    `MIN_YEAR` / `MAX_YEAR` / `DEFAULT_MINIMUM_YEAR`
-    bounds and the `clampMinimumYear` helper every opting-in source uses
-    for its earliest-year filter, plus the `minimumYearSchema`
-    config-fragment builder the opting-in inputs share), `rating.ts` (the
-    `MIN_RATING` / `MAX_RATING` / `DEFAULT_MINIMUM_RATING` bounds and the
-    `clampMinimumRating` helper the ActiveCaptain input and the panel's
-    normalize-config share, mirroring the year-filter and bbox-debounce
-    shared-bounds pattern), `cache-duration.ts`, `dedupe-radius.ts`,
-    `refresh-hours.ts`, `scale-band.ts`, and `route-corridor.ts` (browser-safe
-    single-source-of-truth homes for, respectively, the ActiveCaptain
-    cache-duration bounds, `clampCacheDurationMinutes`, and
-    `cacheDurationSchema`; the dedupe merge-radius default (150 feet), the
-    min and max bounds, `cappedDedupeRadius` (nullable, for the input
-    modules), and `clampDedupeRadius` (the panel form), named for the dedupe
-    rather than one source since all three non-base sources use it; the USCG
-    refresh-hours bounds plus
-    `clampRefreshHours` and `refreshHoursSchema`; the NOAA `ScaleBand` type
-    plus `SCALE_BANDS`, `SCALE_BAND_LABELS`, `DEFAULT_SCALE_BAND`, and
-    `resolveScaleBand`; and the route-corridor-width bounds,
-    `clampRouteCorridorWidth`, and `routeCorridorWidthSchema`. Each is
-    imported by both its source module and the panel's normalize-config so
-    the two cannot drift, completing the bounds-sharing pattern),
+    `MIN_YEAR` / `MAX_YEAR` / `DEFAULT_MINIMUM_YEAR` bounds, the
+    `clampMinimumYear` helper, and the `minimumYearSchema` config-fragment
+    builder), `rating.ts` (the `MIN_RATING` / `MAX_RATING` /
+    `DEFAULT_MINIMUM_RATING` bounds and the `clampMinimumRating` helper),
+    `cache-duration.ts`, `dedupe-radius.ts`, `refresh-hours.ts`,
+    `scale-band.ts`, and `route-corridor.ts` (browser-safe single-source-of-truth
+    homes for, respectively, the ActiveCaptain cache-duration bounds and schema;
+    the dedupe merge-radius default and bounds; the USCG refresh-hours bounds
+    and schema; the NOAA `ScaleBand` type plus constants; and the
+    route-corridor-width bounds, `clampRouteCorridorWidth`, and schema),
     `config-schema.ts` (the `boundedNumberSchema` fragment constructor every
-    bounds module's schema builder delegates to, so the field shape lives
-    once), `numbers.ts` (the `toFiniteNumber`, `finiteOrUndefined`, and
-    `positiveFiniteNumber` narrowing helpers, the `isFiniteNumber` type guard,
-    plus `isValidLatitude`,
-    `isValidLongitude`, `isWireTruthy`, the `clampNumber` bound-and-fallback
-    helper, the `roundTo` fixed-decimals rounding the message formatter and
-    the panel's display-unit conversions share, and the
-    `positiveCappedNumber` fallback-then-cap helper the
-    config-bounds modules delegate to), `retry-after.ts` (the
-    `parseRetryAfterMs` header parser shared by the queued upstream HTTP client
-    and the OpenRouter client, so the seconds-or-HTTP-date handling lives once),
-    `strings.ts` (the `presentString`
-    trim-and-reject-blank reader the USCG and NOAA wire parsers and the
-    panel's unit-preferences reader share, plus `capitalizeFirst`, the
-    sentence-case touch the OpenSeaMap detail renderer and the route-draft
-    not-checked message share),
-    `debug.ts` (the `debugIsEnabled` guard that reads the npm `debug`
-    logger's live `enabled` flag so hot paths skip building log arguments
-    while debug is off, plus `appLogger`, which adapts a SignalK app to the
-    project `Logger` surface in one place so the route-draft endpoint and the
-    channel router share one adapter rather than each building their own),
-    `cache.ts`
-    (the `MAX_POI_CACHE_ENTRIES` and `MAX_BBOX_CACHE_ENTRIES` ceilings
-    shared by the per-source detail and bbox caches),
+    bounds module's schema builder delegates to), `numbers.ts` (the
+    `toFiniteNumber`, `finiteOrUndefined`, and `positiveFiniteNumber` narrowing
+    helpers, the `isFiniteNumber` type guard, plus `isValidLatitude`,
+    `isValidLongitude`, `isWireTruthy`, the `clampNumber` helper, the `roundTo`
+    helper, and the `positiveCappedNumber` helper), `retry-after.ts` (the
+    `parseRetryAfterMs` header parser shared by the queued upstream HTTP client),
+    `strings.ts` (the `presentString` trim-and-reject-blank reader, plus
+    `capitalizeFirst`), `debug.ts` (the `debugIsEnabled` guard plus `appLogger`,
+    which adapts a SignalK app to the project `Logger` surface), `cache.ts`
+    (the `MAX_POI_CACHE_ENTRIES` and `MAX_BBOX_CACHE_ENTRIES` ceilings),
     `relative-time-format.ts` (the `formatRelativeDelta` unit-stepping the
-    panel's status bar and the ActiveCaptain detail renderer share, each
-    passing its own unit table and locale), `namespaced-id.ts` (the
-    `splitOnFirstSeparator` helper, plus its `splitOnFirstUnderscore` wrapper,
-    the OpenSeaMap and NOAA ENC sources share to decode their `node_123` /
-    `wreck_12345` id form and the aggregate registry uses for its
-    `activecaptain-12345` hyphen form), and `time.ts`
-    (the `MS_PER_SECOND` / `MS_PER_MINUTE` / `MS_PER_HOUR` millisecond
-    constants, the `SECONDS_PER_MINUTE` / `SECONDS_PER_HOUR` /
-    `SECONDS_PER_DAY` constants the relative-time formatters share, and the
-    `MINUTES_PER_HOUR` / `MINUTES_PER_DAY` constants the minute-denominated
-    cache windows derive from),
-    `length.ts` (the `METERS_PER_FOOT`, `METERS_PER_KM`,
-    `METERS_PER_NAUTICAL_MILE`, and `METERS_PER_DEGREE` constants, the
-    latitude-dependent `metersPerDegreeLon` helper the channel-router grid sizes
-    its cells with, and the `metersFromFeet` / `metersFromFeetInches` /
-    `metersFromNauticalMiles` conversions shared by the two bridge-clearance
-    parsers, the dedupe-radius default, the panel's display-unit conversions,
-    and the route-corridor and route-draft nautical-mile distances),
-    `format-meters.ts` (the `formatMeters` one-decimal meter formatter every
-    safety message uses, plus `formatNm`, the two-decimal nautical-mile
-    formatter the route-draft ENC and OpenSeaMap standoff messages read),
-    `bridge-clearance.ts` (the bridge air-draft comparison: `readVesselAirDraft`
-    reads `design.airHeight` then a config fallback, `bridgeBlocksVessel` plus
-    the margin bounds and `clampClearanceMargin`, the `formatClearanceMeters`
-    message helper, and the config-fragment builders; pure and panel-bundle-safe),
-    `proximity-radius.ts` (the vessel-proximity alarm geometry shared by the two
-    proximity outputs, the two alarm modules, and the panel: the radius bounds,
-    `clampProximityAlarmRadius`, `proximityRadiusSchema`,
-    `hysteresisThreshold` (the shared raise/clear distance both alarm modules
-    apply), and `vesselScanRadiusMeters`), `light-character.ts` (the IALA
-    light-character humanizer the OpenSeaMap and USCG Light List detail
-    renderers share), `self-paths.ts` (the `SELF_POSITION_PATH` and
-    `SELF_SOG_PATH` constants shared by the position monitor and the course
-    reader, so both consumers reference the same path strings), and
-    `normalized-detail.ts` (the source-agnostic
-    structured-notes schema: `NormalizedSection`, `NormalizedItem`, the
-    item-`kind` union, the `schemaVersion`, and the shared `pushSection`
-    builder every source's section builder produces onto a note's
-    `properties.crowsNest`; documented for consumers in
-    `docs/notes-resource-format.md`).
+    panel's status bar and the ActiveCaptain detail renderer share),
+    `namespaced-id.ts` (the `splitOnFirstSeparator` helper, plus its
+    `splitOnFirstUnderscore` wrapper), `time.ts` (the millisecond and
+    second constants the relative-time formatters share), `length.ts` (the
+    `METERS_PER_FOOT`, `METERS_PER_KM`, `METERS_PER_NAUTICAL_MILE`, and
+    `METERS_PER_DEGREE` constants, the latitude-dependent `metersPerDegreeLon`
+    helper, and the `metersFromFeet` / `metersFromFeetInches` /
+    `metersFromNauticalMiles` conversions), `format-meters.ts` (the
+    `formatMeters` one-decimal meter formatter plus `formatNm`),
+    `bridge-clearance.ts` (the bridge air-draft comparison: `readVesselAirDraft`,
+    `bridgeBlocksVessel`, the margin bounds, and the config-fragment builders),
+    `proximity-radius.ts` (the vessel-proximity alarm geometry shared by the
+    proximity outputs: the radius bounds, `clampProximityAlarmRadius`,
+    `proximityRadiusSchema`, `hysteresisThreshold`, and `vesselScanRadiusMeters`),
+    `light-character.ts` (the IALA light-character humanizer the OpenSeaMap and
+    USCG Light List detail renderers share), `self-paths.ts` (the
+    `SELF_POSITION_PATH` and `SELF_SOG_PATH` constants), and
+    `normalized-detail.ts` (the source-agnostic structured-notes schema:
+    `NormalizedSection`, `NormalizedItem`, the item-`kind` union, the
+    `schemaVersion`, and the shared `pushSection` builder).
   - `panel/` - federated React configuration panel. Root and reducer:
     `index.tsx` (Module Federation entry), `PluginConfigurationPanel.tsx`,
     `config-reducer.ts`, `normalize-config.ts`, plus the UI-metadata
     modules `active-captain-poi-types.ts`, `styles.ts` (the `--ac-*` design
     tokens: scale tokens plus light, dark, and red-preserving night theme
     blocks, each with `color-scheme`, and the `data-ac-theme` pinned
-    overrides the theme toggle drives; the host-driven dark block is dormant
-    because the current SignalK admin has no theme switcher),
-    `relative-time.ts`, `source-status-pill.ts` (the pure `pillVariant`
-    + `pillContent` helpers used by the per-source live-status pill on each
-    card header, in a non-tsx module so the unit tests import it without
-    JSX), `request-timeout.ts` (the panel-wide per-request timeout the
-    status poller and the unit-preferences fetch share), and
-    `unit-system.ts` (the React-free display-units module: the
-    `UnitSystem` resolver keyed off the server unit-preset's
-    `categories.length.targetUnit`, the meters-to-display conversions, and
-    the fetch ladder that mirrors the admin UI's Units page, per-user
-    `applicationData` preset first, then the server-wide active preset,
-    then metric). `hooks/` holds `use-config`, `use-status` (which also
-    exposes `lastUpdatedMs`, the freshness note's clock), `use-theme` (the
-    localStorage-persisted `ac-theme` choice the root renders declaratively
-    as `data-ac-theme`), `use-unit-system` (resolves the display system
-    from the server's unit preferences once on mount and provides it
-    through `UnitSystemContext`), `use-number-draft` (the raw-text draft
-    state for clearable numeric inputs), and `use-collapse-focus-restore`
-    (the shared focus-restore-on-collapse hook both `SectionBox` and
-    `DataSourceCard` consume, so a keyboard user is not dropped to
-    `document.body` when a region collapses). `components/` holds the layout pieces: `SectionBox`
-    (the shared collapsible-section primitive: section heading, chevron, and
-    focus-restore on collapse via the shared hook), and on top of it
-    `StatusBar` (per-source health grid, the "checked Ns ago" freshness
-    note, and recent errors as jump-to-card shortcuts), `FooterBar` (sticky,
+    overrides the theme toggle drives), `relative-time.ts`,
+    `source-status-pill.ts` (the pure `pillVariant` + `pillContent` helpers
+    used by the per-source live-status pill on each card header),
+    `request-timeout.ts` (the panel-wide per-request timeout the status
+    poller and the unit-preferences fetch share), and `unit-system.ts` (the
+    React-free display-units module keyed off the server unit-preset's
+    `categories.length.targetUnit`). `hooks/` holds `use-config`,
+    `use-status` (which also exposes `lastUpdatedMs`), `use-theme` (the
+    localStorage-persisted `ac-theme` choice), `use-unit-system` (resolves
+    the display system from the server's unit preferences), `use-number-draft`
+    (the raw-text draft state for clearable numeric inputs), and
+    `use-collapse-focus-restore` (the shared focus-restore-on-collapse hook).
+    `components/` holds the layout pieces: `SectionBox` (the shared
+    collapsible-section primitive), `StatusBar`, `FooterBar` (sticky,
     composing `SaveStatus`), `DataSourcesSection` (the per-source accordion
-    shell, with a getting-started callout while no optional source is
-    enabled), `DataSourceCard` (one collapsible card, with an in-header
-    live-status pill and a body that stays mounted via `display: none` (and
-    marked `inert` while collapsed) so an in-progress NumberField draft
-    survives a collapse-and-expand round trip), `ActiveCaptainSource`,
-    `OpenSeaMapSource`, `UscgLightListSource`, and `NoaaEncSource` (the
-    per-source card bodies), `AlertsSection` (the proximity, route-hazard, and
-    bridge air-draft controls), `RouteDraftingSection` (the opt-in AI
-    route-drafting card: the master toggle, the masked OpenRouter key and model,
-    the call budget, and the vessel, fuel, and routing inputs that feed the
-    depth, sailability, and fuel math); plus the per-field input components
-    `LabeledField` (the shared label-plus-control-plus-hint scaffold, which
-    wires `aria-describedby` from the hint to the control), `NumberField`
-    (the labeled numeric input with a draft-while-editing buffer, on top of
-    `LabeledField`), `LengthField` (the meters-backed NumberField wrapper
-    that renders in the unit system the server preference selects,
-    converting the value and bounds at the display edge while the config
-    stays in meters; every length field composes it),
-    `CacheDurationField`, `EndpointUrlField`,
-    `FallbackEndpointsField` (the OpenSeaMap one-per-line Overpass
-    fallback-mirror textarea), `Fieldset` (the shared titled-fieldset shell,
-    legend plus an optional action slot and hint, that every grouped section
-    composes), `Disclosure` (the native `<details>` Advanced collapsible that
-    tucks each card's rarely-changed tuning out of the default view),
-    `ToggleFieldset` (the shared opt-in toggle-plus-legend fieldset shell,
-    composing `Fieldset`),
-    `RatingFilterField`, `MinimumYearField` (the shared earliest-year
-    NumberField wrapper used by each opting-in source card),
-    `RefreshSecondsField` (the shared NumberField wrapper for the
-    bbox-debounce period on at-runtime sources),
-    `MergeWithActiveCaptain` (the shared dedupe-toggle + merge-radius
-    fieldset, composing `ToggleFieldset`, used by every non-base card),
-    `ProximityAlarmFields` and `RouteHazardScanFields` (the two alarm
-    controls, each a `ToggleFieldset` with one LengthField),
-    `BridgeAirDraftFields` (the
-    bridge air-draft check controls), `ActiveCaptainPoiTypes`,
-    `SeamarkGroups`, `SegmentedControl` (the bordered aria-pressed segment
-    fieldset), `ThemeToggle` (the Auto / Light / Dark / Night control on
-    `SegmentedControl`), and `SaveStatus` (the dirty / just-saved
-    indicator).
+    shell), `DataSourceCard` (one collapsible card, with an in-header
+    live-status pill), `ActiveCaptainSource`, `OpenSeaMapSource`,
+    `UscgLightListSource`, and `NoaaEncSource` (the per-source card bodies),
+    `AlertsSection` (the proximity, route-hazard, and bridge air-draft
+    controls); plus the per-field input components `LabeledField`,
+    `NumberField`, `LengthField`, `CacheDurationField`, `EndpointUrlField`,
+    `FallbackEndpointsField`, `Fieldset`, `Disclosure`, `ToggleFieldset`,
+    `RatingFilterField`, `MinimumYearField`, `RefreshSecondsField`,
+    `MergeWithActiveCaptain`, `ProximityAlarmFields`, `RouteHazardScanFields`,
+    `BridgeAirDraftFields`, `ActiveCaptainPoiTypes`, `SeamarkGroups`,
+    `SegmentedControl`, `ThemeToggle`, and `SaveStatus`.
     The panel is a per-source accordion: a top control bar with the theme
     toggle, the status bar, a collapsible card per data source, then the
-    Alerts and Route drafting sections. Card disclosure state lives at the
-    panel root so the four card bodies share one stable map. Each card shows
-    only its import choice by default and tucks refresh, freshness, merge, and
-    connection tuning under a per-card `Disclosure` ("Advanced"); the Route
-    drafting section has one master enable, the vessel basics, and the rest of
-    its tuning under the same Advanced disclosure.
+    Alerts section. Card disclosure state lives at the panel root so the
+    four card bodies share one stable map.
 - `test/` - `node:test` test suite, run through `tsx`.
 - `docs/` - project documentation: the development guide, troubleshooting, the
   notes-resource integration guide (`notes-resource-format.md`), the Garmin API
   research notes, decision records, and maintainer notes.
 - `assets/` - committed, published static files: `icons/` (the plugin icon in
-  SVG and PNG sizes, wired through the `signalk.appIcon` field), `screenshots/`
-  (the admin-panel and Freeboard-SK images declared under `signalk.screenshots`
-  for the plugin-registry listing), and `boundaries/` (the bundled, simplified
-  country partition for border-aware route drafting, built by
-  `scripts/build-boundaries.mjs`; see `assets/boundaries/README.md`). The
-  boundary data is deliberately bundled rather than a fetched input module
-  because it is a small, static worldwide partition with no upstream API, read
-  once at plugin start and degrading to a no-op if absent.
+  SVG and PNG sizes, wired through the `signalk.appIcon` field), and
+  `screenshots/` (the admin-panel and Freeboard-SK images declared under
+  `signalk.screenshots` for the plugin-registry listing).
 - `dist/` and `public/` - compiled plugin and bundled panel. Generated, not
   committed. They are published to npm alongside `assets/` (see the `files`
   field in `package.json`).

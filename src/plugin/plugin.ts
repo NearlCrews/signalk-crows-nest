@@ -5,6 +5,9 @@
  * the config schema from the modules' fragments, and its `start`/`stop`
  * lifecycle builds the aggregate POI source, starts the enabled outputs, and
  * builds the shared position monitor from the outputs' scan contributors.
+ * The plugin serves POI inputs (ActiveCaptain, OpenSeaMap, USCG Light List,
+ * NOAA ENC Direct) and outputs (notes-resource, proximity-alarm, route-hazard,
+ * bridge-air-draft), the status API, and the position monitor.
  */
 
 import type { Plugin, ServerAPI } from '@signalk/server-api'
@@ -19,22 +22,9 @@ import type { PositionMonitor } from '../monitoring/position-monitor.js'
 import { createPluginStatus } from '../status/plugin-status.js'
 import { createStatusRouter } from '../status/status-router.js'
 import { buildPoiTypesString, ensurePoiTypes } from '../shared/poi-type-selection.js'
-import { PLUGIN_ID, PLUGIN_REPO_URL } from '../shared/plugin-id.js'
-import { appLogger } from '../shared/debug.js'
-import type { Logger, PluginConfig } from '../shared/types.js'
-import { join } from 'node:path'
+import { PLUGIN_ID } from '../shared/plugin-id.js'
+import type { PluginConfig } from '../shared/types.js'
 import type { IRouter } from 'express'
-import { createEncDirectClient } from '../inputs/noaa-enc/enc-direct-client.js'
-import { createOverpassClient, type OverpassClient } from '../inputs/openseamap/overpass-client.js'
-import { createVectorTileClient, DEFAULT_TILE_STYLE_URL, type VectorTileClient } from '../inputs/vector-tiles/vector-tile-client.js'
-import { createTileWaterSource } from '../route-draft/channel-router/index.js'
-import { loadCountryBoundaries } from '../route-draft/country-boundaries.js'
-import { resolvePrimaryEndpoint } from '../shared/overpass-endpoints.js'
-import { normalizeRouteDraftConfig, routeDraftConfigSchema } from '../route-draft/config.js'
-import { createRouteDraftRouter, modelsForRequest, type RouteDraftService } from '../route-draft/endpoint.js'
-import { createEmodnetClient } from '../route-draft/emodnet/emodnet-client.js'
-import { OpenRouterClient } from '../route-draft/openrouter.js'
-import { BudgetTracker } from '../route-draft/budget.js'
 
 const PLUGIN_NAME = "Crow's Nest"
 const PLUGIN_DESCRIPTION =
@@ -46,7 +36,7 @@ const OPEN_API = {
   info: {
     title: "Crow's Nest plugin API",
     version: '1.0.0',
-    description: 'Internal status API plus the optional AI route-draft endpoint.'
+    description: 'Internal status API for the POI plugin.'
   },
   // The plugin router mounts under /plugins/signalk-crows-nest, so the paths below resolve there; this
   // servers entry makes the rendered Swagger docs point at the reachable URLs rather than the bare paths.
@@ -63,75 +53,6 @@ const OPEN_API = {
           },
           401: { description: 'The caller is not authenticated.' },
           403: { description: 'The caller is authenticated but is not an administrator.' }
-        }
-      }
-    },
-    '/api/route-draft': {
-      post: {
-        summary: 'Draft a route from a plain-language passage request',
-        description:
-          'Asks OpenRouter for a route, then checks each leg against NOAA ENC charted depth, land, and ' +
-          'hazards in US waters; OpenSeaMap point hazards and OpenStreetMap coastline land worldwide; ' +
-          'and EMODnet modeled depth (awareness-grade, referenced to LAT) in European seas. Computes ' +
-          'a deterministic fuel estimate. Optional and admin-scoped: it spends the OpenRouter budget, ' +
-          'so it is gated to administrators and is disabled until a key is configured.',
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                required: ['from', 'bounds'],
-                properties: {
-                  prompt: {
-                    type: 'string',
-                    description: 'Plain-language passage request. Required for a from-scratch draft; an optional hint when route is present.'
-                  },
-                  from: {
-                    type: 'object',
-                    required: ['latitude', 'longitude'],
-                    properties: {
-                      latitude: { type: 'number' },
-                      longitude: { type: 'number' }
-                    }
-                  },
-                  bounds: {
-                    type: 'array',
-                    description: 'Visible chart window as [west, south, east, north].',
-                    items: { type: 'number' },
-                    minItems: 4,
-                    maxItems: 4
-                  },
-                  route: {
-                    type: 'array',
-                    description: 'Optional drawn route to optimize, ordered turning points. When present the endpoint refines it and prompt becomes an optional hint.',
-                    minItems: 2,
-                    maxItems: 25,
-                    items: {
-                      type: 'object',
-                      required: ['latitude', 'longitude'],
-                      properties: {
-                        latitude: { type: 'number' },
-                        longitude: { type: 'number' }
-                      }
-                    }
-                  },
-                  units: { type: 'string', enum: ['metric', 'imperial'] }
-                }
-              }
-            }
-          }
-        },
-        responses: {
-          200: {
-            description: 'A drafted route, or an ok:false body with a stable error code.',
-            content: { 'application/json': { schema: { type: 'object' } } }
-          },
-          400: { description: 'The request body was invalid.' },
-          401: { description: 'The caller is not authenticated, or drafting is not configured.' },
-          403: { description: 'The caller is authenticated but is not an administrator.' },
-          500: { description: 'The route-draft handler failed unexpectedly.' },
-          502: { description: 'The AI service or the safety check failed.' }
         }
       }
     }
@@ -155,22 +76,6 @@ export function createPlugin (
   // Replaced on every start with a recorder built for that run's enabled
   // sources; an empty recorder stands in before the first start.
   let status = createPluginStatus([])
-  // The optional AI route-draft service, built at start() when drafting is
-  // enabled and a key is set. Undefined makes the endpoint return
-  // `unauthorized` (not configured). The generation counter orphans an
-  // in-flight budget load if a teardown or a newer start beats it.
-  let routeDraftService: RouteDraftService | undefined
-  // True when drafting is configured (a key is set) but the service failed to start, for example a
-  // budget-state load error. It lets the endpoint return a "configured but failed to start" error
-  // rather than the misleading "not configured" when the service is undefined for that reason.
-  let routeDraftInitFailed = false
-  let routeDraftGeneration = 0
-  // The route-draft Overpass client is a queued client with in-flight work to
-  // abort, unlike the one-shot ENC client, so it is held alongside the service
-  // and closed on teardown even if the budget load (and thus the published
-  // service) never resolved. The one-shot ENC client needs no close.
-  let routeDraftOverpass: OverpassClient | undefined
-  let routeDraftTiles: VectorTileClient | undefined
 
   /**
    * Tear the current runtime down. Idempotent.
@@ -181,30 +86,6 @@ export function createPlugin (
    * half-stopped runtime behind for a later call.
    */
   function teardown (): void {
-    // Always orphan any in-flight route-draft build and drop the service, even
-    // on the no-runtime path, so the endpoint cannot answer with a stale one.
-    // The Overpass client is closed (aborting any in-flight route-draft query)
-    // independently of the service, since it is built synchronously while the
-    // service is published only after the async budget load.
-    routeDraftGeneration += 1
-    routeDraftService = undefined
-    routeDraftInitFailed = false
-    if (routeDraftOverpass !== undefined) {
-      try {
-        routeDraftOverpass.close()
-      } catch (error) {
-        app.error(`Cannot close the route-draft Overpass client: ${String(error)}`)
-      }
-      routeDraftOverpass = undefined
-    }
-    if (routeDraftTiles !== undefined) {
-      try {
-        routeDraftTiles.close()
-      } catch (error) {
-        app.error(`Cannot close the route-draft vector-tile client: ${String(error)}`)
-      }
-      routeDraftTiles = undefined
-    }
     if (runtime === undefined) {
       // Even with no runtime to tear down, reset the status recorder so a
       // snapshot during the gap between teardown and the next start does
@@ -241,78 +122,12 @@ export function createPlugin (
     }
   }
 
-  /**
-   * Build the optional AI route-draft service when drafting is enabled and a
-   * key is set. The OpenRouter and ENC clients are built at once; the call
-   * budget loads asynchronously from the plugin data dir, so the service is
-   * published only once the load resolves and only if this start is still
-   * current (the generation guard).
-   */
-  function startRouteDraft (config: PluginConfig): void {
-    const rd = normalizeRouteDraftConfig(config)
-    // normalizeRouteDraftConfig already trims the key, so read it once.
-    const apiKey = rd.routeDraftOpenRouterApiKey
-    if (!rd.routeDraftEnabled || apiKey === '') return
-    // Drafting is configured from here on; start clean so a prior failed start does not stick.
-    routeDraftInitFailed = false
-    const mine = routeDraftGeneration
-    const llm = new OpenRouterClient({
-      apiKey,
-      baseUrl: 'https://openrouter.ai/api/v1',
-      model: rd.routeDraftModel,
-      requestTimeoutMs: 20_000,
-      referer: PLUGIN_REPO_URL,
-      title: PLUGIN_NAME
-    })
-    const enc = createEncDirectClient()
-    // The European modeled-depth leg check queries through this EMODnet client.
-    // Like the ENC client it is a stateless one-shot client holding no sockets
-    // between calls, so it needs no close on teardown.
-    const emodnet = createEmodnetClient()
-    const log: Logger = appLogger(app)
-    // The worldwide OpenSeaMap leg check queries through this Overpass client.
-    // The default endpoint suffices (no per-source config here); the lighter
-    // minDelayMs keeps the bounded per-route burst inside the request deadline.
-    const overpass = createOverpassClient(resolvePrimaryEndpoint(undefined), log, { minDelayMs: 250 })
-    routeDraftOverpass = overpass
-    // The channel router reads worldwide water from vector tiles; the source holds the
-    // cross-request tile cache, so it is built once here, not per request.
-    const tileClient = createVectorTileClient(DEFAULT_TILE_STYLE_URL, log)
-    routeDraftTiles = tileClient
-    const tileWater = createTileWaterSource(tileClient)
-    // Border-aware routing reads bundled country polygons; loaded once here, degrading to a no-op
-    // service on any asset problem so it never disables route drafting.
-    const boundaries = loadCountryBoundaries(log)
-    const statePath = join(app.getDataDirPath(), 'route-draft-budget.json')
-    BudgetTracker.load({
-      maxPerDay: rd.routeDraftMaxCallsPerDay,
-      statePath,
-      log
-    }).then((budget) => {
-      if (mine === routeDraftGeneration) {
-        routeDraftService = { llm, budget, enc, overpass, emodnet, tileWater, boundaries, config: rd, models: modelsForRequest(rd.routeDraftModel) }
-        routeDraftInitFailed = false
-        app.debug(`${PLUGIN_NAME} route drafting ready`)
-      }
-    }).catch((err) => {
-      // Configured but failed to start: record it so the endpoint reports a start failure, not "not
-      // configured". Skip both the flag and the log on a stale generation (a teardown or newer start
-      // already moved on), so a rapid restart does not record or log an orphaned load's failure.
-      if (mine === routeDraftGeneration) {
-        routeDraftInitFailed = true
-        app.error(`Cannot load the route-draft budget: ${String(err)}`)
-      }
-    })
-  }
-
   const statusRegistrar = createStatusRouter(
     app,
     () => status.snapshot(runtime?.source.cacheSize() ?? 0)
   )
-  const routeDraftRegistrar = createRouteDraftRouter(app, () => routeDraftService, () => routeDraftInitFailed)
   const registerWithRouter = (router: IRouter): void => {
     statusRegistrar(router)
-    routeDraftRegistrar(router)
   }
 
   return {
@@ -321,8 +136,7 @@ export function createPlugin (
     description: PLUGIN_DESCRIPTION,
     schema: assemblePluginSchema(PLUGIN_NAME, PLUGIN_DESCRIPTION, [
       ...inputs.configSchemaFragments(),
-      ...outputs.configSchemaFragments(),
-      routeDraftConfigSchema()
+      ...outputs.configSchemaFragments()
     ]),
 
     start: (rawConfig: object): void => {
@@ -332,7 +146,6 @@ export function createPlugin (
       app.setPluginStatus('Starting')
 
       const config = rawConfig as PluginConfig
-      startRouteDraft(config)
       // A fresh recorder per run, built with this run's enabled sources so the
       // status snapshot carries one row per source; it reports this run's own
       // start time and a clean error history.

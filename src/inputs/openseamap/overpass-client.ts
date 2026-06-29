@@ -124,8 +124,7 @@ export interface OverpassClient {
    * List elements within a bounding box whose `seamark:type` tag matches the
    * given alternation regex, plus every `leisure=marina`. Resolves with a
    * normalized array (possibly empty). Rejects on any failure. An optional
-   * caller `signal` lets a deadline (the route-draft check) cancel an in-flight
-   * request.
+   * caller `signal` lets a deadline cancel an in-flight request.
    */
   listPointsOfInterest: (bbox: Bbox, seamarkRegex: string, signal?: AbortSignal) => Promise<OverpassElement[]>
   /**
@@ -137,7 +136,7 @@ export interface OverpassClient {
   getById: (typedId: string, signal?: AbortSignal) => Promise<OverpassElement | undefined>
   /**
    * List the `natural=coastline` ways within a bounding box as ordered vertex
-   * lists, for the route-draft land check. Resolves with an array (possibly
+   * lists for caller land and coastline queries. Resolves with an array (possibly
    * empty); ways with fewer than two valid vertices are dropped. Rejects on
    * any failure. An optional caller `signal` lets a deadline cancel an
    * in-flight request.
@@ -201,10 +200,10 @@ function buildDetailQuery (type: OsmElementType, id: number): string {
 
 /**
  * Build the Overpass QL for a coastline-way query. `out geom` returns, per way,
- * a `geometry` array of `{ lat, lon }` vertices, which the route-draft land
- * check consumes as polylines. The bbox is clamped to {@link
- * MAX_BBOX_SPAN_DEGREES}, the same clamp the list query applies; the coastline
- * helper tiles a wide box so the clamp never silently truncates coverage.
+ * a `geometry` array of `{ lat, lon }` vertices, which caller queries consume as
+ * polylines. The bbox is clamped to {@link MAX_BBOX_SPAN_DEGREES}, the same clamp
+ * the list query applies; the coastline helper tiles a wide box so the clamp never
+ * silently truncates coverage.
  */
 function buildCoastlineQuery (bbox: Bbox): string {
   const { south, west, north, east } = clampBbox(bbox)
@@ -398,8 +397,8 @@ export function createOverpassClient (
         return await attemptRawQuery(endpoint, query, errorPrefix, signal)
       } catch (error) {
         lastError = error
-        // A caller abort (the route-draft deadline) must stop failover at once: trying the next
-        // mirror would issue fresh upstream requests for a check that has already been abandoned.
+        // A caller abort must stop failover at once: trying the next mirror would issue fresh
+        // upstream requests for a query that has already been abandoned.
         if (signal?.aborted === true) throw error
         if (i < endpointList.length - 1) {
           log.debug(

@@ -18,8 +18,8 @@ export type { ScaleBand }
 /**
  * The ENC Direct layers the plugin reads. The first three are the S-57 POINT
  * hazard layers published as POIs (wreck, obstruction, rock). The last two are
- * the S-57 POLYGON area layers (depthArea, land) the route-draft leg check
- * reads as an internal capability; they are not published as POIs.
+ * the S-57 POLYGON area layers (depthArea, land) read as an internal capability
+ * by depth-area-query.ts; they are not published as POIs.
  */
 export type EncLayerKey = 'wreck' | 'obstruction' | 'rock' | 'depthArea' | 'land'
 

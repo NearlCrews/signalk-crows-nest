@@ -4,7 +4,7 @@
  * which may be tagged in feet or feet-and-inches), the ActiveCaptain input
  * (converting `bridgeHeight` when its `distanceUnit` is feet), the dedupe-radius
  * default (150 feet), the panel's display-unit conversions, and the
- * nautical-mile distances the route-corridor and route-draft modules work in.
+ * nautical-mile distances the route-corridor module works in.
  * Defining each factor once keeps every consumer from drifting. Dependency-free
  * and browser-safe.
  */
@@ -20,8 +20,8 @@ export const METERS_PER_NAUTICAL_MILE = 1852
 
 /**
  * Meters per degree of latitude, and of longitude at the equator. A spherical
- * approximation, good to a fraction of a percent at the leg and grid scales the
- * route-draft modules work at. Shared so the planar projection lives once.
+ * approximation, good to a fraction of a percent at the leg and grid scales this
+ * plugin works at. Shared so the planar projection lives once.
  */
 export const METERS_PER_DEGREE = 111_320
 

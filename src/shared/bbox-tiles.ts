@@ -1,8 +1,8 @@
 /**
- * Split a bbox into sub-boxes no larger than maxSpanDegrees on either edge, so a
- * route-draft Overpass query covers a wide box completely rather than letting the
- * client's center clamp silently truncate it. A box already within the span
- * returns as a single tile.
+ * Split a bbox into sub-boxes no larger than maxSpanDegrees on either edge, so an
+ * Overpass query covers a wide box completely rather than letting the client's
+ * center clamp silently truncate it. A box already within the span returns as a
+ * single tile.
  */
 
 import type { Bbox } from './types.js'

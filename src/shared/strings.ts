@@ -23,8 +23,8 @@ export function presentString (value: unknown): string | undefined {
 
 /**
  * Uppercase the first character of `value` and leave the rest unchanged, the
- * sentence-case touch shared by the OpenSeaMap detail renderer and the
- * route-draft not-checked message. An empty string is returned unchanged.
+ * sentence-case touch shared by the OpenSeaMap detail renderer and other
+ * display helpers. An empty string is returned unchanged.
  */
 export function capitalizeFirst (value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1)

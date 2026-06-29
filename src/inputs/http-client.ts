@@ -261,13 +261,13 @@ export function createHttpClient (
     for (;;) {
       try {
         // The per-request timeout and plugin-stop close-controller always abort
-        // the request. A caller-supplied `init.signal` (a route-draft deadline,
-        // say) is folded in too when present, so all three can cancel an
-        // in-flight fetch. When the caller passes none, the behavior is exactly
-        // the prior two-signal combine. The `?? undefined` is load-bearing:
-        // RequestInit.signal is `AbortSignal | null | undefined` and
-        // combineAbortSignals filters only `undefined`, so a raw null would reach
-        // AbortSignal.any and throw; do not simplify it away.
+        // the request. A caller-supplied `init.signal` is folded in too when
+        // present, so all three can cancel an in-flight fetch. When the caller
+        // passes none, the behavior is exactly the prior two-signal combine.
+        // The `?? undefined` is load-bearing: RequestInit.signal is
+        // `AbortSignal | null | undefined` and combineAbortSignals filters only
+        // `undefined`, so a raw null would reach AbortSignal.any and throw; do
+        // not simplify it away.
         const response = await fetch(url, {
           ...init,
           signal: combineAbortSignals([
@@ -307,7 +307,7 @@ export function createHttpClient (
         attempt++
       } catch (error) {
         // Do not retry once the client is closed, once the caller's own signal
-        // has aborted (a route-draft deadline must reject promptly, not burn
+        // has aborted (a caller-supplied deadline must reject promptly, not burn
         // the whole retry budget with backoff first), or past the configured
         // limit.
         if (

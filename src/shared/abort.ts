@@ -1,7 +1,7 @@
 /**
  * Combine optional abort signals into one. Shared by the queued upstream HTTP
- * client and the OpenRouter client so the "conditionally fold a caller signal
- * into an AbortSignal.any" idea lives once.
+ * client(s) so the "conditionally fold a caller signal into an AbortSignal.any"
+ * idea lives once.
  *
  * Undefined entries are filtered out, so a caller can pass an optional signal
  * positionally. When a single signal remains it is returned directly, skipping

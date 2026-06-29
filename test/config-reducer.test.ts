@@ -303,53 +303,6 @@ test('setNoaaEncIncludeRocks toggles the rocks layer', () => {
   assert.equal(next.noaaEncIncludeRocks, true)
 })
 
-test('setRouteDraftEnabled enables route drafting', () => {
-  const next = configReducer(baseConfig(), { type: 'setRouteDraftEnabled', enabled: true })
-  assert.equal(next.routeDraftEnabled, true)
-})
-
-test('setRouteDraftEnabled returns the same state when the value is unchanged', () => {
-  const state: PluginConfig = { ...baseConfig(), routeDraftEnabled: true }
-  const next = configReducer(state, { type: 'setRouteDraftEnabled', enabled: true })
-  assert.equal(next, state)
-})
-
-test('setRouteDraftOpenRouterApiKey updates the API key', () => {
-  const next = configReducer(baseConfig(), { type: 'setRouteDraftOpenRouterApiKey', key: 'sk-test' })
-  assert.equal(next.routeDraftOpenRouterApiKey, 'sk-test')
-})
-
-test('setRouteDraftModel updates the model slug', () => {
-  const next = configReducer(baseConfig(), { type: 'setRouteDraftModel', model: 'anthropic/claude' })
-  assert.equal(next.routeDraftModel, 'anthropic/claude')
-})
-
-test('setRouteDraftMaxCallsPerDay updates the daily call cap', () => {
-  const next = configReducer(baseConfig(), { type: 'setRouteDraftMaxCallsPerDay', calls: 50 })
-  assert.equal(next.routeDraftMaxCallsPerDay, 50)
-})
-
-test('setRouteDraftPropulsion updates the propulsion kind', () => {
-  const next = configReducer(baseConfig(), { type: 'setRouteDraftPropulsion', propulsion: 'sail' })
-  assert.equal(next.routeDraftPropulsion, 'sail')
-})
-
-test('setRouteDraftDraftMeters updates the vessel draft', () => {
-  const next = configReducer(baseConfig(), { type: 'setRouteDraftDraftMeters', meters: 2.5 })
-  assert.equal(next.routeDraftDraftMeters, 2.5)
-})
-
-test('setRouteDraftMaxLegNm updates the max leg length', () => {
-  const next = configReducer(baseConfig(), { type: 'setRouteDraftMaxLegNm', nauticalMiles: 35 })
-  assert.equal(next.routeDraftMaxLegNm, 35)
-})
-
-test('setRouteDraftMaxLegNm returns the same state when the value is unchanged', () => {
-  const state: PluginConfig = { ...baseConfig(), routeDraftMaxLegNm: 20 }
-  const next = configReducer(state, { type: 'setRouteDraftMaxLegNm', nauticalMiles: 20 })
-  assert.equal(next, state)
-})
-
 test('discard returns the supplied configuration', () => {
   const edited: PluginConfig = { ...baseConfig(), cachingDurationMinutes: 999, includeMarinas: true }
   const saved: PluginConfig = { ...baseConfig(), includeAnchorages: true }

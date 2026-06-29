@@ -55,19 +55,6 @@ The plugin ships its own configuration panel: a federated React app, loaded by
 the Signal K admin UI through Module Federation, that replaces the generated
 settings form with a live status section and grouped POI-type toggles.
 
-The plugin also hosts an optional, admin-gated, beta AI route-draft feature under
-`src/route-draft/`. The feature is in beta and cannot guarantee accuracy, so
-every drafted route is a draft to verify against the official charts before use.
-It asks OpenRouter for a passage's turning waypoints,
-optionally re-routes the geometry through a deterministic channel router so the
-legs follow charted or mapped water, then checks every leg and computes a fuel
-estimate in owned code. The safety check is worldwide: per leg it runs the union
-of every provider whose coverage reaches the leg, NOAA ENC charted depth, land,
-and point hazards in US waters, OpenSeaMap point hazards and an OpenStreetMap
-coastline land check worldwide, and EMODnet modeled depth in European seas. The
-feature is off until an OpenRouter key is configured, and the endpoint mounts
-only behind the shared admin gate. The contract is documented in
-[docs/route-draft-api.md](route-draft-api.md).
 
 ## Project structure
 
@@ -101,21 +88,6 @@ src/                      # TypeScript source
 │   │                      #   query): module, source adapter, ArcGIS REST client,
 │   │                      #   wire types, S-57 enum and per-layer mapping,
 │   │                      #   plain-English detail renderer
-│   └── vector-tiles/      # The channel router's water source: resolves the tile
-│                          #   template, fetches, gunzips, and decodes the OpenMapTiles
-│                          #   water layer to lon/lat polygons
-├── route-draft/         # The optional, admin-gated AI route-draft feature (server half):
-│                         #   endpoint.ts (parse, draft or optimize, channel-route,
-│                         #   safety-check, fuel), safety-check.ts (the orchestrator over
-│                         #   the per-leg providers, with worldwide provider resolution),
-│                         #   providers/ (the per-leg data providers: provider.ts contract
-│                         #   and resolver, enc-provider, openseamap-provider,
-│                         #   emodnet-provider), emodnet/ (the European modeled-depth
-│                         #   client), channel-router/ (the deterministic water-following
-│                         #   router: channel-router orchestrator, tile-water-query,
-│                         #   nav-grid, astar, path-simplify, and the slice barrel),
-│                         #   openrouter.ts, budget.ts, fuel.ts, config.ts, and
-│                         #   leg-geometry.ts (the shared planar ring and polyline helpers)
 ├── outputs/              # SignalK consumers of POI data
 │   ├── output.ts          # The OutputModule and PositionScanContributor contracts
 │   ├── output-registry.ts # Holds the outputs, starts the enabled ones
@@ -126,8 +98,8 @@ src/                      # TypeScript source
 ├── monitoring/           # position-monitor.ts: drives the per-tick scan
 ├── geo/                  # position-utilities.ts: bounding-box and great-circle helpers
 ├── status/               # plugin-status.ts (per-source recorder), status-router.ts,
-│                         #   admin-gate.ts (the shared admin gate the status and
-│                         #   route-draft routes mount behind), status-types.ts
+│                         #   admin-gate.ts (the shared admin gate the status route
+│                         #   mounts behind), status-types.ts
 ├── shared/               # Source-agnostic helpers: types.ts (cross-module contracts;
 │                         #   skIcon is required on PoiSummary and PoiDetailView),
 │                         #   plugin-id.ts (id, repo URL, and shared User-Agent),
@@ -167,7 +139,6 @@ src/                      # TypeScript source
                            #   ActiveCaptainSource, OpenSeaMapSource, UscgLightListSource,
                            #   NoaaEncSource (card bodies), AlertsSection (the proximity,
                            #   route-hazard, and bridge air-draft controls),
-                           #   RouteDraftingSection (the opt-in AI route-drafting card),
                            #   ThemeToggle; and the per-field input components, including
                            #   the shared NumberField, LengthField (the meters-backed,
                            #   unit-aware wrapper), MinimumYearField (the per-source

@@ -166,15 +166,9 @@ test("schema is assembled from the registries' fragments", () => {
   assert.deepEqual(
     Object.keys(schema.properties).sort(),
     [
-      'cachingDurationMinutes', 'enable_out-a', 'enable_out-b', 'stubInputEnabled',
-      // The route-draft fragment is always merged (it is neither an input nor an output).
-      'routeDraftEnabled', 'routeDraftOpenRouterApiKey', 'routeDraftModel',
-      'routeDraftMaxCallsPerDay', 'routeDraftPropulsion', 'routeDraftDraftMeters',
-      'routeDraftSafetyMarginMeters', 'routeDraftTackingAngleDeg', 'routeDraftCruiseSpeedKn',
-      'routeDraftBurnLitersPerHour', 'routeDraftReservePercent', 'routeDraftStandoffNm',
-      'routeDraftMaxLegNm', 'routeDraftUseCompanion'
+      'cachingDurationMinutes', 'enable_out-a', 'enable_out-b', 'stubInputEnabled'
     ].sort(),
-    'every input and output fragment, plus the route-draft fragment, is merged into the schema'
+    'every input and output fragment is merged into the schema'
   )
 })
 
@@ -426,22 +420,16 @@ test('the status router serves the snapshot', () => {
   plugin.start(CONFIG, noopRestart)
 
   let statusHandler: ((req: unknown, res: unknown) => void) | undefined
-  let routeDraftRegistered = false
   const router = {
     get: (path: string, handler: (req: unknown, res: unknown) => void) => {
       if (path === '/api/status') {
         statusHandler = handler
       }
-    },
-    // The plugin also registers the route-draft POST route on the same router.
-    post: (path: string) => {
-      if (path === '/api/route-draft') routeDraftRegistered = true
     }
   }
   plugin.registerWithRouter?.(router as unknown as IRouter)
-  assert.equal(stub.adminGatedPaths.length, 1, 'the api subtree is admin-gated exactly once for both routes')
+  assert.equal(stub.adminGatedPaths.length, 1, 'the api subtree is admin-gated exactly once')
   assert.ok(statusHandler !== undefined, 'the status route is registered')
-  assert.ok(routeDraftRegistered, 'the route-draft route is registered behind the same gate')
 
   let body: unknown
   statusHandler?.({}, { json: (payload: unknown) => { body = payload } })
@@ -451,12 +439,12 @@ test('the status router serves the snapshot', () => {
   plugin.stop()
 })
 
-test('both API routes fail closed when the admin gate cannot be installed', () => {
+test('the status API route fails closed when the admin gate cannot be installed', () => {
   const input = createStubInput()
   const out = createStubOutput({ id: 'out' })
   const stub = createStubApp()
-  // A server with no admin middleware: the gate cannot be installed, so neither
-  // route may mount, least of all the budget-spending route-draft POST.
+  // A server with no admin middleware: the gate cannot be installed, so no
+  // route may mount.
   delete (stub.app as unknown as { securityStrategy?: unknown }).securityStrategy
   const plugin = createPlugin(
     stub.app,
@@ -466,14 +454,11 @@ test('both API routes fail closed when the admin gate cannot be installed', () =
   plugin.start(CONFIG, noopRestart)
 
   let statusRegistered = false
-  let routeDraftRegistered = false
   const router = {
-    get: (path: string) => { if (path === '/api/status') statusRegistered = true },
-    post: (path: string) => { if (path === '/api/route-draft') routeDraftRegistered = true }
+    get: (path: string) => { if (path === '/api/status') statusRegistered = true }
   }
   plugin.registerWithRouter?.(router as unknown as IRouter)
   assert.equal(stub.adminGatedPaths.length, 0, 'no path is gated when the gate is unavailable')
   assert.equal(statusRegistered, false, 'the status route fails closed')
-  assert.equal(routeDraftRegistered, false, 'the route-draft spend endpoint fails closed, never ungated')
   plugin.stop()
 })

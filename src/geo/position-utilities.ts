@@ -1,11 +1,12 @@
 /**
  * Geographic helpers for the signalk-crows-nest plugin.
  *
- * This module turns a center point plus a search radius into a bounding box
- * suitable for the ActiveCaptain bounding-box list endpoint, and measures the
- * great-circle distance between two positions for the proximity alarms.
+ * Turns a center point plus a search radius into a bounding box suitable for
+ * the ActiveCaptain bounding-box list endpoint, measures the great-circle
+ * distance between two positions for the proximity alarms, and provides
+ * cross-track and along-track projection helpers for the route-corridor scan.
  *
- * It works only with the typed `Position` and `Bbox` objects from
+ * Works only with the typed `Position` and `Bbox` objects from
  * `../shared/types.js`. Parsing the raw SignalK
  * `ResourceProviderMethods.listResources` query into a center `Position` and a
  * distance is the job of `src/outputs/notes-resource/resource-query.ts`; that
@@ -213,151 +214,6 @@ export function initialBearingRad (a: Position, b: Position): number {
     Math.cos(latitudeA) * Math.sin(latitudeB) -
     Math.sin(latitudeA) * Math.cos(latitudeB) * Math.cos(deltaLongitude)
   return Math.atan2(y, x)
-}
-
-/**
- * Wrap an east-west delta, in radians, to the shortest signed path: take the
- * route across the antimeridian when it is shorter than going the long way
- * around, matching how a constant-bearing leg is drawn on a chart.
- */
-function wrapDeltaLongitudeRad (deltaLongitude: number): number {
-  if (Math.abs(deltaLongitude) > Math.PI) {
-    return deltaLongitude > 0 ? deltaLongitude - 2 * Math.PI : deltaLongitude + 2 * Math.PI
-  }
-  return deltaLongitude
-}
-
-/**
- * Isometric (Mercator-stretched) latitude `ln(tan(pi/4 + lat/2))` in radians.
- * The loxodrome helpers (`rhumbDistanceMeters`, `sampleRhumbLeg`) both walk this
- * stretched latitude, so the one formula lives here.
- */
-function isometricLatitudeRad (latitudeRad: number): number {
-  return Math.log(Math.tan(Math.PI / 4 + latitudeRad / 2))
-}
-
-/**
- * Below this isometric-latitude change a leg is treated as east-west: the
- * isometric-latitude difference is ~0, so the meridional scale falls back to the
- * parallel's `cos(latitude)` to avoid a 0/0. Shared by both loxodrome helpers.
- */
-const EAST_WEST_ISOMETRIC_EPSILON = 1e-12
-
-/**
- * Rhumb-line (loxodromic) distance between two positions, in meters.
- *
- * A rhumb line is a path of constant compass bearing. It is the line a chart
- * plotter's editor (Binnacle's) draws and measures, so the route-draft leg
- * check samples along it rather than along the great circle the haversine
- * helpers use. On a short north-south leg the two are nearly identical; on a
- * long east-west leg they diverge, and a rhumb east-west leg stays on one
- * parallel where the great circle bows poleward.
- *
- * Uses the standard loxodrome formula (Bowditch / Williams "Aviation
- * Formulary"): the distance is `radius * sqrt(dLat^2 + q^2 * dLon^2)`, where
- * `q = dLat / dPsi` is the relative scale between true and stretched
- * (Mercator, isometric) latitude, and `dPsi` is the difference in isometric
- * latitude `ln(tan(pi/4 + lat/2))`. The same `EARTH_RADIUS_METERS` the
- * haversine helper uses keeps the two distance measures on one sphere.
- *
- * @param from - The leg's start point.
- * @param to - The leg's end point.
- * @returns The rhumb-line distance in meters.
- */
-export function rhumbDistanceMeters (from: Position, to: Position): number {
-  const latitudeFrom = toRadians(from.latitude)
-  const latitudeTo = toRadians(to.latitude)
-  const deltaLatitude = latitudeTo - latitudeFrom
-  const deltaLongitude = wrapDeltaLongitudeRad(toRadians(to.longitude - from.longitude))
-
-  const deltaIsometricLatitude = isometricLatitudeRad(latitudeTo) - isometricLatitudeRad(latitudeFrom)
-  // q is the meridional scale. On an east-west leg the isometric-latitude
-  // change is zero, so fall back to cos(latitude) (the parallel's scale) to
-  // avoid a 0/0; the two agree in the limit.
-  const q = Math.abs(deltaIsometricLatitude) > EAST_WEST_ISOMETRIC_EPSILON
-    ? deltaLatitude / deltaIsometricLatitude
-    : Math.cos(latitudeFrom)
-
-  const angularDistance = Math.sqrt(deltaLatitude ** 2 + (q * deltaLongitude) ** 2)
-  return EARTH_RADIUS_METERS * angularDistance
-}
-
-/**
- * Sample intermediate points along a rhumb (constant-bearing) leg.
- *
- * Steps from `from` toward `to` along the loxodrome at `spacingMeters`,
- * returning the ordered intermediate points. Neither endpoint is included: the
- * caller already holds `from` and `to`, and the samples are the points strictly
- * between them, so a leg shorter than one spacing returns an empty array.
- * Because every step holds the leg's constant bearing, an east-west leg's
- * samples all share the start latitude (a rhumb east-west leg is a parallel),
- * which is the property the depth-area leg check relies on.
- *
- * The sampling walks the leg by a fixed fraction of its rhumb length per step.
- * True latitude advances linearly with rhumb distance (the bearing is
- * constant), and longitude advances linearly with isometric latitude (the
- * loxodrome is a straight line in Mercator coordinates), so the points are
- * evenly spaced along the rhumb line, not along the great circle.
- *
- * @param from - The leg's start point.
- * @param to - The leg's end point.
- * @param spacingMeters - Target spacing between samples, in meters. Must be a
- *   finite positive number.
- * @returns The ordered intermediate positions, endpoints excluded.
- */
-export function sampleRhumbLeg (from: Position, to: Position, spacingMeters: number): Position[] {
-  if (!Number.isFinite(spacingMeters) || spacingMeters <= 0) {
-    throw new Error('sampleRhumbLeg: spacingMeters must be a finite positive number')
-  }
-
-  const totalMeters = rhumbDistanceMeters(from, to)
-  // Number of strictly-interior samples at this spacing. `ceil - 1` excludes
-  // the endpoint even when the leg length is an exact multiple of the spacing,
-  // where a plain `floor` would land the final sample exactly on `to`.
-  const stepCount = Math.ceil(totalMeters / spacingMeters) - 1
-  if (stepCount < 1) {
-    return []
-  }
-
-  const latitudeFrom = toRadians(from.latitude)
-  const latitudeTo = toRadians(to.latitude)
-  const deltaLatitude = latitudeTo - latitudeFrom
-  const deltaLongitude = wrapDeltaLongitudeRad(toRadians(to.longitude - from.longitude))
-
-  const isometricFrom = isometricLatitudeRad(latitudeFrom)
-  const deltaIsometricLatitude = isometricLatitudeRad(latitudeTo) - isometricFrom
-
-  const longitudeFrom = toRadians(from.longitude)
-  const eastWest = Math.abs(deltaIsometricLatitude) <= EAST_WEST_ISOMETRIC_EPSILON
-  // Off the east-west case, longitude advances linearly with isometric latitude,
-  // so the meters-per-isometric ratio is loop-invariant; hoist it once.
-  const lonPerIso = eastWest ? 0 : deltaLongitude / deltaIsometricLatitude
-
-  const samples: Position[] = []
-  for (let step = 1; step <= stepCount; step += 1) {
-    const fraction = (step * spacingMeters) / totalMeters
-    // True latitude advances linearly with rhumb distance (the bearing is
-    // constant), so interpolate it directly.
-    const latitudeRad = latitudeFrom + fraction * deltaLatitude
-
-    // Longitude advances linearly with ISOMETRIC latitude, not true latitude,
-    // so derive this sample's isometric latitude from its true latitude rather
-    // than interpolating it. On an east-west leg the isometric change is zero
-    // (a 0/0), so step longitude linearly along the parallel instead.
-    let longitudeRad: number
-    if (eastWest) {
-      longitudeRad = longitudeFrom + fraction * deltaLongitude
-    } else {
-      const isometricStep = isometricLatitudeRad(latitudeRad)
-      longitudeRad = longitudeFrom + lonPerIso * (isometricStep - isometricFrom)
-    }
-
-    samples.push({
-      latitude: toDegrees(latitudeRad),
-      longitude: normalizeLongitude(toDegrees(longitudeRad))
-    })
-  }
-  return samples
 }
 
 /**
