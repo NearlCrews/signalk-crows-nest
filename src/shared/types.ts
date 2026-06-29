@@ -218,7 +218,7 @@ export interface PoiDetailView {
  */
 export type PoiTypeFlag = Extract<keyof PluginConfig, `include${string}`>
 
-/** Vessel propulsion kind, the primary source for the route-draft fuel and sailability math. */
+/** Vessel propulsion kind, used by the route-draft config module. */
 export type Propulsion = 'sail' | 'power' | 'motorsail'
 
 /** Plugin configuration as supplied by the SignalK admin UI. */
