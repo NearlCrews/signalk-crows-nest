@@ -9,6 +9,33 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 > development milestones that preceded this publication. Their content is
 > incorporated into the 0.4.2 release.
 
+<a id="v0120"></a>
+
+## [0.12.0] - 2026-06-29
+
+The AI route-draft feature is removed. Crow's Nest is a POI plugin only.
+
+### Removed
+
+- **AI route-draft endpoint (`POST /api/route-draft`).** The optional,
+  admin-gated endpoint that asked OpenRouter for turning waypoints, ran the
+  deterministic channel router, checked every leg, and returned a drafted or
+  optimized route is gone. All associated source files are deleted: the
+  route-draft directory, the channel-router, the EMODnet client, the vector-tile
+  water source, the safety-check orchestrator and its providers, the OpenRouter
+  client, and the budget and fuel modules. The `@mapbox/vector-tile` and `pbf`
+  runtime dependencies, which were used only by the vector-tile client, are also
+  removed. The `build:boundaries` script and the bundled country-boundary asset
+  it produced are removed.
+- **Route-drafting panel card.** The RouteDraftingSection panel component that
+  controlled the OpenRouter key, model, call budget, and vessel inputs is gone.
+
+### Unchanged
+
+All POI inputs (ActiveCaptain, OpenSeaMap, USCG Light List, NOAA ENC Direct),
+all outputs (notes-resource, proximity-alarm, route-hazard, bridge-air-draft),
+the status API, the position monitor, and every alarm are unchanged.
+
 <a id="v0110"></a>
 
 ## [0.11.0] - 2026-06-27

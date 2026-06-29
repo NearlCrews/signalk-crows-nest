@@ -21,32 +21,15 @@ proximity, route-corridor, and bridge air-draft alarms.
 > safety-of-life navigation: always cross-check against official charts and
 > your primary instruments.
 
-## What's new in 0.11.0
+## What's new in 0.12.0
 
-Route drafting can now offload its on-water routing to the Binnacle Companion
-container when it is installed, which keeps the heavy geometry off the Signal K
-server. The built-in router stays as an automatic fallback, so a standalone
-install is unchanged. This builds on **AI route drafting** (beta), introduced in
-the 0.10 line (see the [changelog](CHANGELOG.md#v0110)).
+The AI route-draft feature is removed. Crow's Nest is now a POI plugin only:
+it imports points of interest from ActiveCaptain, OpenSeaMap, the USCG Light
+List, and NOAA ENC Direct, and publishes them as Signal K `notes` resources
+with proximity, route-corridor, and bridge air-draft alarms. All POI inputs,
+outputs, and alarms are unchanged.
 
-> **AI route drafting is in beta.** It cannot guarantee accuracy. The model can
-> place a waypoint in error and the safety check runs on generalized and modeled
-> data, not on certified charts. Treat every drafted route as a suggestion only,
-> and verify it against the official charts and your primary instruments before
-> you navigate it. Never follow a drafted route on the AI's word alone.
-
-- **Route through the Binnacle Companion router when available.** When the
-  Binnacle Companion plugin is installed and its container is running, route
-  drafting sends the on-water routing to the container and uses the result, with
-  the built-in router as an automatic fallback when the companion is absent, not
-  ready, or unreachable. A new "Use Binnacle Companion router when available"
-  setting, on by default, controls it, and turning it off forces the built-in
-  router. Border-aware routing through the companion uses the maritime boundary
-  source, which covers the open-sea borders the built-in admin-0 source did not,
-  and does not cover the inland and river boundaries it did. Every drafted route
-  remains a draft you verify on the chart.
-
-See the [changelog](CHANGELOG.md#v0110) for the full list.
+See the [changelog](CHANGELOG.md#v0120) for the full list.
 
 ## What it does
 
@@ -86,28 +69,6 @@ air-draft check).
   at or below the vessel air draft (`design.airHeight` or a configured
   fallback) plus a safety margin, both as a proximity alarm as the vessel
   nears a too-low bridge and as a clearance-specific route warning ahead.
-- **AI route drafting (beta, optional, admin only, off until you set a key)**:
-  turn a plain-language passage request into a drafted route. This feature is
-  in beta: it cannot guarantee accuracy, so every drafted route is a draft you
-  must verify against the official charts before you navigate it. With an
-  OpenRouter key configured, the plugin asks the model for the turning
-  waypoints, then checks every leg in owned code and adds a deterministic
-  fuel estimate. Where charted depth (US ENC) or mapped water covers the
-  passage, a deterministic channel router replaces the model's straight legs
-  with a water-following route over a depth-aware navigable grid plus A*, so
-  the waypoints follow the channel rather than cutting across land. The
-  endpoint also optimizes a drawn route: pass a `route` and it refines that
-  polyline instead of drafting from words, anchors the drawn endpoints, and
-  returns an `optimized` marker. The safety check covers routes worldwide,
-  resolving data providers per leg: NOAA ENC charted depth, land, and point
-  hazards in US waters, OpenSeaMap point hazards and an OpenStreetMap coastline
-  land check worldwide, and EMODnet modeled depth (awareness-grade, referenced
-  to Lowest Astronomical Tide) in European seas. Every dimension is either
-  checked with its value and datum stated or flagged explicitly as not checked,
-  never silently passed. The route is always a draft you verify on the chart
-  before saving, the depth check reads the charted depth-area contour rather
-  than the depth at every point, and a daily call cap bounds the OpenRouter
-  spend.
 - **Rich point detail** rendered as plain-English HTML, with the
   source-specific attribution credit (ODbL for OSM, CC0 for NOAA, US
   Government public domain for USCG, Garmin ActiveCaptain for the base)
@@ -184,8 +145,6 @@ decimal degrees, distances and heights in meters).
 - `navigation.speedOverGround` — ETA math in the route-corridor scan.
 - `design.airHeight` — the vessel air draft for the bridge-clearance check
   (a configured fallback is used only when this path is absent).
-- `design.draft` (`value.maximum`) — the vessel draft for the AI route-draft
-  depth check, when the panel's draft field is left at 0.
 - The **Course API** active route — the route-corridor hazard scan reads the
   active route to look ahead along the planned track.
 
@@ -201,9 +160,7 @@ decimal degrees, distances and heights in meters).
 - `notifications.navigation.crowsNest.bridgeClearance.<id>` — bridge
   air-draft alarms.
 
-The plugin also serves an admin-gated `GET` status endpoint and the optional,
-admin-gated `POST /api/route-draft` endpoint (off until an OpenRouter key is
-set); see [the route-draft API notes](docs/route-draft-api.md).
+The plugin also serves an admin-gated `GET` status endpoint.
 
 ## Requirements
 
@@ -261,11 +218,6 @@ The panel has these areas:
    alarm is enabled): the proximity-alarm, route-corridor scan, and
    bridge air-draft check controls, each in its own fieldset with an
    opt-in toggle and its numeric settings.
-5. **Route drafting section** (beta, optional, admin only, off until you set a
-   key): a master enable, the masked OpenRouter key and model, a daily call
-   cap, and the vessel, fuel, and routing inputs, with the rarely-changed
-   tuning tucked under an Advanced disclosure. The drafted route is in beta and
-   is a draft to verify against the official charts before use.
 
 Per-source enable toggles live on each card's header, alongside the
 disclosure chevron. Each card carries a small live-status pill on the
@@ -283,8 +235,6 @@ on the next request.
 - [Development guide](docs/development.md)
 - [Notes-resource integration guide](docs/notes-resource-format.md): the
   wire format and the normalized detail schema for client developers
-- [Route-draft API guide](docs/route-draft-api.md): the contract for the
-  optional, beta AI route-draft endpoint, for client integrators
 - [Architecture notes](CLAUDE.md): project layout and module map
 - [Changelog](CHANGELOG.md)
 - [Contributing](.github/CONTRIBUTING.md)
@@ -339,10 +289,6 @@ and maintained by [Nearl Crews](https://github.com/NearlCrews).
 - The [NOAA Office of Coast Survey](https://nauticalcharts.noaa.gov)
   for [ENC Direct](https://encdirect.noaa.gov) authoritative US chart
   hazard data, published under CC0
-- EMODnet Digital Bathymetry (DTM 2024), EMODnet Bathymetry Consortium,
-  for the European modeled depth used in the route-draft safety check, under
-  the [Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/)
-  license
 
 Crow's Nest pairs well with sibling plugins such as
 [`signalk-nmea2000-emitter-cannon`](https://github.com/NearlCrews/signalk-nmea2000-emitter-cannon)
