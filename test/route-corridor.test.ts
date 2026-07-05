@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { scanRouteCorridor } from '../src/outputs/route-hazard/route-corridor.js'
+import { distanceMeters, projectPointOntoLeg } from '../src/geo/position-utilities.js'
 import type { Position, RoutePolyline } from '../src/shared/types.js'
 import { poiSummary as poi } from './helpers.js'
 
@@ -159,6 +160,92 @@ test('scanRouteCorridor reports a hazard near a bend only once', () => {
 
   assert.equal(result.length, 1, 'a hazard matching two legs is reported once')
   assertClose(result[0].alongTrackDistanceMeters, ONE_DEGREE_ARC_METERS, 5, 'reported at its nearest projection')
+})
+
+test('scanRouteCorridor reports the nearer leg when a POI projects onto two legs at a bend', () => {
+  // Leg 0 runs east along the equator to the bend at longitude 1; leg 1 turns
+  // due north up that meridian. The hazard sits just inside the corner: it
+  // falls in the corridor of both legs but lies much closer to leg 1. The scan
+  // records leg 0 first, then must replace it with the nearer leg-1 projection.
+  const bend: Position = { latitude: 0, longitude: 1 }
+  const end: Position = { latitude: 1, longitude: 1 }
+  const poiPos: Position = { latitude: 0.005, longitude: 0.999 }
+  const result = scanRouteCorridor({
+    route: routeAhead([bend, end]),
+    pois: [poi('bend', 'Hazard', 'Corner Rock', poiPos)],
+    corridorHalfWidthMeters: 1000
+  })
+
+  const legLength0 = distanceMeters(VESSEL, bend)
+  const leg0 = projectPointOntoLeg(VESSEL, bend, poiPos)
+  const leg1 = projectPointOntoLeg(bend, end, poiPos)
+  // The fixture is only meaningful if the later leg is the nearer one, so the
+  // replacement branch is exercised rather than the keep-existing branch.
+  assert.ok(
+    Math.abs(leg1.crossTrackMeters) < Math.abs(leg0.crossTrackMeters),
+    'fixture: leg 1 passes nearer the hazard than leg 0'
+  )
+
+  assert.equal(result.length, 1, 'the bend hazard is reported once')
+  assertClose(result[0].crossTrackDistanceMeters, leg1.crossTrackMeters, 1e-6, 'the nearer leg-1 cross-track is reported')
+  assertClose(
+    result[0].alongTrackDistanceMeters,
+    legLength0 + leg1.alongTrackMeters,
+    1e-6,
+    'along-track is the full first leg plus the leg-1 projection'
+  )
+})
+
+test('scanRouteCorridor keeps the earlier projection when two legs tie on cross-track', () => {
+  // The route runs east to longitude 2, then doubles back west to longitude 1.
+  // A hazard on the equator at longitude 1.5 sits exactly on both legs, so the
+  // cross-track is zero on each. The equal-cross-track tiebreaker then keeps the
+  // earlier, shorter along-track projection.
+  const result = scanRouteCorridor({
+    route: routeAhead([
+      { latitude: 0, longitude: 2 },
+      { latitude: 0, longitude: 1 }
+    ]),
+    pois: [poi('tie', 'Hazard', 'Doubled-back Rock', { latitude: 0, longitude: 1.5 })],
+    corridorHalfWidthMeters: 500
+  })
+
+  assert.equal(result.length, 1, 'the hazard is reported once despite matching two legs')
+  assertClose(result[0].crossTrackDistanceMeters, 0, 1e-3, 'a hazard on the route line has no cross-track offset')
+  assertClose(
+    result[0].alongTrackDistanceMeters,
+    1.5 * ONE_DEGREE_ARC_METERS,
+    5,
+    'the earlier, shorter along-track projection wins the cross-track tie'
+  )
+})
+
+test('scanRouteCorridor keeps along-track correct past a duplicate (zero-length) waypoint', () => {
+  // The route repeats the waypoint at longitude 1, so the middle leg is
+  // zero-length. That leg is skipped without advancing the along-track
+  // accumulator, so a hazard on the leg beyond the duplicate still reports the
+  // true distance along the route.
+  const result = scanRouteCorridor({
+    route: routeAhead([
+      { latitude: 0, longitude: 1 },
+      { latitude: 0, longitude: 1 },
+      { latitude: 0, longitude: 2 }
+    ]),
+    pois: [
+      poi('after', 'Hazard', 'Beyond Rock', { latitude: 0, longitude: 1.5 }),
+      poi('before', 'Hazard', 'Near Rock', { latitude: 0, longitude: 0.5 })
+    ],
+    corridorHalfWidthMeters: 500
+  })
+
+  assert.deepEqual(result.map((entry) => entry.id), ['before', 'after'], 'nearest-first, the degenerate leg skipped')
+  assertClose(result[0].alongTrackDistanceMeters, ONE_DEGREE_ARC_METERS / 2, 5, 'the leg-0 hazard along-track')
+  assertClose(
+    result[1].alongTrackDistanceMeters,
+    ONE_DEGREE_ARC_METERS + ONE_DEGREE_ARC_METERS / 2,
+    5,
+    'the duplicate waypoint adds no distance, so the far hazard is one and a half legs along'
+  )
 })
 
 test('scanRouteCorridor measures from the first waypoint when there is no vessel fix', () => {

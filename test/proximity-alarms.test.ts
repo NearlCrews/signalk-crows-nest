@@ -160,6 +160,32 @@ test('sanitizes a POI id that carries path-breaking characters', () => {
   assert.equal(captured[0].path, 'notifications.navigation.crowsNest.hazard.a_b_c')
 })
 
+test('two distinct ids that sanitize to the same key share one alarm path and tracker entry', () => {
+  const { app, captured } = createCapturingApp()
+  const alarms = createProximityAlarms(app, 500)
+
+  // `a.b` and `a_b` are distinct source ids, but the path sanitizer maps the
+  // `.` to `_`, so both resolve to the segment `a_b`. The tracker keys by the
+  // sanitized id, so the two collapse to a single alarm: the first raises it,
+  // the second finds the key already active. This collision is the documented
+  // contract, not a bug: two POIs that sanitize identically cannot hold
+  // independent alarms on one shared notification path.
+  alarms.evaluate(ORIGIN, [
+    poi('a.b', 'Hazard', 'Dotted rock', northOfOrigin(100)),
+    poi('a_b', 'Hazard', 'Scored rock', northOfOrigin(120))
+  ])
+
+  assert.equal(captured.length, 1, 'the two colliding ids raise exactly one alarm')
+  assert.equal(captured[0].path, 'notifications.navigation.crowsNest.hazard.a_b')
+
+  // One tracker entry means clearAll emits exactly one clear on the shared path.
+  alarms.clearAll()
+  const clears = captured.slice(1)
+  assert.equal(clears.length, 1, 'the single shared entry clears once')
+  assert.equal(clears[0].path, 'notifications.navigation.crowsNest.hazard.a_b')
+  assert.equal(clears[0].value.state, 'normal')
+})
+
 test('clearAll clears every active hazard exactly once', () => {
   const { app, captured } = createCapturingApp()
   const alarms = createProximityAlarms(app, 500)
