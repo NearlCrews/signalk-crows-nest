@@ -9,6 +9,7 @@
  */
 
 import type { ServerAPI } from '@signalk/server-api'
+import { bboxContainsPoint } from '../geo/position-utilities.js'
 import type { PluginStatus } from '../status/plugin-status.js'
 import type { Bbox, PluginConfig, PoiDetailView, PoiSummary, Position } from '../shared/types.js'
 
@@ -109,4 +110,64 @@ export async function fetchDetailRecorded<T> (
   }
   status.recordDetailSuccess(sourceId)
   return result
+}
+
+/** The outcome of a list fetch that may fall back to stale offline data. */
+export type ListFetchOutcome<T> =
+  | { kind: 'fresh', value: T }
+  | { kind: 'stale', summaries: PoiSummary[] }
+
+/**
+ * Run an upstream list fetch with the shared offline-fallback policy: on a
+ * rejection (a cold cache miss offline, say) the caller's `rebuildStale`
+ * closure rebuilds summaries from its hydrated detail cache so previously
+ * visited areas still show their markers after a restart. `recordStaleServe`
+ * keeps the status honest: `apiReachable` is set false and the aggregate does
+ * not count the serve as a reachable list fetch. With no stale data to show,
+ * the original error propagates instead. The OpenSeaMap and NOAA ENC sources
+ * both wrap their bbox fetch in this helper, so the fallback control flow
+ * lives once; only the per-source summary rebuild varies.
+ */
+export async function fetchListWithOfflineFallback<T> (
+  status: PluginStatus,
+  sourceId: string,
+  outageReason: string,
+  fetchUpstream: () => Promise<T>,
+  rebuildStale: () => PoiSummary[]
+): Promise<ListFetchOutcome<T>> {
+  try {
+    return { kind: 'fresh', value: await fetchUpstream() }
+  } catch (error) {
+    const summaries = rebuildStale()
+    if (summaries.length === 0) throw error
+    status.recordStaleServe?.(sourceId, outageReason)
+    return { kind: 'stale', summaries }
+  }
+}
+
+/**
+ * Rebuild summaries from a hydrated detail cache for a bounding box, the
+ * per-source half of the offline fallback. The position is read through the
+ * cheap `positionOf` accessor BEFORE the full summary is built, so an
+ * out-of-box record costs no summary construction; `toSummary` may still
+ * return null for a record too malformed to list.
+ */
+export function staleSummariesWithinBbox<V> (
+  values: Iterable<V>,
+  bbox: Bbox,
+  positionOf: (value: V) => Position | undefined,
+  toSummary: (value: V) => PoiSummary | null
+): PoiSummary[] {
+  const summaries: PoiSummary[] = []
+  for (const value of values) {
+    const position = positionOf(value)
+    if (position === undefined ||
+      !bboxContainsPoint(bbox, position.longitude, position.latitude)) {
+      continue
+    }
+    const summary = toSummary(value)
+    if (summary === null) continue
+    summaries.push(summary)
+  }
+  return summaries
 }

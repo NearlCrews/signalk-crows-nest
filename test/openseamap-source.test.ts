@@ -1,9 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { createOpenSeaMapSource } from '../src/inputs/openseamap/openseamap-source.js'
 import type { OverpassClient, OverpassElement } from '../src/inputs/openseamap/overpass-client.js'
 import type { PluginStatus } from '../src/status/plugin-status.js'
 import type { Bbox } from '../src/shared/types.js'
+import { withTempDir } from './helpers.js'
 
 const sampleBbox: Bbox = { north: 1, south: 0, east: 1, west: 0 }
 
@@ -14,7 +17,7 @@ function silentStatus (): PluginStatus {
     recordDetailSuccess: () => {},
     recordError: () => {},
     recordSkipped: () => {},
-    wasJustSkipped: () => false,
+    wasListFetchSuppressed: () => false,
     snapshot: () => ({}) as never
   }
 }
@@ -351,4 +354,93 @@ test('listPointsOfInterest queries upstream every call when refreshSeconds is 0 
   await source.listPointsOfInterest(sampleBbox, '')
   assert.equal(calls, 2)
   source.close()
+})
+
+test('a listed element survives a restart and renders offline from the on-disk store', async () => {
+  await withTempDir('openseamap-source-', async (dir) => {
+    // First run: list seeds the detail cache and persists to disk, then close
+    // flushes the debounced write.
+    const first = createOpenSeaMapSource({ client: fakeClient().client, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 0, status: silentStatus(), dataDir: dir })
+    await first.listPointsOfInterest(sampleBbox, '')
+    first.close()
+    assert.ok(existsSync(join(dir, 'openseamap-cache.json')), 'the detail store is written on close')
+
+    // Second run: the client is offline (both list and by-id reject), yet the
+    // previously fetched element renders from the hydrated store without any
+    // upstream call.
+    let getByIdCalls = 0
+    const offlineClient: OverpassClient = {
+      listPointsOfInterest: async () => { throw new Error('offline') },
+      getById: async () => { getByIdCalls++; throw new Error('offline') },
+      listCoastlineWays: async () => [],
+      close: () => {}
+    }
+    const second = createOpenSeaMapSource({ client: offlineClient, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 0, status: silentStatus(), dataDir: dir })
+    assert.equal(second.cacheSize(), 2, 'the store hydrates the detail cache on a cold start')
+    const view = await second.getDetails('node_123')
+    assert.equal(view.name, 'Big Rock')
+    assert.equal(view.type, 'Hazard')
+    assert.equal(getByIdCalls, 0, 'a hydrated element is served without an upstream fetch')
+    second.close()
+  })
+})
+
+test('without a data directory the source persists nothing and starts blank', async () => {
+  await withTempDir('openseamap-source-', async (dir) => {
+    const source = createOpenSeaMapSource({ client: fakeClient().client, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 0, status: silentStatus() })
+    await source.listPointsOfInterest(sampleBbox, '')
+    source.close()
+    assert.equal(existsSync(join(dir, 'openseamap-cache.json')), false, 'no store file is written without a data directory')
+  })
+})
+
+test('an offline list falls back to hydrated markers within the bbox and records a stale serve', async () => {
+  await withTempDir('openseamap-source-', async (dir) => {
+    // First run seeds and persists the two fixture elements (at lat 50-51).
+    const first = createOpenSeaMapSource({ client: fakeClient().client, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 0, status: silentStatus(), dataDir: dir })
+    await first.listPointsOfInterest(sampleBbox, '')
+    first.close()
+
+    // Second run is offline: the upstream list rejects, so the source rebuilds
+    // markers from the hydrated detail cache for the requested box and records a
+    // stale serve rather than a reachable fetch.
+    const staleServes: Array<{ source: string, reason: string }> = []
+    const status: PluginStatus = { ...silentStatus(), recordStaleServe: (source, reason) => staleServes.push({ source, reason }) }
+    const offlineClient: OverpassClient = {
+      listPointsOfInterest: async () => { throw new Error('offline') },
+      getById: async () => { throw new Error('offline') },
+      listCoastlineWays: async () => [],
+      close: () => {}
+    }
+    const second = createOpenSeaMapSource({ client: offlineClient, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 0, status, dataDir: dir })
+    // A box that covers the fixture positions (lat 50-51, lon 1-2).
+    const list = await second.listPointsOfInterest({ south: 49, west: 0, north: 52, east: 3 }, '')
+    assert.deepEqual(list.map((poi) => poi.id).sort(), ['node_123', 'way_456'],
+      'both previously fetched markers reappear offline')
+    assert.deepEqual(staleServes, [{ source: 'openseamap', reason: 'Overpass unreachable' }])
+    second.close()
+  })
+})
+
+test('an offline list with nothing cached inside the bbox rethrows the upstream error', async () => {
+  await withTempDir('openseamap-source-', async (dir) => {
+    const first = createOpenSeaMapSource({ client: fakeClient().client, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 0, status: silentStatus(), dataDir: dir })
+    await first.listPointsOfInterest(sampleBbox, '')
+    first.close()
+
+    const staleServes: string[] = []
+    const status: PluginStatus = { ...silentStatus(), recordStaleServe: (source) => staleServes.push(source) }
+    const offlineClient: OverpassClient = {
+      listPointsOfInterest: async () => { throw new Error('offline') },
+      getById: async () => { throw new Error('offline') },
+      listCoastlineWays: async () => [],
+      close: () => {}
+    }
+    const second = createOpenSeaMapSource({ client: offlineClient, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 0, status, dataDir: dir })
+    // sampleBbox (0-1) contains none of the cached markers (lat 50-51), so there
+    // is no offline data to serve and the upstream error propagates.
+    await assert.rejects(() => second.listPointsOfInterest(sampleBbox, ''), /offline/)
+    assert.deepEqual(staleServes, [], 'no stale serve is recorded when there is nothing cached to show')
+    second.close()
+  })
 })

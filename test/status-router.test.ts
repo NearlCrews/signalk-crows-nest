@@ -12,7 +12,8 @@ const SNAPSHOT: StatusSnapshot = {
       source: 'activecaptain',
       name: 'Garmin ActiveCaptain',
       apiReachable: true,
-      lastListFetch: { at: '2026-01-01T00:00:00.000Z', poiCount: 3 }
+      lastListFetch: { at: '2026-01-01T00:00:00.000Z', poiCount: 3 },
+      lastSkipReason: null
     }
   ],
   cachedPoiCount: 5,

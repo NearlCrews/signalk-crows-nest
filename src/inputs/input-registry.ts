@@ -200,12 +200,13 @@ export function createInputRegistry (
                 continue
               }
               anyOk = true
-              // A source that gated itself out (recordSkipped) returns []
-              // immediately; treating that as a "fetched zero POIs" success
-              // would overwrite the previous fetch's lastListFetch and flip
-              // apiReachable to true even though no request was sent. The
-              // wasJustSkipped flag distinguishes the two cases.
-              if (!context.status.wasJustSkipped(sourceId)) {
+              // A returned-but-not-reachable result must not be laundered into
+              // a "fetched N POIs" success that flips apiReachable to true: a
+              // source that gated itself out (recordSkipped) returned []
+              // without sending a request, and a source that served stale
+              // offline data (recordStaleServe) already recorded the outage.
+              // Both raise the same suppression flag, consumed on read.
+              if (!context.status.wasListFetchSuppressed(sourceId)) {
                 context.status.recordListFetch(sourceId, result.value.pois.length)
               }
               // The id rewrite is a spread-clone, not an in-place mutation:

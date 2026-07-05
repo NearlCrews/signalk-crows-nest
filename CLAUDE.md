@@ -50,12 +50,21 @@ self-contained module registered on one line in `src/index.ts`.
       the single schema the SignalK admin UI renders.
   - `inputs/` - POI data sources.
     - `poi-source.ts` - the `PoiSource` and `InputModule` contracts an input
-      implements.
+      implements, plus the shared per-source policy helpers:
+      `fetchDetailRecorded` (the miss-vs-outage detail policy),
+      `fetchListWithOfflineFallback` (the offline list-fallback control flow
+      the OpenSeaMap and NOAA ENC sources share), and
+      `staleSummariesWithinBbox` (the cheap-position-first stale-summary
+      rebuild the fallback consumes).
     - `input-registry.ts` - holds the registered inputs and builds the
       aggregate `PoiSource` for a plugin start: it fans each list request out
       to every enabled input, namespaces resource ids with the producing
       source's slug, unions the results, records per-source status, and runs
-      the dedupe pass.
+      the dedupe pass. Its per-source status recording skips `recordListFetch`
+      for a source whose result did not come from a reachable upstream fetch
+      (a skip or a stale offline serve, read through
+      `wasListFetchSuppressed`), so neither is laundered into a reachable
+      fetch.
     - `http-client.ts` - shared HTTP client plumbing for the queued clients
       (ActiveCaptain and Overpass): a concurrency-limited and throttled
       request queue, retry with exponential backoff that honors HTTP 429/503
@@ -84,9 +93,10 @@ self-contained module registered on one line in `src/index.ts`.
       the rating filter cannot diverge), `poi-cache.ts` (TTL detail cache
       with stale-on-error: a lapsed entry whose refetch fails, offline or
       API down, is served rather than rejected), `poi-store.ts`
-      (disk-backed detail store with its own long retention, 30 days and
-      entry-capped, independent of the freshness TTL, so offline data
-      survives restarts and hydrates as stale-but-usable),
+      (the ActiveCaptain binding of the shared `detail-store.ts` disk store:
+      the `PoiDetails` guard, the file name, and the version gate; long
+      retention independent of the freshness TTL, so offline data survives
+      restarts and hydrates as stale-but-usable),
       `poi-detail-renderer.ts`
       (Handlebars helpers and POI detail rendering), `templates.ts` (inlined
       Handlebars templates), `rating-filter.ts` (drops list entries below
@@ -97,8 +107,14 @@ self-contained module registered on one line in `src/index.ts`.
       HTML cannot drift; reviews are emitted only for review-bearing POI types).
     - `openseamap/` - the OpenSeaMap input (OpenStreetMap marine data via the
       OSM Overpass API): `openseamap-input.ts` (the `InputModule`),
-      `openseamap-source.ts` (the `PoiSource` adapter over the client and an
-      in-memory detail cache; uses an underscore-separated internal id form
+      `openseamap-source.ts` (the `PoiSource` adapter over the client, an
+      in-memory detail cache, and the shared disk-backed detail store that
+      hydrates the cache on a cold start so a restart offline still renders
+      previously fetched elements; when an upstream list fails it falls back to
+      rebuilding summaries from the hydrated cache within the requested bbox and
+      records a stale serve (see `plugin-status.ts`), so previously visited
+      areas reappear offline without laundering the outage into a reachable
+      fetch; uses an underscore-separated internal id form
       like `node_123` so the slash in raw OSM ids never splits the resource
       URL), `overpass-client.ts` (the Overpass HTTP client built on
       `http-client.ts`, with the required `User-Agent`; it takes an ordered
@@ -143,7 +159,12 @@ self-contained module registered on one line in `src/index.ts`.
       `noaa-enc-input.ts` (the `InputModule`), `noaa-enc-source.ts` (the
       `PoiSource` adapter over the ArcGIS REST client; fans the bbox query
       out across the enabled hazard layers in parallel, stashes raw features
-      in an LRU detail cache, gates outbound HTTP on `isInUsWaters`, and
+      in an LRU detail cache backed by the shared disk detail store that
+      hydrates the cache on a cold start, falls back on an upstream list failure
+      to rebuilding summaries from the hydrated cache within the requested bbox
+      and recording a stale serve (see `plugin-status.ts`) so previously visited
+      areas reappear offline, gates outbound HTTP on `isInUsWaters`
+      on BOTH the list path and the detail-miss path, and
       uses an underscore-separated id form like `wreck_12345` so the slash
       in `wreck/12345` does not split the resource URL),
       `enc-direct-client.ts` (the ArcGIS REST client built on
@@ -201,7 +222,12 @@ self-contained module registered on one line in `src/index.ts`.
     position to bounding box, great-circle `distanceMeters`, `unionBbox`,
     and `projectPointOntoLeg` for corridor geometry).
   - `status/` - `plugin-status.ts` (records request outcomes, produces a
-    `StatusSnapshot`), `status-router.ts` (Express router that serves the
+    `StatusSnapshot`; besides list, detail, error, and skip outcomes it exposes
+    `recordStaleServe` so a source that serves cached markers while its
+    upstream is unreachable reads as in error, and the consume-on-read
+    `wasListFetchSuppressed`, raised by a skip or a stale serve, that the
+    aggregate registry checks before recording a reachable list fetch),
+    `status-router.ts` (Express router that serves the
     snapshot behind the shared admin gate), `admin-gate.ts` (the
     `ensureApiAdminGate` helper that installs the server admin middleware on the
     plugin's `/api` subtree once per app and reports whether it holds, so the
@@ -289,6 +315,16 @@ self-contained module registered on one line in `src/index.ts`.
     `capitalizeFirst`), `debug.ts` (the `debugIsEnabled` guard plus `appLogger`,
     which adapts a SignalK app to the project `Logger` surface), `cache.ts`
     (the `MAX_POI_CACHE_ENTRIES` and `MAX_BBOX_CACHE_ENTRIES` ceilings),
+    `detail-store.ts` (the generic disk-backed detail store: an atomic-write,
+    debounced, retention-bounded, entry-capped JSON store generic over the
+    value type with a caller-supplied guard, node-only; the ActiveCaptain
+    `poi-store.ts` binds it directly, and the OpenSeaMap and NOAA ENC sources
+    reach it through `hydrated-detail-cache.ts`, so a restart offline does not
+    blank them), `hydrated-detail-cache.ts` (the LRU-plus-store lifecycle glue
+    the OpenSeaMap and NOAA ENC sources share: hydrates the detail LRU from
+    disk at construction, mirrors inserts to the store, and on close flushes
+    the pending write, drops the store reference so a late list resolution
+    persists nothing, and clears the cache),
     `relative-time-format.ts` (the `formatRelativeDelta` unit-stepping the
     panel's status bar and the ActiveCaptain detail renderer share),
     `namespaced-id.ts` (the `splitOnFirstSeparator` helper, plus its

@@ -53,7 +53,7 @@ function fakeStatus (): { events: string[], status: FakeStatus } {
       events.push(`skipped:${source}:${reason}`)
       skipped.add(source)
     },
-    wasJustSkipped: (source) => skipped.has(source),
+    wasListFetchSuppressed: (source) => skipped.has(source),
     snapshot: () => ({ sources: [], cachedPoiCount: 0, recentErrors: [], startedAt: '' })
   }
   return { events, status }
@@ -170,7 +170,11 @@ test('getDetails returns a fully rendered detail view with attribution', async (
     // note-builder tests). This source-level check confirms the inline
     // footer has been removed.
     assert.doesNotMatch(view.description, /crows-nest-attribution/)
-    assert.ok(events.includes(`detail-ok:${USCG_LIGHT_LIST_SOURCE_ID}`))
+    // getDetails serves from the in-memory index with no HTTP, so it records
+    // no reachability evidence: a local serve must not flip apiReachable and
+    // mask a failing NAVCEN refresh. This mirrors the OpenSeaMap and NOAA ENC
+    // cache-hit paths.
+    assert.ok(!events.includes(`detail-ok:${USCG_LIGHT_LIST_SOURCE_ID}`))
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

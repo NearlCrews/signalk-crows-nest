@@ -66,7 +66,7 @@ const silentStatus = {
   recordDetailSuccess: () => {},
   recordError: () => {},
   recordSkipped: () => {},
-  wasJustSkipped: () => false
+  wasListFetchSuppressed: () => false
 }
 
 const context = {
@@ -149,7 +149,7 @@ test('listPointsOfInterest keeps a successful source when another fails', async 
       recordDetailSuccess: () => {},
       recordError: (_source: string, message: string) => errors.push(message),
       recordSkipped: () => {},
-      wasJustSkipped: () => false
+      wasListFetchSuppressed: () => false
     }
   } as never
   const source = createInputRegistry([failing, ok]).createSource(failContext)
@@ -188,7 +188,7 @@ test('listPointsOfInterest records each source list outcome onto the per-source 
       recordDetailSuccess: () => {},
       recordError: (_source: string, message: string) => errors.push(message),
       recordSkipped: () => {},
-      wasJustSkipped: () => false
+      wasListFetchSuppressed: () => false
     }
   } as never
   const source = createInputRegistry([ok, failing]).createSource(recordingContext)
@@ -288,7 +288,7 @@ test('listPointsOfInterest times out a slow source, ships the others, and record
       recordDetailSuccess: () => {},
       recordError: () => {},
       recordSkipped: (source: string, reason: string) => skips.push({ source, reason }),
-      wasJustSkipped: () => false
+      wasListFetchSuppressed: () => false
     }
   } as never
   const registry = createInputRegistry([slow, fast], { perSourceListTimeoutMs: 25 })
@@ -374,7 +374,7 @@ test('listPointsOfInterest does NOT record a list fetch when a source returned e
       recordDetailSuccess: () => {},
       recordError: () => {},
       recordSkipped: () => { skipFlag.current = true },
-      wasJustSkipped: (source: string) => source === 'skipper' && skipFlag.current
+      wasListFetchSuppressed: (source: string) => source === 'skipper' && skipFlag.current
     }
   } as never
   const source = createInputRegistry([fetchEmpty, fetchTwo]).createSource(skipAwareContext)
@@ -385,7 +385,7 @@ test('listPointsOfInterest does NOT record a list fetch when a source returned e
 })
 
 test('a source that skipped on one tick is not frozen out of recording a later real fetch', async () => {
-  // Regression for the sticky-justSkipped freeze: a US-only source gates
+  // Regression for the sticky-suppression freeze: a US-only source gates
   // itself out (recordSkipped + empty return) on tick 1, then returns POIs
   // on tick 2 after re-entering US waters. The later real fetch MUST be
   // recorded; with the old flag lifecycle, recordListFetch was gated behind
@@ -418,4 +418,30 @@ test('a source that skipped on one tick is not frozen out of recording a later r
     'the real fetch after a skip is recorded, not suppressed for the rest of the run'
   )
   assert.equal(row?.lastListFetch?.poiCount, 1)
+})
+
+test('a source that served stale offline data ships its markers but is not recorded as a reachable fetch', async () => {
+  // Offline restart: the source cannot reach upstream, so it serves cached
+  // markers and calls recordStaleServe. The aggregate must union those markers
+  // (offline hazard visibility) while leaving the source's recorded error state
+  // in place: apiReachable must NOT flip to true, and no list fetch is recorded.
+  // Uses the real PluginStatus so the freshness signal's interaction with the
+  // registry's gate is exercised end to end.
+  const status = createPluginStatus([{ source: 'stale', name: 'Stale Source' }])
+  const staleModule = stubModule('stale', true, stubSource('stale', {
+    list: async () => {
+      status.recordStaleServe?.('stale', 'upstream unreachable')
+      return [summary('1', 'stale'), summary('2', 'stale')]
+    }
+  }))
+  const ctx = { app: {}, config: {}, dataDir: '/tmp', status } as never
+  const source = createInputRegistry([staleModule]).createSource(ctx)
+
+  const list = await source.listPointsOfInterest(SAMPLE_BBOX, '')
+  assert.deepEqual(list.map((poi) => poi.id).sort(), ['stale-1', 'stale-2'],
+    'the cached markers are still shipped so hazards stay visible offline')
+
+  const row = status.snapshot(0).sources.find((s) => s.source === 'stale')
+  assert.equal(row?.apiReachable, false, 'a stale offline serve is not laundered into reachable')
+  assert.equal(row?.lastListFetch, null, 'no list fetch is recorded for a stale serve')
 })

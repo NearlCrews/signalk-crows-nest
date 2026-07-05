@@ -12,7 +12,6 @@
  * the produced note, not inline in the rendered description.
  */
 
-import { LRUCache } from 'lru-cache'
 import type { OverpassClient, OverpassElement } from './overpass-client.js'
 import { renderOpenSeaMapDetail, readFamilyTags, readLightTags } from './openseamap-detail.js'
 import { buildOpenSeaMapSections } from './openseamap-sections.js'
@@ -24,9 +23,15 @@ import {
   elementOsmUrl,
   toSummary
 } from './element-summary.js'
-import { fetchDetailRecorded, type PoiSource } from '../poi-source.js'
+import {
+  fetchDetailRecorded,
+  fetchListWithOfflineFallback,
+  staleSummariesWithinBbox,
+  type PoiSource
+} from '../poi-source.js'
 import { createBboxDebounceCache } from '../../shared/bbox-debounce.js'
-import { MAX_BBOX_CACHE_ENTRIES, MAX_POI_CACHE_ENTRIES } from '../../shared/cache.js'
+import { MAX_BBOX_CACHE_ENTRIES } from '../../shared/cache.js'
+import { createHydratedDetailCache } from '../../shared/hydrated-detail-cache.js'
 import { splitOnFirstUnderscore } from '../../shared/namespaced-id.js'
 import { OPENSEAMAP_SOURCE_ID } from '../../shared/source-ids.js'
 import type { Bbox, PoiDetailView, PoiSummary } from '../../shared/types.js'
@@ -58,6 +63,42 @@ export interface OpenSeaMapSourceConfig {
    * alongside its list fetches.
    */
   status: PluginStatus
+  /**
+   * Plugin data directory, for the on-disk detail store that survives a
+   * restart. Optional so a fixture that does not exercise persistence can omit
+   * it; the production input module always supplies it. When absent the source
+   * runs in memory only.
+   */
+  dataDir?: string
+}
+
+/** Name of the JSON file the OpenSeaMap detail store persists to. */
+const STORE_FILE_NAME = 'openseamap-cache.json'
+
+/** The OSM element types the store guard accepts. */
+const OSM_ELEMENT_TYPES: ReadonlySet<string> = new Set(['node', 'way', 'relation'])
+
+/**
+ * Narrow an unknown, JSON-parsed value to an {@link OverpassElement}. Checks the
+ * fields the summary and detail builders dereference (`type`, `id`, `tags`, and
+ * a numeric `position`), so a hydrated entry cannot crash the renderer.
+ */
+function isOverpassElement (value: unknown): value is OverpassElement {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+  const element = value as { type?: unknown, id?: unknown, tags?: unknown, position?: unknown }
+  if (typeof element.type !== 'string' || !OSM_ELEMENT_TYPES.has(element.type)) {
+    return false
+  }
+  if (typeof element.id !== 'number' || typeof element.tags !== 'object' || element.tags === null) {
+    return false
+  }
+  const position = element.position as { latitude?: unknown, longitude?: unknown } | null
+  if (typeof position !== 'object' || position === null) {
+    return false
+  }
+  return typeof position.latitude === 'number' && typeof position.longitude === 'number'
 }
 
 /**
@@ -97,15 +138,20 @@ function toDetailView (element: OverpassElement): PoiDetailView {
 
 /** Create the OpenSeaMap POI source. */
 export function createOpenSeaMapSource (config: OpenSeaMapSourceConfig): PoiSource {
-  const { client, seamarkGroups, minimumYear, refreshSeconds, status } = config
+  const { client, seamarkGroups, minimumYear, refreshSeconds, status, dataDir } = config
 
   // The seamark filter is fixed for the life of the source: the configured
   // groups do not change without a plugin restart.
   const regex = seamarkRegex(seamarkGroups)
 
-  // Detail cache, populated from every list query. `getDetails` queries
-  // Overpass by id only on a miss.
-  const cache = new LRUCache<string, OverpassElement>({ max: MAX_POI_CACHE_ENTRIES })
+  // Detail cache, populated from every list query and hydrated from the
+  // on-disk store so a cold start offline still renders previously fetched
+  // elements. `getDetails` queries Overpass by id only on a miss.
+  const { cache, persist, close: closeCache } = createHydratedDetailCache<OverpassElement>({
+    dataDir,
+    fileName: STORE_FILE_NAME,
+    isValue: isOverpassElement
+  })
   // Per-bbox debounce: a Freeboard refresh burst on the same view reuses
   // the raw Overpass elements for `refreshSeconds` before re-querying. The
   // cache holds raw elements (not summaries) so the per-call tagging,
@@ -126,12 +172,25 @@ export function createOpenSeaMapSource (config: OpenSeaMapSourceConfig): PoiSour
       // next list call rather than after the TTL, and so a click on a
       // marker whose detail entry has been LRU-evicted between two list
       // calls re-seeds rather than re-fetching upstream.
-      const elements = await bboxCache.get(bbox, (fetchBbox) =>
-        client.listPointsOfInterest(fetchBbox, regex))
+      const outcome = await fetchListWithOfflineFallback(
+        status,
+        OPENSEAMAP_SOURCE_ID,
+        'Overpass unreachable',
+        () => bboxCache.get(bbox, (fetchBbox) =>
+          client.listPointsOfInterest(fetchBbox, regex)),
+        () => filterByMinimumYear(
+          staleSummariesWithinBbox(cache.values(), bbox,
+            (element) => element.position, toSummary),
+          minimumYear)
+      )
+      if (outcome.kind === 'stale') {
+        return outcome.summaries
+      }
       const summaries: PoiSummary[] = []
-      for (const element of elements) {
+      for (const element of outcome.value) {
         const summary = toSummary(element)
         cache.set(summary.id, element)
+        persist(summary.id, element)
         summaries.push(summary)
       }
       // Year filter is applied source-side so the rest of the pipeline
@@ -158,13 +217,17 @@ export function createOpenSeaMapSource (config: OpenSeaMapSourceConfig): PoiSour
         throw new Error(`No OpenSeaMap element found for "${id}"`)
       }
       cache.set(id, element)
+      persist(id, element)
       return toDetailView(element)
     },
     cacheSize: () => cache.size,
     close: () => {
-      // Drop the in-memory detail LRU on close so a per-config-change restart
-      // does not carry a stopped run's entries, matching the NOAA ENC source.
-      cache.clear()
+      // Flush any debounced write so a clean shutdown persists every element
+      // fetched during the run, then drop the in-memory detail LRU so a
+      // per-config-change restart does not carry a stopped run's entries,
+      // matching the NOAA ENC source. The on-disk store is left in place so a
+      // later cold start can hydrate it.
+      closeCache()
       bboxCache.clear()
       client.close()
     }

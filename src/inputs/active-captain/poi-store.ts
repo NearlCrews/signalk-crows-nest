@@ -1,88 +1,44 @@
 /**
- * Disk-backed key-value store of point-of-interest detail.
+ * Disk-backed store of ActiveCaptain point-of-interest detail.
  *
- * The store persists detail responses to a single JSON file in the plugin's
- * data directory so the in-memory cache (see `poi-cache.ts`) can be hydrated on
- * a cold start, giving the plugin offline data without a network round-trip.
+ * A thin binding of the shared `detail-store.ts` mechanism (debounced atomic
+ * writes, long retention, capped entries, resilient reads) to the ActiveCaptain
+ * value type and file name. The in-memory cache (see `poi-cache.ts`) hydrates
+ * from it on a cold start, giving the plugin offline data without a network
+ * round-trip; entries past the in-memory freshness TTL but within retention
+ * hydrate as stale-but-usable.
  *
- * Retention is deliberately long (30 days by default) and INDEPENDENT of the
- * in-memory freshness TTL: POI details are nearly static (a marina does not
- * move), so an entry past its freshness window is still the best available
- * answer when the vessel is offline. The cache hydrates old entries as
- * stale-but-usable and serves them when a refetch fails; retention only bounds
- * how long the file keeps growing with places the vessel has left behind.
- *
- * Every read and write is resilient: a missing, unreadable, or corrupt store
- * file never throws to the caller, the store simply behaves as if it were
- * empty. A failed write is swallowed, the entry survives in memory and is
- * re-fetched on a future cold start.
- *
- * Writes are debounced. A `persist` updates the in-memory mirror and schedules
- * one file write a short while later, so a burst of detail loads collapses into
- * a single rewrite rather than rewriting the whole file once per POI. `flush`
- * forces a pending write out at once; the plugin calls it on stop so a clean
- * shutdown loses nothing.
+ * The store file is versioned at 2: version 1 files persisted the detail under
+ * a `details` field where the shared store uses `value`, so a leftover version
+ * 1 file is discarded on load and the cache regenerates from the live API.
  */
 
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { MAX_POI_CACHE_ENTRIES } from '../../shared/cache.js'
-import { MINUTES_PER_DAY, MS_PER_MINUTE } from '../../shared/time.js'
+import {
+  createDetailStore,
+  DEFAULT_DETAIL_STORE_RETENTION_MINUTES,
+  type DetailStore,
+  type StoredEntry
+} from '../../shared/detail-store.js'
 import type { PoiDetails } from './active-captain-types.js'
 
 /** Name of the JSON file the store persists to inside the data directory. */
 const STORE_FILE_NAME = 'poi-cache.json'
+
+/** On-disk format version; see the module comment for the history. */
+const STORE_VERSION = 2
 
 /**
  * Default on-disk retention, in minutes: 30 days. Entries older than this are
  * dropped on `load`. The window bounds file growth, not data freshness; the
  * in-memory cache's own TTL decides when an entry is refetched while online.
  */
-export const DEFAULT_STORE_RETENTION_MINUTES = 30 * MINUTES_PER_DAY
-
-/**
- * How long, in milliseconds, a `persist` waits before the file write runs. A
- * burst of loads inside this window collapses into one rewrite of the store.
- */
-const WRITE_DEBOUNCE_MS = 1000
-
-/** On-disk format version, bumped if the file layout ever changes. */
-const STORE_VERSION = 1
+export const DEFAULT_STORE_RETENTION_MINUTES = DEFAULT_DETAIL_STORE_RETENTION_MINUTES
 
 /** A point-of-interest detail entry as held in the store, with its age. */
-export interface StoredPoi {
-  /** Epoch milliseconds at which the entry was persisted. */
-  timestamp: number
-  /** The cached detail response. */
-  details: PoiDetails
-}
-
-/** The on-disk shape of the store file. */
-interface StoreFile {
-  version: number
-  entries: Record<string, StoredPoi>
-}
+export type StoredPoi = StoredEntry<PoiDetails>
 
 /** Public surface of the persistent point-of-interest detail store. */
-export interface PoiStore {
-  /**
-   * Read the retained entries from disk, keyed by point-of-interest id.
-   * Entries older than the retention window are dropped; entries past the
-   * in-memory freshness TTL but within retention are returned (the cache
-   * hydrates them as stale-but-usable for offline reads). A missing or
-   * corrupt store file yields an empty map rather than an error.
-   */
-  load: () => Map<string, StoredPoi>
-  /**
-   * Record (or replace) one entry, stamped with the current time, and schedule
-   * a debounced write of the whole store to disk.
-   */
-  persist: (id: string, details: PoiDetails) => void
-  /** Write any pending debounced change to disk now. */
-  flush: () => void
-  /** Drop every persisted entry and remove the backing file. */
-  clear: () => void
-}
+export type PoiStore = DetailStore<PoiDetails>
 
 /**
  * Narrow an unknown value to {@link PoiDetails}. This checks the fields the
@@ -106,28 +62,6 @@ function isPoiDetails (value: unknown): value is PoiDetails {
   )
 }
 
-/** Narrow an unknown value to a {@link StoredPoi}. */
-function isStoredPoi (value: unknown): value is StoredPoi {
-  if (typeof value !== 'object' || value === null) {
-    return false
-  }
-  const entry = value as Partial<StoredPoi>
-  return typeof entry.timestamp === 'number' && isPoiDetails(entry.details)
-}
-
-/** Narrow an unknown parsed value to a {@link StoreFile}. */
-function isStoreFile (value: unknown): value is StoreFile {
-  if (typeof value !== 'object' || value === null) {
-    return false
-  }
-  const file = value as Partial<StoreFile>
-  return (
-    file.version === STORE_VERSION &&
-    typeof file.entries === 'object' &&
-    file.entries !== null
-  )
-}
-
 /**
  * Create a persistent point-of-interest detail store.
  *
@@ -142,135 +76,11 @@ export function createPoiStore (
   directoryPath: string,
   retentionMinutes: number = DEFAULT_STORE_RETENTION_MINUTES
 ): PoiStore {
-  const filePath = join(directoryPath, STORE_FILE_NAME)
-  const retentionMs = retentionMinutes * MS_PER_MINUTE
-
-  // In-memory mirror of the on-disk store, kept current so each persist can
-  // rewrite the whole file without re-reading it. Populated by load().
-  let entries: Record<string, StoredPoi> = {}
-
-  // A pending debounced write, or undefined when no write is scheduled.
-  let writeTimer: NodeJS.Timeout | undefined
-
-  // Write the in-memory mirror to disk. Writes go to a temp file that is then
-  // renamed over the target, so a crash mid-write cannot corrupt the store.
-  // The temp path is fixed (no pid), so at most one stale temp file can ever
-  // exist; the next write truncates and reuses it. A failed rename unlinks the
-  // temp file so a write error does not leave debris behind.
-  const tempPath = `${filePath}.tmp`
-
-  // Bound the mirror at the in-memory cache's own ceiling by dropping the
-  // oldest entries past the cap. With the 30-day retention this is what
-  // keeps a month-long cruise from growing the file, the startup parse, and
-  // the hydration loop without limit; pruning happens on each write, so a
-  // long-running process is bounded too, not only the next restart.
-  const pruneToCap = (): void => {
-    const ids = Object.keys(entries)
-    if (ids.length <= MAX_POI_CACHE_ENTRIES) {
-      return
-    }
-    ids.sort((a, b) => entries[a].timestamp - entries[b].timestamp)
-    for (const id of ids.slice(0, ids.length - MAX_POI_CACHE_ENTRIES)) {
-      delete entries[id]
-    }
-  }
-
-  const writeFile = (): void => {
-    pruneToCap()
-    const payload: StoreFile = { version: STORE_VERSION, entries }
-    mkdirSync(directoryPath, { recursive: true })
-    writeFileSync(tempPath, JSON.stringify(payload))
-    try {
-      renameSync(tempPath, filePath)
-    } catch (error) {
-      rmSync(tempPath, { force: true })
-      throw error
-    }
-  }
-
-  // Run a pending write now, cancelling the debounce timer. A failed write is
-  // swallowed: the entry stays in the in-memory mirror and is re-fetched on a
-  // future cold start.
-  const flush = (): void => {
-    if (writeTimer === undefined) {
-      return
-    }
-    clearTimeout(writeTimer)
-    writeTimer = undefined
-    try {
-      writeFile()
-    } catch {
-      // A failed write must not crash the plugin.
-    }
-  }
-
-  return {
-    load: (): Map<string, StoredPoi> => {
-      const result = new Map<string, StoredPoi>()
-      entries = {}
-
-      let raw: string
-      try {
-        raw = readFileSync(filePath, 'utf8')
-      } catch {
-        // No store file yet (first run), or it cannot be read: start empty.
-        return result
-      }
-
-      let parsed: unknown
-      try {
-        parsed = JSON.parse(raw)
-      } catch {
-        // Corrupt JSON: discard the file's contents and start empty.
-        return result
-      }
-
-      if (!isStoreFile(parsed)) {
-        // A readable file of the wrong shape (e.g. an older format): ignore it.
-        return result
-      }
-
-      const cutoff = Date.now() - retentionMs
-      for (const [id, entry] of Object.entries(parsed.entries)) {
-        if (!isStoredPoi(entry) || entry.timestamp < cutoff) {
-          // Malformed, or older than the retention window: drop it from both
-          // the map and the mirror.
-          continue
-        }
-        entries[id] = entry
-        result.set(id, entry)
-      }
-      return result
-    },
-
-    persist: (id: string, details: PoiDetails): void => {
-      entries[id] = { timestamp: Date.now(), details }
-      // Coalesce a burst of detail loads into one file write: a dense scan can
-      // persist many POIs in quick succession, and rewriting the whole store
-      // file on each one would block the event loop repeatedly. The timer is
-      // unref'd so a pending write never holds the process open.
-      if (writeTimer === undefined) {
-        writeTimer = setTimeout(flush, WRITE_DEBOUNCE_MS)
-        writeTimer.unref()
-      }
-    },
-
-    flush,
-
-    clear: (): void => {
-      if (writeTimer !== undefined) {
-        clearTimeout(writeTimer)
-        writeTimer = undefined
-      }
-      entries = {}
-      try {
-        rmSync(filePath, { force: true })
-        // Also remove any `.tmp` sibling a failed rename may have left behind,
-        // so a wipe leaves no debris.
-        rmSync(tempPath, { force: true })
-      } catch {
-        // Nothing persisted, or a file cannot be removed: nothing to do.
-      }
-    }
-  }
+  return createDetailStore<PoiDetails>({
+    directoryPath,
+    fileName: STORE_FILE_NAME,
+    isValue: isPoiDetails,
+    retentionMinutes,
+    version: STORE_VERSION
+  })
 }

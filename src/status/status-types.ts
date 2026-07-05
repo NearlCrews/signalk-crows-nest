@@ -41,6 +41,15 @@ export interface SourceStatus {
   apiReachable: boolean | null
   /** The source's most recent successful list fetch, or null if none has happened. */
   lastListFetch: LastListFetch | null
+  /**
+   * Why the source most recently declined to issue a request, e.g. `outside US
+   * waters` for a US-only source offshore, or null when the source is not
+   * currently skipping. Cleared the moment a real request succeeds or fails, so
+   * a set value means the source's last recorded action was a deliberate skip.
+   * The panel surfaces it as an idle explanation so an intentionally quiet
+   * source does not read as broken.
+   */
+  lastSkipReason: string | null
 }
 
 /** A point-in-time view of the plugin's health, served to the config panel. */

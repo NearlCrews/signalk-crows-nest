@@ -199,10 +199,12 @@ export function createUscgLightListSource (
       if (record.modifiedDate !== undefined) {
         view.timestamp = record.modifiedDate
       }
-      // The light list is held in memory, so getDetails always serves locally. Record a detail
-      // success: the status surface reports it as detail-ok, distinct from the list and refresh
-      // calls that signal upstream API reachability.
-      status.recordDetailSuccess(USCG_LIGHT_LIST_SOURCE_ID)
+      // The light list is held in memory, so getDetails always serves from the
+      // local index without issuing HTTP. A purely local serve is not evidence
+      // of NAVCEN reachability, so it records no status: only the refresh path's
+      // real requests drive apiReachable. This mirrors the OpenSeaMap and NOAA
+      // ENC cache-hit paths, so a failing refresh is not masked while the user
+      // clicks already-loaded markers.
       return view
     },
     // The store exposes its live record total in O(1) (per-record tile

@@ -17,15 +17,20 @@
  * OpenSeaMap source already uses.
  */
 
-import { LRUCache } from 'lru-cache'
 import type { EncDirectClient } from './enc-direct-client.js'
 import type { EncFeature, EncLayerKey, ScaleBand } from './enc-direct-types.js'
 import { humanizeCategory, LAYER_LABEL, LAYER_POI_TYPE, LAYER_SK_ICON, sordatToIsoTimestamp } from './s57-mapping.js'
 import { renderEncDirectDetail } from './enc-direct-detail.js'
 import { buildNoaaEncSections } from './noaa-enc-sections.js'
-import { fetchDetailRecorded, type PoiSource } from '../poi-source.js'
+import {
+  fetchDetailRecorded,
+  fetchListWithOfflineFallback,
+  staleSummariesWithinBbox,
+  type PoiSource
+} from '../poi-source.js'
 import { createBboxDebounceCache } from '../../shared/bbox-debounce.js'
-import { MAX_BBOX_CACHE_ENTRIES, MAX_POI_CACHE_ENTRIES } from '../../shared/cache.js'
+import { MAX_BBOX_CACHE_ENTRIES } from '../../shared/cache.js'
+import { createHydratedDetailCache } from '../../shared/hydrated-detail-cache.js'
 import { splitOnFirstUnderscore } from '../../shared/namespaced-id.js'
 import { isValidLatitude, isValidLongitude } from '../../shared/numbers.js'
 import type { Bbox, PoiDetailView, PoiSummary, Position } from '../../shared/types.js'
@@ -74,7 +79,17 @@ export interface NoaaEncSourceConfig {
   status: PluginStatus
   /** Returns the most recent vessel position, or undefined when unknown. */
   getCurrentPosition: () => Position | undefined
+  /**
+   * Plugin data directory, for the on-disk detail store that survives a
+   * restart. Optional so a fixture that does not exercise persistence can omit
+   * it; the production input module always supplies it. When absent the source
+   * runs in memory only.
+   */
+  dataDir?: string
 }
+
+/** Name of the JSON file the NOAA ENC detail store persists to. */
+const STORE_FILE_NAME = 'noaa-enc-cache.json'
 
 /** Resolve the set of enabled hazard layers from the per-layer config flags. */
 function enabledLayers (config: NoaaEncSourceConfig): EncLayerKey[] {
@@ -98,6 +113,29 @@ function featureObjectId (feature: EncFeature): number | undefined {
 
 /** The hazard layer keys a summary id can carry, the subset of EncLayerKey this source publishes. */
 const HAZARD_LAYER_KEYS = ['wreck', 'obstruction', 'rock'] as const
+
+/**
+ * Narrow an unknown, JSON-parsed value to a {@link CachedFeature}. Checks the
+ * hazard layer key and that the feature carries a `properties` bag, the two
+ * things `toDetailView` dereferences, so a hydrated entry cannot crash the
+ * renderer. Coordinates are validated later by `featureLatLon`, which treats a
+ * malformed geometry as a miss.
+ */
+function isCachedFeature (value: unknown): value is CachedFeature {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+  const cached = value as { layerKey?: unknown, feature?: unknown }
+  if (typeof cached.layerKey !== 'string' ||
+    !HAZARD_LAYER_KEYS.some((key) => key === cached.layerKey)) {
+    return false
+  }
+  const feature = cached.feature as { properties?: unknown } | null
+  if (typeof feature !== 'object' || feature === null) {
+    return false
+  }
+  return typeof feature.properties === 'object' && feature.properties !== null
+}
 
 /** Parse a summary id back into `(layerKey, objectId)` for a getById call. */
 function parseSummaryId (id: string): { layerKey: EncLayerKey, objectId: number } | undefined {
@@ -192,8 +230,14 @@ type LayerFeatures = Array<{ layerKey: EncLayerKey, features: EncFeature[] }>
 
 /** Create the NOAA ENC Direct POI source. */
 export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
-  const { client, band, minimumYear, refreshSeconds, status, getCurrentPosition } = config
-  const cache = new LRUCache<string, CachedFeature>({ max: MAX_POI_CACHE_ENTRIES })
+  const { client, band, minimumYear, refreshSeconds, status, getCurrentPosition, dataDir } = config
+  // Detail cache, hydrated from the on-disk store so a cold start offline
+  // still renders previously fetched features.
+  const { cache, persist, close: closeCache } = createHydratedDetailCache<CachedFeature>({
+    dataDir,
+    fileName: STORE_FILE_NAME,
+    isValue: isCachedFeature
+  })
   // Per-bbox debounce: a Freeboard refresh burst on the same view reuses
   // the raw layer features for `refreshSeconds` before re-querying upstream.
   // The cache holds raw per-layer features (not summaries) so the per-call
@@ -205,6 +249,27 @@ export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
   // so the array is built once at construction rather than on every list
   // call.
   const layers = enabledLayers(config)
+
+  // The offline fallback's per-source half: the cheap coordinate extraction
+  // runs before the full summary build, so an out-of-box feature costs no
+  // summary construction, and the year filter drops filtered features from
+  // the stale serve exactly as the fresh path does.
+  const rebuildStale = (bbox: Bbox): PoiSummary[] =>
+    staleSummariesWithinBbox(
+      cache.values(),
+      bbox,
+      (cached) => {
+        const latLon = featureLatLon(cached.feature)
+        return latLon === null
+          ? undefined
+          : { latitude: latLon.lat, longitude: latLon.lon }
+      },
+      (cached) => {
+        const summary = toSummary(cached.layerKey, cached.feature)
+        if (summary === null) return null
+        return passesMinimumYear(summary.timestamp, minimumYear) ? summary : null
+      }
+    )
 
   return {
     id: NOAA_ENC_SOURCE_ID,
@@ -228,47 +293,56 @@ export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
       // next list call rather than after the TTL, and so the detail LRU is
       // re-seeded on every cache hit rather than going stale alongside the
       // bbox cache.
-      const cached = await bboxCache.get(bbox, async (fetchBbox) => {
-        const results = await Promise.allSettled(
-          layers.map(async (layerKey) => {
-            const response = await client.queryLayer({ band, layerKey, bbox: fetchBbox })
-            return { layerKey, features: response.features }
-          })
-        )
-        const layerFeatures: LayerFeatures = []
-        let anyLayerOk = false
-        let firstRejection: unknown
-        for (const result of results) {
-          if (result.status === 'rejected') {
-            status.recordError(
-              NOAA_ENC_SOURCE_ID,
-              `Layer query failed: ${String(result.reason)}`
-            )
-            if (firstRejection === undefined) firstRejection = result.reason
-            continue
-          }
-          anyLayerOk = true
-          layerFeatures.push(result.value)
-        }
-        // If every enabled layer rejected, the source itself failed: reject
-        // rather than returning a fulfilled empty result, so the aggregate
-        // registry's "any source succeeded" check trips correctly and
-        // apiReachable is not flipped to true via recordListFetch(0). A
-        // rejection from the wrapped fetcher is not cached, so the next
-        // tick retries the upstream.
-        if (!anyLayerOk) {
-          throw new Error(
-            `Every enabled NOAA ENC layer query failed: ${String(firstRejection)}`
+      const outcome = await fetchListWithOfflineFallback(
+        status,
+        NOAA_ENC_SOURCE_ID,
+        'NOAA ENC unreachable',
+        () => bboxCache.get(bbox, async (fetchBbox) => {
+          const results = await Promise.allSettled(
+            layers.map(async (layerKey) => {
+              const response = await client.queryLayer({ band, layerKey, bbox: fetchBbox })
+              return { layerKey, features: response.features }
+            })
           )
-        }
-        return layerFeatures
-      // Only cache a full result. A partial result (a layer transiently
-      // failed) is returned for this call but not cached, so the failed
-      // layer is retried on the next call rather than its POIs staying absent
-      // for the whole debounce window.
-      }, undefined, (layerFeatures) => layerFeatures.length === layers.length)
+          const layerFeatures: LayerFeatures = []
+          let anyLayerOk = false
+          let firstRejection: unknown
+          for (const result of results) {
+            if (result.status === 'rejected') {
+              status.recordError(
+                NOAA_ENC_SOURCE_ID,
+                `Layer query failed: ${String(result.reason)}`
+              )
+              if (firstRejection === undefined) firstRejection = result.reason
+              continue
+            }
+            anyLayerOk = true
+            layerFeatures.push(result.value)
+          }
+          // If every enabled layer rejected, the source itself failed: reject
+          // rather than returning a fulfilled empty result, so the aggregate
+          // registry's "any source succeeded" check trips correctly and
+          // apiReachable is not flipped to true via recordListFetch(0). A
+          // rejection from the wrapped fetcher is not cached, so the next
+          // tick retries the upstream.
+          if (!anyLayerOk) {
+            throw new Error(
+              `Every enabled NOAA ENC layer query failed: ${String(firstRejection)}`
+            )
+          }
+          return layerFeatures
+        // Only cache a full result. A partial result (a layer transiently
+        // failed) is returned for this call but not cached, so the failed
+        // layer is retried on the next call rather than its POIs staying absent
+        // for the whole debounce window.
+        }, undefined, (layerFeatures) => layerFeatures.length === layers.length),
+        () => rebuildStale(bbox)
+      )
+      if (outcome.kind === 'stale') {
+        return outcome.summaries
+      }
       const summaries: PoiSummary[] = []
-      for (const { layerKey, features } of cached) {
+      for (const { layerKey, features } of outcome.value) {
         for (const feature of features) {
           // A feature with no OBJECTID, no geometry, or out-of-range
           // coordinates is dropped rather than minting an
@@ -281,7 +355,19 @@ export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
           // is never placed, so caching it would only evict entries a
           // click-through can actually reach.
           if (!passesMinimumYear(summary.timestamp, minimumYear)) continue
-          cache.set(summary.id, { layerKey, feature })
+          // Reuse the cached wrapper when the feature reference is unchanged
+          // (a bbox-debounce hit returns the same features): the store's
+          // same-value persist guard then sees an identical reference, so a
+          // stationary viewport does not rewrite an unchanged store file.
+          const existing = cache.get(summary.id)
+          const cachedFeature =
+            existing !== undefined &&
+            existing.feature === feature &&
+            existing.layerKey === layerKey
+              ? existing
+              : { layerKey, feature }
+          cache.set(summary.id, cachedFeature)
+          persist(summary.id, cachedFeature)
           summaries.push(summary)
         }
       }
@@ -301,6 +387,15 @@ export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
       if (parsed === undefined) {
         throw new Error(`Malformed NOAA ENC id "${id}"`)
       }
+      // Gate outbound HTTP on the vessel position, mirroring the list path: a
+      // detail click on a stale marker (one Freeboard still shows from before
+      // the vessel left US waters) must not issue a NOAA request offshore. On
+      // a skip, behave as a miss and record the skip, exactly as the list path
+      // does. A cached or hydrated hit was already served above, so this only
+      // gates a genuine miss.
+      if (shouldSkipOutsideUsWaters(getCurrentPosition, status, NOAA_ENC_SOURCE_ID)) {
+        throw new Error(`No NOAA ENC feature for "${id}"`)
+      }
       // The shared wrapper owns the miss-vs-outage policy: the ArcGIS query
       // answering normally keeps the source reachable even when the feature
       // is gone or carries no usable geometry, so the throws below cannot
@@ -318,6 +413,7 @@ export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
         throw new Error(`NOAA ENC feature "${id}" carries no usable geometry`)
       }
       cache.set(id, cachedFeature)
+      persist(id, cachedFeature)
       return view
     },
     // The detail cache is the user-visible "POIs the plugin has loaded"
@@ -325,7 +421,10 @@ export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
     // ephemeral, so it is intentionally not added here.
     cacheSize: () => cache.size,
     close: () => {
-      cache.clear()
+      // Flush any debounced write so a clean shutdown persists every feature
+      // fetched during the run. The on-disk store is left in place so a later
+      // cold start can hydrate it; only the in-memory caches are dropped.
+      closeCache()
       bboxCache.clear()
     }
   }

@@ -123,8 +123,8 @@ export function createPoiCache (
   // off another machine) from extending an entry beyond the TTL window.
   if (store !== undefined) {
     const now = Date.now()
-    for (const [id, entry] of store.load()) {
-      cache.set(id, entry.details, { start: Math.min(now, entry.timestamp) })
+    for (const [id, entry] of Object.entries(store.load())) {
+      cache.set(id, entry.value, { start: Math.min(now, entry.timestamp) })
     }
   }
 

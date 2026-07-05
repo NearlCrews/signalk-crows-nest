@@ -22,14 +22,20 @@ export interface PillContent {
 /**
  * Classify a SourceStatus into one of the three pill variants:
  *  - `'error'` whenever the most recent attempt failed (apiReachable=false),
- *  - `'idle'` when no list fetch has resolved yet (lastListFetch=null), and
+ *  - `'idle'` when the source is currently skipping (lastSkipReason set) or has
+ *    not resolved a list fetch yet (lastListFetch=null), and
  *  - `'ok'` otherwise.
  *
- * The error branch outranks idle: a source with a failed most-recent
- * attempt but a still-cached stale prior fetch still reads as in error.
+ * The error branch outranks idle: a source with a failed most-recent attempt
+ * but a still-cached stale prior fetch still reads as in error. A set
+ * `lastSkipReason` means the source's last recorded action was a deliberate
+ * skip (the recorder clears the reason on the next real request), so it reads
+ * as idle even when a stale prior fetch is on file: an intentionally quiet
+ * source should not masquerade as freshly ok.
  */
 export function pillVariant (status: SourceStatus): PillVariant {
   if (status.apiReachable === false) return 'error'
+  if (status.lastSkipReason !== null) return 'idle'
   if (status.lastListFetch === null) return 'idle'
   return 'ok'
 }
@@ -45,6 +51,16 @@ export function pillContent (status: SourceStatus, variant: PillVariant): PillCo
     return { glyph: '!', label: 'error', title: `${status.name}: last request failed` }
   }
   if (variant === 'idle') {
+    // A skipping source explains itself, e.g. "Idle: outside US waters", so an
+    // intentionally quiet US-only source offshore does not read as broken. With
+    // no reason it is simply awaiting its first request.
+    if (status.lastSkipReason !== null) {
+      return {
+        glyph: '…',
+        label: `Idle: ${status.lastSkipReason}`,
+        title: `${status.name}: ${status.lastSkipReason}`
+      }
+    }
     return { glyph: '…', label: 'idle', title: `${status.name}: awaiting first request` }
   }
   const fetch = status.lastListFetch as Exclude<SourceStatus['lastListFetch'], null>

@@ -19,6 +19,7 @@ function status (overrides: Partial<SourceStatus> = {}): SourceStatus {
     name: 'ActiveCaptain',
     apiReachable: null,
     lastListFetch: null,
+    lastSkipReason: null,
     ...overrides
   }
 }
@@ -55,6 +56,39 @@ test('pillContent for the idle variant shows the ellipsis glyph and an awaiting-
   assert.equal(content.glyph, '…')
   assert.equal(content.label, 'idle')
   assert.equal(content.title, 'OpenSeaMap: awaiting first request')
+})
+
+test('pillVariant returns "idle" when a source is currently skipping, even with a stale prior fetch', () => {
+  // A US-only source offshore records a skip; its previous fetch is stale but
+  // the source is deliberately quiet, so it must read as idle, not ok.
+  assert.equal(
+    pillVariant(status({
+      apiReachable: true,
+      lastListFetch: { at: '2026-05-23T08:15:00Z', poiCount: 42 },
+      lastSkipReason: 'outside US waters'
+    })),
+    'idle'
+  )
+})
+
+test('pillVariant keeps "error" over a skip reason when the most recent attempt failed', () => {
+  assert.equal(
+    pillVariant(status({
+      apiReachable: false,
+      lastSkipReason: 'outside US waters'
+    })),
+    'error'
+  )
+})
+
+test('pillContent for the idle variant surfaces the skip reason as the label and tooltip', () => {
+  const content = pillContent(
+    status({ name: 'NOAA ENC', lastSkipReason: 'outside US waters' }),
+    'idle'
+  )
+  assert.equal(content.glyph, '…')
+  assert.equal(content.label, 'Idle: outside US waters')
+  assert.equal(content.title, 'NOAA ENC: outside US waters')
 })
 
 test('pillContent for the error variant shows the bang glyph and the failure tooltip', () => {

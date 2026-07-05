@@ -11,10 +11,27 @@
  * lands in one place rather than in per-file copies.
  */
 
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { CourseInfo } from '@signalk/server-api'
 import type { PoiDetails } from '../src/inputs/active-captain/active-captain-types.js'
 import type { NotificationTrackerApp } from '../src/shared/notification-tracker.js'
 import type { PoiSummary, PoiType, Position } from '../src/shared/types.js'
+
+/**
+ * Run `body` against a fresh temp directory named with `prefix`, removing the
+ * directory afterwards even when the body throws. Used by the disk-store
+ * tests that exercise real filesystem persistence.
+ */
+export async function withTempDir (prefix: string, body: (dir: string) => Promise<void>): Promise<void> {
+  const dir = mkdtempSync(join(tmpdir(), prefix))
+  try {
+    await body(dir)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
 
 /**
  * Resolve once the pending microtasks have drained, so a fire-and-forget

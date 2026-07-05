@@ -110,7 +110,7 @@ export const openSeaMapInput: InputModule = {
   dedupeRadiusMeters: (config: PluginConfig) =>
     cappedDedupeRadius(config.openSeaMapDedupeRadiusMeters),
   createSource: (context: InputContext) => {
-    const { app, config, status } = context
+    const { app, config, status, dataDir } = context
     return createOpenSeaMapSource({
       client: createOverpassClient(resolveEndpoints(config), app),
       seamarkGroups: resolveSeamarkGroups(config.openSeaMapSeamarkGroups),
@@ -118,7 +118,8 @@ export const openSeaMapInput: InputModule = {
       refreshSeconds: clampBboxDebounceSeconds(
         config.openSeaMapRefreshSeconds, DEFAULT_OPENSEAMAP_DEBOUNCE_SECONDS
       ),
-      status
+      status,
+      dataDir
     })
   }
 }

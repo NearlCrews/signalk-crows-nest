@@ -11,10 +11,13 @@
 
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { createNoaaEncSource } from '../src/inputs/noaa-enc/noaa-enc-source.js'
 import type { EncFeature, EncLayerKey, ScaleBand } from '../src/inputs/noaa-enc/enc-direct-types.js'
 import type { Bbox } from '../src/shared/types.js'
 import { NOAA_ENC_SOURCE_ID } from '../src/shared/source-ids.js'
+import { withTempDir } from './helpers.js'
 
 interface FakeStatus {
   events: string[]
@@ -23,7 +26,8 @@ interface FakeStatus {
     recordDetailSuccess: (source: string) => void
     recordError: (source: string, message: string) => void
     recordSkipped: (source: string, reason: string) => void
-    wasJustSkipped: (source: string) => boolean
+    wasListFetchSuppressed: (source: string) => boolean
+    recordStaleServe: (source: string, reason: string) => void
     snapshot: () => unknown
   }
 }
@@ -47,7 +51,8 @@ function fakeStatus (): FakeStatus {
         events.push(`skipped:${source}:${reason}`)
         skipped.add(source)
       },
-      wasJustSkipped: (source) => skipped.has(source),
+      wasListFetchSuppressed: (source) => skipped.has(source),
+      recordStaleServe: (source, reason) => events.push(`stale:${source}:${reason}`),
       snapshot: () => ({})
     }
   }
@@ -600,6 +605,88 @@ test('listPointsOfInterest queries upstream every call when refreshSeconds is 0 
   assert.equal(calls, 2)
 })
 
+test('a listed feature survives a restart and renders offline from the on-disk store', async () => {
+  await withTempDir('noaa-enc-source-', async (dir) => {
+    // First run: list seeds the detail cache and persists to disk, then close
+    // flushes the debounced write.
+    const firstClient: FakeClient = {
+      queryLayer: async ({ layerKey }) => layerKey === 'wreck' ? { features: [namedWreck] } : { features: [] },
+      queryById: async () => undefined
+    }
+    const first = createNoaaEncSource({
+      client: firstClient as never,
+      band: 'coastal',
+      includeWrecks: true,
+      includeObstructions: false,
+      includeRocks: false,
+      minimumYear: 0,
+      refreshSeconds: 0,
+      status: fakeStatus().status as never,
+      getCurrentPosition: () => undefined,
+      dataDir: dir
+    })
+    await first.listPointsOfInterest({ south: 41, west: -72, north: 43, east: -70 }, '')
+    first.close()
+    assert.ok(existsSync(join(dir, 'noaa-enc-cache.json')), 'the detail store is written on close')
+
+    // Second run: the client is offline (queryById rejects), yet the previously
+    // fetched feature renders from the hydrated store without any upstream call.
+    let queryByIdCalls = 0
+    const offlineClient: FakeClient = {
+      queryLayer: async () => { throw new Error('offline') },
+      queryById: async () => { queryByIdCalls++; throw new Error('offline') }
+    }
+    const second = createNoaaEncSource({
+      client: offlineClient as never,
+      band: 'coastal',
+      includeWrecks: true,
+      includeObstructions: false,
+      includeRocks: false,
+      minimumYear: 0,
+      refreshSeconds: 0,
+      status: fakeStatus().status as never,
+      getCurrentPosition: () => undefined,
+      dataDir: dir
+    })
+    assert.equal(second.cacheSize(), 1, 'the store hydrates the detail cache on a cold start')
+    const view = await second.getDetails('wreck_12345')
+    assert.equal(view.name, 'SS Test')
+    assert.equal(view.type, 'Hazard')
+    assert.equal(queryByIdCalls, 0, 'a hydrated feature is served without an upstream fetch')
+    second.close()
+  })
+})
+
+test('getDetails on a cache miss skips outbound HTTP when the vessel is outside US waters', async () => {
+  // Mirrors the list-path gate: a detail click on a stale marker offshore must
+  // not issue a NOAA request. The miss records a skip and behaves as a
+  // not-found, and queryById is never called.
+  let queryByIdCalls = 0
+  const client: FakeClient = {
+    queryLayer: async () => ({ features: [] }),
+    queryById: async () => { queryByIdCalls++; return namedWreck }
+  }
+  const { events, status } = fakeStatus()
+  const source = createNoaaEncSource({
+    client: client as never,
+    band: 'coastal',
+    includeWrecks: true,
+    includeObstructions: false,
+    includeRocks: false,
+    minimumYear: 0,
+    refreshSeconds: 0,
+    status: status as never,
+    // Mediterranean off Barcelona, decidedly not US waters.
+    getCurrentPosition: () => ({ latitude: 41.38, longitude: 2.18 })
+  })
+  await assert.rejects(() => source.getDetails('wreck_404'), /wreck_404/)
+  assert.equal(queryByIdCalls, 0, 'no NOAA request is issued outside US waters')
+  assert.ok(
+    events.some(e => e.startsWith(`skipped:${NOAA_ENC_SOURCE_ID}`)),
+    'the skip is recorded like the list path does'
+  )
+})
+
 test('the summary url field points at OpenSeaMap with a marker at the feature lat/lon', async () => {
   // The previous NOAA ENC Direct URL format (`encdirect.noaa.gov/?center=...`)
   // loaded a blank page in the browser, so the source now produces an
@@ -625,4 +712,160 @@ test('the summary url field points at OpenSeaMap with a marker at the feature la
   assert.ok(summaries[0].url.startsWith('https://map.openseamap.org/'))
   assert.ok(summaries[0].url.includes('mlat=42'))
   assert.ok(summaries[0].url.includes('mlon=-71'))
+})
+
+test('an offline list falls back to hydrated features within the bbox and records a stale serve', async () => {
+  await withTempDir('noaa-enc-source-', async (dir) => {
+    // First run seeds and persists the wreck feature (at lat 42, lon -71).
+    const firstClient: FakeClient = {
+      queryLayer: async ({ layerKey }) => layerKey === 'wreck' ? { features: [namedWreck] } : { features: [] },
+      queryById: async () => undefined
+    }
+    const first = createNoaaEncSource({
+      client: firstClient as never,
+      band: 'coastal',
+      includeWrecks: true,
+      includeObstructions: false,
+      includeRocks: false,
+      minimumYear: 0,
+      refreshSeconds: 0,
+      status: fakeStatus().status as never,
+      getCurrentPosition: () => undefined,
+      dataDir: dir
+    })
+    await first.listPointsOfInterest({ south: 41, west: -72, north: 43, east: -70 }, '')
+    first.close()
+
+    // Second run is offline: every layer query fails, so the source rebuilds the
+    // marker from the hydrated detail cache and records a stale serve.
+    const offlineClient: FakeClient = {
+      queryLayer: async () => { throw new Error('offline') },
+      queryById: async () => undefined
+    }
+    const { events, status } = fakeStatus()
+    const second = createNoaaEncSource({
+      client: offlineClient as never,
+      band: 'coastal',
+      includeWrecks: true,
+      includeObstructions: false,
+      includeRocks: false,
+      minimumYear: 0,
+      refreshSeconds: 0,
+      status: status as never,
+      getCurrentPosition: () => undefined,
+      dataDir: dir
+    })
+    const list = await second.listPointsOfInterest({ south: 41, west: -72, north: 43, east: -70 }, '')
+    assert.equal(list.length, 1, 'the previously fetched wreck reappears offline')
+    assert.equal(list[0].id, 'wreck_12345')
+    assert.ok(events.some(e => e === `stale:${NOAA_ENC_SOURCE_ID}:NOAA ENC unreachable`),
+      'the offline serve is recorded as a stale serve, not a reachable fetch')
+    second.close()
+  })
+})
+
+test('an offline list with nothing cached inside the bbox rethrows the upstream error', async () => {
+  await withTempDir('noaa-enc-source-', async (dir) => {
+    const firstClient: FakeClient = {
+      queryLayer: async ({ layerKey }) => layerKey === 'wreck' ? { features: [namedWreck] } : { features: [] },
+      queryById: async () => undefined
+    }
+    const first = createNoaaEncSource({
+      client: firstClient as never,
+      band: 'coastal',
+      includeWrecks: true,
+      includeObstructions: false,
+      includeRocks: false,
+      minimumYear: 0,
+      refreshSeconds: 0,
+      status: fakeStatus().status as never,
+      getCurrentPosition: () => undefined,
+      dataDir: dir
+    })
+    await first.listPointsOfInterest({ south: 41, west: -72, north: 43, east: -70 }, '')
+    first.close()
+
+    const offlineClient: FakeClient = {
+      queryLayer: async () => { throw new Error('offline') },
+      queryById: async () => undefined
+    }
+    const { events, status } = fakeStatus()
+    const second = createNoaaEncSource({
+      client: offlineClient as never,
+      band: 'coastal',
+      includeWrecks: true,
+      includeObstructions: false,
+      includeRocks: false,
+      minimumYear: 0,
+      refreshSeconds: 0,
+      status: status as never,
+      getCurrentPosition: () => undefined,
+      dataDir: dir
+    })
+    // A box far from the cached wreck (which is at lat 42, lon -71): no offline
+    // data to serve, so the upstream failure propagates.
+    await assert.rejects(
+      () => second.listPointsOfInterest({ south: 0, west: 0, north: 1, east: 1 }, ''),
+      /Every enabled NOAA ENC layer query failed/
+    )
+    assert.ok(!events.some(e => e.startsWith(`stale:${NOAA_ENC_SOURCE_ID}`)),
+      'no stale serve is recorded when there is nothing cached to show')
+    second.close()
+  })
+})
+
+test('an offline list outside US waters skips without serving stale data, even with a populated store', async () => {
+  await withTempDir('noaa-enc-source-', async (dir) => {
+    // Seed and persist a wreck inside the query box while a fix is unknown so
+    // the gate lets the fetch through.
+    const seedClient: FakeClient = {
+      queryLayer: async ({ layerKey }) => layerKey === 'wreck' ? { features: [namedWreck] } : { features: [] },
+      queryById: async () => undefined
+    }
+    const seed = createNoaaEncSource({
+      client: seedClient as never,
+      band: 'coastal',
+      includeWrecks: true,
+      includeObstructions: false,
+      includeRocks: false,
+      minimumYear: 0,
+      refreshSeconds: 0,
+      status: fakeStatus().status as never,
+      getCurrentPosition: () => undefined,
+      dataDir: dir
+    })
+    await seed.listPointsOfInterest({ south: 41, west: -72, north: 43, east: -70 }, '')
+    seed.close()
+
+    // Now offline AND outside US waters. The store hydrates the cache, but the
+    // US-waters gate precedes the offline fallback: the list returns [] with a
+    // skip recorded, no upstream query is issued, and no stale serve is
+    // recorded, so cached US data is never shown while offshore.
+    let queryLayerCalls = 0
+    const offlineClient: FakeClient = {
+      queryLayer: async () => { queryLayerCalls++; throw new Error('offline') },
+      queryById: async () => undefined
+    }
+    const { events, status } = fakeStatus()
+    const offshore = createNoaaEncSource({
+      client: offlineClient as never,
+      band: 'coastal',
+      includeWrecks: true,
+      includeObstructions: false,
+      includeRocks: false,
+      minimumYear: 0,
+      refreshSeconds: 0,
+      status: status as never,
+      // Mediterranean off Barcelona, decidedly not US waters.
+      getCurrentPosition: () => ({ latitude: 41.38, longitude: 2.18 }),
+      dataDir: dir
+    })
+    assert.equal(offshore.cacheSize(), 1, 'the store did hydrate a cached feature inside the box')
+    const list = await offshore.listPointsOfInterest({ south: 41, west: -72, north: 43, east: -70 }, '')
+    assert.equal(list.length, 0, 'the gate returns empty offshore, never the cached US markers')
+    assert.equal(queryLayerCalls, 0, 'no upstream query is issued offshore')
+    assert.ok(events.some(e => e.startsWith(`skipped:${NOAA_ENC_SOURCE_ID}`)), 'the skip is recorded')
+    assert.ok(!events.some(e => e.startsWith(`stale:${NOAA_ENC_SOURCE_ID}`)), 'no stale serve is recorded offshore')
+    offshore.close()
+  })
 })

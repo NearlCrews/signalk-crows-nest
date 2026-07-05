@@ -81,7 +81,7 @@ export const noaaEncInput: InputModule = {
   dedupeRadiusMeters: (config: PluginConfig) =>
     cappedDedupeRadius(config.noaaEncDedupeRadiusMeters),
   createSource: (context: InputContext) => {
-    const { config, status, getCurrentPosition } = context
+    const { config, status, getCurrentPosition, dataDir } = context
     return createNoaaEncSource({
       client: createEncDirectClient(),
       band: resolveScaleBand(config.noaaEncScaleBand),
@@ -96,7 +96,8 @@ export const noaaEncInput: InputModule = {
         config.noaaEncRefreshSeconds, DEFAULT_NOAA_ENC_DEBOUNCE_SECONDS
       ),
       status,
-      getCurrentPosition
+      getCurrentPosition,
+      dataDir
     })
   }
 }
