@@ -333,7 +333,16 @@ export function bboxesOverlap (a: Bbox, b: Bbox): boolean {
   return a.west <= b.east && a.east >= b.west && a.south <= b.north && a.north >= b.south
 }
 
-/** True when a bbox contains the point (touching counts). */
+/**
+ * True when a bbox contains the point (touching counts).
+ *
+ * Antimeridian-aware: a bbox whose `west` exceeds its `east` straddles the
+ * +/-180 degree meridian (a viewport in the western Aleutians, say), so the
+ * longitude test becomes `lon >= west || lon <= east`. The `west <= east` case
+ * is the plain inclusive range.
+ */
 export function bboxContainsPoint (b: Bbox, lon: number, lat: number): boolean {
-  return lon >= b.west && lon <= b.east && lat >= b.south && lat <= b.north
+  if (lat < b.south || lat > b.north) return false
+  if (b.west <= b.east) return lon >= b.west && lon <= b.east
+  return lon >= b.west || lon <= b.east
 }

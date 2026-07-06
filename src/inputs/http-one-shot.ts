@@ -79,3 +79,25 @@ export function requestText (
     req.end()
   })
 }
+
+/**
+ * Issue a one-shot GET and parse the body as JSON, rejecting non-2xx statuses
+ * with a `label`-tagged error. The shared envelope for the raw JSON clients
+ * (the ArcGIS paging protocol and the World Port Index full dump); callers
+ * narrow the returned value themselves. JSON.parse throws only a SyntaxError
+ * (already an Error), so the parse is returned directly: a try/catch that
+ * rethrows the same value would be a no-op.
+ */
+export async function requestJson (
+  url: string,
+  headers: Record<string, string>,
+  timeoutMs: number,
+  label: string,
+  signal?: AbortSignal
+): Promise<unknown> {
+  const response = await requestText(url, headers, timeoutMs, label, signal)
+  if (response.status < 200 || response.status >= 300) {
+    throw new Error(`${label} HTTP ${response.status} for ${url}`)
+  }
+  return JSON.parse(response.body)
+}

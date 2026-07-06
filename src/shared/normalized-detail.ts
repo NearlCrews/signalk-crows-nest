@@ -89,3 +89,13 @@ export function pushSection (
     sections.push({ id, title, items })
   }
 }
+
+/** A plain-text item carrying a string value. */
+export function textItem (label: string, value: string): NormalizedItem {
+  return { label, value, kind: 'text' }
+}
+
+/** A `measure` item carrying a metric value in meters. */
+export function meterMeasureItem (label: string, meters: number): NormalizedItem {
+  return { label, value: meters, kind: 'measure', unit: 'm' }
+}

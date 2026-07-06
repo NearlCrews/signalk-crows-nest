@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { positionToBbox, projectPointOntoLeg } from '../src/geo/position-utilities.js'
-import type { Position } from '../src/shared/types.js'
+import { bboxContainsPoint, positionToBbox, projectPointOntoLeg } from '../src/geo/position-utilities.js'
+import type { Bbox, Position } from '../src/shared/types.js'
 
 /** Assert that two numbers are within `epsilon` of each other. */
 function assertClose (actual: number, expected: number, epsilon: number, message: string): void {
@@ -99,6 +99,34 @@ test('positionToBbox returns a zero-size box for a zero distance', () => {
   assertClose(bbox.south, center.latitude, 1e-9, 'south collapses onto the center')
   assertClose(bbox.east, center.longitude, 1e-9, 'east collapses onto the center')
   assertClose(bbox.west, center.longitude, 1e-9, 'west collapses onto the center')
+})
+
+test('bboxContainsPoint includes and excludes points around a non-wrapping box', () => {
+  const bbox: Bbox = { north: 43, south: 41, east: -70, west: -72 }
+
+  assert.ok(bboxContainsPoint(bbox, -71, 42), 'a point inside is contained')
+  assert.ok(!bboxContainsPoint(bbox, -69, 42), 'a point east of the box is excluded')
+  assert.ok(!bboxContainsPoint(bbox, -73, 42), 'a point west of the box is excluded')
+  assert.ok(!bboxContainsPoint(bbox, -71, 44), 'a point north of the box is excluded')
+  assert.ok(!bboxContainsPoint(bbox, -71, 40), 'a point south of the box is excluded')
+})
+
+test('bboxContainsPoint counts the box edges as inside', () => {
+  const bbox: Bbox = { north: 10, south: -10, east: 20, west: -20 }
+
+  assert.ok(bboxContainsPoint(bbox, -20, -10), 'the south-west corner is contained')
+  assert.ok(bboxContainsPoint(bbox, 20, 10), 'the north-east corner is contained')
+})
+
+test('bboxContainsPoint wraps across the antimeridian when west exceeds east', () => {
+  // A viewport in the western Aleutians straddling +/-180: west 170, east -170.
+  const bbox: Bbox = { north: 55, south: 50, east: -170, west: 170 }
+
+  assert.ok(bboxContainsPoint(bbox, 179, 52), 'a point just west of 180 is contained')
+  assert.ok(bboxContainsPoint(bbox, -179, 52), 'a point just east of -180 is contained')
+  assert.ok(bboxContainsPoint(bbox, 175, 52), 'a point at the western edge is contained')
+  assert.ok(!bboxContainsPoint(bbox, 0, 52), 'a point on the far side of the globe is excluded')
+  assert.ok(!bboxContainsPoint(bbox, 179, 40), 'a latitude outside the box is excluded even in the wrap span')
 })
 
 // An eastward leg one degree of longitude long, on the equator. Its great

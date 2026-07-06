@@ -26,6 +26,18 @@ export const USCG_LIGHT_LIST_SOURCE_ID = 'usclightlist'
 /** The NOAA ENC Direct source. */
 export const NOAA_ENC_SOURCE_ID = 'noaaenc'
 
+/** The NOAA CO-OPS tide and current station source. */
+export const NOAA_COOPS_SOURCE_ID = 'noaacoops'
+
+/** The USCG Local Notice to Mariners source. */
+export const USCG_LNM_SOURCE_ID = 'uscglnm'
+
+/** The NGA World Port Index source. */
+export const WPI_SOURCE_ID = 'wpi'
+
+/** The USACE locks and dams source. */
+export const USACE_SOURCE_ID = 'usace'
+
 /**
  * Every source slug the plugin recognizes, as a runtime list. The panel's
  * jump-to-error shortcut narrows raw status slugs against it, so a fifth
@@ -35,7 +47,11 @@ export const SOURCE_SLUGS = [
   ACTIVE_CAPTAIN_SOURCE_ID,
   OPENSEAMAP_SOURCE_ID,
   USCG_LIGHT_LIST_SOURCE_ID,
-  NOAA_ENC_SOURCE_ID
+  NOAA_ENC_SOURCE_ID,
+  NOAA_COOPS_SOURCE_ID,
+  USCG_LNM_SOURCE_ID,
+  WPI_SOURCE_ID,
+  USACE_SOURCE_ID
 ] as const
 
 /**

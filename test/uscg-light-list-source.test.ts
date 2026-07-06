@@ -25,39 +25,7 @@ import type {
 } from '../src/inputs/uscg-light-list/light-list-client.js'
 import type { LightListStore } from '../src/inputs/uscg-light-list/light-list-store.js'
 import type { LightListRecord } from '../src/inputs/uscg-light-list/light-list-types.js'
-import type { PluginStatus } from '../src/status/plugin-status.js'
-
-interface FakeStatus extends PluginStatus {
-  recordSkipped: (source: string, reason: string) => void
-}
-
-/**
- * A small fake status recorder. Returns the recorded events as an array of
- * `event:source[:detail]` strings so a test can assert exactly what happened
- * without depending on the real status snapshot format.
- */
-function fakeStatus (): { events: string[], status: FakeStatus } {
-  const events: string[] = []
-  const skipped = new Set<string>()
-  const status: FakeStatus = {
-    recordListFetch: (source, count) => {
-      events.push(`list:${source}:${count}`)
-      skipped.delete(source)
-    },
-    recordDetailSuccess: (source) => { events.push(`detail-ok:${source}`) },
-    recordError: (source, message) => {
-      events.push(`error:${source}:${message}`)
-      skipped.delete(source)
-    },
-    recordSkipped: (source, reason) => {
-      events.push(`skipped:${source}:${reason}`)
-      skipped.add(source)
-    },
-    wasListFetchSuppressed: (source) => skipped.has(source),
-    snapshot: () => ({ sources: [], cachedPoiCount: 0, recentErrors: [], startedAt: '' })
-  }
-  return { events, status }
-}
+import { createStubStatus } from './helpers.js'
 
 /** A fake client that defaults to "not-modified" for every download. */
 function fakeClient (): LightListClient {
@@ -99,7 +67,7 @@ test('a refresh in flight when close() runs does not flush after stop', async ()
     close: () => { closed = true },
     queryBbox: () => []
   }
-  const { status } = fakeStatus()
+  const { status } = createStubStatus()
   const source = createUscgLightListSource({
     client: fakeClient(),
     store: fakeStore,
@@ -119,7 +87,7 @@ test('listPointsOfInterest filters by bbox and tags every summary with the sourc
     const store = createLightListStore(dir)
     await store.load()
     loadOne(store)
-    const { status } = fakeStatus()
+    const { status } = createStubStatus()
     const source = createUscgLightListSource({
       client: fakeClient(),
       store,
@@ -152,7 +120,7 @@ test('getDetails returns a fully rendered detail view with attribution', async (
     const store = createLightListStore(dir)
     await store.load()
     loadOne(store, sampleRecord({ remark: 'Visible 015° to 195°' }))
-    const { events, status } = fakeStatus()
+    const { events, status } = createStubStatus()
     const source = createUscgLightListSource({
       client: fakeClient(),
       store,
@@ -185,7 +153,7 @@ test('getDetails rejects for an unknown id', async () => {
   try {
     const store = createLightListStore(dir)
     await store.load()
-    const { status } = fakeStatus()
+    const { status } = createStubStatus()
     const source = createUscgLightListSource({
       client: fakeClient(),
       store,
@@ -204,7 +172,7 @@ test('refreshAll skips outbound HTTP when the vessel is outside US waters', asyn
   try {
     const store = createLightListStore(dir)
     await store.load()
-    const { events, status } = fakeStatus()
+    const { events, status } = createStubStatus()
     let calls = 0
     const client: LightListClient = {
       downloadDistrict: async (): Promise<DownloadResult> => {
@@ -233,7 +201,7 @@ test('refreshAll iterates every district page when the vessel is in US waters', 
   try {
     const store = createLightListStore(dir)
     await store.load()
-    const { status } = fakeStatus()
+    const { status } = createStubStatus()
     let calls = 0
     const client: LightListClient = {
       downloadDistrict: async (): Promise<DownloadResult> => {
@@ -266,7 +234,7 @@ test('refreshAll records an error status when a district download fails', async 
   try {
     const store = createLightListStore(dir)
     await store.load()
-    const { events, status } = fakeStatus()
+    const { events, status } = createStubStatus()
     const client: LightListClient = {
       downloadDistrict: async (): Promise<DownloadResult> =>
         ({ status: 'error', message: 'HTTP 500' })
@@ -292,7 +260,7 @@ test('summary carries timestamp when the record has modifiedDate', async () => {
     const store = createLightListStore(dir)
     await store.load()
     loadOne(store, sampleRecord({ modifiedDate: '2020-06-15T00:00:00.000Z' }))
-    const { status } = fakeStatus()
+    const { status } = createStubStatus()
     const source = createUscgLightListSource({
       client: fakeClient(),
       store,
@@ -315,7 +283,7 @@ test('summary has no timestamp when the record has no modifiedDate', async () =>
     const store = createLightListStore(dir)
     await store.load()
     loadOne(store)
-    const { status } = fakeStatus()
+    const { status } = createStubStatus()
     const source = createUscgLightListSource({
       client: fakeClient(),
       store,
@@ -347,7 +315,7 @@ test('minimumYear drops records whose modifiedDate is older than the threshold',
       modifiedDate: '2022-01-10T00:00:00.000Z'
     })
     store.upsertDistrict('D01', 1, [oldRecord, newRecord], {})
-    const { status } = fakeStatus()
+    const { status } = createStubStatus()
     const source = createUscgLightListSource({
       client: fakeClient(),
       store,
@@ -370,7 +338,7 @@ test('an undated record always survives the year filter', async () => {
     const store = createLightListStore(dir)
     await store.load()
     loadOne(store)
-    const { status } = fakeStatus()
+    const { status } = createStubStatus()
     const source = createUscgLightListSource({
       client: fakeClient(),
       store,

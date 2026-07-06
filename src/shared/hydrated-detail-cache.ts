@@ -31,6 +31,13 @@ export interface HydratedDetailCacheOptions<V> {
   fileName: string
   /** Narrow an unknown, JSON-parsed value to the cached value type. */
   isValue: (value: unknown) => value is V
+  /**
+   * Ceiling for both the in-memory LRU and the on-disk store. Defaults to
+   * {@link MAX_POI_CACHE_ENTRIES}. A source that must hold a complete dataset
+   * (the World Port Index holds every port on earth) raises this above the
+   * dataset's plausible size so the LRU never silently evicts part of it.
+   */
+  maxEntries?: number
 }
 
 /** An LRU detail cache with disk-backed hydration and persistence. */
@@ -53,11 +60,11 @@ export interface HydratedDetailCache<V extends {}> {
 export function createHydratedDetailCache<V extends {}> (
   options: HydratedDetailCacheOptions<V>
 ): HydratedDetailCache<V> {
-  const { dataDir, fileName, isValue } = options
-  const cache = new LRUCache<string, V>({ max: MAX_POI_CACHE_ENTRIES })
+  const { dataDir, fileName, isValue, maxEntries = MAX_POI_CACHE_ENTRIES } = options
+  const cache = new LRUCache<string, V>({ max: maxEntries })
   let store: DetailStore<V> | undefined = dataDir === undefined
     ? undefined
-    : createDetailStore<V>({ directoryPath: dataDir, fileName, isValue })
+    : createDetailStore<V>({ directoryPath: dataDir, fileName, isValue, maxEntries })
   if (store !== undefined) {
     for (const [id, entry] of Object.entries(store.load())) {
       cache.set(id, entry.value)

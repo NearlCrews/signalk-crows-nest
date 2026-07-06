@@ -24,10 +24,13 @@ import {
   type EncLayerKey,
   type ScaleBand
 } from './enc-direct-types.js'
-import { requestText } from '../http-one-shot.js'
+import {
+  arcgisByIdParams,
+  arcgisEnvelopeParams,
+  arcgisPagedQuery,
+  arcgisQueryById
+} from '../arcgis-query.js'
 import type { Bbox } from '../../shared/types.js'
-import { PLUGIN_USER_AGENT } from '../../shared/plugin-id.js'
-import { MS_PER_MINUTE } from '../../shared/time.js'
 
 /**
  * Default ArcGIS REST host for the ENC Direct service. NOAA's own ENC Direct
@@ -39,26 +42,8 @@ import { MS_PER_MINUTE } from '../../shared/time.js'
  */
 const DEFAULT_BASE_URL = 'https://encdirect.noaa.gov'
 
-/** ArcGIS' per-response cap. The client pages while the upstream signals more. */
-const PAGE_SIZE = 1000
-
-/**
- * Upper bound on pagination passes per `queryLayer` call. The largest ENC
- * layer observed live (coastal-band rocks) caps at ~43k features, eight pages
- * below this bound. A misbehaving server that pins `exceededTransferLimit:
- * true` forever (a CDN cache regression, a stuck cursor) would otherwise
- * loop indefinitely and exhaust memory; the bound trips first and rejects
- * with a clear error so the source records it and the caller backs off.
- */
-const MAX_PAGES = 200
-
-/**
- * Per-request timeout in milliseconds. A hung TCP connection (a silently
- * dropped TLS handshake, a black-hole proxy) would otherwise block the next
- * scan tick indefinitely. The shared `http-client.ts` already enforces this
- * for the queued sources; this raw client mirrors the policy.
- */
-const REQUEST_TIMEOUT_MS = MS_PER_MINUTE
+/** Tags this feed's error messages and its timeout/abort reason. */
+const UPSTREAM_LABEL = 'ENC Direct'
 
 export interface EncDirectClient {
   /** Bbox query against one (band, layerKey). Pages internally to completion. */
@@ -87,55 +72,13 @@ export interface EncDirectClientConfig {
   baseUrl?: string
 }
 
-interface ArcGisFeatureCollection {
-  features?: EncFeature[]
-  exceededTransferLimit?: boolean
-}
-
-async function fetchJson (url: string, headers: Record<string, string>, signal?: AbortSignal): Promise<unknown> {
-  const response = await requestText(url, headers, REQUEST_TIMEOUT_MS, 'ENC Direct', signal)
-  if (response.status < 200 || response.status >= 300) {
-    throw new Error(`ENC Direct HTTP ${response.status} for ${url}`)
-  }
-  // JSON.parse only throws a SyntaxError (already an Error), so the parse is
-  // returned directly: a try/catch that rethrows the same value would be a
-  // no-op. The caller treats a parse failure as a failed layer query.
-  return JSON.parse(response.body)
-}
-
-function buildBboxUrl (
+/** The MapServer `/query` endpoint for a (band, layerId) with the given params. */
+function layerQueryUrl (
   base: string,
   band: ScaleBand,
   layerId: number,
-  bbox: Bbox,
-  offset: number
+  params: URLSearchParams
 ): string {
-  const params = new URLSearchParams({
-    geometry: `${bbox.west},${bbox.south},${bbox.east},${bbox.north}`,
-    geometryType: 'esriGeometryEnvelope',
-    spatialRel: 'esriSpatialRelIntersects',
-    inSR: '4326',
-    outFields: '*',
-    returnGeometry: 'true',
-    f: 'geojson',
-    resultOffset: String(offset),
-    resultRecordCount: String(PAGE_SIZE)
-  })
-  return `${base}/arcgis/rest/services/encdirect/enc_${band}/MapServer/${layerId}/query?${params.toString()}`
-}
-
-function buildByIdUrl (
-  base: string,
-  band: ScaleBand,
-  layerId: number,
-  objectId: number
-): string {
-  const params = new URLSearchParams({
-    objectIds: String(objectId),
-    outFields: '*',
-    returnGeometry: 'true',
-    f: 'geojson'
-  })
   return `${base}/arcgis/rest/services/encdirect/enc_${band}/MapServer/${layerId}/query?${params.toString()}`
 }
 
@@ -143,36 +86,21 @@ export function createEncDirectClient (
   config: EncDirectClientConfig = {}
 ): EncDirectClient {
   const baseUrl = config.baseUrl ?? DEFAULT_BASE_URL
-  const headers = { 'User-Agent': PLUGIN_USER_AGENT }
   return {
     async queryLayer ({ band, layerKey, bbox, signal }) {
       const layerId = LAYER_IDS_BY_BAND[band][layerKey]
-      const all: EncFeature[] = []
-      let offset = 0
-      // Bounded pagination loop: a misbehaving server pinning
-      // exceededTransferLimit forever would otherwise loop indefinitely.
-      for (let page = 0; page < MAX_PAGES; page++) {
-        // requestText rejects immediately when signal is already aborted, so the
-        // continuation does not need its own pre-fetch abort guard.
-        const url = buildBboxUrl(baseUrl, band, layerId, bbox, offset)
-        const json = await fetchJson(url, headers, signal) as ArcGisFeatureCollection
-        const features = json.features ?? []
-        all.push(...features)
-        if (json.exceededTransferLimit !== true || features.length === 0) {
-          return { features: all }
-        }
-        offset += features.length
-      }
-      throw new Error(
-        `ENC Direct pagination exceeded ${MAX_PAGES} pages for ${band}/${layerKey}; ` +
-        'the upstream may be pinning exceededTransferLimit incorrectly'
-      )
+      const features = await arcgisPagedQuery<EncFeature>({
+        label: UPSTREAM_LABEL,
+        context: `${band}/${layerKey}`,
+        buildPageUrl: (offset) => layerQueryUrl(baseUrl, band, layerId, arcgisEnvelopeParams(bbox, offset)),
+        signal
+      })
+      return { features }
     },
     async queryById ({ band, layerKey, objectId, signal }) {
       const layerId = LAYER_IDS_BY_BAND[band][layerKey]
-      const url = buildByIdUrl(baseUrl, band, layerId, objectId)
-      const json = await fetchJson(url, headers, signal) as ArcGisFeatureCollection
-      return (json.features ?? [])[0]
+      const url = layerQueryUrl(baseUrl, band, layerId, arcgisByIdParams(objectId))
+      return arcgisQueryById<EncFeature>(url, UPSTREAM_LABEL, signal)
     }
   }
 }

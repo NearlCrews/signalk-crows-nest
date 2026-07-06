@@ -43,6 +43,26 @@ export type ConfigAction =
   | { type: 'setOpenSeaMapRefreshSeconds', seconds: number }
   | { type: 'setNoaaEncRefreshSeconds', seconds: number }
   | { type: 'setActiveCaptainRefreshSeconds', seconds: number }
+  | { type: 'setNoaaCoopsEnabled', enabled: boolean }
+  | { type: 'setNoaaCoopsIncludeTideStations', enabled: boolean }
+  | { type: 'setNoaaCoopsIncludeCurrentStations', enabled: boolean }
+  | { type: 'setNoaaCoopsDedupe', enabled: boolean }
+  | { type: 'setNoaaCoopsDedupeRadius', meters: number }
+  | { type: 'setNoaaCoopsRefreshHours', hours: number }
+  | { type: 'setUscgLnmEnabled', enabled: boolean }
+  | { type: 'setUscgLnmDedupe', enabled: boolean }
+  | { type: 'setUscgLnmDedupeRadius', meters: number }
+  | { type: 'setUscgLnmRefreshSeconds', seconds: number }
+  | { type: 'setWpiEnabled', enabled: boolean }
+  | { type: 'setWpiDedupe', enabled: boolean }
+  | { type: 'setWpiDedupeRadius', meters: number }
+  | { type: 'setWpiRefreshHours', hours: number }
+  | { type: 'setUsaceEnabled', enabled: boolean }
+  | { type: 'setUsaceIncludeLocks', enabled: boolean }
+  | { type: 'setUsaceIncludeDams', enabled: boolean }
+  | { type: 'setUsaceDedupe', enabled: boolean }
+  | { type: 'setUsaceDedupeRadius', meters: number }
+  | { type: 'setUsaceRefreshSeconds', seconds: number }
   | { type: 'discard', config: PluginConfig }
 
 /**
@@ -158,5 +178,45 @@ export function configReducer (state: PluginConfig, action: ConfigAction): Plugi
       return setField(state, 'noaaEncRefreshSeconds', action.seconds)
     case 'setActiveCaptainRefreshSeconds':
       return setField(state, 'activeCaptainRefreshSeconds', action.seconds)
+    case 'setNoaaCoopsEnabled':
+      return setField(state, 'noaaCoopsEnabled', action.enabled)
+    case 'setNoaaCoopsIncludeTideStations':
+      return setField(state, 'noaaCoopsIncludeTideStations', action.enabled)
+    case 'setNoaaCoopsIncludeCurrentStations':
+      return setField(state, 'noaaCoopsIncludeCurrentStations', action.enabled)
+    case 'setNoaaCoopsDedupe':
+      return setField(state, 'noaaCoopsDedupe', action.enabled)
+    case 'setNoaaCoopsDedupeRadius':
+      return setField(state, 'noaaCoopsDedupeRadiusMeters', action.meters)
+    case 'setNoaaCoopsRefreshHours':
+      return setField(state, 'noaaCoopsRefreshHours', action.hours)
+    case 'setUscgLnmEnabled':
+      return setField(state, 'uscgLnmEnabled', action.enabled)
+    case 'setUscgLnmDedupe':
+      return setField(state, 'uscgLnmDedupe', action.enabled)
+    case 'setUscgLnmDedupeRadius':
+      return setField(state, 'uscgLnmDedupeRadiusMeters', action.meters)
+    case 'setUscgLnmRefreshSeconds':
+      return setField(state, 'uscgLnmRefreshSeconds', action.seconds)
+    case 'setWpiEnabled':
+      return setField(state, 'wpiEnabled', action.enabled)
+    case 'setWpiDedupe':
+      return setField(state, 'wpiDedupe', action.enabled)
+    case 'setWpiDedupeRadius':
+      return setField(state, 'wpiDedupeRadiusMeters', action.meters)
+    case 'setWpiRefreshHours':
+      return setField(state, 'wpiRefreshHours', action.hours)
+    case 'setUsaceEnabled':
+      return setField(state, 'usaceEnabled', action.enabled)
+    case 'setUsaceIncludeLocks':
+      return setField(state, 'usaceIncludeLocks', action.enabled)
+    case 'setUsaceIncludeDams':
+      return setField(state, 'usaceIncludeDams', action.enabled)
+    case 'setUsaceDedupe':
+      return setField(state, 'usaceDedupe', action.enabled)
+    case 'setUsaceDedupeRadius':
+      return setField(state, 'usaceDedupeRadiusMeters', action.meters)
+    case 'setUsaceRefreshSeconds':
+      return setField(state, 'usaceRefreshSeconds', action.seconds)
   }
 }

@@ -12,12 +12,16 @@
  */
 
 import { mkdtempSync, rmSync } from 'node:fs'
+import { createServer, type IncomingHttpHeaders, type IncomingMessage, type ServerResponse } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { CourseInfo } from '@signalk/server-api'
 import type { PoiDetails } from '../src/inputs/active-captain/active-captain-types.js'
 import type { NotificationTrackerApp } from '../src/shared/notification-tracker.js'
 import type { PoiSummary, PoiType, Position } from '../src/shared/types.js'
+import type { PluginStatus } from '../src/status/plugin-status.js'
+import type { StatusSnapshot } from '../src/status/status-types.js'
 
 /**
  * Run `body` against a fresh temp directory named with `prefix`, removing the
@@ -179,5 +183,82 @@ export function poiSummary (id: string, type: PoiType, name: string, position: P
     // helper exercise alarm and dedupe behavior, not icon mapping, so they do
     // not assert on it.
     skIcon: 'notice-to-mariners'
+  }
+}
+
+/** A stub {@link PluginStatus} recorder and the events it captured. */
+export interface StubStatus {
+  /** Every recorded outcome as an `event:source[:detail]` string, in order. */
+  events: string[]
+  /** The recorder the source under test is driven with. */
+  status: PluginStatus
+}
+
+/**
+ * Build a stub {@link PluginStatus} that records each outcome as an
+ * `event:source[:detail]` string, so a source-adapter test can assert the
+ * request outcomes it drove. `wasListFetchSuppressed` reads the per-source
+ * suppression that `recordSkipped` and `recordStaleServe` raise, matching
+ * production plugin-status.ts (though the stub's read is persistent membership
+ * rather than consume-on-read). `snapshot` returns an empty-but-valid
+ * {@link StatusSnapshot}; the at-runtime sources under test do not read it, so
+ * it is present only to satisfy the interface.
+ */
+export function createStubStatus (): StubStatus {
+  const events: string[] = []
+  const suppressed = new Set<string>()
+  const status: PluginStatus = {
+    recordListFetch: (source, count) => { events.push(`list:${source}:${count}`); suppressed.delete(source) },
+    recordDetailSuccess: (source) => { events.push(`detail-ok:${source}`) },
+    recordError: (source, message) => { events.push(`error:${source}:${message}`); suppressed.delete(source) },
+    recordSkipped: (source, reason) => { events.push(`skipped:${source}:${reason}`); suppressed.add(source) },
+    recordStaleServe: (source, reason) => { events.push(`stale:${source}:${reason}`); suppressed.add(source) },
+    wasListFetchSuppressed: (source) => suppressed.has(source),
+    snapshot: (): StatusSnapshot => ({ sources: [], cachedPoiCount: 0, recentErrors: [], startedAt: '' })
+  }
+  return { events, status }
+}
+
+/** One request a {@link StubServer} recorded. */
+export interface StubServerRequest {
+  method: string
+  url: string
+  headers: IncomingHttpHeaders
+}
+
+/** A running {@link startStubServer} instance and the requests it received. */
+export interface StubServer {
+  /** Base URL the server listens on, e.g. `http://127.0.0.1:54321`. */
+  url: string
+  /** Every request received, in order, captured before the handler runs. */
+  requests: StubServerRequest[]
+  /** Stop the server, resolving once it has closed. */
+  close: () => Promise<void>
+}
+
+/**
+ * Start a `node:http` server on an ephemeral loopback port, recording each
+ * request's method, url, and headers before handing it to `handler`. The
+ * one-shot HTTP transport the raw-client sources use speaks real sockets rather
+ * than a mockable global fetch, so their client tests need a real server; this
+ * owns the listen, address-to-url, request recording, and close plumbing they
+ * all shared, leaving each test only its own response behavior.
+ */
+export async function startStubServer (
+  handler: (req: IncomingMessage, res: ServerResponse) => void
+): Promise<StubServer> {
+  const requests: StubServerRequest[] = []
+  const server = createServer((req, res) => {
+    requests.push({ method: req.method ?? 'GET', url: req.url ?? '/', headers: req.headers })
+    handler(req, res)
+  })
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const address = server.address() as AddressInfo
+  return {
+    url: `http://127.0.0.1:${address.port}`,
+    requests,
+    close: () => new Promise<void>((resolve, reject) => {
+      server.close((error) => (error != null ? reject(error) : resolve()))
+    })
   }
 }

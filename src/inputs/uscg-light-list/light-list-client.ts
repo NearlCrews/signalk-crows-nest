@@ -14,30 +14,13 @@ import type {
   LightListProperties,
   LightListRecord
 } from './light-list-types.js'
-import { requestText } from '../http-one-shot.js'
-import { PLUGIN_USER_AGENT } from '../../shared/plugin-id.js'
+import { conditionalGet } from '../http-conditional-get.js'
 import { USCG_LIGHT_LIST_SOURCE_ID } from '../../shared/source-ids.js'
 import { finiteOrUndefined, isValidLatitude, isValidLongitude, isWireTruthy } from '../../shared/numbers.js'
 import { presentString } from '../../shared/strings.js'
-import { MS_PER_MINUTE } from '../../shared/time.js'
 
 /** Default upstream host for the NAVCEN Maritime Safety Information files. */
 const DEFAULT_BASE_URL = 'https://navcen.uscg.gov'
-
-/** HTTP status returned by the upstream when the file has not changed. */
-const HTTP_NOT_MODIFIED = 304
-
-/** HTTP status returned by the upstream on a successful GET. */
-const HTTP_OK = 200
-
-/**
- * Per-request timeout in milliseconds. A silently dropped TCP connection
- * (no FIN, no RST, a transparent proxy black-holing the socket) would
- * otherwise stall a refresh worker indefinitely, holding up the
- * concurrency-capped refresh fan-out. The shared `http-client.ts` enforces an
- * equivalent policy for the queued sources; this raw client mirrors it.
- */
-const REQUEST_TIMEOUT_MS = MS_PER_MINUTE
 
 /** Result of a single district download attempt. */
 export type DownloadResult =
@@ -169,42 +152,19 @@ export function createLightListClient (
   return {
     async downloadDistrict (district, page, previousHeaders) {
       const url = `${baseUrl}/sites/default/files/msi/lightList${district}_${page}.geojson`
-      const headers: Record<string, string> = { 'User-Agent': PLUGIN_USER_AGENT }
-      if (previousHeaders?.lastModified !== undefined) {
-        headers['If-Modified-Since'] = previousHeaders.lastModified
+      const result = await conditionalGet(url, 'USCG Light List', previousHeaders)
+      if (result.status !== 'ok') {
+        return result
       }
-      if (previousHeaders?.etag !== undefined) {
-        headers['If-None-Match'] = previousHeaders.etag
+      const collection = JSON.parse(result.body) as { features?: LightListFeature[] }
+      const records: LightListRecord[] = []
+      for (const feature of collection.features ?? []) {
+        const parsed = parseFeature(feature, district)
+        if (parsed !== null) {
+          records.push(parsed)
+        }
       }
-      try {
-        const response = await requestText(url, headers, REQUEST_TIMEOUT_MS, 'USCG Light List')
-        if (response.status === HTTP_NOT_MODIFIED) {
-          return { status: 'not-modified' }
-        }
-        if (response.status !== HTTP_OK) {
-          return { status: 'error', message: `HTTP ${response.status}` }
-        }
-        const collection = JSON.parse(response.body) as { features?: LightListFeature[] }
-        const records: LightListRecord[] = []
-        for (const feature of collection.features ?? []) {
-          const parsed = parseFeature(feature, district)
-          if (parsed !== null) {
-            records.push(parsed)
-          }
-        }
-        const lastModified = response.headers['last-modified']
-        const etag = response.headers.etag
-        const responseHeaders: DistrictHeaders = {}
-        if (typeof lastModified === 'string') {
-          responseHeaders.lastModified = lastModified
-        }
-        if (typeof etag === 'string') {
-          responseHeaders.etag = etag
-        }
-        return { status: 'ok', records, headers: responseHeaders }
-      } catch (error) {
-        return { status: 'error', message: String(error) }
-      }
+      return { status: 'ok', records, headers: result.headers }
     }
   }
 }

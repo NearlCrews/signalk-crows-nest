@@ -337,4 +337,58 @@ export interface PluginConfig {
    * cache and posts to Garmin on every list call.
    */
   activeCaptainRefreshSeconds?: number
+  /** Import tide and current stations from NOAA CO-OPS (US-only). */
+  noaaCoopsEnabled?: boolean
+  /** Include tide (water level) stations in the CO-OPS import. */
+  noaaCoopsIncludeTideStations?: boolean
+  /** Include current-meter stations in the CO-OPS import. */
+  noaaCoopsIncludeCurrentStations?: boolean
+  /** Merge CO-OPS stations that duplicate an ActiveCaptain marker. */
+  noaaCoopsDedupe?: boolean
+  /** Merge radius, in meters, for CO-OPS dedupe against the ActiveCaptain base. */
+  noaaCoopsDedupeRadiusMeters?: number
+  /** NOAA CO-OPS station-list background refresh period, in hours. */
+  noaaCoopsRefreshHours?: number
+  /** Import live Local Notice to Mariners layers from USCG NAVCEN (US-only). */
+  uscgLnmEnabled?: boolean
+  /** Merge LNM points of interest that duplicate an ActiveCaptain marker. */
+  uscgLnmDedupe?: boolean
+  /** Merge radius, in meters, for LNM dedupe against the ActiveCaptain base. */
+  uscgLnmDedupeRadiusMeters?: number
+  /**
+   * Periodic bulk-refresh interval for the LNM layers, in seconds. Unlike
+   * `openSeaMapRefreshSeconds`, this is the cadence of a background full
+   * re-download rather than a per-viewport debounce, so `0` is not an off
+   * sentinel: it falls back to the default cadence, since a periodic refresh
+   * cannot run on a zero-second interval.
+   */
+  uscgLnmRefreshSeconds?: number
+  /** Import world ports from the NGA World Port Index (worldwide). */
+  wpiEnabled?: boolean
+  /** Merge World Port Index ports that duplicate an ActiveCaptain marker. */
+  wpiDedupe?: boolean
+  /** Merge radius, in meters, for World Port Index dedupe against the ActiveCaptain base. */
+  wpiDedupeRadiusMeters?: number
+  /**
+   * World Port Index full-dataset background refresh period, in hours. The
+   * authoritative NGA endpoint is not bbox-queryable, so the source re-fetches
+   * the whole near-static Pub 150 dataset on this cadence.
+   */
+  wpiRefreshHours?: number
+  /** Import locks and dams from the US Army Corps of Engineers (US-only). */
+  usaceEnabled?: boolean
+  /** Include lock structures in the USACE import. */
+  usaceIncludeLocks?: boolean
+  /** Include dam structures in the USACE import. */
+  usaceIncludeDams?: boolean
+  /** Merge USACE structures that duplicate an ActiveCaptain marker. */
+  usaceDedupe?: boolean
+  /** Merge radius, in meters, for USACE dedupe against the ActiveCaptain base. */
+  usaceDedupeRadiusMeters?: number
+  /**
+   * Minimum upstream-query interval per bbox for the USACE layers, in
+   * seconds. Same semantic as `openSeaMapRefreshSeconds`. `0` disables the
+   * cache.
+   */
+  usaceRefreshSeconds?: number
 }

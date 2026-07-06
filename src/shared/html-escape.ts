@@ -10,6 +10,8 @@
  * behavior automatically.
  */
 
+import { formatMeters } from './format-meters.js'
+
 const ESCAPE_TABLE: ReadonlyMap<string, string> = new Map([
   ['&', '&amp;'],
   ['<', '&lt;'],
@@ -37,4 +39,15 @@ export function escapeHtml (value: string): string {
  */
 export function labeledParagraph (label: string, value: string): string {
   return `<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}.</p>`
+}
+
+/**
+ * Render a labelled metric line: `<p><strong>Label:</strong> X.X m.</p>` with
+ * the value formatted to one decimal in meters. The USACE and World Port Index
+ * renderers each build this exact metric-paragraph shape, so it lives here once;
+ * each caller does its own wire parsing and unit conversion before handing the
+ * meters in.
+ */
+export function labeledMeters (label: string, meters: number): string {
+  return `<p><strong>${escapeHtml(label)}:</strong> ${formatMeters(meters)} m.</p>`
 }

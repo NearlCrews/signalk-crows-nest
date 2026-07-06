@@ -26,10 +26,11 @@
  * overlap the box rather than scanning the full ~57,700-record map.
  */
 
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { randomBytes } from 'node:crypto'
+import { bboxContainsPoint } from '../../geo/position-utilities.js'
+import { atomicWriteJson } from '../../shared/atomic-write-json.js'
 import type {
   Bbox,
   Position
@@ -176,36 +177,6 @@ function latCellRange (bbox: Bbox): [number, number] {
     Math.floor((bbox.south + 90) * TILE_CELLS_PER_DEGREE),
     Math.floor((bbox.north + 90) * TILE_CELLS_PER_DEGREE)
   ]
-}
-
-/**
- * True when a record's longitude lies inside the bbox, with antimeridian
- * support. A normal bbox is `west <= longitude <= east`; a wrap bbox is
- * `longitude >= west || longitude <= east`.
- */
-function longitudeInBbox (longitude: number, bbox: Bbox): boolean {
-  if (bbox.east >= bbox.west) {
-    return longitude >= bbox.west && longitude <= bbox.east
-  }
-  return longitude >= bbox.west || longitude <= bbox.east
-}
-
-/**
- * Atomically write JSON to `filePath` by writing a sibling temp file and
- * renaming it over the target. The temp filename carries a per-call random
- * nonce so two concurrent writers to the same target (a stop+start race
- * during an in-flight refresh) do not race on a shared temp path. A failed
- * rename unlinks the temp file so no debris is left behind.
- */
-async function atomicWriteJson (filePath: string, value: unknown): Promise<void> {
-  const tempPath = `${filePath}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`
-  await writeFile(tempPath, JSON.stringify(value), 'utf8')
-  try {
-    await rename(tempPath, filePath)
-  } catch (error) {
-    await rm(tempPath, { force: true }).catch(() => {})
-    throw error
-  }
 }
 
 /** Create a Light List store rooted at `<dataDir>/uscg-light-list/`. */
@@ -448,8 +419,7 @@ export function createLightListStore (dataDir: string): LightListStore {
             if (bucket === undefined) continue
             for (const record of bucket) {
               const { latitude, longitude } = record.position
-              if (latitude >= bbox.south && latitude <= bbox.north &&
-                longitudeInBbox(longitude, bbox)) {
+              if (bboxContainsPoint(bbox, longitude, latitude)) {
                 result.push(record)
               }
             }

@@ -14,16 +14,14 @@ import type { UscgLightListSource } from './uscg-light-list-source.js'
 import { createLightListClient } from './light-list-client.js'
 import { createLightListStore } from './light-list-store.js'
 import type { InputContext, InputModule } from '../poi-source.js'
+import { startRefreshScheduler } from '../refresh-scheduler.js'
 import { cappedDedupeRadius } from '../../shared/dedupe-radius.js'
 import { clampRefreshHours, refreshHoursSchema } from '../../shared/refresh-hours.js'
 import { USCG_LIGHT_LIST_SOURCE_ID } from '../../shared/source-ids.js'
-import { MS_PER_HOUR, MS_PER_SECOND } from '../../shared/time.js'
+import { MS_PER_HOUR } from '../../shared/time.js'
 import type { PluginConfig } from '../../shared/types.js'
 import { dedupeRadiusSchema, dedupeToggleSchema } from '../dedupe-pois.js'
 import { clampMinimumYear, minimumYearSchema } from '../../shared/year-filter.js'
-
-/** Delay before the first refresh fires after a plugin start, in seconds. */
-const INITIAL_REFRESH_DELAY_SECONDS = 30
 
 /** The enable, dedupe, and refresh-period config fragment. */
 const CONFIG_SCHEMA: Record<string, unknown> = {
@@ -75,36 +73,11 @@ export const uscgLightListInput: InputModule = {
       status,
       getCurrentPosition
     })
-    const refreshHours = clampRefreshHours(config.uscgLightListRefreshHours)
-    const intervalMs = refreshHours * MS_PER_HOUR
-    const delayMs = INITIAL_REFRESH_DELAY_SECONDS * MS_PER_SECOND
-    // In-flight guard: a refresh pass that takes longer than the configured
-    // window (62 conditional GETs against a slow NAVCEN, fanned out four at a
-    // time) would otherwise let the next setInterval tick start a concurrent
-    // refreshAll, racing on store.upsertDistrict and clobbering each other's
-    // writes. The guard skips overlapping ticks; the next interval fires
-    // normally.
-    let refreshing = false
-    const runRefresh = (reason: string): void => {
-      if (refreshing) {
-        app.debug(`USCG Light List ${reason} skipped: previous refresh still running`)
-        return
-      }
-      refreshing = true
-      source.refreshAll()
-        .catch(error => {
-          app.debug(`USCG Light List ${reason} failed: ${String(error)}`)
-        })
-        .finally(() => { refreshing = false })
-    }
-    const initialTimer = setTimeout(() => { runRefresh('initial refresh') }, delayMs)
-    const periodicTimer = setInterval(() => { runRefresh('refresh') }, intervalMs)
-    const originalClose = source.close.bind(source)
-    source.close = () => {
-      clearTimeout(initialTimer)
-      clearInterval(periodicTimer)
-      originalClose()
-    }
-    return source
+    const intervalMs = clampRefreshHours(config.uscgLightListRefreshHours) * MS_PER_HOUR
+    // The scheduler owns the in-flight guard: a refresh pass that takes longer
+    // than the configured window (62 conditional GETs against a slow NAVCEN,
+    // fanned out four at a time) never lets the next tick start a concurrent
+    // refreshAll that would race on store.upsertDistrict.
+    return startRefreshScheduler({ source, app, name: 'USCG Light List', intervalMs })
   }
 }

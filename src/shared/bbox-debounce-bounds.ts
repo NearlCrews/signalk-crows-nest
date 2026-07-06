@@ -11,6 +11,11 @@
  * `route-corridor.ts`, `dedupe-radius.ts`), each deliberately dependency-free so
  * the source module and the panel's normalize-config cannot drift on a bound.
  * The cache implementation that consumes these lives in `bbox-debounce.ts`.
+ *
+ * The same bounds also govern the periodic bulk-refresh cadence of the USCG
+ * LNM source, which reuses the refresh-seconds config field; see
+ * {@link effectivePeriodicRefreshSeconds} for that interpretation, where `0`
+ * means the default cadence rather than "no caching".
  */
 
 import { clampNumber } from './numbers.js'
@@ -43,6 +48,22 @@ export const DEFAULT_OPENSEAMAP_DEBOUNCE_SECONDS = 600
 export const DEFAULT_NOAA_ENC_DEBOUNCE_SECONDS = 1800
 
 /**
+ * Default refresh window for the USCG Local Notice to Mariners source: 15
+ * minutes, NAVCEN's own publication cadence for the LNM GeoJSON files. For
+ * this source the value is a periodic bulk-refresh interval rather than a
+ * per-viewport debounce, so the input treats a configured `0` as "use the
+ * default" instead of "no caching".
+ */
+export const DEFAULT_USCG_LNM_DEBOUNCE_SECONDS = 900
+
+/**
+ * Default debounce window for the USACE locks and dams source: 30 minutes.
+ * Lock and dam structures change on an engineering timescale, so this matches
+ * the NOAA ENC window rather than the dynamic ActiveCaptain one.
+ */
+export const DEFAULT_USACE_DEBOUNCE_SECONDS = 1800
+
+/**
  * Smallest configurable value. `0` is the off sentinel (no caching), so the
  * minimum below the off sentinel does not exist; the minimum is itself `0`.
  */
@@ -64,6 +85,21 @@ export const MAX_BBOX_DEBOUNCE_SECONDS = 3600
  */
 export function clampBboxDebounceSeconds (raw: unknown, fallback: number): number {
   return clampNumber(raw, MIN_BBOX_DEBOUNCE_SECONDS, MAX_BBOX_DEBOUNCE_SECONDS, fallback, true)
+}
+
+/**
+ * Resolve the effective periodic bulk-refresh cadence, in seconds, for an input
+ * that reuses the bbox-debounce bounds as a background re-download interval
+ * rather than a per-viewport window. The value is clamped to the shared bounds,
+ * then a clamped `0` (the off sentinel for a per-viewport cache) or any
+ * non-positive value falls back to the given default, since a periodic refresh
+ * cannot run on a zero-second interval. Shared by the USCG LNM input's
+ * millisecond conversion and the panel's normalize-config so the two cannot
+ * drift on the zero-to-default rule.
+ */
+export function effectivePeriodicRefreshSeconds (raw: unknown, fallback: number): number {
+  const seconds = clampBboxDebounceSeconds(raw, fallback)
+  return seconds > 0 ? seconds : fallback
 }
 
 /**

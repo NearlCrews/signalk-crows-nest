@@ -1,31 +1,17 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createServer, type IncomingHttpHeaders } from 'node:http'
-import type { AddressInfo } from 'node:net'
 import { readFile } from 'node:fs/promises'
 import { createLightListClient } from '../src/inputs/uscg-light-list/light-list-client.js'
+import { startStubServer, type StubServer } from './helpers.js'
 
-interface RecordedRequest {
-  method: string
-  url: string
-  headers: IncomingHttpHeaders
-}
-
-interface FixtureServer {
-  url: string
-  requests: RecordedRequest[]
-  close: () => Promise<void>
-}
-
-async function startFixtureServer (): Promise<FixtureServer> {
+/**
+ * A stub NAVCEN server that serves the district fixture with Last-Modified
+ * and ETag headers, answering 304 when the request carries the matching
+ * conditional headers. Thin adapter over the shared startStubServer.
+ */
+async function startFixtureServer (): Promise<StubServer> {
   const body = await readFile('test/fixtures/light-list-d01-1.geojson')
-  const requests: RecordedRequest[] = []
-  const server = createServer((req, res) => {
-    requests.push({
-      method: req.method ?? 'GET',
-      url: req.url ?? '/',
-      headers: req.headers
-    })
+  return await startStubServer((req, res) => {
     const ifModifiedSince = req.headers['if-modified-since']
     const ifNoneMatch = req.headers['if-none-match']
     if (
@@ -41,15 +27,6 @@ async function startFixtureServer (): Promise<FixtureServer> {
     res.setHeader('ETag', '"abc"')
     res.end(body)
   })
-  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
-  const address = server.address() as AddressInfo
-  return {
-    url: `http://127.0.0.1:${address.port}`,
-    requests,
-    close: () => new Promise<void>((resolve, reject) => {
-      server.close(error => (error != null ? reject(error) : resolve()))
-    })
-  }
 }
 
 test('downloadDistrict parses the GeoJSON into LightListRecord values', async () => {

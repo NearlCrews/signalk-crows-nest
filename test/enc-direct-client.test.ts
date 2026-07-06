@@ -1,36 +1,24 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createServer, type IncomingMessage } from 'node:http'
-import type { AddressInfo } from 'node:net'
+import type { IncomingMessage } from 'node:http'
 import { readFile } from 'node:fs/promises'
 import { createEncDirectClient } from '../src/inputs/noaa-enc/enc-direct-client.js'
+import { startStubServer, type StubServer } from './helpers.js'
 
-interface RecordingServer {
-  url: string
-  close: () => Promise<void>
-  requests: { url: string, headers: Record<string, string | string[] | undefined> }[]
-}
-
+/**
+ * A JSON stub server with a per-run page counter: the handler receives the
+ * 1-based request number so a pagination test can answer each page
+ * differently. Thin adapter over the shared startStubServer.
+ */
 async function startServer (
   handler: (req: IncomingMessage, page: number) => unknown
-): Promise<RecordingServer> {
+): Promise<StubServer> {
   let page = 0
-  const requests: RecordingServer['requests'] = []
-  const server = createServer((req, res) => {
+  return await startStubServer((req, res) => {
     page++
-    requests.push({ url: req.url ?? '', headers: req.headers })
     res.setHeader('Content-Type', 'application/json')
     res.end(JSON.stringify(handler(req, page)))
   })
-  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
-  const address = server.address() as AddressInfo
-  return {
-    url: `http://127.0.0.1:${address.port}`,
-    requests,
-    close: () => new Promise<void>((resolve, reject) => {
-      server.close(error => { error === undefined ? resolve() : reject(error) })
-    })
-  }
 }
 
 test('queryLayer issues a bbox query and parses the GeoJSON response', async () => {

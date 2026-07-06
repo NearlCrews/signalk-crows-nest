@@ -17,46 +17,7 @@ import { createNoaaEncSource } from '../src/inputs/noaa-enc/noaa-enc-source.js'
 import type { EncFeature, EncLayerKey, ScaleBand } from '../src/inputs/noaa-enc/enc-direct-types.js'
 import type { Bbox } from '../src/shared/types.js'
 import { NOAA_ENC_SOURCE_ID } from '../src/shared/source-ids.js'
-import { withTempDir } from './helpers.js'
-
-interface FakeStatus {
-  events: string[]
-  status: {
-    recordListFetch: (source: string, poiCount: number) => void
-    recordDetailSuccess: (source: string) => void
-    recordError: (source: string, message: string) => void
-    recordSkipped: (source: string, reason: string) => void
-    wasListFetchSuppressed: (source: string) => boolean
-    recordStaleServe: (source: string, reason: string) => void
-    snapshot: () => unknown
-  }
-}
-
-function fakeStatus (): FakeStatus {
-  const events: string[] = []
-  const skipped = new Set<string>()
-  return {
-    events,
-    status: {
-      recordListFetch: (source, count) => {
-        events.push(`list-ok:${source}:${count}`)
-        skipped.delete(source)
-      },
-      recordDetailSuccess: (source) => events.push(`detail-ok:${source}`),
-      recordError: (source, message) => {
-        events.push(`error:${source}:${message}`)
-        skipped.delete(source)
-      },
-      recordSkipped: (source, reason) => {
-        events.push(`skipped:${source}:${reason}`)
-        skipped.add(source)
-      },
-      wasListFetchSuppressed: (source) => skipped.has(source),
-      recordStaleServe: (source, reason) => events.push(`stale:${source}:${reason}`),
-      snapshot: () => ({})
-    }
-  }
-}
+import { createStubStatus, withTempDir } from './helpers.js'
 
 const namedWreck: EncFeature = {
   type: 'Feature',
@@ -102,7 +63,7 @@ test('listPointsOfInterest fans out across enabled layers and tags summaries', a
     },
     queryById: async () => undefined
   }
-  const { status } = fakeStatus()
+  const { status } = createStubStatus()
   const source = createNoaaEncSource({
     client: client as never,
     band: 'coastal',
@@ -111,7 +72,7 @@ test('listPointsOfInterest fans out across enabled layers and tags summaries', a
     includeRocks: false,
     minimumYear: 0,
     refreshSeconds: 0,
-    status: status as never,
+    status,
     getCurrentPosition: () => undefined
   })
   const summaries = await source.listPointsOfInterest(
@@ -150,7 +111,7 @@ test('a partial layer failure is not cached, so the failed layer is retried on t
     },
     queryById: async () => undefined
   }
-  const { status } = fakeStatus()
+  const { status } = createStubStatus()
   const source = createNoaaEncSource({
     client: client as never,
     band: 'coastal',
@@ -159,7 +120,7 @@ test('a partial layer failure is not cached, so the failed layer is retried on t
     includeRocks: false,
     minimumYear: 0,
     refreshSeconds: 60, // caching ON: only the no-cache-on-partial rule lets the retry through
-    status: status as never,
+    status,
     getCurrentPosition: () => undefined
   })
   const bbox = { south: 41, west: -72, north: 43, east: -70 }
@@ -181,7 +142,7 @@ test('listPointsOfInterest only queries layers that are enabled', async () => {
     },
     queryById: async () => undefined
   }
-  const { status } = fakeStatus()
+  const { status } = createStubStatus()
   const source = createNoaaEncSource({
     client: client as never,
     band: 'coastal',
@@ -190,7 +151,7 @@ test('listPointsOfInterest only queries layers that are enabled', async () => {
     includeRocks: false,
     minimumYear: 0,
     refreshSeconds: 0,
-    status: status as never,
+    status,
     getCurrentPosition: () => undefined
   })
   await source.listPointsOfInterest(
@@ -206,7 +167,7 @@ test('listPointsOfInterest skips outbound work when the vessel is outside US wat
     },
     queryById: async () => undefined
   }
-  const { events, status } = fakeStatus()
+  const { events, status } = createStubStatus()
   const source = createNoaaEncSource({
     client: client as never,
     band: 'coastal',
@@ -215,7 +176,7 @@ test('listPointsOfInterest skips outbound work when the vessel is outside US wat
     includeRocks: false,
     minimumYear: 0,
     refreshSeconds: 0,
-    status: status as never,
+    status,
     // Mediterranean off Barcelona, decidedly not US waters.
     getCurrentPosition: () => ({ latitude: 41.38, longitude: 2.18 })
   })
@@ -234,7 +195,7 @@ test('listPointsOfInterest records a per-layer error when one layer query fails'
     },
     queryById: async () => undefined
   }
-  const { events, status } = fakeStatus()
+  const { events, status } = createStubStatus()
   const source = createNoaaEncSource({
     client: client as never,
     band: 'coastal',
@@ -243,7 +204,7 @@ test('listPointsOfInterest records a per-layer error when one layer query fails'
     includeRocks: false,
     minimumYear: 0,
     refreshSeconds: 0,
-    status: status as never,
+    status,
     getCurrentPosition: () => undefined
   })
   const summaries = await source.listPointsOfInterest(
@@ -261,7 +222,7 @@ test('listPointsOfInterest rejects when every enabled layer query fails', async 
     queryLayer: async () => { throw new Error('upstream 500') },
     queryById: async () => undefined
   }
-  const { events, status } = fakeStatus()
+  const { events, status } = createStubStatus()
   const source = createNoaaEncSource({
     client: client as never,
     band: 'coastal',
@@ -270,7 +231,7 @@ test('listPointsOfInterest rejects when every enabled layer query fails', async 
     includeRocks: false,
     minimumYear: 0,
     refreshSeconds: 0,
-    status: status as never,
+    status,
     getCurrentPosition: () => undefined
   })
   await assert.rejects(
@@ -294,7 +255,7 @@ test('getDetails on a cache hit serves the view, skips the upstream, and records
     queryLayer: async () => ({ features: [namedWreck] }),
     queryById: async () => { queryByIdCalls++; return namedWreck }
   }
-  const { events, status } = fakeStatus()
+  const { events, status } = createStubStatus()
   const source = createNoaaEncSource({
     client: client as never,
     band: 'coastal',
@@ -303,7 +264,7 @@ test('getDetails on a cache hit serves the view, skips the upstream, and records
     includeRocks: false,
     minimumYear: 0,
     refreshSeconds: 0,
-    status: status as never,
+    status,
     getCurrentPosition: () => undefined
   })
   await source.listPointsOfInterest(
@@ -334,7 +295,7 @@ test('getDetails records detail success only on a cache miss that hits the upstr
     queryLayer: async () => ({ features: [] }),
     queryById: async () => namedWreck
   }
-  const { events, status } = fakeStatus()
+  const { events, status } = createStubStatus()
   const source = createNoaaEncSource({
     client: client as never,
     band: 'coastal',
@@ -343,7 +304,7 @@ test('getDetails records detail success only on a cache miss that hits the upstr
     includeRocks: false,
     minimumYear: 0,
     refreshSeconds: 0,
-    status: status as never,
+    status,
     getCurrentPosition: () => undefined
   })
   await source.getDetails('wreck_99999')
@@ -362,7 +323,7 @@ test('getDetails fetches by objectId on a cache miss and caches the result', asy
       return { ...namedWreck, id: objectId, properties: { ...namedWreck.properties, OBJECTID: objectId } }
     }
   }
-  const { status } = fakeStatus()
+  const { status } = createStubStatus()
   const source = createNoaaEncSource({
     client: client as never,
     band: 'coastal',
@@ -371,7 +332,7 @@ test('getDetails fetches by objectId on a cache miss and caches the result', asy
     includeRocks: false,
     minimumYear: 0,
     refreshSeconds: 0,
-    status: status as never,
+    status,
     getCurrentPosition: () => undefined
   })
   const first = await source.getDetails('wreck_99999')
@@ -386,7 +347,7 @@ test('getDetails rejects when the upstream has no feature for the id', async () 
     queryLayer: async () => ({ features: [] }),
     queryById: async () => undefined
   }
-  const { status, events } = fakeStatus()
+  const { status, events } = createStubStatus()
   const source = createNoaaEncSource({
     client: client as never,
     band: 'coastal',
@@ -395,7 +356,7 @@ test('getDetails rejects when the upstream has no feature for the id', async () 
     includeRocks: false,
     minimumYear: 0,
     refreshSeconds: 0,
-    status: status as never,
+    status,
     getCurrentPosition: () => undefined
   })
   await assert.rejects(() => source.getDetails('wreck_404'), /wreck_404/)
@@ -413,7 +374,7 @@ test('cacheSize reports the LRU entry count', async () => {
     },
     queryById: async () => undefined
   }
-  const { status } = fakeStatus()
+  const { status } = createStubStatus()
   const source = createNoaaEncSource({
     client: client as never,
     band: 'coastal',
@@ -422,7 +383,7 @@ test('cacheSize reports the LRU entry count', async () => {
     includeRocks: false,
     minimumYear: 0,
     refreshSeconds: 0,
-    status: status as never,
+    status,
     getCurrentPosition: () => undefined
   })
   try {
@@ -446,7 +407,7 @@ test('toSummary populates timestamp from SORDAT (YYYYMM)', async () => {
     queryLayer: async () => ({ features: [featureWithSordat] }),
     queryById: async () => featureWithSordat
   }
-  const { status } = fakeStatus()
+  const { status } = createStubStatus()
   const source = createNoaaEncSource({
     client: client as never,
     band: 'coastal',
@@ -455,7 +416,7 @@ test('toSummary populates timestamp from SORDAT (YYYYMM)', async () => {
     includeRocks: false,
     minimumYear: 0,
     refreshSeconds: 0,
-    status: status as never,
+    status,
     getCurrentPosition: () => undefined
   })
   const summaries = await source.listPointsOfInterest(
@@ -474,7 +435,7 @@ test('toSummary populates timestamp from SORDAT (YYYYMMDD) and getDetails carrie
     queryLayer: async () => ({ features: [featureWithSordat] }),
     queryById: async () => featureWithSordat
   }
-  const { status } = fakeStatus()
+  const { status } = createStubStatus()
   const source = createNoaaEncSource({
     client: client as never,
     band: 'coastal',
@@ -483,7 +444,7 @@ test('toSummary populates timestamp from SORDAT (YYYYMMDD) and getDetails carrie
     includeRocks: false,
     minimumYear: 0,
     refreshSeconds: 0,
-    status: status as never,
+    status,
     getCurrentPosition: () => undefined
   })
   const summaries = await source.listPointsOfInterest(
@@ -498,7 +459,7 @@ test('a feature with no SORDAT carries no timestamp and survives the year filter
     queryLayer: async () => ({ features: [namedWreck] }),
     queryById: async () => namedWreck
   }
-  const { status } = fakeStatus()
+  const { status } = createStubStatus()
   const source = createNoaaEncSource({
     client: client as never,
     band: 'coastal',
@@ -507,7 +468,7 @@ test('a feature with no SORDAT carries no timestamp and survives the year filter
     includeRocks: false,
     minimumYear: 2050,
     refreshSeconds: 0,
-    status: status as never,
+    status,
     getCurrentPosition: () => undefined
   })
   const summaries = await source.listPointsOfInterest(
@@ -531,7 +492,7 @@ test('minimumYear drops features whose SORDAT year is below the threshold', asyn
     queryLayer: async () => ({ features: [oldWreck, newWreck] }),
     queryById: async () => undefined
   }
-  const { status } = fakeStatus()
+  const { status } = createStubStatus()
   const source = createNoaaEncSource({
     client: client as never,
     band: 'coastal',
@@ -540,7 +501,7 @@ test('minimumYear drops features whose SORDAT year is below the threshold', asyn
     includeRocks: false,
     minimumYear: 2000,
     refreshSeconds: 0,
-    status: status as never,
+    status,
     getCurrentPosition: () => undefined
   })
   const summaries = await source.listPointsOfInterest(
@@ -561,7 +522,7 @@ test('listPointsOfInterest reuses the bbox-cached result within refreshSeconds',
     },
     queryById: async () => undefined
   }
-  const { status } = fakeStatus()
+  const { status } = createStubStatus()
   const source = createNoaaEncSource({
     client: client as never,
     band: 'coastal',
@@ -570,7 +531,7 @@ test('listPointsOfInterest reuses the bbox-cached result within refreshSeconds',
     includeRocks: false,
     minimumYear: 0,
     refreshSeconds: 60,
-    status: status as never,
+    status,
     getCurrentPosition: () => undefined
   })
   const bbox = { south: 41, west: -72, north: 43, east: -70 }
@@ -587,7 +548,7 @@ test('listPointsOfInterest queries upstream every call when refreshSeconds is 0 
     queryLayer: async () => { calls++; return { features: [namedWreck] } },
     queryById: async () => undefined
   }
-  const { status } = fakeStatus()
+  const { status } = createStubStatus()
   const source = createNoaaEncSource({
     client: client as never,
     band: 'coastal',
@@ -596,7 +557,7 @@ test('listPointsOfInterest queries upstream every call when refreshSeconds is 0 
     includeRocks: false,
     minimumYear: 0,
     refreshSeconds: 0,
-    status: status as never,
+    status,
     getCurrentPosition: () => undefined
   })
   const bbox = { south: 41, west: -72, north: 43, east: -70 }
@@ -621,7 +582,7 @@ test('a listed feature survives a restart and renders offline from the on-disk s
       includeRocks: false,
       minimumYear: 0,
       refreshSeconds: 0,
-      status: fakeStatus().status as never,
+      status: createStubStatus().status as never,
       getCurrentPosition: () => undefined,
       dataDir: dir
     })
@@ -644,7 +605,7 @@ test('a listed feature survives a restart and renders offline from the on-disk s
       includeRocks: false,
       minimumYear: 0,
       refreshSeconds: 0,
-      status: fakeStatus().status as never,
+      status: createStubStatus().status as never,
       getCurrentPosition: () => undefined,
       dataDir: dir
     })
@@ -666,7 +627,7 @@ test('getDetails on a cache miss skips outbound HTTP when the vessel is outside 
     queryLayer: async () => ({ features: [] }),
     queryById: async () => { queryByIdCalls++; return namedWreck }
   }
-  const { events, status } = fakeStatus()
+  const { events, status } = createStubStatus()
   const source = createNoaaEncSource({
     client: client as never,
     band: 'coastal',
@@ -675,7 +636,7 @@ test('getDetails on a cache miss skips outbound HTTP when the vessel is outside 
     includeRocks: false,
     minimumYear: 0,
     refreshSeconds: 0,
-    status: status as never,
+    status,
     // Mediterranean off Barcelona, decidedly not US waters.
     getCurrentPosition: () => ({ latitude: 41.38, longitude: 2.18 })
   })
@@ -695,7 +656,7 @@ test('the summary url field points at OpenSeaMap with a marker at the feature la
     queryLayer: async () => ({ features: [namedWreck] }),
     queryById: async () => undefined
   }
-  const { status } = fakeStatus()
+  const { status } = createStubStatus()
   const source = createNoaaEncSource({
     client: client as never,
     band: 'coastal',
@@ -704,7 +665,7 @@ test('the summary url field points at OpenSeaMap with a marker at the feature la
     includeRocks: false,
     minimumYear: 0,
     refreshSeconds: 0,
-    status: status as never,
+    status,
     getCurrentPosition: () => undefined
   })
   const summaries = await source.listPointsOfInterest(
@@ -729,7 +690,7 @@ test('an offline list falls back to hydrated features within the bbox and record
       includeRocks: false,
       minimumYear: 0,
       refreshSeconds: 0,
-      status: fakeStatus().status as never,
+      status: createStubStatus().status as never,
       getCurrentPosition: () => undefined,
       dataDir: dir
     })
@@ -742,7 +703,7 @@ test('an offline list falls back to hydrated features within the bbox and record
       queryLayer: async () => { throw new Error('offline') },
       queryById: async () => undefined
     }
-    const { events, status } = fakeStatus()
+    const { events, status } = createStubStatus()
     const second = createNoaaEncSource({
       client: offlineClient as never,
       band: 'coastal',
@@ -751,7 +712,7 @@ test('an offline list falls back to hydrated features within the bbox and record
       includeRocks: false,
       minimumYear: 0,
       refreshSeconds: 0,
-      status: status as never,
+      status,
       getCurrentPosition: () => undefined,
       dataDir: dir
     })
@@ -778,7 +739,7 @@ test('an offline list with nothing cached inside the bbox rethrows the upstream 
       includeRocks: false,
       minimumYear: 0,
       refreshSeconds: 0,
-      status: fakeStatus().status as never,
+      status: createStubStatus().status as never,
       getCurrentPosition: () => undefined,
       dataDir: dir
     })
@@ -789,7 +750,7 @@ test('an offline list with nothing cached inside the bbox rethrows the upstream 
       queryLayer: async () => { throw new Error('offline') },
       queryById: async () => undefined
     }
-    const { events, status } = fakeStatus()
+    const { events, status } = createStubStatus()
     const second = createNoaaEncSource({
       client: offlineClient as never,
       band: 'coastal',
@@ -798,7 +759,7 @@ test('an offline list with nothing cached inside the bbox rethrows the upstream 
       includeRocks: false,
       minimumYear: 0,
       refreshSeconds: 0,
-      status: status as never,
+      status,
       getCurrentPosition: () => undefined,
       dataDir: dir
     })
@@ -830,7 +791,7 @@ test('an offline list outside US waters skips without serving stale data, even w
       includeRocks: false,
       minimumYear: 0,
       refreshSeconds: 0,
-      status: fakeStatus().status as never,
+      status: createStubStatus().status as never,
       getCurrentPosition: () => undefined,
       dataDir: dir
     })
@@ -846,7 +807,7 @@ test('an offline list outside US waters skips without serving stale data, even w
       queryLayer: async () => { queryLayerCalls++; throw new Error('offline') },
       queryById: async () => undefined
     }
-    const { events, status } = fakeStatus()
+    const { events, status } = createStubStatus()
     const offshore = createNoaaEncSource({
       client: offlineClient as never,
       band: 'coastal',
@@ -855,7 +816,7 @@ test('an offline list outside US waters skips without serving stale data, even w
       includeRocks: false,
       minimumYear: 0,
       refreshSeconds: 0,
-      status: status as never,
+      status,
       // Mediterranean off Barcelona, decidedly not US waters.
       getCurrentPosition: () => ({ latitude: 41.38, longitude: 2.18 }),
       dataDir: dir

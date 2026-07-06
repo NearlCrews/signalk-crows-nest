@@ -25,7 +25,10 @@ import {
   clampBboxDebounceSeconds,
   DEFAULT_ACTIVE_CAPTAIN_DEBOUNCE_SECONDS,
   DEFAULT_NOAA_ENC_DEBOUNCE_SECONDS,
-  DEFAULT_OPENSEAMAP_DEBOUNCE_SECONDS
+  DEFAULT_OPENSEAMAP_DEBOUNCE_SECONDS,
+  DEFAULT_USACE_DEBOUNCE_SECONDS,
+  DEFAULT_USCG_LNM_DEBOUNCE_SECONDS,
+  effectivePeriodicRefreshSeconds
 } from '../shared/bbox-debounce-bounds.js'
 /**
  * Coerce the admin UI's untyped `configuration` prop into a fully populated
@@ -160,6 +163,43 @@ export function normalizeConfig (configuration: unknown): PluginConfig {
   )
   config.activeCaptainRefreshSeconds = clampBboxDebounceSeconds(
     raw.activeCaptainRefreshSeconds, DEFAULT_ACTIVE_CAPTAIN_DEBOUNCE_SECONDS
+  )
+
+  config.noaaCoopsEnabled = raw.noaaCoopsEnabled === true
+  // Both station families default on; only an explicit false narrows the import.
+  config.noaaCoopsIncludeTideStations = raw.noaaCoopsIncludeTideStations !== false
+  config.noaaCoopsIncludeCurrentStations = raw.noaaCoopsIncludeCurrentStations !== false
+  // Dedupe defaults on with the shared radius fallback, matching the siblings.
+  config.noaaCoopsDedupe = raw.noaaCoopsDedupe !== false
+  config.noaaCoopsDedupeRadiusMeters = clampDedupeRadius(raw.noaaCoopsDedupeRadiusMeters)
+  config.noaaCoopsRefreshHours = clampRefreshHours(raw.noaaCoopsRefreshHours)
+
+  config.uscgLnmEnabled = raw.uscgLnmEnabled === true
+  config.uscgLnmDedupe = raw.uscgLnmDedupe !== false
+  config.uscgLnmDedupeRadiusMeters = clampDedupeRadius(raw.uscgLnmDedupeRadiusMeters)
+  // For the LNM source the value is a periodic bulk-refresh interval, not a
+  // per-viewport debounce, so the runtime treats a configured 0 as "use the
+  // default" rather than "no caching". The shared helper applies that same
+  // zero-to-default rule the scheduler runs, so the panel shows the real
+  // cadence.
+  config.uscgLnmRefreshSeconds = effectivePeriodicRefreshSeconds(
+    raw.uscgLnmRefreshSeconds, DEFAULT_USCG_LNM_DEBOUNCE_SECONDS
+  )
+
+  config.wpiEnabled = raw.wpiEnabled === true
+  config.wpiDedupe = raw.wpiDedupe !== false
+  config.wpiDedupeRadiusMeters = clampDedupeRadius(raw.wpiDedupeRadiusMeters)
+  config.wpiRefreshHours = clampRefreshHours(raw.wpiRefreshHours)
+
+  config.usaceEnabled = raw.usaceEnabled === true
+  // Locks default on (about 240 nationwide, all navigation-relevant); dams
+  // default off because the National Inventory of Dams would bury the chart.
+  config.usaceIncludeLocks = raw.usaceIncludeLocks !== false
+  config.usaceIncludeDams = raw.usaceIncludeDams === true
+  config.usaceDedupe = raw.usaceDedupe !== false
+  config.usaceDedupeRadiusMeters = clampDedupeRadius(raw.usaceDedupeRadiusMeters)
+  config.usaceRefreshSeconds = clampBboxDebounceSeconds(
+    raw.usaceRefreshSeconds, DEFAULT_USACE_DEBOUNCE_SECONDS
   )
 
   return config
