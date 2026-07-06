@@ -30,6 +30,7 @@ import {
   DEFAULT_USCG_LNM_DEBOUNCE_SECONDS,
   effectivePeriodicRefreshSeconds
 } from '../shared/bbox-debounce-bounds.js'
+
 /**
  * Coerce the admin UI's untyped `configuration` prop into a fully populated
  * PluginConfig. A POI-type flag absent from the stored config defaults to

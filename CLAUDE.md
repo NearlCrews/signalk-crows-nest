@@ -381,8 +381,7 @@ self-contained module registered on one line in `src/index.ts`.
     helper, and the `positiveCappedNumber` helper), `retry-after.ts` (the
     `parseRetryAfterMs` header parser shared by the queued upstream HTTP client),
     `strings.ts` (the `presentString` trim-and-reject-blank reader, plus
-    `capitalizeFirst`), `debug.ts` (the `debugIsEnabled` guard plus `appLogger`,
-    which adapts a SignalK app to the project `Logger` surface), `cache.ts`
+    `capitalizeFirst`), `debug.ts` (the `debugIsEnabled` guard), `cache.ts`
     (the `MAX_POI_CACHE_ENTRIES` and `MAX_BBOX_CACHE_ENTRIES` ceilings),
     `detail-store.ts` (the generic disk-backed detail store: an atomic-write,
     debounced, retention-bounded, entry-capped JSON store generic over the
@@ -400,10 +399,9 @@ self-contained module registered on one line in `src/index.ts`.
     `splitOnFirstUnderscore` wrapper), `time.ts` (the millisecond and
     second constants the relative-time formatters share), `length.ts` (the
     `METERS_PER_FOOT`, `METERS_PER_KM`, `METERS_PER_NAUTICAL_MILE`, and
-    `METERS_PER_DEGREE` constants, the latitude-dependent `metersPerDegreeLon`
-    helper, and the `metersFromFeet` / `metersFromFeetInches` /
-    `metersFromNauticalMiles` conversions), `format-meters.ts` (the
-    `formatMeters` one-decimal meter formatter plus `formatNm`),
+    `METERS_PER_DEGREE` constants, and the `metersFromFeet` /
+    `metersFromFeetInches` conversions), `format-meters.ts` (the
+    `formatMeters` one-decimal meter formatter),
     `bridge-clearance.ts` (the bridge air-draft comparison: `readVesselAirDraft`,
     `bridgeBlocksVessel`, the margin bounds, and the config-fragment builders),
     `proximity-radius.ts` (the vessel-proximity alarm geometry shared by the

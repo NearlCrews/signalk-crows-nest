@@ -8,8 +8,8 @@
  * The outer `<section>` carries `aria-labelledby` referencing the
  * heading so the landmark has an accessible name. Sections collapse
  * independently. The Data sources section defaults open (the
- * operator's primary work area); the Alerts and Route drafting
- * sections default closed. Children stay mounted (visibility flips via
+ * operator's primary work area); the Alerts section defaults
+ * closed. Children stay mounted (visibility flips via
  * CSS) so an in-progress NumberField draft inside a child card
  * survives a collapse.
  *
