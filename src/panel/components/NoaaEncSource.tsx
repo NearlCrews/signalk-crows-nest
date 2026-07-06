@@ -16,6 +16,7 @@ import { DEFAULT_SCALE_BAND, SCALE_BAND_LABELS, SCALE_BANDS } from '../../shared
 import type { PluginConfig } from '../../shared/types.js'
 import Disclosure from './Disclosure.js'
 import Fieldset from './Fieldset.js'
+import IncludeToggles from './IncludeToggles.js'
 import LabeledField from './LabeledField.js'
 import MergeWithActiveCaptain from './MergeWithActiveCaptain.js'
 import MinimumYearField from './MinimumYearField.js'
@@ -42,7 +43,37 @@ export default function NoaaEncSource ({ state, dispatch }: Props): React.ReactE
 
   return (
     <>
-      <Fieldset title='Import layers'>
+      <IncludeToggles
+        legend='Import layers'
+        emptyWarning='Choose at least one layer; with all three off the source is enabled but imports nothing.'
+        options={[
+          {
+            id: 'noaa-enc-wrecks',
+            label: 'Wrecks',
+            checked: includeWrecks,
+            onChange: (enabled) => dispatch({ type: 'setNoaaEncIncludeWrecks', enabled })
+          },
+          {
+            id: 'noaa-enc-obstructions',
+            label: 'Obstructions',
+            checked: includeObstructions,
+            onChange: (enabled) => dispatch({ type: 'setNoaaEncIncludeObstructions', enabled })
+          },
+          {
+            id: 'noaa-enc-rocks',
+            label: 'Underwater rocks',
+            checked: includeRocks,
+            onChange: (enabled) => dispatch({ type: 'setNoaaEncIncludeRocks', enabled })
+          }
+        ]}
+        footnote={
+          <p style={S.hintBelow}>
+            Underwater rocks default off because a coastal-band query can
+            return tens of thousands of rocks, which slows the chartplotter
+            and obscures other hazards.
+          </p>
+        }
+      >
         <LabeledField
           id={BAND_FIELD_ID}
           label='Chart scale band'
@@ -63,47 +94,7 @@ export default function NoaaEncSource ({ state, dispatch }: Props): React.ReactE
             </select>
           )}
         </LabeledField>
-        <div style={S.checkboxGrid}>
-          <label style={S.checkboxLabel}>
-            <input
-              type='checkbox'
-              style={S.checkbox}
-              checked={includeWrecks}
-              onChange={(e) => dispatch({ type: 'setNoaaEncIncludeWrecks', enabled: e.target.checked })}
-            />
-            Wrecks
-          </label>
-          <label style={S.checkboxLabel}>
-            <input
-              type='checkbox'
-              style={S.checkbox}
-              checked={includeObstructions}
-              onChange={(e) => dispatch({ type: 'setNoaaEncIncludeObstructions', enabled: e.target.checked })}
-            />
-            Obstructions
-          </label>
-          <label style={S.checkboxLabel}>
-            <input
-              type='checkbox'
-              style={S.checkbox}
-              checked={includeRocks}
-              onChange={(e) => dispatch({ type: 'setNoaaEncIncludeRocks', enabled: e.target.checked })}
-            />
-            Underwater rocks
-          </label>
-        </div>
-        {!includeWrecks && !includeObstructions && !includeRocks && (
-          <p style={S.hint}>
-            Choose at least one layer; with all three off the source is
-            enabled but imports nothing.
-          </p>
-        )}
-        <p style={S.hintBelow}>
-          Underwater rocks default off because a coastal-band query can
-          return tens of thousands of rocks, which slows the chartplotter
-          and obscures other hazards.
-        </p>
-      </Fieldset>
+      </IncludeToggles>
       <Disclosure>
         <Fieldset title='Refresh and freshness'>
           <RefreshSecondsField

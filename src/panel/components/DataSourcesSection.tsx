@@ -18,22 +18,35 @@ import { POI_TYPE_FLAGS } from '../../shared/poi-type-selection.js'
 import { SEAMARK_GROUP_REFS } from '../../shared/seamark-groups.js'
 import {
   ACTIVE_CAPTAIN_SOURCE_ID,
+  NOAA_COOPS_SOURCE_ID,
   NOAA_ENC_SOURCE_ID,
   OPENSEAMAP_SOURCE_ID,
+  USACE_SOURCE_ID,
   USCG_LIGHT_LIST_SOURCE_ID,
+  USCG_LNM_SOURCE_ID,
+  WPI_SOURCE_ID,
   type SourceSlug
 } from '../../shared/source-ids.js'
 import { DEFAULT_REFRESH_HOURS } from '../../shared/refresh-hours.js'
+import { SECONDS_PER_MINUTE } from '../../shared/time.js'
+import {
+  DEFAULT_USACE_DEBOUNCE_SECONDS,
+  DEFAULT_USCG_LNM_DEBOUNCE_SECONDS
+} from '../../shared/bbox-debounce-bounds.js'
 import { resolveScaleBand, SCALE_BAND_LABELS } from '../../shared/scale-band.js'
 import { S } from '../styles.js'
 import type { PluginConfig } from '../../shared/types.js'
 import type { SourceStatus, StatusSnapshot } from '../../status/status-types.js'
 import ActiveCaptainSource from './ActiveCaptainSource.js'
 import DataSourceCard from './DataSourceCard.js'
+import NoaaCoopsSource from './NoaaCoopsSource.js'
 import NoaaEncSource from './NoaaEncSource.js'
 import OpenSeaMapSource from './OpenSeaMapSource.js'
 import SectionBox from './SectionBox.js'
+import UsaceSource from './UsaceSource.js'
 import UscgLightListSource from './UscgLightListSource.js'
+import UscgLnmSource from './UscgLnmSource.js'
+import WpiSource from './WpiSource.js'
 
 interface Props {
   state: PluginConfig
@@ -77,6 +90,44 @@ function openSeaMapSummary (state: PluginConfig): string {
 function uscgLightListSummary (state: PluginConfig): string {
   const hours = state.uscgLightListRefreshHours ?? DEFAULT_REFRESH_HOURS
   return appendSinceYear(`${hours} h refresh`, state.uscgLightListMinimumUpdateYear)
+}
+
+/** Build the NOAA CO-OPS card's collapsed one-line summary. */
+function noaaCoopsSummary (state: PluginConfig): string {
+  const families: string[] = []
+  if (state.noaaCoopsIncludeTideStations !== false) families.push('tide')
+  if (state.noaaCoopsIncludeCurrentStations !== false) families.push('current')
+  const stations = families.length === 0 ? 'no stations' : `${families.join(' and ')} stations`
+  return `${stations}, ${state.noaaCoopsRefreshHours ?? DEFAULT_REFRESH_HOURS} h refresh`
+}
+
+/** Format a refresh window in seconds as minutes when it divides evenly. */
+function refreshSecondsLabel (seconds: number): string {
+  return seconds % SECONDS_PER_MINUTE === 0
+    ? `${seconds / SECONDS_PER_MINUTE} min`
+    : `${seconds} s`
+}
+
+/** Build the USCG Local Notice to Mariners card's collapsed one-line summary. */
+function uscgLnmSummary (state: PluginConfig): string {
+  const seconds = state.uscgLnmRefreshSeconds ?? DEFAULT_USCG_LNM_DEBOUNCE_SECONDS
+  return `hazards, discrepancies, and notices, ${refreshSecondsLabel(seconds)} refresh`
+}
+
+/** Build the World Port Index card's collapsed one-line summary. */
+function wpiSummary (state: PluginConfig): string {
+  return `worldwide ports, ${state.wpiRefreshHours ?? DEFAULT_REFRESH_HOURS} h refresh`
+}
+
+/** Build the USACE card's collapsed one-line summary. */
+function usaceSummary (state: PluginConfig): string {
+  // Locks default on; dams default off (National Inventory of Dams volume).
+  const layers: string[] = []
+  if (state.usaceIncludeLocks !== false) layers.push('locks')
+  if (state.usaceIncludeDams === true) layers.push('dams')
+  const layerList = layers.length === 0 ? 'no layers' : layers.join(' and ')
+  const seconds = state.usaceRefreshSeconds ?? DEFAULT_USACE_DEBOUNCE_SECONDS
+  return `${layerList}, ${refreshSecondsLabel(seconds)} refresh`
 }
 
 /** Build the NOAA ENC card's collapsed one-line summary. */
@@ -128,7 +179,11 @@ export default memo(function DataSourcesSection (
   const noOptionalSourceEnabled =
     state.openSeaMapEnabled !== true &&
     state.uscgLightListEnabled !== true &&
-    state.noaaEncEnabled !== true
+    state.noaaEncEnabled !== true &&
+    state.noaaCoopsEnabled !== true &&
+    state.uscgLnmEnabled !== true &&
+    state.wpiEnabled !== true &&
+    state.usaceEnabled !== true
   return (
     <SectionBox cardId='data-sources' title='Data sources' defaultExpanded>
       {noOptionalSourceEnabled
@@ -136,7 +191,7 @@ export default memo(function DataSourcesSection (
           <p style={S.infoCallout}>
             Getting started: Garmin ActiveCaptain is always on. The other
             sources below are off by default; expand a card and toggle one on
-            to layer OpenSeaMap, USCG Light List, or NOAA ENC Direct data onto
+            to layer OpenSeaMap, US government, or worldwide port data onto
             the chart.
           </p>
           )
@@ -187,6 +242,54 @@ export default memo(function DataSourcesSection (
         status={statusBySource.get(NOAA_ENC_SOURCE_ID)}
       >
         <NoaaEncSource state={state} dispatch={dispatch} />
+      </DataSourceCard>
+      <DataSourceCard
+        cardId={NOAA_COOPS_SOURCE_ID}
+        name='NOAA CO-OPS (US tide and current stations)'
+        enabled={state.noaaCoopsEnabled === true}
+        summary={noaaCoopsSummary(state)}
+        expanded={expanded[NOAA_COOPS_SOURCE_ID] === true}
+        onToggleExpanded={onToggleExpanded}
+        onToggleEnabled={(enabled) => dispatch({ type: 'setNoaaCoopsEnabled', enabled })}
+        status={statusBySource.get(NOAA_COOPS_SOURCE_ID)}
+      >
+        <NoaaCoopsSource state={state} dispatch={dispatch} />
+      </DataSourceCard>
+      <DataSourceCard
+        cardId={USCG_LNM_SOURCE_ID}
+        name='USCG Local Notice to Mariners (US live safety notices)'
+        enabled={state.uscgLnmEnabled === true}
+        summary={uscgLnmSummary(state)}
+        expanded={expanded[USCG_LNM_SOURCE_ID] === true}
+        onToggleExpanded={onToggleExpanded}
+        onToggleEnabled={(enabled) => dispatch({ type: 'setUscgLnmEnabled', enabled })}
+        status={statusBySource.get(USCG_LNM_SOURCE_ID)}
+      >
+        <UscgLnmSource state={state} dispatch={dispatch} />
+      </DataSourceCard>
+      <DataSourceCard
+        cardId={WPI_SOURCE_ID}
+        name='NGA World Port Index (worldwide ports)'
+        enabled={state.wpiEnabled === true}
+        summary={wpiSummary(state)}
+        expanded={expanded[WPI_SOURCE_ID] === true}
+        onToggleExpanded={onToggleExpanded}
+        onToggleEnabled={(enabled) => dispatch({ type: 'setWpiEnabled', enabled })}
+        status={statusBySource.get(WPI_SOURCE_ID)}
+      >
+        <WpiSource state={state} dispatch={dispatch} />
+      </DataSourceCard>
+      <DataSourceCard
+        cardId={USACE_SOURCE_ID}
+        name='USACE locks and dams (US waterways)'
+        enabled={state.usaceEnabled === true}
+        summary={usaceSummary(state)}
+        expanded={expanded[USACE_SOURCE_ID] === true}
+        onToggleExpanded={onToggleExpanded}
+        onToggleEnabled={(enabled) => dispatch({ type: 'setUsaceEnabled', enabled })}
+        status={statusBySource.get(USACE_SOURCE_ID)}
+      >
+        <UsaceSource state={state} dispatch={dispatch} />
       </DataSourceCard>
     </SectionBox>
   )

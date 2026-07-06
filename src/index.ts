@@ -15,6 +15,10 @@ import { activeCaptainInput } from './inputs/active-captain/active-captain-input
 import { openSeaMapInput } from './inputs/openseamap/openseamap-input.js'
 import { uscgLightListInput } from './inputs/uscg-light-list/uscg-light-list-input.js'
 import { noaaEncInput } from './inputs/noaa-enc/noaa-enc-input.js'
+import { noaaCoopsInput } from './inputs/noaa-coops/noaa-coops-input.js'
+import { uscgLnmInput } from './inputs/uscg-lnm/uscg-lnm-input.js'
+import { wpiInput } from './inputs/wpi/wpi-input.js'
+import { usaceInput } from './inputs/usace/usace-input.js'
 import { notesResourceOutput } from './outputs/notes-resource/notes-resource-output.js'
 import { proximityAlarmOutput } from './outputs/proximity-alarm/proximity-alarm-output.js'
 import { routeHazardOutput } from './outputs/route-hazard/route-hazard-output.js'
@@ -25,7 +29,11 @@ export = function (app: ServerAPI): Plugin {
     activeCaptainInput,
     openSeaMapInput,
     uscgLightListInput,
-    noaaEncInput
+    noaaEncInput,
+    noaaCoopsInput,
+    uscgLnmInput,
+    wpiInput,
+    usaceInput
   ])
   const outputs = createOutputRegistry([
     notesResourceOutput,
