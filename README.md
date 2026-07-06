@@ -22,24 +22,12 @@ route-corridor, and bridge air-draft alarms.
 > safety-of-life navigation: always cross-check against official charts and
 > your primary instruments.
 
-## What's new in 0.13.0
+## What's new in 0.13.1
 
-- **Four new data sources**, each opt-in with its own panel card: NOAA
-  CO-OPS tide and current stations (US and territories), USCG Local Notice
-  to Mariners live safety notices (US-only), the NGA World Port Index
-  (worldwide, about 2950 ports), and USACE locks and dams (US inland
-  waterways).
-- **Live hazards feed the alarms**: the Local Notice to Mariners danger
-  categories (hazards to navigation, discrepant aids) render as hazards, so
-  the proximity alarm and the route-corridor scan react to them.
-- **Offline hardening**: OpenSeaMap and NOAA ENC Direct details now persist
-  to disk, hydrate on a cold start, and keep serving previously fetched
-  markers when the upstream is unreachable.
-- **Honest status readout**: an intentionally idle source explains itself
-  ("Idle: outside US waters"), and a cache hit no longer masks a failing
-  upstream refresh.
-
-See the [changelog](CHANGELOG.md#v0130) for the full list.
+- **Housekeeping**: internal helpers left over from the route-draft removal
+  are gone; no behavior change. The 0.13.0 feature release (four new data
+  sources, offline hardening, and the honest status readout) is described in
+  the [changelog](CHANGELOG.md#v0130).
 
 ## What it does
 

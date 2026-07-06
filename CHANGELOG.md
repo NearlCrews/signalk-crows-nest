@@ -9,6 +9,18 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 > development milestones that preceded this publication. Their content is
 > incorporated into the 0.4.2 release.
 
+<a id="v0131"></a>
+
+## [0.13.1] - 2026-07-06
+
+Housekeeping release, no behavior change.
+
+### Removed
+
+- Internal helpers left over from the route-draft feature's removal, along
+  with their stale documentation references. No configuration, data, or
+  chart-facing behavior changes.
+
 <a id="v0130"></a>
 
 ## [0.13.0] - 2026-07-06
