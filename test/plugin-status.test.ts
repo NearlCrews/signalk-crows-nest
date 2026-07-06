@@ -181,19 +181,32 @@ test('recordSkipped does not flip apiReachable', () => {
   assert.equal(row?.lastListFetch?.poiCount, 10, 'lastListFetch carries forward unchanged')
 })
 
-test('recordSkipped retains the reason on the snapshot as lastSkipReason', () => {
+test('recordSkipped retains the reason on the snapshot as lastSkip', () => {
   // The panel labels an intentionally quiet source with why it is idle, so the
   // reason must survive onto the snapshot rather than being discarded.
   const status = createPluginStatus(SOURCES)
   status.recordSkipped('activecaptain', 'outside US waters')
   const row = status.snapshot(0).sources.find(s => s.source === 'activecaptain')
-  assert.equal(row?.lastSkipReason, 'outside US waters')
+  assert.deepEqual(row?.lastSkip, { reason: 'outside US waters', transient: false })
 })
 
-test('a fresh recorder reports every source lastSkipReason null', () => {
+test('recordSkipped marks a transient deferral on the snapshot', () => {
+  // The aggregate's per-source timeout records a transient skip: the fetch is
+  // still running and the next refresh serves it, so the panel shows waiting
+  // rather than idle. The flag must survive onto the snapshot.
+  const status = createPluginStatus(SOURCES)
+  status.recordSkipped('openseamap', 'list request exceeded 5s; result will appear on next refresh', true)
+  const row = status.snapshot(0).sources.find(s => s.source === 'openseamap')
+  assert.deepEqual(row?.lastSkip, {
+    reason: 'list request exceeded 5s; result will appear on next refresh',
+    transient: true
+  })
+})
+
+test('a fresh recorder reports every source lastSkip null', () => {
   const snapshot = createPluginStatus(SOURCES).snapshot(0)
   for (const source of snapshot.sources) {
-    assert.equal(source.lastSkipReason, null)
+    assert.equal(source.lastSkip, null)
   }
 })
 
@@ -204,7 +217,7 @@ test('a real list fetch clears a prior skip reason', () => {
   status.recordSkipped('activecaptain', 'outside US waters')
   status.recordListFetch('activecaptain', 4)
   const row = status.snapshot(0).sources.find(s => s.source === 'activecaptain')
-  assert.equal(row?.lastSkipReason, null)
+  assert.equal(row?.lastSkip, null)
 })
 
 test('recordError clears a prior skip reason', () => {
@@ -214,7 +227,7 @@ test('recordError clears a prior skip reason', () => {
   status.recordSkipped('activecaptain', 'outside US waters')
   status.recordError('activecaptain', 'upstream 500')
   const row = status.snapshot(0).sources.find(s => s.source === 'activecaptain')
-  assert.equal(row?.lastSkipReason, null)
+  assert.equal(row?.lastSkip, null)
 })
 
 test('wasListFetchSuppressed returns false for an unknown source', () => {
@@ -232,7 +245,7 @@ test('recordStaleServe marks the source unreachable without a list fetch', () =>
   assert.equal(row?.apiReachable, false)
   assert.equal(row?.lastListFetch, null)
   // Not an idle skip: the reason stays null so the pill reads as error.
-  assert.equal(row?.lastSkipReason, null)
+  assert.equal(row?.lastSkip, null)
 })
 
 test('recordStaleServe logs a single recent error even across repeated ticks', () => {

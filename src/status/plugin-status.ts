@@ -12,7 +12,7 @@
  * The recent-errors list stays global, capped at a small fixed count.
  */
 
-import type { LastListFetch, SourceStatus, StatusError, StatusSnapshot } from './status-types.js'
+import type { LastListFetch, LastSkip, SourceStatus, StatusError, StatusSnapshot } from './status-types.js'
 
 /** Upper bound on retained errors. Older entries are dropped past this count. */
 const MAX_RECENT_ERRORS = 5
@@ -44,11 +44,14 @@ export interface PluginStatus {
    * flag the aggregate input registry reads (and consumes) through
    * {@link wasListFetchSuppressed} so a follow-on `recordListFetch(0)` does not
    * overwrite the previous fetch with a bogus "fetched zero POIs" success. The
-   * `reason` is retained on the source row as `lastSkipReason` so the panel can
-   * explain why an intentionally quiet source is idle; a later successful or
-   * failed request clears it.
+   * `reason` is retained on the source row as `lastSkip` so the panel can
+   * explain why a quiet source is idle; a later successful or failed request
+   * clears it. `transient` marks a deferral rather than a deliberate gate (a
+   * list request that outran the aggregate's per-source timeout and will be
+   * served from cache on the next refresh), which the panel renders as waiting
+   * instead of idle.
    */
-  recordSkipped: (source: string, reason: string) => void
+  recordSkipped: (source: string, reason: string, transient?: boolean) => void
   /**
    * Record that a source served a stale result from its on-disk cache because
    * the upstream was unreachable (an offline restart, say). This is NOT a
@@ -92,14 +95,14 @@ interface SourceState {
    */
   suppressListFetch: boolean
   /**
-   * The reason from the most recent {@link PluginStatus.recordSkipped}, or null
-   * when the source is not currently skipping. Unlike
-   * {@link suppressListFetch} this is not consumed on read: it persists on the
-   * snapshot so the panel can label an idle source with why it is quiet, and is
-   * cleared by the next real
+   * The reason and transience from the most recent
+   * {@link PluginStatus.recordSkipped}, or null when the source is not
+   * currently skipping. Unlike {@link suppressListFetch} this is not consumed
+   * on read: it persists on the snapshot so the panel can label a quiet source
+   * with why, and is cleared by the next real
    * `recordListFetch`/`recordDetailSuccess`/`recordError`.
    */
-  lastSkipReason: string | null
+  lastSkip: LastSkip | null
 }
 
 /**
@@ -120,7 +123,7 @@ export function createPluginStatus (sources: ReadonlyArray<StatusSource>): Plugi
       apiReachable: null,
       lastListFetch: null,
       suppressListFetch: false,
-      lastSkipReason: null
+      lastSkip: null
     })
   }
 
@@ -134,9 +137,8 @@ export function createPluginStatus (sources: ReadonlyArray<StatusSource>): Plugi
     if (state !== undefined) {
       state.apiReachable = true
       // A real request succeeded, so the source is no longer skipping or serving
-      // stale: drop the idle-skip reason so the panel stops labeling it as
-      // quiet.
-      state.lastSkipReason = null
+      // stale: drop the skip so the panel stops labeling it as quiet.
+      state.lastSkip = null
     }
     return state
   }
@@ -159,11 +161,11 @@ export function createPluginStatus (sources: ReadonlyArray<StatusSource>): Plugi
       if (state !== undefined) {
         state.apiReachable = false
         state.suppressListFetch = false
-        // A real request failed, so this is no longer an idle skip: clear the
-        // reason. The error variant outranks idle on the pill regardless, but
-        // keeping the row clean avoids a stale "outside US waters" label riding
-        // alongside a fresh failure.
-        state.lastSkipReason = null
+        // A real request failed, so this is no longer a skip: clear it. The
+        // error variant outranks idle on the pill regardless, but keeping the
+        // row clean avoids a stale "outside US waters" label riding alongside
+        // a fresh failure.
+        state.lastSkip = null
       }
       recentErrors.unshift({ at: new Date().toISOString(), message, source })
       if (recentErrors.length > MAX_RECENT_ERRORS) {
@@ -177,13 +179,14 @@ export function createPluginStatus (sources: ReadonlyArray<StatusSource>): Plugi
     // aggregate input registry distinguish a "fetched zero POIs" success
     // from a "did not bother" skip when it sees the empty result that
     // follows. `reason` (the caller's skip explanation, e.g. "outside US
-    // waters") is retained on `lastSkipReason` so the panel can explain why
-    // the source is idle.
-    recordSkipped: (source: string, reason: string): void => {
+    // waters") is retained on `lastSkip` so the panel can explain why the
+    // source is quiet; `transient` marks a deferral the panel shows as
+    // waiting rather than idle.
+    recordSkipped: (source: string, reason: string, transient = false): void => {
       const state = states.get(source)
       if (state !== undefined) {
         state.suppressListFetch = true
-        state.lastSkipReason = reason
+        state.lastSkip = { reason, transient }
       }
     },
 
@@ -197,9 +200,9 @@ export function createPluginStatus (sources: ReadonlyArray<StatusSource>): Plugi
       if (state !== undefined) {
         state.apiReachable = false
         state.suppressListFetch = true
-        // Not an idle skip: leave lastSkipReason null so the pill reads as
-        // error (honest about the unreachable upstream) rather than idle.
-        state.lastSkipReason = null
+        // Not a skip: leave lastSkip null so the pill reads as error (honest
+        // about the unreachable upstream) rather than idle.
+        state.lastSkip = null
       }
       const message = `Serving cached data offline: ${reason}`
       if (!recentErrors.some((error) => error.source === source && error.message === message)) {
@@ -229,7 +232,7 @@ export function createPluginStatus (sources: ReadonlyArray<StatusSource>): Plugi
         name: state.name,
         apiReachable: state.apiReachable,
         lastListFetch: state.lastListFetch,
-        lastSkipReason: state.lastSkipReason
+        lastSkip: state.lastSkip
       })),
       cachedPoiCount,
       recentErrors: recentErrors.slice(),

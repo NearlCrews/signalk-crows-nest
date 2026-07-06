@@ -63,10 +63,12 @@ and the status readout is more honest about why a source is quiet.
 
 ### Changed
 
-- **The status pill explains an intentionally idle source.** A source that
-  is skipping work on purpose now says why, for example "Idle: outside US
-  waters" on a US-only source when the vessel is offshore, instead of
-  looking broken.
+- **The status pill explains a quiet source.** A source that is skipping
+  work on purpose now says why, for example "Idle: outside US waters" on a
+  US-only source when the vessel is offshore, instead of looking broken. A
+  source that merely outran the aggregate's per-source timeout (a slow
+  Overpass mirror, say) shows a calm "waiting" instead, with the full
+  explanation on hover, because its result arrives on the next refresh.
 - Dependencies refreshed, and the `signalk.recommends` list (the App Store's
   "Works well with") now names only the chartplotters that display the
   plugin's notes.

@@ -19,7 +19,7 @@ function status (overrides: Partial<SourceStatus> = {}): SourceStatus {
     name: 'ActiveCaptain',
     apiReachable: null,
     lastListFetch: null,
-    lastSkipReason: null,
+    lastSkip: null,
     ...overrides
   }
 }
@@ -65,17 +65,44 @@ test('pillVariant returns "idle" when a source is currently skipping, even with 
     pillVariant(status({
       apiReachable: true,
       lastListFetch: { at: '2026-05-23T08:15:00Z', poiCount: 42 },
-      lastSkipReason: 'outside US waters'
+      lastSkip: { reason: 'outside US waters', transient: false }
     })),
     'idle'
   )
+})
+
+test('pillVariant returns "waiting" for a transient deferral, even with a stale prior fetch', () => {
+  // A list request that outran the aggregate's per-source timeout is a
+  // deferral, not a deliberate gate: the fetch is still running and the next
+  // refresh serves it, so the pill reads waiting rather than idle.
+  assert.equal(
+    pillVariant(status({
+      apiReachable: true,
+      lastListFetch: { at: '2026-05-23T08:15:00Z', poiCount: 42 },
+      lastSkip: { reason: 'list request exceeded 5s; result will appear on next refresh', transient: true }
+    })),
+    'waiting'
+  )
+})
+
+test('pillContent for the waiting variant keeps the label calm and puts the reason in the tooltip', () => {
+  const content = pillContent(
+    status({
+      name: 'OpenSeaMap',
+      lastSkip: { reason: 'list request exceeded 5s; result will appear on next refresh', transient: true }
+    }),
+    'waiting'
+  )
+  assert.equal(content.glyph, '…')
+  assert.equal(content.label, 'waiting')
+  assert.equal(content.title, 'OpenSeaMap: list request exceeded 5s; result will appear on next refresh')
 })
 
 test('pillVariant keeps "error" over a skip reason when the most recent attempt failed', () => {
   assert.equal(
     pillVariant(status({
       apiReachable: false,
-      lastSkipReason: 'outside US waters'
+      lastSkip: { reason: 'outside US waters', transient: false }
     })),
     'error'
   )
@@ -83,7 +110,7 @@ test('pillVariant keeps "error" over a skip reason when the most recent attempt 
 
 test('pillContent for the idle variant surfaces the skip reason as the label and tooltip', () => {
   const content = pillContent(
-    status({ name: 'NOAA ENC', lastSkipReason: 'outside US waters' }),
+    status({ name: 'NOAA ENC', lastSkip: { reason: 'outside US waters', transient: false } }),
     'idle'
   )
   assert.equal(content.glyph, '…')

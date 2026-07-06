@@ -193,9 +193,13 @@ export function createInputRegistry (
             if (result.status === 'fulfilled') {
               if (result.value.kind === 'timeout') {
                 anyTimeout = true
+                // Transient: the underlying fetch keeps running inside the
+                // source's cache, so the next refresh serves it. The panel
+                // shows this as waiting, not idle.
                 context.status.recordSkipped(
                   sourceId,
-                  `list request exceeded ${Math.round(perSourceListTimeoutMs / MS_PER_SECOND)}s; result will appear on next refresh`
+                  `list request exceeded ${Math.round(perSourceListTimeoutMs / MS_PER_SECOND)}s; result will appear on next refresh`,
+                  true
                 )
                 continue
               }

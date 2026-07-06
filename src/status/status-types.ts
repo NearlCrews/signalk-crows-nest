@@ -28,6 +28,20 @@ export interface LastListFetch {
   poiCount: number
 }
 
+/** Why a source most recently declined or deferred a request. */
+export interface LastSkip {
+  /** Human-readable explanation, e.g. `outside US waters`. */
+  reason: string
+  /**
+   * True when the skip is a transient deferral rather than a deliberate gate:
+   * a list request that outran the aggregate's per-source timeout and will be
+   * served from cache on the next refresh. The panel renders a transient skip
+   * as waiting rather than idle, so a merely slow source does not read as
+   * intentionally quiet.
+   */
+  transient: boolean
+}
+
 /** Health of one enabled POI data source. */
 export interface SourceStatus {
   /** Source slug, e.g. `activecaptain`. */
@@ -42,14 +56,13 @@ export interface SourceStatus {
   /** The source's most recent successful list fetch, or null if none has happened. */
   lastListFetch: LastListFetch | null
   /**
-   * Why the source most recently declined to issue a request, e.g. `outside US
-   * waters` for a US-only source offshore, or null when the source is not
-   * currently skipping. Cleared the moment a real request succeeds or fails, so
-   * a set value means the source's last recorded action was a deliberate skip.
-   * The panel surfaces it as an idle explanation so an intentionally quiet
-   * source does not read as broken.
+   * Why the source most recently declined or deferred a request, or null when
+   * the source is not currently skipping. Cleared the moment a real request
+   * succeeds or fails, so a set value means the source's last recorded action
+   * was a skip. The panel surfaces it as an idle or waiting explanation so a
+   * quiet source does not read as broken.
    */
-  lastSkipReason: string | null
+  lastSkip: LastSkip | null
 }
 
 /** A point-in-time view of the plugin's health, served to the config panel. */

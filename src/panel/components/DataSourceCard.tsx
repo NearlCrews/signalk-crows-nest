@@ -177,7 +177,7 @@ function SourceStatusPill ({ status }: { status: SourceStatus }): React.ReactEle
   const variant = pillVariant(status)
   const pillStyle = variant === 'error'
     ? PILL_ERROR
-    : variant === 'idle'
+    : variant === 'idle' || variant === 'waiting'
       ? PILL_IDLE
       : S.sourceStatusPill
   const { glyph, label, title } = pillContent(status, variant)
