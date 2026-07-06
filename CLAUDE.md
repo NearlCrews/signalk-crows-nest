@@ -7,11 +7,13 @@ Guidance for Claude Code (and contributors) working in this repository.
 `signalk-crows-nest` is a single [Signal K server](https://github.com/SignalK/signalk-server)
 plugin. It imports points of interest from multiple marine data sources
 (Garmin ActiveCaptain, OpenSeaMap via the OpenStreetMap Overpass API, the USCG
-Light List of US Aids to Navigation, and the NOAA ENC Direct database of
-wrecks, obstructions, and underwater rocks) and exposes them as Signal K
-`notes` resources so chartplotters such as Freeboard-SK can display them. It
-also runs three safety outputs: a proximity hazard alarm, a route-corridor
-hazard scan, and a bridge air-draft check.
+Light List of US Aids to Navigation, the NOAA ENC Direct database of wrecks,
+obstructions, and underwater rocks, NOAA CO-OPS tide and current stations, the
+USCG Local Notice to Mariners live safety feed, the NGA World Port Index, and
+USACE locks and dams) and exposes them as Signal K `notes` resources so
+chartplotters such as Freeboard-SK can display them. It also runs three safety
+outputs: a proximity hazard alarm, a route-corridor hazard scan, and a bridge
+air-draft check.
 
 ## Architecture rule: ONE plugin, modular files
 
@@ -69,12 +71,29 @@ self-contained module registered on one line in `src/index.ts`.
       (ActiveCaptain and Overpass): a concurrency-limited and throttled
       request queue, retry with exponential backoff that honors HTTP 429/503
       `Retry-After`, and a `close()` that aborts in-flight work.
-    - `http-one-shot.ts` - the `requestText` one-shot GET shared by the two
-      raw-client sources (USCG Light List and NOAA ENC Direct): it selects the
-      `http`/`https` transport, buffers the body, aborts on a per-request
-      timeout, and honors an optional caller `AbortSignal`, leaving each caller
-      its own status and JSON handling. Those two feeds are low-volume and
-      deliberately skip the queue and retry of `http-client.ts`.
+    - `http-one-shot.ts` - the `requestText` one-shot GET the raw-client
+      sources build on: it selects the `http`/`https` transport, buffers the
+      body, aborts on a per-request timeout, and honors an optional caller
+      `AbortSignal`; plus `requestJson`, the status-guarded JSON envelope the
+      ArcGIS protocol and the World Port Index client share. Those feeds are
+      low-volume and deliberately skip the queue and retry of
+      `http-client.ts`.
+    - `http-conditional-get.ts` - the `conditionalGet` download envelope built
+      on `http-one-shot.ts` and shared by the USCG Light List, USCG LNM, and
+      NOAA CO-OPS clients: the ok / not-modified / error result union, the
+      `If-Modified-Since` and `If-None-Match` request headers, the 304 branch,
+      and the `Last-Modified` / `ETag` response-header extraction, leaving
+      each caller its own body parsing.
+    - `arcgis-query.ts` - the ArcGIS REST query protocol shared by the NOAA
+      ENC Direct and USACE clients: the envelope and by-id query parameters,
+      the JSON fetch with status guard, and the bounded
+      `exceededTransferLimit` pagination loop, parameterized by a per-request
+      URL resolver and an upstream label for error messages.
+    - `refresh-scheduler.ts` - `startRefreshScheduler`, the periodic-refresh
+      installer the USCG Light List, USCG LNM, and NOAA CO-OPS input modules
+      share: the in-flight guard, the initial and periodic timers, and the
+      close-wrap that clears both timers before chaining the source's own
+      `close`.
     - `dedupe-pois.ts` - merges non-base POIs that duplicate an ActiveCaptain
       base POI, then runs a same-source pass that collapses internal
       duplicates within a configurable radius (default 150 feet, 45.72 m), so
@@ -183,6 +202,51 @@ self-contained module registered on one line in `src/index.ts`.
       `noaa-enc-sections.ts` (the normalized-detail section builder), and
       `depth-area-query.ts` (the charted `Depth_Area` and `Land_Area` polygon
       query built on the same `EncDirectClient`; not published as POIs).
+    - `noaa-coops/` - the NOAA CO-OPS input (US tide and current stations,
+      US-only, defaults off): `noaa-coops-input.ts` (the `InputModule` with the
+      periodic refresh scheduler on `noaaCoopsRefreshHours`),
+      `noaa-coops-source.ts` (the `PoiSource` over the client and store),
+      `coops-client.ts` (the keyless mdapi client built on `http-one-shot.ts`
+      with best-effort conditional GET), `coops-store.ts` (the on-disk station
+      index under the plugin data directory), `coops-mapping.ts` (station to
+      summary mapping; ids are `tide_<id>` / `current_<id>`),
+      `coops-detail.ts` (the plain-English HTML renderer),
+      `coops-sections.ts` (the normalized-detail section builder), and
+      `noaa-coops-types.ts` (the mdapi wire types, private to this input).
+    - `uscg-lnm/` - the USCG Local Notice to Mariners input (live US safety
+      notices, US-only, defaults off): `uscg-lnm-input.ts` (the `InputModule`
+      with the periodic refresh on `uscgLnmRefreshSeconds`, where a configured
+      `0` means the default cadence, not no-cache), `uscg-lnm-source.ts` (the
+      `PoiSource`; serves bbox-filtered from the in-memory record set),
+      `lnm-client.ts` (the NAVCEN per-category GeoJSON client on
+      `http-one-shot.ts` with conditional GET), `lnm-layers.ts` (the pinned
+      file list and layer-to-`PoiType` mapping; danger layers map to `Hazard`
+      so the alarms fire, and NAVCEN's duplicate-page quirk is neutralized by
+      unioning records by business id), `lnm-store.ts` (the single-file
+      on-disk store), `lnm-detail.ts`, `lnm-sections.ts`, and `lnm-types.ts`
+      (the notice and discrepancy wire shapes normalized into one
+      kind-discriminated record).
+    - `wpi/` - the NGA World Port Index input (worldwide ports, defaults
+      off): `wpi-input.ts` (the `InputModule`), `wpi-source.ts` (the
+      `PoiSource`; the authoritative NGA endpoint is not bbox-queryable, so
+      the source single-flight fetches the full near-static dataset on the
+      `wpiRefreshHours` cadence, holds it complete in the hydrated detail
+      cache with a WPI-specific entry cap, and bbox-filters in memory per
+      list call), `wpi-client.ts` (the msi.nga.mil publications client on
+      `http-one-shot.ts`), `wpi-mapping.ts` (Pub 150 coded-value decoding;
+      ports map to `Marina` so they dedupe against ActiveCaptain markers),
+      `wpi-detail.ts`, `wpi-sections.ts`, and `wpi-types.ts`.
+    - `usace/` - the USACE locks and dams input (US inland waterways,
+      defaults off; locks default on, dams default off because the National
+      Inventory of Dams would bury the chart): `usace-input.ts` (the
+      `InputModule`), `usace-source.ts` (the `PoiSource`; per-layer ArcGIS
+      fan-out mirroring the NOAA ENC shape, with the US-waters gate on the
+      list and detail-miss paths and the offline stale fallback),
+      `usace-client.ts` (the ArcGIS REST client on `http-one-shot.ts` with
+      envelope query and paging), `usace-mapping.ts` (locks map to `Lock`
+      and dams to `Dam`, the types the route-hazard scan treats specially;
+      wire dimensions are feet, stored SI via `metersFromFeet`),
+      `usace-detail.ts`, `usace-sections.ts`, and `usace-types.ts`.
   - `outputs/` - SignalK consumers of POI data.
     - `output.ts` - the `OutputModule`, `OutputHandle`, `OutputContext`, and
       `PositionScanContributor` contracts an output implements.
@@ -220,7 +284,9 @@ self-contained module registered on one line in `src/index.ts`.
     position-driven outputs' scan contributors.
   - `geo/` - `position-utilities.ts`: geo helpers (`toPosition` parsing,
     position to bounding box, great-circle `distanceMeters`, `unionBbox`,
-    and `projectPointOntoLeg` for corridor geometry).
+    the antimeridian-aware `bboxContainsPoint` (a box whose `west` exceeds
+    its `east` wraps across the 180-degree line), and `projectPointOntoLeg`
+    for corridor geometry).
   - `status/` - `plugin-status.ts` (records request outcomes, produces a
     `StatusSnapshot`; besides list, detail, error, and skip outcomes it exposes
     `recordStaleServe` so a source that serves cached markers while its
@@ -283,7 +349,9 @@ self-contained module registered on one line in `src/index.ts`.
     use), `html-escape.ts` (the shared `escapeHtml` helper every source's
     detail renderer consumes, plus `labeledParagraph`, the
     `<p><strong>Label:</strong> value.</p>` builder the structured detail
-    renderers share), `url-safety.ts` (the `safeLinkUrl` scheme allowlist both
+    renderers share, and `labeledMeters`, its meters-formatting sibling),
+    `atomic-write-json.ts` (the async temp-file-and-rename JSON write the
+    USCG Light List, USCG LNM, and NOAA CO-OPS stores share), `url-safety.ts` (the `safeLinkUrl` scheme allowlist both
     the Handlebars detail templates and the structured section builders gate a
     link value through), `notification-path.ts` (builds path-safe SignalK
     notification deltas, shared by the alarm outputs, with a `sourceSuffix`
@@ -345,7 +413,8 @@ self-contained module registered on one line in `src/index.ts`.
     `SELF_POSITION_PATH` and `SELF_SOG_PATH` constants), and
     `normalized-detail.ts` (the source-agnostic structured-notes schema:
     `NormalizedSection`, `NormalizedItem`, the item-`kind` union, the
-    `schemaVersion`, and the shared `pushSection` builder).
+    `schemaVersion`, and the shared `pushSection`, `textItem`, and
+    `meterMeasureItem` builders).
   - `panel/` - federated React configuration panel. Root and reducer:
     `index.tsx` (Module Federation entry), `PluginConfigurationPanel.tsx`,
     `config-reducer.ts`, `normalize-config.ts`, plus the UI-metadata
@@ -369,7 +438,10 @@ self-contained module registered on one line in `src/index.ts`.
     composing `SaveStatus`), `DataSourcesSection` (the per-source accordion
     shell), `DataSourceCard` (one collapsible card, with an in-header
     live-status pill), `ActiveCaptainSource`, `OpenSeaMapSource`,
-    `UscgLightListSource`, and `NoaaEncSource` (the per-source card bodies),
+    `UscgLightListSource`, `NoaaEncSource`, `NoaaCoopsSource`,
+    `UscgLnmSource`, `WpiSource`, and `UsaceSource` (the per-source card
+    bodies), `IncludeToggles` (the shared import-layers checkbox grid with
+    its empty-selection warning),
     `AlertsSection` (the proximity, route-hazard, and bridge air-draft
     controls); plus the per-field input components `LabeledField`,
     `NumberField`, `LengthField`, `CacheDurationField`, `EndpointUrlField`,
@@ -381,7 +453,7 @@ self-contained module registered on one line in `src/index.ts`.
     The panel is a per-source accordion: a top control bar with the theme
     toggle, the status bar, a collapsible card per data source, then the
     Alerts section. Card disclosure state lives at the panel root so the
-    four card bodies share one stable map.
+    card bodies share one stable map.
 - `test/` - `node:test` test suite, run through `tsx`.
 - `docs/` - project documentation: the development guide, troubleshooting, the
   notes-resource integration guide (`notes-resource-format.md`), the Garmin API
