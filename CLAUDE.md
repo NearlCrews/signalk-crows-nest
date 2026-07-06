@@ -369,8 +369,9 @@ self-contained module registered on one line in `src/index.ts`.
     `cache-duration.ts`, `dedupe-radius.ts`, `refresh-hours.ts`,
     `scale-band.ts`, and `route-corridor.ts` (browser-safe single-source-of-truth
     homes for, respectively, the ActiveCaptain cache-duration bounds and schema;
-    the dedupe merge-radius default and bounds; the USCG refresh-hours bounds
-    and schema; the NOAA `ScaleBand` type plus constants; and the
+    the dedupe merge-radius default and bounds; the refresh-hours bounds and
+    schema the bulk-download sources share; the NOAA `ScaleBand` type plus
+    constants; and the
     route-corridor-width bounds, `clampRouteCorridorWidth`, and schema),
     `config-schema.ts` (the `boundedNumberSchema` fragment constructor every
     bounds module's schema builder delegates to), `numbers.ts` (the

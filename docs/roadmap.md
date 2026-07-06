@@ -62,26 +62,29 @@ terms-of-service exposure.
   rocks both shipped as US-only, opt-in inputs that gate outbound HTTP on the
   vessel position. NOAA ENC Direct is the official successor to the retired
   AWOIS dataset, so chart hazards now come from the same authoritative survey
-  data that ships in the official ENC chart cells. USACE lock status and
-  Waterway Guide remain candidates for follow-up sources.
+  data that ships in the official ENC chart cells. NOAA CO-OPS tide and
+  current stations, the USCG Local Notice to Mariners feeds, the NGA World
+  Port Index, and USACE locks and dams shipped in v0.13.0. Waterway Guide
+  remains a candidate for a follow-up source.
 - React panel component tests.
 
 ## Candidate data sources (researched 2026-05-30)
 
-These are the strongest next sources, beyond the four that ship today:
+Most of the candidates from this research round shipped in v0.13.0:
 
-- **NOAA CO-OPS tide and current stations** as a first-class input, not just the
-  Tier 2 nearest-station cross-reference: the free
-  `api.tidesandcurrents.noaa.gov` station-metadata endpoint lists every station
-  with a position, rendered as a POI note with the next high/low or flood/ebb
-  and a deep link. High daily value, fits the pull-and-cache pattern, US plus
-  some Pacific and Caribbean coverage.
-- **AIS Aids to Navigation read from SignalK itself**: a new input that surfaces
-  the AIS AtoN already on the SignalK bus (message 21, especially virtual AtoN)
-  as POI notes. Global, no external API, and no terms-of-service exposure; it
-  introduces a read-from-SignalK input flavor alongside the HTTP pulls.
-- **World Port Index (NGA Pub 150)**: a free global ports and harbours dataset
-  that fills the plugin's US bias for international cruisers.
+- **NOAA CO-OPS tide and current stations**: shipped in v0.13.0 as a
+  first-class input reading the free `api.tidesandcurrents.noaa.gov`
+  station-metadata endpoint, with each station rendered as a POI note
+  carrying a deep link to its station page. The next high/low or flood/ebb
+  prediction in the popup remains future work.
+- **World Port Index (NGA Pub 150)**: shipped in v0.13.0, filling the
+  plugin's US bias for international cruisers.
+- **USACE locks and dams**: shipped in v0.13.0 (locks by default, dams
+  opt-in).
+- **AIS Aids to Navigation read from SignalK itself**: still a candidate. A
+  new input that surfaces the AIS AtoN already on the SignalK bus (message
+  21, especially virtual AtoN) as POI notes. Global, no external API, and no
+  terms-of-service exposure; it introduces a read-from-SignalK input flavor
+  alongside the HTTP pulls.
 
-USACE lock status and Waterway Guide remain the other candidates noted in
-Tier 3.
+Waterway Guide remains the other candidate noted in Tier 3.

@@ -10,9 +10,10 @@
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/nearlcrews)
 
 A points-of-interest importer for [Signal K](https://signalk.org): it pulls
-marinas, anchorages, hazards, aids to navigation, and chart hazards from four
-marine data sources and publishes them as Signal K `notes` resources, with
-proximity, route-corridor, and bridge air-draft alarms.
+marinas, ports, anchorages, hazards, aids to navigation, live safety notices,
+tide and current stations, locks, and chart hazards from eight marine data
+sources and publishes them as Signal K `notes` resources, with proximity,
+route-corridor, and bridge air-draft alarms.
 
 > Built on the foundation of [`signalk-activecaptain-resources`](https://github.com/KvotheBloodless/signalk-activecaptain-resources)
 > by Paul Willems and the Signal K community.
@@ -21,22 +22,31 @@ proximity, route-corridor, and bridge air-draft alarms.
 > safety-of-life navigation: always cross-check against official charts and
 > your primary instruments.
 
-## What's new in 0.12.0
+## What's new in 0.13.0
 
-The AI route-draft feature is removed. Crow's Nest is now a POI plugin only:
-it imports points of interest from ActiveCaptain, OpenSeaMap, the USCG Light
-List, and NOAA ENC Direct, and publishes them as Signal K `notes` resources
-with proximity, route-corridor, and bridge air-draft alarms. All POI inputs,
-outputs, and alarms are unchanged.
+- **Four new data sources**, each opt-in with its own panel card: NOAA
+  CO-OPS tide and current stations (US and territories), USCG Local Notice
+  to Mariners live safety notices (US-only), the NGA World Port Index
+  (worldwide, about 2950 ports), and USACE locks and dams (US inland
+  waterways).
+- **Live hazards feed the alarms**: the Local Notice to Mariners danger
+  categories (hazards to navigation, discrepant aids) render as hazards, so
+  the proximity alarm and the route-corridor scan react to them.
+- **Offline hardening**: OpenSeaMap and NOAA ENC Direct details now persist
+  to disk, hydrate on a cold start, and keep serving previously fetched
+  markers when the upstream is unreachable.
+- **Honest status readout**: an intentionally idle source explains itself
+  ("Idle: outside US waters"), and a cache hit no longer masks a failing
+  upstream refresh.
 
-See the [changelog](CHANGELOG.md#v0120) for the full list.
+See the [changelog](CHANGELOG.md#v0130) for the full list.
 
 ## What it does
 
 Signal K is an open marine data standard that streams a boat's navigation,
 environment, and AIS data over a single API. Crow's Nest is a Signal K
 server plugin that fills the chart around that data: it imports points of
-interest from four sources, merges duplicates into one corroborated marker,
+interest from eight sources, merges duplicates into one corroborated marker,
 and serves them as standard `notes` resources that chartplotters such as
 [Freeboard-SK](https://github.com/SignalK/freeboard-sk) display natively.
 
@@ -48,18 +58,21 @@ air-draft check).
 
 ## Features
 
-- **Four data sources, merged into one chart layer.** Garmin ActiveCaptain
-  is the base; OpenSeaMap (OpenStreetMap marine data via the Overpass API),
-  the USCG Light List of US Aids to Navigation (US-only), and NOAA ENC
-  Direct (US authoritative wrecks, obstructions, and underwater rocks,
-  US-only) are opt-in. Cross-source duplicates merge into the ActiveCaptain
-  base, and the surviving note records every contributing source as a
-  corroboration signal.
+- **Eight data sources, merged into one chart layer.** Garmin ActiveCaptain
+  is the base; the other seven are opt-in: OpenSeaMap (OpenStreetMap marine
+  data via the Overpass API), the USCG Light List of US Aids to Navigation
+  (US-only), NOAA ENC Direct (US authoritative wrecks, obstructions, and
+  underwater rocks), NOAA CO-OPS tide and current stations (US and
+  territories), USCG Local Notice to Mariners live safety notices (US-only),
+  the NGA World Port Index (worldwide), and USACE locks and dams (US inland
+  waterways). Cross-source duplicates merge into the ActiveCaptain base, and
+  the surviving note records every contributing source as a corroboration
+  signal.
 - **A broad point-of-interest overlay** as Signal K `notes` resources:
-  marinas, anchorages, hazards, businesses, boat ramps, bridges, dams,
-  ferries, inlets, locks, local knowledge, navigational aids, airports,
-  lighted and unlighted aids, daymarks, racons, wrecks, obstructions, and
-  underwater rocks.
+  marinas, ports, anchorages, hazards, safety notices, businesses, boat
+  ramps, bridges, dams, ferries, inlets, locks, local knowledge,
+  navigational aids, airports, lighted and unlighted aids, daymarks, racons,
+  tide and current stations, wrecks, obstructions, and underwater rocks.
 - **Proximity hazard alarms** with hysteresis: a Signal K notification
   fires when a Hazard point comes within a configurable radius and clears
   once the vessel moves beyond it.
@@ -70,19 +83,23 @@ air-draft check).
   fallback) plus a safety margin, both as a proximity alarm as the vessel
   nears a too-low bridge and as a clearance-specific route warning ahead.
 - **Rich point detail** rendered as plain-English HTML, with the
-  source-specific attribution credit (ODbL for OSM, CC0 for NOAA, US
-  Government public domain for USCG, Garmin ActiveCaptain for the base)
-  published as a structured `properties.attribution` field on every note,
-  so a client UI can render it in chrome rather than next to the POI text.
+  source-specific attribution credit (ODbL for OSM, CC0 for NOAA ENC, US
+  Government public domain for the USCG, NOAA CO-OPS, NGA, and USACE feeds,
+  Garmin ActiveCaptain for the base) published as a structured
+  `properties.attribution` field on every note, so a client UI can render it
+  in chrome rather than next to the POI text.
 - **A normalized detail schema for structured clients**: every note also
   carries a presentation-neutral `properties.crowsNest` view of the same
   detail alongside the HTML, documented in the
   [notes-resource integration guide](docs/notes-resource-format.md), so a
   richer chartplotter can render the sections natively and skip the HTML.
-- **Persistent, offline caching.** ActiveCaptain details live in a 30-day
-  on-disk store with stale-on-error fallback; the USCG Light List index is
-  sharded on disk and queried through an in-memory spatial tile index for
-  sub-millisecond bbox lookups.
+- **Persistent, offline caching.** ActiveCaptain, OpenSeaMap, and NOAA ENC
+  details live in 30-day on-disk stores with stale-on-error fallback, so an
+  offline restart still renders previously fetched markers; the USCG Light
+  List index is sharded on disk and queried through an in-memory spatial
+  tile index for sub-millisecond bbox lookups; and the Local Notice to
+  Mariners, NOAA CO-OPS, and World Port Index datasets are held complete on
+  disk and survive restarts.
 - **Refresh debounce per source**: each at-runtime source snaps the
   viewport to a coarse tile and serves stale while revalidating, so a
   Freeboard refresh burst on a stationary viewport reuses the cached
@@ -114,16 +131,18 @@ Crow's Nest is one plugin built from focused modules:
   the React configuration panel bundles with webpack 5 as a Module
   Federation remote that the Signal K admin UI loads.
 - **Inputs and outputs.** Every POI source is a self-contained input module
-  (ActiveCaptain, OpenSeaMap, USCG Light List, NOAA ENC Direct) and every
-  consumer is an output module (the `notes` provider, the proximity alarm,
-  the route-corridor scan, and the bridge air-draft check), each registered
-  on one line in the plugin entrypoint.
+  (ActiveCaptain, OpenSeaMap, USCG Light List, NOAA ENC Direct, NOAA CO-OPS,
+  USCG Local Notice to Mariners, NGA World Port Index, and USACE locks and
+  dams) and every consumer is an output module (the `notes` provider, the
+  proximity alarm, the route-corridor scan, and the bridge air-draft check),
+  each registered on one line in the plugin entrypoint.
 - **One aggregate source.** A registry fans each chart request out to every
   enabled input, namespaces the ids, unions the results, records per-source
   health, and runs the dedupe pass that merges duplicates within a
   configurable radius (default 150 feet).
 - **Polite HTTP.** Queued, throttled clients with retry and `Retry-After`
-  handling for the high-volume sources; conditional GET for the USCG feed;
+  handling for the high-volume sources; conditional GET for the bulk-download
+  feeds (USCG Light List, Local Notice to Mariners, and NOAA CO-OPS);
   Overpass fallback mirrors so a single instance outage does not take the
   source offline; and a US-waters gate that skips outbound HTTP on the
   US-only feeds when the vessel is elsewhere.
@@ -140,24 +159,24 @@ decimal degrees, distances and heights in meters).
 
 **Reads (from `vessels.self`):**
 
-- `navigation.position` — the viewport centre for POI fetches, the US-waters
+- `navigation.position`: the viewport center for POI fetches, the US-waters
   gate on the US-only feeds, and the proximity and route scans.
-- `navigation.speedOverGround` — ETA math in the route-corridor scan.
-- `design.airHeight` — the vessel air draft for the bridge-clearance check
+- `navigation.speedOverGround`: ETA math in the route-corridor scan.
+- `design.airHeight`: the vessel air draft for the bridge-clearance check
   (a configured fallback is used only when this path is absent).
-- The **Course API** active route — the route-corridor hazard scan reads the
+- The **Course API** active route: the route-corridor hazard scan reads the
   active route to look ahead along the planned track.
 
 **Writes:**
 
-- `resources/notes` — every imported POI is published as a Signal K `note`
+- `resources/notes`: every imported POI is published as a Signal K `note`
   resource (with the source-agnostic structured detail on
   `properties.crowsNest` alongside the HTML description) so chartplotters such
   as Freeboard-SK can display it.
-- `notifications.navigation.crowsNest.hazard.<id>` — proximity hazard alarms.
-- `notifications.navigation.crowsNest.route.<id>` — route-corridor hazard
+- `notifications.navigation.crowsNest.hazard.<id>`: proximity hazard alarms.
+- `notifications.navigation.crowsNest.route.<id>`: route-corridor hazard
   alarms (including the too-low-bridge verdict).
-- `notifications.navigation.crowsNest.bridgeClearance.<id>` — bridge
+- `notifications.navigation.crowsNest.bridgeClearance.<id>`: bridge
   air-draft alarms.
 
 The plugin also serves an admin-gated `GET` status endpoint.
@@ -210,10 +229,36 @@ The panel has these areas:
    enabled source, a "checked Ns ago" freshness note, plus any recent
    errors, each clickable to jump to the source card it belongs to.
 3. **Data sources accordion** with one collapsible card per source
-   (ActiveCaptain, OpenSeaMap, USCG Light List, NOAA ENC Direct). Each
-   card's body groups its options into bordered fieldsets: import layers,
-   refresh and freshness, filters (when present), and merge with
-   ActiveCaptain.
+   (ActiveCaptain, OpenSeaMap, USCG Light List, NOAA ENC Direct, NOAA
+   CO-OPS, USCG Local Notice to Mariners, NGA World Port Index, and USACE
+   locks and dams). Each card's body groups its options into bordered
+   fieldsets: import layers, refresh and freshness, filters (when present),
+   and merge with ActiveCaptain. In brief, per card:
+   - **ActiveCaptain** (on by default): 13 POI-type toggles, a
+     minimum-rating filter, the detail freshness window (default 24 hours),
+     and the viewport refresh window (default 30 seconds).
+   - **OpenSeaMap** (off by default): four seamark feature-group toggles, an
+     earliest-year filter, the Overpass endpoint with optional fallback
+     mirrors, and the viewport refresh window (default 10 minutes).
+   - **USCG Light List** (off by default, US-only): the background refresh
+     period in hours (default 24) and an earliest-year filter.
+   - **NOAA ENC Direct** (off by default, US-only): wreck and obstruction
+     layer toggles (on), an underwater-rocks toggle (off, heavy), the chart
+     scale band, an earliest survey-year filter, and the viewport refresh
+     window (default 30 minutes).
+   - **NOAA CO-OPS** (off by default, US and territories): tide and
+     current-meter station family toggles (both on) and the background
+     refresh period in hours (default 24).
+   - **USCG Local Notice to Mariners** (off by default, US-only): the
+     background refresh period in seconds (default 900, 15 minutes).
+   - **NGA World Port Index** (off by default, worldwide): the background
+     refresh period in hours (default 24).
+   - **USACE locks and dams** (off by default, US-only): a locks toggle
+     (on), a dams toggle (off, heavy), and the viewport refresh window
+     (default 30 minutes).
+
+   Every card except ActiveCaptain also carries a merge-with-ActiveCaptain
+   toggle (on by default) and its per-source merge radius.
 4. **Alerts section** (collapsed by default, opens automatically when an
    alarm is enabled): the proximity-alarm, route-corridor scan, and
    bridge air-draft check controls, each in its own fieldset with an
@@ -285,10 +330,18 @@ and maintained by [Nearl Crews](https://github.com/NearlCrews).
   under the [Open Database License](https://opendatacommons.org/licenses/odbl/)
 - The [US Coast Guard Navigation Center](https://www.navcen.uscg.gov)
   for the [Light List](https://www.navcen.uscg.gov/light-lists) of US
-  Aids to Navigation, US Government public domain
+  Aids to Navigation and for the Local Notice to Mariners feeds, US
+  Government public domain
 - The [NOAA Office of Coast Survey](https://nauticalcharts.noaa.gov)
   for [ENC Direct](https://encdirect.noaa.gov) authoritative US chart
   hazard data, published under CC0
+- [NOAA CO-OPS](https://tidesandcurrents.noaa.gov) for the tide and
+  current station metadata, US Government public domain
+- The [National Geospatial-Intelligence Agency](https://msi.nga.mil) for
+  the World Port Index (Pub 150), US Government public domain
+- The [US Army Corps of Engineers](https://www.usace.army.mil) for the
+  navigation lock data and the National Inventory of Dams, US Government
+  public domain
 
 Crow's Nest pairs well with sibling plugins such as
 [`signalk-nmea2000-emitter-cannon`](https://github.com/NearlCrews/signalk-nmea2000-emitter-cannon)

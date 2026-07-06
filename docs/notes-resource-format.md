@@ -231,10 +231,16 @@ Rendering notes:
 Every POI source produces `sections` on its detail responses: ActiveCaptain
 (marina and anchorage amenities, fuel, dockage with maximum LOA and beam,
 mooring, services, contact, and reviews), OpenSeaMap (seamark attributes), the
-USCG Light List (light characteristic, structure, daymark, and signals), and
-NOAA ENC Direct (wreck, obstruction, and rock S-57 attributes). The per-source
-builders live in `src/inputs/<source>/<source>-sections.ts`; the shared schema
-is `src/shared/normalized-detail.ts`.
+USCG Light List (light characteristic, structure, daymark, and signals),
+NOAA ENC Direct (wreck, obstruction, and rock S-57 attributes), NOAA CO-OPS
+(station identity and the station-page link), USCG Local Notice to Mariners
+(the notice detail, including the Broadcast Notice to Mariners number and the
+affected aid's LLNR), the NGA World Port Index (harbor classification,
+entrance restrictions, pilotage, services, and maximum vessel dimensions),
+and USACE locks and dams (chamber dimensions, river and river mile, and gate
+type). The per-source builders live in
+`src/inputs/<source>/<source>-sections.ts`; the shared schema is
+`src/shared/normalized-detail.ts`.
 
 A few source-specific conventions worth knowing:
 

@@ -35,10 +35,11 @@ npm run clean         # Remove dist/ and the panel build artifacts
 
 The plugin imports points of interest (POIs) from multiple marine data sources
 (Garmin ActiveCaptain, OpenSeaMap via the OpenStreetMap Overpass API, the USCG
-Light List of US Aids to Navigation, and NOAA ENC Direct's authoritative US
-wrecks, obstructions, and underwater rocks) and exposes them as Signal K
-`notes` resources, so chartplotters such as Freeboard-SK can render them as
-an extra chart layer.
+Light List of US Aids to Navigation, NOAA ENC Direct's authoritative US
+wrecks, obstructions, and underwater rocks, NOAA CO-OPS tide and current
+stations, the USCG Local Notice to Mariners feeds, the NGA World Port Index,
+and USACE locks and dams) and exposes them as Signal K `notes` resources, so
+chartplotters such as Freeboard-SK can render them as an extra chart layer.
 
 When the Signal K resources API receives a `notes` query, the plugin resolves
 the query into a bounding box and asks the aggregate POI source for POIs in
@@ -47,9 +48,12 @@ each resource id with its source slug, unions the results, and merges
 duplicates that more than one source reports. POI detail summaries are fetched
 lazily and rendered into HTML descriptions. The queued sources' HTTP clients
 (ActiveCaptain and Overpass) rate-limit requests, retry `429` and `5xx`
-responses with exponential backoff, and honor `Retry-After`; the two
-low-volume US sources (USCG Light List and NOAA ENC) use a simpler one-shot
-client. A cache holds detail responses so repeated queries do not refetch.
+responses with exponential backoff, and honor `Retry-After`; the low-volume
+sources use a simpler one-shot client, with a shared conditional-GET envelope
+(`http-conditional-get.ts`) for the bulk downloads (USCG Light List, Local
+Notice to Mariners, and NOAA CO-OPS) and a shared ArcGIS REST paging protocol
+(`arcgis-query.ts`) for the bbox-queried services (NOAA ENC Direct and
+USACE). A cache holds detail responses so repeated queries do not refetch.
 
 The plugin ships its own configuration panel: a federated React app, loaded by
 the Signal K admin UI through Module Federation, that replaces the generated
@@ -72,7 +76,14 @@ src/                      # TypeScript source
 │   ├── input-registry.ts  # Holds the inputs, builds the aggregate PoiSource
 │   ├── http-client.ts     # Shared queued HTTP plumbing (ActiveCaptain, Overpass):
 │   │                      #   queue, throttle, retry, Retry-After
-│   ├── http-one-shot.ts   # One-shot GET shared by the USCG and NOAA raw clients
+│   ├── http-one-shot.ts   # One-shot GET shared by the low-volume raw clients
+│   ├── http-conditional-get.ts # Conditional-GET envelope shared by the
+│   │                      #   bulk-download sources (USCG Light List, USCG LNM,
+│   │                      #   NOAA CO-OPS)
+│   ├── arcgis-query.ts    # Shared ArcGIS REST /query paging protocol
+│   │                      #   (NOAA ENC Direct, USACE)
+│   ├── refresh-scheduler.ts # Periodic-refresh scheduler shared by the
+│   │                      #   full-download inputs (Light List, CO-OPS, LNM)
 │   ├── dedupe-pois.ts     # Merges duplicates against the ActiveCaptain base layer,
 │   │                      #   then a same-source pass; radius configurable, default 150 ft
 │   ├── active-captain/    # The ActiveCaptain input: module, source adapter, client,
@@ -88,6 +99,22 @@ src/                      # TypeScript source
 │   │                      #   query): module, source adapter, ArcGIS REST client,
 │   │                      #   wire types, S-57 enum and per-layer mapping,
 │   │                      #   plain-English detail renderer
+│   ├── noaa-coops/        # The NOAA CO-OPS tide and current stations input
+│   │                      #   (US and territories, periodic download): module,
+│   │                      #   source adapter, keyless mdapi client, on-disk
+│   │                      #   store, mapping, detail renderer, section builder
+│   ├── uscg-lnm/          # The USCG Local Notice to Mariners input (US-only,
+│   │                      #   periodic download of the NAVCEN GeoJSON layers):
+│   │                      #   module, source adapter, client, on-disk store,
+│   │                      #   pinned layer catalog, detail renderer, section
+│   │                      #   builder
+│   ├── wpi/               # The NGA World Port Index input (worldwide,
+│   │                      #   full-index download held on disk): module, source
+│   │                      #   adapter, client, Pub 150 code-to-label mapping,
+│   │                      #   detail renderer, section builder
+│   ├── usace/             # The USACE locks and dams input (US-only, at-runtime
+│   │                      #   bbox query): module, source adapter, ArcGIS
+│   │                      #   client, mapping, detail renderer, section builder
 ├── outputs/              # SignalK consumers of POI data
 │   ├── output.ts          # The OutputModule and PositionScanContributor contracts
 │   ├── output-registry.ts # Holds the outputs, starts the enabled ones
@@ -117,7 +144,11 @@ src/                      # TypeScript source
 │                         #   time.ts (MS_PER_SECOND/MINUTE/HOUR and
 │                         #   SECONDS_PER_MINUTE/HOUR/DAY), source-ids.ts,
 │                         #   bbox-debounce.ts (the geographic stale-while-revalidate
-│                         #   cache), map-link.ts, bridge-clearance.ts, length.ts,
+│                         #   cache), detail-store.ts and hydrated-detail-cache.ts
+│                         #   (the disk-backed detail persistence behind the
+│                         #   offline hydration), atomic-write-json.ts (the
+│                         #   crash-safe JSON write the on-disk stores share),
+│                         #   map-link.ts, bridge-clearance.ts, length.ts,
 │                         #   proximity-radius.ts, light-character.ts, url-safety.ts
 │                         #   (the safeLinkUrl scheme allowlist), overpass-endpoints.ts
 │                         #   (the OpenSeaMap default and fallback mirrors), and
@@ -137,7 +168,8 @@ src/                      # TypeScript source
     └── components/        # StatusBar, FooterBar, DataSourcesSection (per-source
                            #   accordion shell), DataSourceCard (one collapsible card),
                            #   ActiveCaptainSource, OpenSeaMapSource, UscgLightListSource,
-                           #   NoaaEncSource (card bodies), AlertsSection (the proximity,
+                           #   NoaaEncSource, NoaaCoopsSource, UscgLnmSource, WpiSource,
+                           #   UsaceSource (card bodies), AlertsSection (the proximity,
                            #   route-hazard, and bridge air-draft controls),
                            #   ThemeToggle; and the per-field input components, including
                            #   the shared NumberField, LengthField (the meters-backed,
@@ -184,27 +216,37 @@ must set `skIcon` to a Freeboard-registered icon name; the field is required, so
 an omission is a compile error. See [CLAUDE.md](../CLAUDE.md) for the full
 architecture rule and conventions.
 
-### Worked example: USCG Light List and NOAA ENC inputs
+### The two acquisition patterns
 
-The two newest inputs are the cleanest reference implementations of the two
-acquisition patterns a POI source can use:
+Every input follows one of two acquisition patterns, each with shared
+machinery a new source reuses:
 
 - **Periodic download with conditional GET.** `src/inputs/uscg-light-list/`
-  fetches the full NAVCEN district file set on a background scheduler
-  (default daily), records HTTP `Last-Modified` and `ETag`
-  responses, and replays them as `If-Modified-Since` and `If-None-Match`
-  headers on the next refresh. The parsed records land in an on-disk index
-  under the plugin data directory, so list queries are served entirely from
-  memory and survive a restart. This pattern fits datasets that are large
-  but rarely change.
-- **At-runtime bounding-box query.** `src/inputs/noaa-enc/` fans the list
-  request out across the configured ArcGIS REST hazard layers in parallel,
-  stashes raw features in an LRU detail cache, and re-queries by
-  `OBJECTID` on a detail-cache miss. This pattern fits datasets where the
-  upstream API is bbox-aware and the per-query result set is bounded.
+  is the reference: it fetches the full NAVCEN district file set on a
+  background scheduler (default daily), records HTTP `Last-Modified` and
+  `ETag` responses, and replays them as `If-Modified-Since` and
+  `If-None-Match` headers on the next refresh. The parsed records land in an
+  on-disk index under the plugin data directory, so list queries are served
+  entirely from memory and survive a restart. This pattern fits datasets
+  that are large but rarely change. The NOAA CO-OPS
+  (`src/inputs/noaa-coops/`), USCG Local Notice to Mariners
+  (`src/inputs/uscg-lnm/`), and World Port Index (`src/inputs/wpi/`) inputs
+  follow it too, through the shared machinery: the scheduler lives in
+  `src/inputs/refresh-scheduler.ts`, the conditional-GET envelope in
+  `src/inputs/http-conditional-get.ts`, and the crash-safe store write in
+  `src/shared/atomic-write-json.ts`.
+- **At-runtime bounding-box query.** `src/inputs/noaa-enc/` is the
+  reference: it fans the list request out across the configured ArcGIS REST
+  hazard layers in parallel, stashes raw features in an LRU detail cache,
+  and re-queries by `OBJECTID` on a detail-cache miss. This pattern fits
+  datasets where the upstream API is bbox-aware and the per-query result set
+  is bounded. The USACE input (`src/inputs/usace/`) follows it, and the
+  shared ArcGIS `/query` paging protocol both clients speak lives in
+  `src/inputs/arcgis-query.ts`.
 
-Both inputs are US-only and gated on the vessel position: they call
-`shouldSkipOutsideUsWaters` (in `src/shared/us-waters.ts`), which reads
+The US-only inputs (USCG Light List, NOAA ENC Direct, NOAA CO-OPS, USCG
+Local Notice to Mariners, and USACE) are gated on the vessel position: they
+call `shouldSkipOutsideUsWaters` (in `src/shared/us-waters.ts`), which reads
 `InputContext.getCurrentPosition`, checks `isInUsWaters`, and records the skip,
 so the source issues no outbound HTTP when the vessel has left US waters. A new
 US-only source follows the same pattern.

@@ -10,11 +10,12 @@
 - Open Freeboard-SK and make sure the `notes` layer is switched on in its
   layer controls.
 - Confirm at least one data source is enabled in the configuration panel.
-  The ActiveCaptain source is on by default; the OpenSeaMap source is off
-  by default and has to be enabled to import OpenStreetMap marine data.
-  Check the per-source status bar at the top of the panel: an enabled
-  source whose API call has succeeded shows a green tick and a recent
-  fetch time.
+  The ActiveCaptain source is on by default; every other source (OpenSeaMap,
+  USCG Light List, NOAA ENC Direct, NOAA CO-OPS, USCG Local Notice to
+  Mariners, NGA World Port Index, and USACE locks and dams) is off by
+  default and has to be enabled on its card. Check the per-source status bar
+  at the top of the panel: an enabled source whose API call has succeeded
+  shows a green tick and a recent fetch time.
 - Pan the chart to an area with known coverage. Coverage is uneven for
   every source (ActiveCaptain is heavy on the US East Coast and Gulf,
   OpenSeaMap is heavy in Europe), so an empty bounding box legitimately
@@ -50,6 +51,14 @@ aids, harbours, and infrastructure). A group switched off is left out of
 the Overpass query, so those seamark features are never fetched. The
 OpenSeaMap source itself has its own enable toggle; with it off, no
 OpenSeaMap features show up regardless of the group toggles.
+
+Several other cards carry per-layer toggles with deliberate defaults: the
+NOAA ENC Direct card imports wrecks and obstructions by default but leaves
+underwater rocks off (a coastal-band query can return tens of thousands),
+the NOAA CO-OPS card imports both the tide and the current-meter station
+families by default, and the USACE card imports locks by default but leaves
+dams off (the National Inventory of Dams lists tens of thousands, most not
+on navigable water). A layer switched off is never queried.
 
 If you switch every POI type off in the ActiveCaptain card, the plugin
 imports nothing: with no types selected the request is empty, so the
@@ -104,7 +113,7 @@ OpenStreetMap element page.
 
 ## Stale or unexpected POI data
 
-POI detail records are cached for the configured window (default 60 minutes).
+POI detail records are cached for the configured window (default 24 hours).
 A longer window means less traffic to upstream APIs but more lag before
 edits made on ActiveCaptain or OpenStreetMap reach your chart. Shorten the
 caching duration, or restart the plugin, if you need fresher data.
@@ -114,7 +123,7 @@ caching duration, or restart the plugin, if you need fresher data.
 When more than one source reports the same physical feature, the plugin
 merges them into one note (see the per-source dedupe in `README.md`).
 The default merge radius is 150 feet; widen the "Merge radius" field on
-the matching source card (OpenSeaMap, USCG Light List, or NOAA ENC) if
+the matching source card (every card except ActiveCaptain carries one) if
 duplicates still appear close together, or tighten it if genuinely
 separate neighbors are being merged. The radius is per-source, so a tight
 USCG merge can coexist with a looser OpenSeaMap merge.

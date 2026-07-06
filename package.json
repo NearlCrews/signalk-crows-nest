@@ -1,7 +1,7 @@
 {
   "name": "signalk-crows-nest",
-  "version": "0.12.0",
-  "description": "Imports Garmin ActiveCaptain, OpenSeaMap, USCG Light List, and NOAA ENC Direct points of interest as Signal K notes resources, with proximity, route-corridor, and bridge air-draft alarms.",
+  "version": "0.13.0",
+  "description": "Imports points of interest from Garmin ActiveCaptain, OpenSeaMap, the USCG Light List and Local Notice to Mariners, NOAA ENC Direct and CO-OPS stations, the NGA World Port Index, and USACE locks and dams as Signal K notes resources, with proximity, route-corridor, and bridge air-draft alarms.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -40,7 +40,11 @@
     "route-corridor",
     "marina",
     "anchorage",
-    "hazard"
+    "hazard",
+    "tides",
+    "currents",
+    "ports",
+    "locks"
   ],
   "signalk-plugin-enabled-by-default": false,
   "signalk": {

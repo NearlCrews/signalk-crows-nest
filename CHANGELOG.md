@@ -9,6 +9,78 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 > development milestones that preceded this publication. Their content is
 > incorporated into the 0.4.2 release.
 
+<a id="v0130"></a>
+
+## [0.13.0] - 2026-07-06
+
+Four new data sources join the chart: NOAA CO-OPS tide and current stations,
+USCG Local Notice to Mariners safety notices, the NGA World Port Index, and
+USACE locks and dams. All four default off, each with its own card in the
+configuration panel. The release also hardens offline behavior: OpenSeaMap
+and NOAA ENC Direct details now survive a restart and an upstream outage,
+and the status readout is more honest about why a source is quiet.
+
+### Added
+
+- **NOAA CO-OPS tide and current stations (US and territories, defaults
+  off).** Imports the NOAA CO-OPS station list from the keyless mdapi at
+  `api.tidesandcurrents.noaa.gov`, with the tide (water level) and
+  current-meter station families individually toggleable (both default on).
+  A background refresh on a configurable hours cadence (default 24) fills an
+  on-disk index that survives restarts, and each station popup links to its
+  station page on tidesandcurrents.noaa.gov. Stations render as navigational
+  marks. Coverage follows the US-waters gate, which includes the Pacific and
+  Caribbean territories.
+- **USCG Local Notice to Mariners (US-only, defaults off).** Imports the
+  live safety notices NAVCEN publishes as per-category GeoJSON feeds,
+  refreshed every 15 minutes by default: hazards to navigation, discrepant
+  federal and private aids, temporary changes, marine construction, bridge
+  notices, and marine safety notices. The danger categories render as
+  hazards, so the proximity alarm and the route-corridor scan react to them,
+  and each notice carries its Broadcast Notice to Mariners number and the
+  affected aid's LLNR in its details. Notices persist on disk, so they
+  survive an offline restart.
+- **NGA World Port Index (worldwide, defaults off).** Imports every port in
+  the authoritative Pub 150 dataset from msi.nga.mil (about 2950 ports),
+  refreshed daily and held complete on disk for full offline coverage. Ports
+  render as marinas, so a port merges with a duplicate ActiveCaptain marker
+  when dedupe is on. Details cover harbor size and type, shelter, entrance
+  restrictions, pilotage, quarantine, supplies, repairs, and the maximum
+  vessel dimensions, all in meters.
+- **USACE locks and dams (US inland waterways, defaults off).** Imports lock
+  structures from the US Army Corps of Engineers navigation data (locks
+  default on) and dams from the National Inventory of Dams (dams default
+  off: the inventory lists tens of thousands of dams, most not on navigable
+  water). Locks render as Lock POIs, which the route-corridor scan already
+  treats specially. Details include the chamber dimensions converted to
+  meters, the river and river mile, and the gate type.
+- **OpenSeaMap and NOAA ENC Direct details persist to disk.** Both sources
+  now save their fetched details in the plugin data directory and hydrate
+  from the file on a cold start, and when the upstream is unreachable they
+  fall back to serving previously fetched markers for visited areas. An
+  offline restart no longer blanks the two sources: the status row reports
+  the outage honestly while the cached markers stay on the chart.
+
+### Changed
+
+- **The status pill explains an intentionally idle source.** A source that
+  is skipping work on purpose now says why, for example "Idle: outside US
+  waters" on a US-only source when the vessel is offshore, instead of
+  looking broken.
+- Dependencies refreshed, and the `signalk.recommends` list (the App Store's
+  "Works well with") now names only the chartplotters that display the
+  plugin's notes.
+
+### Fixed
+
+- A source serving from its local cache no longer counts as proof the
+  upstream is reachable, so a failing refresh is no longer masked by
+  clicking previously loaded markers.
+- A viewport that crosses the antimeridian (the 180-degree line) now
+  returns the POIs on both sides.
+- A stationary viewport no longer rewrites unchanged cache files, sparing
+  the SD card pointless writes on an anchored or docked vessel.
+
 <a id="v0120"></a>
 
 ## [0.12.0] - 2026-06-29
