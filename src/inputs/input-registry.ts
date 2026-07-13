@@ -8,7 +8,7 @@
  * one source regardless of how many inputs are enabled.
  */
 
-import type { InputContext, InputModule, PoiSource } from './poi-source.js'
+import { getListProvenance, type InputContext, type InputModule, type PoiSource } from './poi-source.js'
 import { dedupeAgainstBase } from './dedupe-pois.js'
 import { ACTIVE_CAPTAIN_SOURCE_ID } from '../shared/source-ids.js'
 import { splitOnFirstSeparator } from '../shared/namespaced-id.js'
@@ -204,13 +204,11 @@ export function createInputRegistry (
                 continue
               }
               anyOk = true
-              // A returned-but-not-reachable result must not be laundered into
-              // a "fetched N POIs" success that flips apiReachable to true: a
-              // source that gated itself out (recordSkipped) returned []
-              // without sending a request, and a source that served stale
-              // offline data (recordStaleServe) already recorded the outage.
-              // Both raise the same suppression flag, consumed on read.
-              if (!context.status.wasListFetchSuppressed(sourceId)) {
+              // Only a request-scoped fresh result proves upstream
+              // reachability. Local indexes, deliberate skips, and stale
+              // offline fallbacks retain the status recorded by their actual
+              // refresh or failure path.
+              if (getListProvenance(result.value.pois) === 'fresh') {
                 context.status.recordListFetch(sourceId, result.value.pois.length)
               }
               // The id rewrite is a spread-clone, not an in-place mutation:
@@ -260,7 +258,17 @@ export function createInputRegistry (
           return await source.getDetails(split.remainder)
         },
         cacheSize: () => sourceList.reduce((sum, s) => sum + s.cacheSize(), 0),
-        close: () => { for (const s of sourceList) s.close() }
+        close: () => {
+          for (const [index, source] of sourceList.entries()) {
+            try {
+              source.close()
+            } catch (error) {
+              context.app.error(
+                `Failed to close source "${sourceIds[index]}": ${String(error)}`
+              )
+            }
+          }
+        }
       }
     }
   }

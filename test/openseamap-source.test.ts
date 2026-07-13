@@ -17,7 +17,6 @@ function silentStatus (): PluginStatus {
     recordDetailSuccess: () => {},
     recordError: () => {},
     recordSkipped: () => {},
-    wasListFetchSuppressed: () => false,
     snapshot: () => ({}) as never
   }
 }

@@ -28,7 +28,7 @@ import type { IRouter } from 'express'
 
 const PLUGIN_NAME = "Crow's Nest"
 const PLUGIN_DESCRIPTION =
-  'Imports Garmin ActiveCaptain, OpenSeaMap, USCG Light List, and NOAA ENC Direct points of interest as SignalK resources, with proximity and route-corridor hazard alarms'
+  'Imports Garmin ActiveCaptain, OpenSeaMap, USCG Light List and Local Notice to Mariners, NOAA ENC Direct and CO-OPS, NGA World Port Index, and USACE points of interest as SignalK resources, with proximity, route-corridor, and bridge air-draft alarms'
 
 /** OpenAPI description of the plugin's internal status API. */
 const OPEN_API = {

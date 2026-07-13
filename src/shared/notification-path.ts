@@ -84,7 +84,8 @@ export function emitNotification (
   pathPrefix: string,
   poiId: string,
   value: NotificationValue,
-  sourceSuffix?: string
+  sourceSuffix?: string,
+  now: () => Date = () => new Date()
 ): void {
   const $source = (sourceSuffix === undefined || sourceSuffix === ''
     ? PLUGIN_ID
@@ -92,7 +93,7 @@ export function emitNotification (
   app.handleMessage(PLUGIN_ID, {
     updates: [{
       $source,
-      timestamp: value.createdAt as Timestamp,
+      timestamp: now().toISOString() as Timestamp,
       values: [{
         path: `${pathPrefix}${sanitizePoiId(poiId)}` as Path,
         value

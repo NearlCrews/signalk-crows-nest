@@ -515,3 +515,29 @@ test('a huge Retry-After value is capped at maxRetryAfterMs', async () => {
   assert.equal(waits.length, 1)
   assert.equal(waits[0], 50, 'expected the huge Retry-After to be capped at maxRetryAfterMs')
 })
+
+test('close aborts a pending Retry-After wait immediately', async () => {
+  let markSleeping: (() => void) | undefined
+  const sleeping = new Promise<void>((resolve) => { markSleeping = resolve })
+  const neverSettles: Sleep = async () => {
+    markSleeping?.()
+    await new Promise<void>(() => {})
+  }
+  await withMockFetch(
+    () => jsonResponse({ message: 'slow down' }, 429, { 'Retry-After': '300' }),
+    async calls => {
+      const client = createActiveCaptainClient(silentLog, {
+        minDelayMs: 0,
+        backoffBaseMs: 1,
+        maxBackoffMs: 10,
+        maxRetryAfterMs: 300_000,
+        maxRetries: 2
+      }, neverSettles)
+      const request = client.listPointsOfInterest(sampleBbox, 'Marina')
+      await sleeping
+      client.close()
+      await assert.rejects(request)
+      assert.equal(calls.count, 1, 'close prevents the retry request')
+    }
+  )
+})

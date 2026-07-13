@@ -198,6 +198,41 @@ test('does not tick again before the minimum interval elapses, then ticks past b
   monitor.stop()
 })
 
+test('a contributor can request a scan while the vessel remains stationary', async () => {
+  const mockApp = createMockApp()
+  const mockClient = createMockClient()
+  const clock = createClock()
+  let requestScan: (() => void) | undefined
+  const evaluations: Position[] = []
+  const contributor: PositionScanContributor = {
+    poiTypes: ['Hazard'],
+    setScanRequester: (request) => { requestScan = request },
+    buildFetchBox: () => null,
+    evaluate: (position) => { evaluations.push(position) }
+  }
+
+  const monitor = createPositionMonitor({
+    app: mockApp.app,
+    client: mockClient.client,
+    contributors: [contributor],
+    poiTypes: 'Hazard',
+    minMoveMeters: 100,
+    minIntervalMs: 60_000,
+    now: clock.now
+  })
+
+  mockApp.emit({ latitude: 10, longitude: 20 })
+  await flush()
+  assert.equal(evaluations.length, 1)
+
+  requestScan?.()
+  await flush()
+  assert.equal(evaluations.length, 2, 'the invalidation bypasses position throttle gates')
+  assert.deepEqual(evaluations[1], { latitude: 10, longitude: 20 })
+
+  monitor.stop()
+})
+
 test('does not start an overlapping tick while a scan is in flight, then ticks once the slot frees', async () => {
   const mockApp = createMockApp()
   const mockClient = createMockClient()

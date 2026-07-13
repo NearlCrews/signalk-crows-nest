@@ -137,39 +137,6 @@ test('a recorder with no sources still records global errors', () => {
   assert.equal(snapshot.recentErrors.length, 1)
 })
 
-test('wasListFetchSuppressed returns false on a fresh recorder for every source', () => {
-  const status = createPluginStatus(SOURCES)
-  for (const { source } of SOURCES) {
-    assert.equal(status.wasListFetchSuppressed(source), false)
-  }
-})
-
-test('recordSkipped sets wasListFetchSuppressed to true for that source only', () => {
-  const status = createPluginStatus(SOURCES)
-  status.recordSkipped('activecaptain', 'outside US waters')
-  assert.equal(status.wasListFetchSuppressed('activecaptain'), true)
-  assert.equal(status.wasListFetchSuppressed('openseamap'), false)
-})
-
-test('recordListFetch clears the suppression flag', () => {
-  // A normal list fetch after a skip transitions the row back to a real
-  // outcome and clears the skip flag so a later empty fetch is recorded
-  // as a real "fetched zero POIs" success.
-  const status = createPluginStatus(SOURCES)
-  status.recordSkipped('activecaptain', 'outside US waters')
-  status.recordListFetch('activecaptain', 5)
-  assert.equal(status.wasListFetchSuppressed('activecaptain'), false)
-})
-
-test('recordError clears the suppression flag', () => {
-  // An error after a skip is a real failure: the skip flag must not mask
-  // the next aggregate-level decision.
-  const status = createPluginStatus(SOURCES)
-  status.recordSkipped('activecaptain', 'outside US waters')
-  status.recordError('activecaptain', 'upstream 500')
-  assert.equal(status.wasListFetchSuppressed('activecaptain'), false)
-})
-
 test('recordSkipped does not flip apiReachable', () => {
   // A skip is observational, not evidence of upstream health.
   const status = createPluginStatus(SOURCES)
@@ -230,11 +197,6 @@ test('recordError clears a prior skip reason', () => {
   assert.equal(row?.lastSkip, null)
 })
 
-test('wasListFetchSuppressed returns false for an unknown source', () => {
-  const status = createPluginStatus(SOURCES)
-  assert.equal(status.wasListFetchSuppressed('not-a-source'), false)
-})
-
 test('recordStaleServe marks the source unreachable without a list fetch', () => {
   // An offline stale serve is a real outage that still shows cached markers:
   // apiReachable goes false and no lastListFetch is recorded, so the source
@@ -260,24 +222,11 @@ test('recordStaleServe logs a single recent error even across repeated ticks', (
   assert.match(errors[0].message, /Serving cached data offline/)
 })
 
-test('wasListFetchSuppressed returns true once after a stale serve then consumes the flag', () => {
-  const status = createPluginStatus(SOURCES)
-  status.recordStaleServe?.('openseamap', 'Overpass unreachable')
-  assert.equal(status.wasListFetchSuppressed('openseamap'), true)
-  assert.equal(status.wasListFetchSuppressed('openseamap'), false, 'the flag is consumed on read')
-})
-
-test('a real list fetch after a stale serve clears the suppression flag and reachability', () => {
+test('a real list fetch after a stale serve restores reachability', () => {
   const status = createPluginStatus(SOURCES)
   status.recordStaleServe?.('openseamap', 'Overpass unreachable')
   status.recordListFetch('openseamap', 3)
-  assert.equal(status.wasListFetchSuppressed('openseamap'), false, 'a reachable fetch clears the suppression flag')
   const row = status.snapshot(0).sources.find(s => s.source === 'openseamap')
   assert.equal(row?.apiReachable, true)
   assert.equal(row?.lastListFetch?.poiCount, 3)
-})
-
-test('the suppression flag stays false for an unknown source after a stale serve', () => {
-  const status = createPluginStatus(SOURCES)
-  assert.equal(status.wasListFetchSuppressed('not-a-source'), false)
 })

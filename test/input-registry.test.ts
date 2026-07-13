@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createInputRegistry } from '../src/inputs/input-registry.js'
 import { createPluginStatus } from '../src/status/plugin-status.js'
-import type { InputModule, PoiSource } from '../src/inputs/poi-source.js'
+import { withListProvenance, type InputModule, type PoiSource } from '../src/inputs/poi-source.js'
 import type { Bbox, PoiDetailView, PoiSummary } from '../src/shared/types.js'
 
 const SAMPLE_BBOX: Bbox = { north: 1, south: 0, east: 1, west: 0 }
@@ -65,8 +65,7 @@ const silentStatus = {
   recordListFetch: () => {},
   recordDetailSuccess: () => {},
   recordError: () => {},
-  recordSkipped: () => {},
-  wasListFetchSuppressed: () => false
+  recordSkipped: () => {}
 }
 
 const context = {
@@ -148,8 +147,7 @@ test('listPointsOfInterest keeps a successful source when another fails', async 
       recordListFetch: () => {},
       recordDetailSuccess: () => {},
       recordError: (_source: string, message: string) => errors.push(message),
-      recordSkipped: () => {},
-      wasListFetchSuppressed: () => false
+      recordSkipped: () => {}
     }
   } as never
   const source = createInputRegistry([failing, ok]).createSource(failContext)
@@ -187,8 +185,7 @@ test('listPointsOfInterest records each source list outcome onto the per-source 
       recordListFetch: (source: string, count: number) => fetches.push({ source, count }),
       recordDetailSuccess: () => {},
       recordError: (_source: string, message: string) => errors.push(message),
-      recordSkipped: () => {},
-      wasListFetchSuppressed: () => false
+      recordSkipped: () => {}
     }
   } as never
   const source = createInputRegistry([ok, failing]).createSource(recordingContext)
@@ -265,6 +262,31 @@ test('close closes every source', () => {
   assert.deepEqual(closed.sort(), ['sourceA', 'sourceB'])
 })
 
+test('close continues after one source throws', () => {
+  const closed: string[] = []
+  const errors: string[] = []
+  const a = stubModule('sourceA', true, {
+    ...stubSource('sourceA'),
+    close: () => { throw new Error('close failed') }
+  })
+  const b = stubModule('sourceB', true, {
+    ...stubSource('sourceB'),
+    close: () => { closed.push('sourceB') }
+  })
+  const source = createInputRegistry([a, b]).createSource({
+    app: { error: (message: string) => { errors.push(message) } },
+    config: {},
+    status: silentStatus,
+    dataDir: '/tmp'
+  } as never)
+
+  source.close()
+
+  assert.deepEqual(closed, ['sourceB'])
+  assert.equal(errors.length, 1)
+  assert.match(errors[0], /sourceA.*close failed/)
+})
+
 test('listPointsOfInterest times out a slow source, ships the others, and records the slow source as skipped', async () => {
   // The slow source's promise never resolves; the fast source returns
   // immediately. The aggregate's per-source timeout wins the race for
@@ -287,8 +309,7 @@ test('listPointsOfInterest times out a slow source, ships the others, and record
       recordListFetch: (source: string, count: number) => fetches.push({ source, count }),
       recordDetailSuccess: () => {},
       recordError: () => {},
-      recordSkipped: (source: string, reason: string) => skips.push({ source, reason }),
-      wasListFetchSuppressed: () => false
+      recordSkipped: (source: string, reason: string) => skips.push({ source, reason })
     }
   } as never
   const registry = createInputRegistry([slow, fast], { perSourceListTimeoutMs: 25 })
@@ -355,12 +376,8 @@ test('listPointsOfInterest does NOT record a list fetch when a source returned e
   // overwrite the previous lastListFetch and flip apiReachable to true even
   // though no request was sent.
   const fetches: Array<{ source: string, count: number }> = []
-  const skipFlag = { current: false }
   const fetchEmpty = stubModule('skipper', true, stubSource('skipper', {
-    list: async () => {
-      skipFlag.current = true
-      return []
-    }
+    list: async () => withListProvenance([], 'skipped')
   }))
   const fetchTwo = stubModule('worker', true, stubSource('worker', {
     list: async () => [summary('1', 'worker'), summary('2', 'worker')]
@@ -373,8 +390,7 @@ test('listPointsOfInterest does NOT record a list fetch when a source returned e
       recordListFetch: (source: string, count: number) => fetches.push({ source, count }),
       recordDetailSuccess: () => {},
       recordError: () => {},
-      recordSkipped: () => { skipFlag.current = true },
-      wasListFetchSuppressed: (source: string) => source === 'skipper' && skipFlag.current
+      recordSkipped: () => {}
     }
   } as never
   const source = createInputRegistry([fetchEmpty, fetchTwo]).createSource(skipAwareContext)
@@ -398,7 +414,7 @@ test('a source that skipped on one tick is not frozen out of recording a later r
     list: async () => {
       if (outsideUsWaters) {
         status.recordSkipped('usonly', 'outside US waters')
-        return []
+        return withListProvenance([], 'skipped')
       }
       return [summary('1', 'usonly')]
     }
@@ -431,7 +447,10 @@ test('a source that served stale offline data ships its markers but is not recor
   const staleModule = stubModule('stale', true, stubSource('stale', {
     list: async () => {
       status.recordStaleServe?.('stale', 'upstream unreachable')
-      return [summary('1', 'stale'), summary('2', 'stale')]
+      return withListProvenance(
+        [summary('1', 'stale'), summary('2', 'stale')],
+        'stale'
+      )
     }
   }))
   const ctx = { app: {}, config: {}, dataDir: '/tmp', status } as never
@@ -444,4 +463,52 @@ test('a source that served stale offline data ships its markers but is not recor
   const row = status.snapshot(0).sources.find((s) => s.source === 'stale')
   assert.equal(row?.apiReachable, false, 'a stale offline serve is not laundered into reachable')
   assert.equal(row?.lastListFetch, null, 'no list fetch is recorded for a stale serve')
+})
+
+test('a local list does not overwrite a recorded upstream refresh failure', async () => {
+  const status = createPluginStatus([{ source: 'bulk', name: 'Bulk Source' }])
+  const bulk = stubModule('bulk', true, stubSource('bulk', {
+    list: async () => withListProvenance([summary('1', 'bulk')], 'local')
+  }))
+  const source = createInputRegistry([bulk]).createSource({
+    app: {}, config: {}, dataDir: '/tmp', status
+  } as never)
+  status.recordError('bulk', 'refresh failed')
+
+  await source.listPointsOfInterest(SAMPLE_BBOX, '')
+
+  const row = status.snapshot(1).sources[0]
+  assert.equal(row.apiReachable, false)
+  assert.equal(row.lastListFetch, null)
+})
+
+test('overlapping list calls keep their status provenance request-scoped', async () => {
+  const status = createPluginStatus([{ source: 'race', name: 'Race Source' }])
+  let releaseFirst: (() => void) | undefined
+  const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve })
+  let calls = 0
+  const race = stubModule('race', true, stubSource('race', {
+    list: async () => {
+      calls++
+      if (calls === 1) {
+        status.recordSkipped('race', 'first call skipped')
+        await firstGate
+        return withListProvenance([], 'skipped')
+      }
+      return [summary('fresh', 'race')]
+    }
+  }))
+  const source = createInputRegistry([race]).createSource({
+    app: {}, config: {}, dataDir: '/tmp', status
+  } as never)
+
+  const first = source.listPointsOfInterest(SAMPLE_BBOX, '')
+  await Promise.resolve()
+  await source.listPointsOfInterest(SAMPLE_BBOX, '')
+  releaseFirst?.()
+  await first
+
+  const row = status.snapshot(0).sources[0]
+  assert.equal(row.apiReachable, true)
+  assert.equal(row.lastListFetch?.poiCount, 1)
 })

@@ -49,7 +49,8 @@ export interface CoopsClient {
    */
   downloadStations: (
     stationType: CoopsStationType,
-    previousHeaders?: CoopsStationHeaders
+    previousHeaders?: CoopsStationHeaders,
+    signal?: AbortSignal
   ) => Promise<CoopsDownloadResult>
 }
 
@@ -98,9 +99,9 @@ function parseStation (
 export function createCoopsClient (config: CoopsClientConfig = {}): CoopsClient {
   const baseUrl = config.baseUrl ?? DEFAULT_BASE_URL
   return {
-    async downloadStations (stationType, previousHeaders) {
+    async downloadStations (stationType, previousHeaders, signal) {
       const url = `${baseUrl}/mdapi/prod/webapi/stations.json?type=${API_TYPE[stationType]}`
-      const result = await conditionalGet(url, 'NOAA CO-OPS', previousHeaders)
+      const result = await conditionalGet(url, 'NOAA CO-OPS', previousHeaders, signal)
       if (result.status !== 'ok') {
         return result
       }

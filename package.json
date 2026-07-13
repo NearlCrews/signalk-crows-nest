@@ -1,6 +1,6 @@
 {
   "name": "signalk-crows-nest",
-  "version": "0.13.1",
+  "version": "0.14.0",
   "description": "Imports points of interest from Garmin ActiveCaptain, OpenSeaMap, the USCG Light List and Local Notice to Mariners, NOAA ENC Direct and CO-OPS stations, the NGA World Port Index, and USACE locks and dams as Signal K notes resources, with proximity, route-corridor, and bridge air-draft alarms.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -21,7 +21,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test": "node --import tsx --test test/*.test.ts",
-    "prepublishOnly": "npm run clean && npm run build"
+    "prepack": "npm run clean && npm run build"
   },
   "keywords": [
     "signalk-node-server-plugin",

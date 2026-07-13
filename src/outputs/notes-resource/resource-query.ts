@@ -4,8 +4,11 @@
  */
 
 import { positionToBbox } from '../../geo/position-utilities.js'
-import { toFiniteNumber } from '../../shared/numbers.js'
+import { isValidLatitude, isValidLongitude, toFiniteNumber } from '../../shared/numbers.js'
 import type { Bbox, Position } from '../../shared/types.js'
+
+/** Largest chart resource search radius accepted, in meters. */
+const MAX_SEARCH_DISTANCE_METERS = 1_000_000
 
 /**
  * Coerce a single loosely typed query component into a finite number, or
@@ -37,7 +40,7 @@ export function resolvePosition (raw: unknown): Position | null {
   if (Array.isArray(raw) && raw.length >= 2) {
     const longitude = parseFiniteNumber(raw[0])
     const latitude = parseFiniteNumber(raw[1])
-    if (longitude !== null && latitude !== null) {
+    if (isValidLongitude(longitude) && isValidLatitude(latitude)) {
       return { latitude, longitude }
     }
     return null
@@ -47,7 +50,7 @@ export function resolvePosition (raw: unknown): Position | null {
     const candidate = raw as Record<string, unknown>
     const latitude = parseFiniteNumber(candidate.latitude)
     const longitude = parseFiniteNumber(candidate.longitude)
-    if (latitude !== null && longitude !== null) {
+    if (isValidLatitude(latitude) && isValidLongitude(longitude)) {
       return { latitude, longitude }
     }
   }
@@ -81,6 +84,15 @@ function resolveExplicitBbox (raw: unknown): Bbox | null {
     return null
   }
   const [west, south, east, north] = numbers as number[]
+  if (
+    !isValidLongitude(west) ||
+    !isValidLongitude(east) ||
+    !isValidLatitude(south) ||
+    !isValidLatitude(north) ||
+    north < south
+  ) {
+    return null
+  }
   return { west, south, east, north }
 }
 
@@ -100,7 +112,7 @@ export function resolveBbox (query: Record<string, unknown>): Bbox | null {
   }
 
   const distance = parseFiniteNumber(query.distance)
-  if (distance === null || distance <= 0) {
+  if (distance === null || distance <= 0 || distance > MAX_SEARCH_DISTANCE_METERS) {
     return null
   }
 

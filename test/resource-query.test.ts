@@ -23,6 +23,8 @@ test('resolvePosition returns null for unusable input', () => {
   assert.equal(resolvePosition([42]), null)
   assert.equal(resolvePosition(['x', 'y']), null)
   assert.equal(resolvePosition({ latitude: 25.77 }), null)
+  assert.equal(resolvePosition({ latitude: 91, longitude: 0 }), null)
+  assert.equal(resolvePosition({ latitude: 0, longitude: 181 }), null)
 })
 
 test('resolvePosition rejects blank, whitespace-only, or null components', () => {
@@ -67,6 +69,7 @@ test('resolveBbox returns null when distance is missing, zero, or negative', () 
   assert.equal(resolveBbox({ position, distance: 0 }), null)
   assert.equal(resolveBbox({ position, distance: -100 }), null)
   assert.equal(resolveBbox({ position, distance: 'far' }), null)
+  assert.equal(resolveBbox({ position, distance: 1_000_001 }), null)
 })
 
 test('resolveBbox returns null when the position is missing or unusable', () => {
@@ -90,6 +93,9 @@ test('resolveBbox returns null for a malformed bbox', () => {
   assert.equal(resolveBbox({ bbox: '1,2,3' }), null)
   assert.equal(resolveBbox({ bbox: [1, 2, 'x', 4] }), null)
   assert.equal(resolveBbox({ bbox: 42 }), null)
+  assert.equal(resolveBbox({ bbox: [-181, 0, 1, 1] }), null)
+  assert.equal(resolveBbox({ bbox: [-1, -91, 1, 1] }), null)
+  assert.equal(resolveBbox({ bbox: [-1, 20, 1, 10] }), null)
 })
 
 test('resolveBbox rejects a bbox of blank or null components', () => {

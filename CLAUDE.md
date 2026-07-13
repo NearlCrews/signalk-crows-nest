@@ -489,8 +489,8 @@ self-contained module registered on one line in `src/index.ts`.
 - `npm run lint` - lint with ESLint 9 + neostandard.
 - `npm run lint:fix` - lint and auto-fix.
 - `npm run clean` - remove `dist/` and the panel build artifacts.
-- `npm run prepublishOnly` - clean and rebuild before publishing (runs
-  automatically on `npm publish`).
+- `npm run prepack` - clean and rebuild before packaging or publishing (runs
+  automatically on `npm pack` and `npm publish`).
 
 ## Conventions
 

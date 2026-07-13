@@ -49,7 +49,7 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org/
       - run: npm ci
-      # prepublishOnly cleans and rebuilds dist/ and public/ before the package
+      # prepack cleans and rebuilds dist/ and public/ before the package
       # is published, so the tarball always ships fresh artifacts.
       - run: npm publish --provenance
         env:

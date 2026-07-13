@@ -27,6 +27,7 @@ import {
   fetchDetailRecorded,
   fetchListWithOfflineFallback,
   staleSummariesWithinBbox,
+  withListProvenance,
   type PoiSource
 } from '../poi-source.js'
 import { createBboxDebounceCache } from '../../shared/bbox-debounce.js'
@@ -184,7 +185,7 @@ export function createOpenSeaMapSource (config: OpenSeaMapSourceConfig): PoiSour
           minimumYear)
       )
       if (outcome.kind === 'stale') {
-        return outcome.summaries
+        return withListProvenance(outcome.summaries, 'stale')
       }
       const summaries: PoiSummary[] = []
       for (const element of outcome.value) {

@@ -28,8 +28,8 @@ npm run lint:fix      # Lint and auto-fix
 npm run clean         # Remove dist/ and the panel build artifacts
 ```
 
-`npm run prepublishOnly` runs `clean` then `build` automatically before
-`npm publish`.
+The `prepack` lifecycle runs `clean` then `build` automatically before
+`npm pack` or `npm publish`.
 
 ## Architecture
 

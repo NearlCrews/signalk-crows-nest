@@ -48,7 +48,8 @@ export interface LnmClient {
   downloadLayerPage: (
     layer: LnmLayer,
     page: number,
-    previousHeaders?: LnmFileHeaders
+    previousHeaders?: LnmFileHeaders,
+    signal?: AbortSignal
   ) => Promise<DownloadResult>
 }
 
@@ -219,9 +220,9 @@ function parseFeature (feature: LnmFeature, layer: LnmLayer): LnmRecord | null {
 export function createLnmClient (config: LnmClientConfig = {}): LnmClient {
   const baseUrl = config.baseUrl ?? DEFAULT_BASE_URL
   return {
-    async downloadLayerPage (layer, page, previousHeaders) {
+    async downloadLayerPage (layer, page, previousHeaders, signal) {
       const url = `${baseUrl}/sites/default/files/msi/${layer.fileBase}_${page}.geojson`
-      const result = await conditionalGet(url, 'USCG LNM', previousHeaders)
+      const result = await conditionalGet(url, 'USCG LNM', previousHeaders, signal)
       if (result.status !== 'ok') {
         return result
       }

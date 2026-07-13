@@ -26,6 +26,7 @@ import {
   fetchDetailRecorded,
   fetchListWithOfflineFallback,
   staleSummariesWithinBbox,
+  withListProvenance,
   type PoiSource
 } from '../poi-source.js'
 import { createBboxDebounceCache } from '../../shared/bbox-debounce.js'
@@ -279,7 +280,7 @@ export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
     // `poiTypes` argument is therefore intentionally ignored for this source.
     listPointsOfInterest: async (bbox: Bbox): Promise<PoiSummary[]> => {
       if (shouldSkipOutsideUsWaters(getCurrentPosition, status, NOAA_ENC_SOURCE_ID)) {
-        return []
+        return withListProvenance([], 'skipped')
       }
       // No enabled layers is a configured-empty list, not a failure: return
       // empty so the aggregate sees a fulfilled empty result and the source
@@ -339,7 +340,7 @@ export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
         () => rebuildStale(bbox)
       )
       if (outcome.kind === 'stale') {
-        return outcome.summaries
+        return withListProvenance(outcome.summaries, 'stale')
       }
       const summaries: PoiSummary[] = []
       for (const { layerKey, features } of outcome.value) {

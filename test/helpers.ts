@@ -197,23 +197,18 @@ export interface StubStatus {
 /**
  * Build a stub {@link PluginStatus} that records each outcome as an
  * `event:source[:detail]` string, so a source-adapter test can assert the
- * request outcomes it drove. `wasListFetchSuppressed` reads the per-source
- * suppression that `recordSkipped` and `recordStaleServe` raise, matching
- * production plugin-status.ts (though the stub's read is persistent membership
- * rather than consume-on-read). `snapshot` returns an empty-but-valid
+ * request outcomes it drove. `snapshot` returns an empty-but-valid
  * {@link StatusSnapshot}; the at-runtime sources under test do not read it, so
  * it is present only to satisfy the interface.
  */
 export function createStubStatus (): StubStatus {
   const events: string[] = []
-  const suppressed = new Set<string>()
   const status: PluginStatus = {
-    recordListFetch: (source, count) => { events.push(`list:${source}:${count}`); suppressed.delete(source) },
+    recordListFetch: (source, count) => { events.push(`list:${source}:${count}`) },
     recordDetailSuccess: (source) => { events.push(`detail-ok:${source}`) },
-    recordError: (source, message) => { events.push(`error:${source}:${message}`); suppressed.delete(source) },
-    recordSkipped: (source, reason) => { events.push(`skipped:${source}:${reason}`); suppressed.add(source) },
-    recordStaleServe: (source, reason) => { events.push(`stale:${source}:${reason}`); suppressed.add(source) },
-    wasListFetchSuppressed: (source) => suppressed.has(source),
+    recordError: (source, message) => { events.push(`error:${source}:${message}`) },
+    recordSkipped: (source, reason) => { events.push(`skipped:${source}:${reason}`) },
+    recordStaleServe: (source, reason) => { events.push(`stale:${source}:${reason}`) },
     snapshot: (): StatusSnapshot => ({ sources: [], cachedPoiCount: 0, recentErrors: [], startedAt: '' })
   }
   return { events, status }

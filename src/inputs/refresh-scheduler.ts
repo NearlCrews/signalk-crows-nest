@@ -20,7 +20,7 @@ const INITIAL_REFRESH_DELAY_SECONDS = 30
 /** A source that can be periodically refreshed and closed. */
 export interface RefreshableSource {
   /** Run one full refresh pass. Rejects on failure. */
-  refreshAll: () => Promise<void>
+  refreshAll: (signal?: AbortSignal) => Promise<void>
   /** Release resources. Wrapped by the scheduler to also clear its timers. */
   close: () => void
 }
@@ -35,6 +35,8 @@ export interface RefreshSchedulerOptions<S extends RefreshableSource> {
   name: string
   /** Interval between periodic refreshes, in milliseconds. */
   intervalMs: number
+  /** Initial delay override for tests. Defaults to 30 seconds. */
+  initialDelayMs?: number
 }
 
 /**
@@ -48,18 +50,21 @@ export function startRefreshScheduler<S extends RefreshableSource> (
   options: RefreshSchedulerOptions<S>
 ): S {
   const { source, app, name, intervalMs } = options
-  const initialDelayMs = INITIAL_REFRESH_DELAY_SECONDS * MS_PER_SECOND
+  const initialDelayMs = options.initialDelayMs ?? INITIAL_REFRESH_DELAY_SECONDS * MS_PER_SECOND
 
   let refreshing = false
+  const abortController = new AbortController()
   const runRefresh = (reason: string): void => {
     if (refreshing) {
       app.debug(`${name} ${reason} skipped: previous refresh still running`)
       return
     }
     refreshing = true
-    source.refreshAll()
+    source.refreshAll(abortController.signal)
       .catch(error => {
-        app.debug(`${name} ${reason} failed: ${String(error)}`)
+        if (!abortController.signal.aborted) {
+          app.debug(`${name} ${reason} failed: ${String(error)}`)
+        }
       })
       .finally(() => { refreshing = false })
   }
@@ -70,6 +75,7 @@ export function startRefreshScheduler<S extends RefreshableSource> (
   source.close = () => {
     clearTimeout(initialTimer)
     clearInterval(periodicTimer)
+    abortController.abort()
     originalClose()
   }
   return source

@@ -60,8 +60,23 @@ const RETRYABLE_STATUSES = new Set<number>([
   HTTP_TOO_MANY_REQUESTS, HTTP_BAD_GATEWAY, HTTP_SERVICE_UNAVAILABLE, HTTP_GATEWAY_TIMEOUT
 ])
 
-const delay = (ms: number): Promise<void> =>
-  new Promise(resolve => setTimeout(resolve, ms))
+const delay = (ms: number, signal?: AbortSignal): Promise<void> =>
+  new Promise((resolve, reject) => {
+    if (signal?.aborted === true) {
+      reject(signal.reason)
+      return
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    const onAbort = (): void => {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', onAbort)
+      reject(signal?.reason)
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
 
 /**
  * A concurrency-limited, throttled task queue. It caps the number of in-flight
@@ -221,7 +236,7 @@ export interface HttpClient {
  * A `setTimeout`-driven millisecond sleep. The default `sleep` implementation
  * for {@link createHttpClient}; injectable for tests.
  */
-export type Sleep = (ms: number) => Promise<void>
+export type Sleep = (ms: number, signal?: AbortSignal) => Promise<void>
 
 /**
  * Build a rate-limited HTTP client.
@@ -255,6 +270,29 @@ export function createHttpClient (
   // Aborted by close(): cancels in-flight fetches and stops further retries so
   // a response cannot land after the plugin has stopped.
   const closeController = new AbortController()
+
+  /** Sleep until a retry is due, or reject immediately when the request closes. */
+  async function waitForRetry (ms: number, callerSignal?: AbortSignal | null): Promise<void> {
+    const signal = combineAbortSignals([closeController.signal, callerSignal ?? undefined])
+    if (signal.aborted) {
+      throw signal.reason
+    }
+    // Race the injected sleeper as well as passing the signal into it. A test
+    // or alternate implementation may ignore the optional signal, but close()
+    // must still settle the request immediately.
+    let abortListener: (() => void) | undefined
+    const aborted = new Promise<never>((_resolve, reject) => {
+      abortListener = () => { reject(signal.reason) }
+      signal.addEventListener('abort', abortListener, { once: true })
+    })
+    try {
+      await Promise.race([sleep(ms, signal), aborted])
+    } finally {
+      if (abortListener !== undefined) {
+        signal.removeEventListener('abort', abortListener)
+      }
+    }
+  }
 
   async function fetchWithRetry (url: string, init: RequestInit): Promise<Response> {
     let attempt = 0
@@ -303,7 +341,7 @@ export function createHttpClient (
         )
         // Release the socket: the retried response body is never read.
         await response.body?.cancel()
-        await sleep(wait)
+        await waitForRetry(wait, init.signal)
         attempt++
       } catch (error) {
         // Do not retry once the client is closed, once the caller's own signal
@@ -322,7 +360,7 @@ export function createHttpClient (
           `${config.label} request to ${url} failed (${String(error)}), ` +
           `retrying in ${Math.round(wait)}ms (attempt ${attempt + 1}/${limits.maxRetries})`
         )
-        await sleep(wait)
+        await waitForRetry(wait, init.signal)
         attempt++
       }
     }

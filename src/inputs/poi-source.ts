@@ -33,6 +33,25 @@ export interface PoiSource {
   close: () => void
 }
 
+/** How one returned POI list was produced, scoped to that array instance. */
+export type ListProvenance = 'fresh' | 'local' | 'skipped' | 'stale'
+
+const listProvenance = new WeakMap<readonly PoiSummary[], ListProvenance>()
+
+/** Tag one list result without changing the public array-shaped source API. */
+export function withListProvenance<T extends PoiSummary[]> (
+  pois: T,
+  provenance: ListProvenance
+): T {
+  listProvenance.set(pois, provenance)
+  return pois
+}
+
+/** Read one result's request-scoped provenance. Untagged lists are fresh. */
+export function getListProvenance (pois: readonly PoiSummary[]): ListProvenance {
+  return listProvenance.get(pois) ?? 'fresh'
+}
+
 /** Dependencies handed to an {@link InputModule} when it builds its source. */
 export interface InputContext {
   /** The SignalK app. */

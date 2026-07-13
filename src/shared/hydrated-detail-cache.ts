@@ -49,6 +49,8 @@ export interface HydratedDetailCache<V extends {}> {
    * after `close`). Call it alongside the `cache.set` for a fetched record.
    */
   persist: (id: string, value: V) => void
+  /** Replace both the in-memory cache and the complete persisted snapshot. */
+  replaceAll: (values: ReadonlyMap<string, V>) => void
   /**
    * Flush the pending store write and drop the in-memory cache. The on-disk
    * file is left in place so a later cold start can hydrate it.
@@ -74,6 +76,13 @@ export function createHydratedDetailCache<V extends {}> (
     cache,
     persist: (id: string, value: V): void => {
       store?.persist(id, value)
+    },
+    replaceAll: (values: ReadonlyMap<string, V>): void => {
+      cache.clear()
+      for (const [id, value] of values) {
+        cache.set(id, value)
+      }
+      store?.replaceAll(values)
     },
     close: (): void => {
       store?.flush()

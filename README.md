@@ -22,12 +22,20 @@ route-corridor, and bridge air-draft alarms.
 > safety-of-life navigation: always cross-check against official charts and
 > your primary instruments.
 
-## What's new in 0.13.1
+## What's new in 0.14.0
 
-- **Housekeeping**: internal helpers left over from the route-draft removal
-  are gone; no behavior change. The 0.13.0 feature release (four new data
-  sources, offline hardening, and the honest status readout) is described in
-  the [changelog](CHANGELOG.md#v0130).
+- **Route warnings react while the vessel is stationary.** Changing the
+  active route now requests a fresh safety scan immediately, and the scan
+  limits a long first leg to the 10-nautical-mile look-ahead.
+- **Cleaner source shutdown and refresh behavior.** Stopping the plugin now
+  cancels retry delays and bulk refreshes promptly. Complete World Port Index
+  refreshes also remove ports that are no longer present upstream.
+- **More accurate status and resource responses.** Concurrent requests keep
+  their own source provenance, cached reads no longer hide refresh failures,
+  malformed spatial queries are rejected, and notification timestamps reflect
+  the current publication time.
+- **Reproducible package contents.** The npm `prepack` lifecycle now cleans and
+  rebuilds the plugin and panel for both `npm pack` and `npm publish`.
 
 ## What it does
 

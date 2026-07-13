@@ -19,7 +19,7 @@ import type { CoopsStationRecord, CoopsStationType } from './noaa-coops-types.js
 import { COOPS_POI_TYPE, COOPS_SK_ICON, coopsInternalId, stationPageUrl } from './coops-mapping.js'
 import { renderCoopsDetail } from './coops-detail.js'
 import { buildCoopsSections } from './coops-sections.js'
-import type { PoiSource } from '../poi-source.js'
+import { withListProvenance, type PoiSource } from '../poi-source.js'
 import type { Bbox, PoiDetailView, PoiSummary, Position } from '../../shared/types.js'
 import { shouldSkipOutsideUsWaters } from '../../shared/us-waters.js'
 import { openSeaMapMarkerUrl } from '../../shared/map-link.js'
@@ -52,7 +52,7 @@ export interface NoaaCoopsSourceConfig {
  */
 export interface NoaaCoopsSource extends PoiSource {
   /** Run one refresh pass across every enabled station type. */
-  refreshAll: () => Promise<void>
+  refreshAll: (signal?: AbortSignal) => Promise<void>
 }
 
 /** The public web page for a station, falling back to an OpenSeaMap marker. */
@@ -82,12 +82,12 @@ export function createNoaaCoopsSource (config: NoaaCoopsSourceConfig): NoaaCoops
   // restarts the plugin), so it is captured once as a Set for the list filter.
   const enabledTypes = new Set<CoopsStationType>(stationTypes)
 
-  async function refreshOneType (stationType: CoopsStationType): Promise<void> {
+  async function refreshOneType (stationType: CoopsStationType, signal?: AbortSignal): Promise<boolean> {
     const previous = store.snapshot().types[stationType]
     const previousHeaders = previous !== undefined
       ? { lastModified: previous.lastModified, etag: previous.etag }
       : undefined
-    const result = await client.downloadStations(stationType, previousHeaders)
+    const result = await client.downloadStations(stationType, previousHeaders, signal)
     if (result.status === 'ok') {
       store.upsertType(stationType, result.records, result.headers)
     } else if (result.status === 'error') {
@@ -95,19 +95,25 @@ export function createNoaaCoopsSource (config: NoaaCoopsSourceConfig): NoaaCoops
         NOAA_COOPS_SOURCE_ID,
         `Refresh failed for ${stationType} stations: ${result.message}`
       )
+      return false
     }
+    return true
   }
 
-  async function refreshAll (): Promise<void> {
+  async function refreshAll (signal?: AbortSignal): Promise<void> {
     if (shouldSkipOutsideUsWaters(getCurrentPosition, status, NOAA_COOPS_SOURCE_ID)) {
       return
     }
     // The two lists are independent and low-volume, so a small sequential walk
     // is plenty; a per-type error is recorded and does not abort the rest.
+    let allSucceeded = true
     for (const stationType of stationTypes) {
+      signal?.throwIfAborted()
       try {
-        await refreshOneType(stationType)
+        if (!await refreshOneType(stationType, signal)) allSucceeded = false
       } catch (error) {
+        signal?.throwIfAborted()
+        allSucceeded = false
         status.recordError(
           NOAA_COOPS_SOURCE_ID,
           `Refresh worker failed for ${stationType} stations: ${String(error)}`
@@ -117,6 +123,9 @@ export function createNoaaCoopsSource (config: NoaaCoopsSourceConfig): NoaaCoops
     // The store no-ops this flush if the run has been closed mid-refresh, so a
     // torn-down run cannot write over a freshly started one at the same dir.
     await store.flush()
+    if (stationTypes.length > 0 && allSucceeded) {
+      status.recordListFetch(NOAA_COOPS_SOURCE_ID, store.recordCount())
+    }
   }
 
   return {
@@ -135,7 +144,7 @@ export function createNoaaCoopsSource (config: NoaaCoopsSourceConfig): NoaaCoops
           result.push(toSummary(record))
         }
       }
-      return result
+      return withListProvenance(result, 'local')
     },
     getDetails: async (id: string): Promise<PoiDetailView> => {
       const record = store.snapshot().records[id]

@@ -126,7 +126,7 @@ Styling is inline style objects with a small injected `<style>` block for states
 
 `tsconfig.panel.json` extends the root tsconfig with `jsx: react-jsx`, DOM libs, `moduleResolution: Bundler`, `noEmit`, and includes `src/panel/**`, `src/types.ts`, `src/statusTypes.ts`, `src/poiTypeSelection.ts`.
 
-`package.json` scripts: `build` runs `build:plugin` (`tsc`) then `build:panel` (`webpack`); `typecheck` runs `tsc --noEmit` over both tsconfigs; `clean` removes `dist/` and the `public/` build artifacts. `prepublishOnly` runs clean then build. New devDependencies: `webpack`, `webpack-cli`, `babel-loader`, `@babel/core`, `@babel/preset-react`, `@babel/preset-typescript`, `react`, `react-dom`, `@types/react`, `@types/react-dom`, `@types/express`. `react` and `react-dom` are dev-only: at runtime they are host-provided singletons.
+`package.json` scripts: `build` runs `build:plugin` (`tsc`) then `build:panel` (`webpack`); `typecheck` runs `tsc --noEmit` over both tsconfigs; `clean` removes `dist/` and the `public/` build artifacts. `prepack` runs clean then build. New devDependencies: `webpack`, `webpack-cli`, `babel-loader`, `@babel/core`, `@babel/preset-react`, `@babel/preset-typescript`, `react`, `react-dom`, `@types/react`, `@types/react-dom`, `@types/express`. `react` and `react-dom` are dev-only: at runtime they are host-provided singletons.
 
 ## 8. Testing
 
@@ -141,7 +141,7 @@ No React component render tests: low value on a federation panel, matching the e
 
 - Version 1.2.0.
 - Minimum SignalK admin UI 2.27.0 (it provides React 19), documented in the README.
-- `public/` is git-ignored and rebuilt by `prepublishOnly`; the npm tarball ships `dist/` and `public/`.
+- `public/` is git-ignored and rebuilt by `prepack`; the npm tarball ships `dist/` and `public/`.
 - The `plugin.schema` property is kept: with the configurator keyword the admin UI ignores it, but non-admin tools may still read it.
 
 ## 10. Out of scope

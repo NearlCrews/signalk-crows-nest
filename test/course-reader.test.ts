@@ -407,6 +407,24 @@ test('a course delta refreshes the cached route', async () => {
   reader.stop()
 })
 
+test('a committed course refresh requests a position scan', async () => {
+  let course = courseWithoutRoute()
+  let changes = 0
+  const { app, emitCourseDelta } = createMockApp({
+    course: async () => course,
+    resource: routeResource(THREE_LEG_ROUTE)
+  })
+  const reader = createCourseReader({ app, onRouteChange: () => { changes++ } })
+  await flush()
+  assert.equal(changes, 1, 'the initial no-route state is committed')
+
+  course = courseWithRoute('/resources/routes/route-1', 0, false)
+  emitCourseDelta()
+  await flush()
+  assert.equal(changes, 2, 'the activated route requests another scan')
+  reader.stop()
+})
+
 test('a course delta clearing the route resets the cache to null', async () => {
   let course = courseWithRoute('/resources/routes/route-1', 0, false)
   const { app, emitCourseDelta } = createMockApp({

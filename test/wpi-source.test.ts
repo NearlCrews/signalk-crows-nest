@@ -139,6 +139,42 @@ test('a list after the refresh window re-fetches the set', async () => {
   assert.equal(fetches, 2)
 })
 
+test('a successful full refresh removes ports absent from the new dataset', async () => {
+  await withTempDir('wpi-source-', async (dir) => {
+    let t = 1_000_000
+    let ports = [brooklyn]
+    const client: FakeClient = { fetchAllPorts: async () => ports }
+    const source = createWpiSource({
+      client: client as never,
+      refreshHours: 1,
+      status: createStubStatus().status as never,
+      dataDir: dir,
+      now: () => t
+    })
+
+    await source.listPointsOfInterest(NY_BBOX, '')
+    assert.equal(source.cacheSize(), 1)
+
+    ports = []
+    t += 60 * 60 * 1000 + 1
+    assert.deepEqual(await source.listPointsOfInterest(NY_BBOX, ''), [])
+    assert.equal(source.cacheSize(), 0, 'the removed port is dropped from memory')
+    await assert.rejects(() => source.getDetails('7630'), /7630/)
+    source.close()
+
+    const offline: FakeClient = { fetchAllPorts: async () => { throw new Error('offline') } }
+    const restarted = createWpiSource({
+      client: offline as never,
+      refreshHours: 24,
+      status: createStubStatus().status as never,
+      dataDir: dir
+    })
+    assert.equal(restarted.cacheSize(), 0, 'the removed port is absent after hydration')
+    await assert.rejects(() => restarted.listPointsOfInterest(NY_BBOX, ''), /offline/)
+    restarted.close()
+  })
+})
+
 test('concurrent list calls share a single full-set fetch', async () => {
   let fetches = 0
   const client: FakeClient = { fetchAllPorts: async () => { fetches++; return [brooklyn] } }

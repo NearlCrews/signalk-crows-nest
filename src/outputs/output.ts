@@ -24,6 +24,12 @@ export interface PositionScanContributor {
   /** POI types this contributor needs included in the per-tick list request. */
   readonly poiTypes: readonly string[]
   /**
+   * Optional hook for outputs whose inputs can change without a position
+   * delta. The monitor supplies a callback that requests one immediate scan;
+   * the output calls it after committing such a change.
+   */
+  setScanRequester?: (requestScan: () => void) => void
+  /**
    * Build this contributor's fetch bounding box for the tick, or `null` when
    * it needs nothing fetched this tick. `tickPosition` is the throttled tick
    * position.

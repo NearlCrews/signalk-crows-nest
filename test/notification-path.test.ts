@@ -30,20 +30,28 @@ test('emitNotification builds the shared notification delta', () => {
     createdAt: '2026-05-22T00:00:00.000Z'
   }
 
-  emitNotification(app, 'notifications.navigation.crowsNest.hazard.', 'h1', value)
+  emitNotification(
+    app,
+    'notifications.navigation.crowsNest.hazard.',
+    'h1',
+    value,
+    undefined,
+    () => new Date('2026-05-22T00:05:00.000Z')
+  )
 
   assert.equal(captured.length, 1)
   assert.equal(captured[0].id, PLUGIN_ID)
   assert.deepEqual(captured[0].delta, {
     updates: [{
       $source: PLUGIN_ID,
-      timestamp: '2026-05-22T00:00:00.000Z',
+      timestamp: '2026-05-22T00:05:00.000Z',
       values: [{
         path: 'notifications.navigation.crowsNest.hazard.h1',
         value
       }]
     }]
   })
+  assert.equal(value.createdAt, '2026-05-22T00:00:00.000Z')
 })
 
 test('emitNotification sanitizes the POI id embedded in the path', () => {

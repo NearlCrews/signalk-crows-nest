@@ -38,7 +38,8 @@ export interface LightListClient {
   downloadDistrict: (
     district: string,
     page: number,
-    previousHeaders?: DistrictHeaders
+    previousHeaders?: DistrictHeaders,
+    signal?: AbortSignal
   ) => Promise<DownloadResult>
 }
 
@@ -150,9 +151,9 @@ export function createLightListClient (
 ): LightListClient {
   const baseUrl = config.baseUrl ?? DEFAULT_BASE_URL
   return {
-    async downloadDistrict (district, page, previousHeaders) {
+    async downloadDistrict (district, page, previousHeaders, signal) {
       const url = `${baseUrl}/sites/default/files/msi/lightList${district}_${page}.geojson`
-      const result = await conditionalGet(url, 'USCG Light List', previousHeaders)
+      const result = await conditionalGet(url, 'USCG Light List', previousHeaders, signal)
       if (result.status !== 'ok') {
         return result
       }

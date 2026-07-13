@@ -19,7 +19,13 @@ import type { OutputContext, OutputHandle, OutputModule, PositionScanContributor
 import type { BridgeClearanceResolver } from '../bridge-air-draft/bridge-clearance-resolver.js'
 import { BRIDGE_POI_TYPE } from '../bridge-air-draft/bridge-clearance-alarms.js'
 import { bridgeBlocksVessel, clampClearanceMargin, readVesselAirDraft } from '../../shared/bridge-clearance.js'
-import { distanceMeters, positionToBbox, unionBbox } from '../../geo/position-utilities.js'
+import {
+  distanceMeters,
+  initialBearingRad,
+  positionToBbox,
+  projectPosition,
+  unionBbox
+} from '../../geo/position-utilities.js'
 import type { Bbox, CorridorPoi, PoiSummary, Position, RoutePolyline } from '../../shared/types.js'
 import { clampRouteCorridorWidth, routeCorridorWidthSchema } from '../../shared/route-corridor.js'
 import { METERS_PER_NAUTICAL_MILE } from '../../shared/length.js'
@@ -57,7 +63,16 @@ function routeCorridorBbox (route: RoutePolyline, corridorWidthMeters: number): 
   let previous: Position | undefined
   for (const point of points) {
     if (previous !== undefined) {
-      traveledMeters += distanceMeters(previous, point)
+      const legMeters = distanceMeters(previous, point)
+      const remainingMeters = ROUTE_LOOK_AHEAD_METERS - traveledMeters
+      if (legMeters > remainingMeters) {
+        const bearingDegrees = initialBearingRad(previous, point) * 180 / Math.PI
+        const clippedPoint = projectPosition(previous, bearingDegrees, remainingMeters / 1000)
+        const clippedBox = positionToBbox(clippedPoint, corridorWidthMeters)
+        box = box === undefined ? clippedBox : unionBbox(box, clippedBox)
+        break
+      }
+      traveledMeters += legMeters
     }
     const pointBox = positionToBbox(point, corridorWidthMeters)
     box = box === undefined ? pointBox : unionBbox(box, pointBox)
@@ -159,7 +174,11 @@ export const routeHazardOutput: OutputModule = {
     // throw after that, those subscriptions would be orphaned with no stop()
     // handle. Constructing the alarms first keeps any throw subscription-free.
     const alarms = createRouteHazardAlarms(app)
-    const courseReader = createCourseReader({ app })
+    let requestScan = (): void => {}
+    const courseReader = createCourseReader({
+      app,
+      onRouteChange: () => { requestScan() }
+    })
 
     // The bridge air-draft check rides this existing route scan: when it is on,
     // a too-low bridge in the corridor gets a clearance-specific warn message.
@@ -182,6 +201,7 @@ export const routeHazardOutput: OutputModule = {
 
     const positionScan: PositionScanContributor = {
       poiTypes: CORRIDOR_POI_TYPES,
+      setScanRequester: (request) => { requestScan = request },
       buildFetchBox: (tickPosition) => {
         // Pass the monitor's fresh tickPosition, not the independent
         // readPosition courseReader would otherwise take. If getSelfPath

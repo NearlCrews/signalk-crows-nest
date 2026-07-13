@@ -34,6 +34,7 @@ import {
   fetchDetailRecorded,
   fetchListWithOfflineFallback,
   staleSummariesWithinBbox,
+  withListProvenance,
   type PoiSource
 } from '../poi-source.js'
 import type { WpiClient } from './wpi-client.js'
@@ -163,7 +164,7 @@ export function createWpiSource (config: WpiSourceConfig): PoiSource {
   // One cache holds the whole worldwide index, hydrated from the on-disk store
   // so a cold start offline still lists and renders every previously fetched
   // port.
-  const { cache, persist, close: closeCache } = createHydratedDetailCache<WpiPort>({
+  const { cache, replaceAll, close: closeCache } = createHydratedDetailCache<WpiPort>({
     dataDir,
     fileName: STORE_FILE_NAME,
     isValue: isWpiPort,
@@ -218,17 +219,21 @@ export function createWpiSource (config: WpiSourceConfig): PoiSource {
   const fetchAllIntoCache = async (): Promise<void> => {
     const ports = await client.fetchAllPorts(abortController.signal)
     const rows: PortSummaryRow[] = []
+    const nextCache = new Map<string, WpiPort>()
     for (const port of ports) {
       const id = portId(port)
       if (id === undefined) continue
-      cache.set(id, port)
-      persist(id, port)
+      nextCache.set(id, port)
       const summary = toSummary(port)
       if (summary === null) continue
       // The summary's own position carries the validated coordinates, so the
       // row reuses them rather than re-deriving the pair.
       rows.push({ lat: summary.position.latitude, lon: summary.position.longitude, summary })
     }
+    // A successful full dump is authoritative. Replace the complete snapshot
+    // only after it has been parsed so an interrupted refresh retains the last
+    // good dataset, while ports removed upstream disappear everywhere.
+    replaceAll(nextCache)
     summaryRows = rows
     lastFetchedAt = now()
   }
@@ -247,10 +252,11 @@ export function createWpiSource (config: WpiSourceConfig): PoiSource {
 
   // Refresh the full set unless it was fetched within the window. A set never
   // fetched this session (including a hydrated-only cache) is always refreshed.
-  const ensureFresh = async (): Promise<void> => {
+  const ensureFresh = async (): Promise<boolean> => {
     const fresh = lastFetchedAt !== undefined && now() - lastFetchedAt < refreshIntervalMs
-    if (fresh) return
+    if (fresh) return false
     await refreshDataset()
+    return true
   }
 
   return {
@@ -258,16 +264,22 @@ export function createWpiSource (config: WpiSourceConfig): PoiSource {
     // The `poiTypes` filter is not meaningful for the World Port Index: every
     // port is a single PoiType, so the argument is intentionally ignored.
     listPointsOfInterest: async (bbox: Bbox): Promise<PoiSummary[]> => {
-      const outcome = await fetchListWithOfflineFallback<void>(
+      const outcome = await fetchListWithOfflineFallback<boolean>(
         status,
         WPI_SOURCE_ID,
         'World Port Index unreachable',
-        async () => { await ensureFresh() },
+        ensureFresh,
         () => buildStaleSummaries(bbox)
       )
       // Fresh: filter the rows prebuilt by the fetch. Stale: the offline rebuild
       // already read the hydrated cache.
-      return outcome.kind === 'stale' ? outcome.summaries : summariesWithinBbox(bbox)
+      if (outcome.kind === 'stale') {
+        return withListProvenance(outcome.summaries, 'stale')
+      }
+      return withListProvenance(
+        summariesWithinBbox(bbox),
+        outcome.value ? 'fresh' : 'local'
+      )
     },
     getDetails: async (id: string): Promise<PoiDetailView> => {
       const hit = cache.get(id)

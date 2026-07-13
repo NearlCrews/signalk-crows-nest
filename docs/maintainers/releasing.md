@@ -10,7 +10,7 @@ runs in two jobs. The first verifies that the release tag matches the
 `package.json` version, then installs dependencies and runs `build`,
 `typecheck`, `test`, and `lint`. The second reinstalls and runs
 `npm publish --provenance` (the job grants the `id-token: write` and
-`contents: read` permissions provenance requires). The `prepublishOnly` script
+`contents: read` permissions provenance requires). The `prepack` script
 cleans and rebuilds `dist/` and `public/` before the package is published, so
 the npm tarball always reflects a fresh build.
 
@@ -65,7 +65,9 @@ Before creating the GitHub release:
 ## Supported Node.js versions
 
 CI (`.github/workflows/ci.yml`) builds, type-checks, tests, and lints on
-Node.js 20 and 22. The publish workflow runs on Node.js 22. The `engines`
-field in `package.json` is `>=20.3.0` (the ActiveCaptain client uses
-`AbortSignal.any`, added in Node 20.3); keep it at or below the lowest
-Node.js version CI exercises.
+Node.js 20 and 22. The official Signal K plugin CI
+(`.github/workflows/plugin-ci.yml`) also exercises Node.js 22 and 24 across
+Linux, macOS, and Windows, plus its Node.js 20 armv7 lane. The publish workflow
+runs on Node.js 22. The `engines` field in `package.json` is `>=20.3.0` (the
+ActiveCaptain client uses `AbortSignal.any`, added in Node 20.3); keep it at or
+below the lowest Node.js version CI exercises.

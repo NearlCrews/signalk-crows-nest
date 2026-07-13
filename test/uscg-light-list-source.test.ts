@@ -81,6 +81,41 @@ test('a refresh in flight when close() runs does not flush after stop', async ()
   assert.equal(flushes, 0, 'a refresh completing after close must not flush')
 })
 
+test('an aborted refresh cancels active downloads and stops dequeuing pages', async () => {
+  let calls = 0
+  const client: LightListClient = {
+    downloadDistrict: async (_district, _page, _headers, signal) => {
+      calls++
+      return await new Promise<DownloadResult>((_resolve, reject) => {
+        signal?.addEventListener('abort', () => { reject(signal.reason) }, { once: true })
+      })
+    }
+  }
+  const store: LightListStore = {
+    load: async () => ({ generated: '', districts: {}, records: {} }),
+    upsertDistrict: () => {},
+    flush: async () => {},
+    snapshot: () => ({ generated: '', districts: {}, records: {} }),
+    recordCount: () => 0,
+    close: () => {},
+    queryBbox: () => []
+  }
+  const source = createUscgLightListSource({
+    client,
+    store,
+    minimumYear: 0,
+    status: createStubStatus().status,
+    getCurrentPosition: () => undefined
+  })
+  const controller = new AbortController()
+  const pass = source.refreshAll(controller.signal)
+  await Promise.resolve()
+  controller.abort()
+
+  await assert.rejects(pass)
+  assert.equal(calls, 4, 'only the initial worker pool started downloads')
+})
+
 test('listPointsOfInterest filters by bbox and tags every summary with the source', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'll-src-'))
   try {

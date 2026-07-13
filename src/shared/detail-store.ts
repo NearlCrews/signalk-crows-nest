@@ -81,6 +81,8 @@ export interface DetailStore<V> {
    * a debounced write of the whole store to disk.
    */
   persist: (id: string, value: V) => void
+  /** Replace the complete persisted snapshot and schedule one write. */
+  replaceAll: (values: ReadonlyMap<string, V>) => void
   /** Write any pending debounced change to disk now. */
   flush: () => void
   /** Drop every persisted entry and remove the backing file. */
@@ -274,6 +276,18 @@ export function createDetailStore<V> (options: DetailStoreOptions<V>): DetailSto
       // persist many records in quick succession, and rewriting the whole store
       // file on each one would block the event loop repeatedly. The timer is
       // unref'd so a pending write never holds the process open.
+      if (writeTimer === undefined) {
+        writeTimer = setTimeout(flush, WRITE_DEBOUNCE_MS)
+        writeTimer.unref()
+      }
+    },
+
+    replaceAll: (values: ReadonlyMap<string, V>): void => {
+      const timestamp = Date.now()
+      entries = {}
+      for (const [id, value] of values) {
+        entries[id] = { timestamp, value }
+      }
       if (writeTimer === undefined) {
         writeTimer = setTimeout(flush, WRITE_DEBOUNCE_MS)
         writeTimer.unref()

@@ -25,6 +25,7 @@ import {
   fetchDetailRecorded,
   fetchListWithOfflineFallback,
   staleSummariesWithinBbox,
+  withListProvenance,
   type PoiSource
 } from '../poi-source.js'
 import { createBboxDebounceCache } from '../../shared/bbox-debounce.js'
@@ -245,7 +246,7 @@ export function createUsaceSource (config: UsaceSourceConfig): PoiSource {
     // intentionally ignored for this source.
     listPointsOfInterest: async (bbox: Bbox): Promise<PoiSummary[]> => {
       if (shouldSkipOutsideUsWaters(getCurrentPosition, status, USACE_SOURCE_ID)) {
-        return []
+        return withListProvenance([], 'skipped')
       }
       // No enabled layers is a configured-empty list, not a failure.
       if (layers.length === 0) {
@@ -296,7 +297,7 @@ export function createUsaceSource (config: UsaceSourceConfig): PoiSource {
         () => rebuildStale(bbox)
       )
       if (outcome.kind === 'stale') {
-        return outcome.summaries
+        return withListProvenance(outcome.summaries, 'stale')
       }
       const summaries: PoiSummary[] = []
       for (const { layerKey, features } of outcome.value) {

@@ -75,6 +75,21 @@ test('persist replaces an existing entry rather than duplicating it', () => {
   })
 })
 
+test('replaceAll removes entries absent from the authoritative snapshot', () => {
+  withTempDir((dir) => {
+    const store = makeStore(dir)
+    store.persist('old', { n: 1, label: 'old' })
+    store.replaceAll(new Map([
+      ['current', { n: 2, label: 'current' }]
+    ]))
+    store.flush()
+
+    const loaded = makeStore(dir).load()
+    assert.deepEqual(Object.keys(loaded), ['current'])
+    assert.equal(loaded.current?.value.label, 'current')
+  })
+})
+
 test('load drops entries older than the retention window and keeps fresh ones', () => {
   withTempDir((dir) => {
     const now = Date.now()

@@ -20,7 +20,7 @@ import type { LnmRecord } from './lnm-types.js'
 import { LNM_LAYER_PAGES, lnmFileKey, type LnmLayer } from './lnm-layers.js'
 import { renderLnmDetail } from './lnm-detail.js'
 import { buildLnmSections } from './lnm-sections.js'
-import type { PoiSource } from '../poi-source.js'
+import { withListProvenance, type PoiSource } from '../poi-source.js'
 import type { Bbox, PoiDetailView, PoiSummary, Position } from '../../shared/types.js'
 import { shouldSkipOutsideUsWaters } from '../../shared/us-waters.js'
 import { openSeaMapMarkerUrl } from '../../shared/map-link.js'
@@ -60,7 +60,7 @@ export interface UscgLnmSourceConfig {
  */
 export interface UscgLnmSource extends PoiSource {
   /** Run one refresh pass across every pinned (layer, page) file. */
-  refreshAll: () => Promise<void>
+  refreshAll: (signal?: AbortSignal) => Promise<void>
 }
 
 /** Build the list summary for one record. */
@@ -85,36 +85,43 @@ function toSummary (record: LnmRecord): PoiSummary {
 export function createUscgLnmSource (config: UscgLnmSourceConfig): UscgLnmSource {
   const { client, store, status, getCurrentPosition } = config
 
-  async function refreshOnePage (layer: LnmLayer, page: number): Promise<void> {
+  async function refreshOnePage (layer: LnmLayer, page: number, signal?: AbortSignal): Promise<boolean> {
     const key = lnmFileKey(layer.slug, page)
-    const result = await client.downloadLayerPage(layer, page, store.headersFor(key))
+    const result = await client.downloadLayerPage(layer, page, store.headersFor(key), signal)
     if (result.status === 'ok') {
       store.upsertFile(key, result.records, result.headers)
     } else if (result.status === 'error') {
       status.recordError(USCG_LNM_SOURCE_ID, `Refresh failed for ${key}: ${result.message}`)
+      return false
     }
+    return true
   }
 
-  async function refreshAll (): Promise<void> {
+  async function refreshAll (signal?: AbortSignal): Promise<void> {
     if (shouldSkipOutsideUsWaters(getCurrentPosition, status, USCG_LNM_SOURCE_ID)) {
       return
     }
     // Concurrency-capped fan-out: a small worker pool pulls (layer, page)
     // pairs off the shared cursor until the pinned catalog is drained.
     // Per-file errors are recorded onto the status and do not abort the pass.
-    await mapWithConcurrency(LNM_LAYER_PAGES, REFRESH_CONCURRENCY, async ({ layer, page }) => {
+    const outcomes = await mapWithConcurrency(LNM_LAYER_PAGES, REFRESH_CONCURRENCY, async ({ layer, page }) => {
       try {
-        await refreshOnePage(layer, page)
+        return await refreshOnePage(layer, page, signal)
       } catch (error) {
+        if (signal?.aborted === true) throw error
         status.recordError(
           USCG_LNM_SOURCE_ID,
           `Refresh worker failed for ${lnmFileKey(layer.slug, page)}: ${String(error)}`
         )
+        return false
       }
-    })
+    }, signal)
     // The store no-ops this flush if the run has been closed mid-refresh, so a
     // torn-down run cannot write over a freshly started one at the same dir.
     await store.flush()
+    if (outcomes.every(Boolean)) {
+      status.recordListFetch(USCG_LNM_SOURCE_ID, store.recordCount())
+    }
   }
 
   return {
@@ -123,7 +130,7 @@ export function createUscgLnmSource (config: UscgLnmSourceConfig): UscgLnmSource
     // NOAA ENC and USCG Light List sources: that string is the ActiveCaptain
     // type selection, and this source's own enable toggle is its type filter.
     listPointsOfInterest: async (bbox: Bbox): Promise<PoiSummary[]> => {
-      return store.queryBbox(bbox).map(toSummary)
+      return withListProvenance(store.queryBbox(bbox).map(toSummary), 'local')
     },
     getDetails: async (id: string): Promise<PoiDetailView> => {
       const record = store.getById(id)

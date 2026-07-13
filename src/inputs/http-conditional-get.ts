@@ -58,7 +58,8 @@ export type ConditionalGetResult =
 export async function conditionalGet (
   url: string,
   label: string,
-  previousHeaders?: ConditionalGetHeaders
+  previousHeaders?: ConditionalGetHeaders,
+  signal?: AbortSignal
 ): Promise<ConditionalGetResult> {
   const headers: Record<string, string> = { 'User-Agent': PLUGIN_USER_AGENT }
   if (previousHeaders?.lastModified !== undefined) {
@@ -68,7 +69,7 @@ export async function conditionalGet (
     headers['If-None-Match'] = previousHeaders.etag
   }
   try {
-    const response = await requestText(url, headers, REQUEST_TIMEOUT_MS, label)
+    const response = await requestText(url, headers, REQUEST_TIMEOUT_MS, label, signal)
     if (response.status === HTTP_NOT_MODIFIED) {
       return { status: 'not-modified' }
     }
@@ -86,6 +87,9 @@ export async function conditionalGet (
     }
     return { status: 'ok', body: response.body, headers: responseHeaders }
   } catch (error) {
+    if (signal?.aborted === true) {
+      throw error
+    }
     return { status: 'error', message: String(error) }
   }
 }

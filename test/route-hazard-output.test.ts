@@ -125,11 +125,10 @@ test('buildFetchBox returns a corridor box for the active route', async () => {
   assert.ok(handle.positionScan)
   const box = handle.positionScan.buildFetchBox({ latitude: 0, longitude: 0 })
   assert.ok(box !== null && box.north > box.south && box.east > box.west)
-  // The route runs due north from latitude 0 to the far waypoint at latitude
-  // 1, so the box must actually enclose the route ahead: its north edge has
-  // to reach past the far waypoint (latitude 1, plus the corridor half-width)
-  // and its south edge has to sit below the near waypoint at latitude 0.
-  assert.ok(box !== null && box.north > 1, 'the box reaches past the far waypoint')
+  // The first leg is about 60 nautical miles, so the 10 nautical mile cap must
+  // clip it near latitude 0.166 rather than querying all the way to latitude 1.
+  assert.ok(box !== null && box.north > 0.16, 'the box reaches the clipped endpoint')
+  assert.ok(box !== null && box.north < 0.18, 'the box does not include the full long leg')
   assert.ok(box !== null && box.south < 0, 'the box reaches below the near waypoint')
   handle.stop()
 })

@@ -112,6 +112,11 @@ export function createPositionMonitor (config: PositionMonitorConfig): PositionM
   // True while a scan request is outstanding, so a burst of position updates
   // cannot stack overlapping list requests on top of one another.
   let tickInFlight = false
+  // A contributor invalidation that arrives during a scan is collapsed into
+  // one follow-up tick. Unlike a position update, it bypasses the movement and
+  // interval gates because route activation and cancellation must take effect
+  // while the vessel is stationary.
+  let forcedTickPending = false
   // The most recent position fix, updated on every delta even while a scan is
   // in flight. Contributors evaluate against this, not the position the tick
   // started from, so a multi-second request does not check stale coordinates.
@@ -211,9 +216,10 @@ export function createPositionMonitor (config: PositionMonitorConfig): PositionM
     if (stopped || tickInFlight || latestPosition === undefined) {
       return
     }
-    if (!shouldTick(latestPosition)) {
+    if (!forcedTickPending && !shouldTick(latestPosition)) {
       return
     }
+    forcedTickPending = false
     const tickPosition = latestPosition
     app.debug(`Position monitor tick at ${tickPosition.latitude}, ${tickPosition.longitude}`)
     // runTick handles its own errors internally and never rejects; the catch
@@ -222,6 +228,15 @@ export function createPositionMonitor (config: PositionMonitorConfig): PositionM
     runTick(tickPosition).catch((error: unknown) => {
       app.debug(`Position monitor tick failed unexpectedly: ${String(error)}`)
     })
+  }
+
+  /** Request a scan for a contributor change that is independent of motion. */
+  function requestScan (): void {
+    if (stopped) {
+      return
+    }
+    forcedTickPending = true
+    maybeTick()
   }
 
   function onPosition (delta: NormalizedDelta): void {
@@ -239,6 +254,9 @@ export function createPositionMonitor (config: PositionMonitorConfig): PositionM
   const unsubscribe = app.streambundle
     .getSelfBus(SELF_POSITION_PATH as Path)
     .onValue(onPosition)
+  for (const contributor of contributors) {
+    contributor.setScanRequester?.(requestScan)
+  }
   app.debug('Position monitor started; subscribed to navigation.position')
 
   return {
@@ -248,6 +266,10 @@ export function createPositionMonitor (config: PositionMonitorConfig): PositionM
         return
       }
       stopped = true
+      forcedTickPending = false
+      for (const contributor of contributors) {
+        contributor.setScanRequester?.(() => {})
+      }
       unsubscribe()
       app.debug('Position monitor stopped')
     }

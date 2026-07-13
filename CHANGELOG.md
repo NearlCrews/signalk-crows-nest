@@ -9,6 +9,46 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 > development milestones that preceded this publication. Their content is
 > incorporated into the 0.4.2 release.
 
+<a id="v0140"></a>
+
+## [0.14.0] - 2026-07-13
+
+Route safety checks now respond to active-route changes without waiting for
+vessel movement. This release also tightens source cancellation, complete
+dataset replacement, request validation, status reporting, and package
+reproducibility.
+
+### Changed
+
+- Active-route changes request an immediate position-driven safety scan, even
+  while the vessel is stationary. Route look-ahead geometry clips a long first
+  leg to 10 nautical miles so a distant waypoint does not expand the scan far
+  beyond the scan horizon.
+- Package preparation uses the npm `prepack` lifecycle to clean and rebuild
+  `dist/` and `public/` for both `npm pack` and `npm publish`. Contributor,
+  development, release, workflow, and design documentation now reflects the
+  current eight-source architecture and supported CI platforms.
+
+### Fixed
+
+- Retry delays and scheduled bulk refreshes now honor plugin shutdown. USCG
+  Light List, Local Notice to Mariners, and NOAA CO-OPS refresh requests carry
+  cancellation through their clients, and one source failing to close no
+  longer prevents the remaining sources from closing.
+- A successful World Port Index bulk refresh now replaces the complete stored
+  snapshot instead of merging into it, so ports removed upstream disappear
+  from memory and disk.
+- Source status provenance is tracked per request. Concurrent resource reads
+  no longer overwrite one another, and a local cache read cannot hide an
+  upstream refresh failure.
+- Resource queries reject non-finite coordinates, malformed bounding boxes,
+  and invalid distance values. Course geometry also ignores invalid positions,
+  and shared concurrency helpers reject invalid limits.
+- Notification deltas use the current publication timestamp instead of
+  reusing a previous value timestamp.
+- Closing a detail store waits for an in-progress write, and hydrated caches
+  can replace complete snapshots without leaving stale entries behind.
+
 <a id="v0131"></a>
 
 ## [0.13.1] - 2026-07-06

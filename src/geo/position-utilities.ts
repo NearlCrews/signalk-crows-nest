@@ -79,7 +79,7 @@ export function toPosition (value: unknown): Position | null {
  * @param distanceKm - Distance to travel in kilometers.
  * @returns The destination position.
  */
-function projectPosition (position: Position, bearingDegrees: number, distanceKm: number): Position {
+export function projectPosition (position: Position, bearingDegrees: number, distanceKm: number): Position {
   const latitudeRad = toRadians(position.latitude)
   const longitudeRad = toRadians(position.longitude)
   const bearingRad = toRadians(bearingDegrees)

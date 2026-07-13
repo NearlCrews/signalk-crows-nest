@@ -18,7 +18,7 @@ import type { LightListStore } from './light-list-store.js'
 import { LIGHT_LIST_POI_TYPE, recordSkIcon } from './light-list-mapping.js'
 import { renderLightListDetail } from './light-list-detail.js'
 import { buildLightListSections } from './light-list-sections.js'
-import type { PoiSource } from '../poi-source.js'
+import { withListProvenance, type PoiSource } from '../poi-source.js'
 import type { Bbox, PoiDetailView, PoiSummary, Position } from '../../shared/types.js'
 import { shouldSkipOutsideUsWaters } from '../../shared/us-waters.js'
 import { openSeaMapMarkerUrl } from '../../shared/map-link.js'
@@ -84,7 +84,7 @@ export interface UscgLightListSourceConfig {
  */
 export interface UscgLightListSource extends PoiSource {
   /** Run one refresh pass across every (district, page) pair. */
-  refreshAll: () => Promise<void>
+  refreshAll: (signal?: AbortSignal) => Promise<void>
 }
 
 /**
@@ -101,13 +101,13 @@ export function createUscgLightListSource (
 ): UscgLightListSource {
   const { client, store, minimumYear, status, getCurrentPosition } = config
 
-  async function refreshOnePage (district: string, page: number): Promise<void> {
+  async function refreshOnePage (district: string, page: number, signal?: AbortSignal): Promise<boolean> {
     const key = `${district}_${page}`
     const previous = store.snapshot().districts[key]
     const previousHeaders = previous !== undefined
       ? { lastModified: previous.lastModified, etag: previous.etag }
       : undefined
-    const result = await client.downloadDistrict(district, page, previousHeaders)
+    const result = await client.downloadDistrict(district, page, previousHeaders, signal)
     if (result.status === 'ok') {
       store.upsertDistrict(district, page, result.records, result.headers)
     } else if (result.status === 'error') {
@@ -115,10 +115,12 @@ export function createUscgLightListSource (
         USCG_LIGHT_LIST_SOURCE_ID,
         `Refresh failed for ${key}: ${result.message}`
       )
+      return false
     }
+    return true
   }
 
-  async function refreshAll (): Promise<void> {
+  async function refreshAll (signal?: AbortSignal): Promise<void> {
     if (shouldSkipOutsideUsWaters(getCurrentPosition, status, USCG_LIGHT_LIST_SOURCE_ID)) {
       return
     }
@@ -126,19 +128,24 @@ export function createUscgLightListSource (
     // pairs off the shared cursor until the table is drained. Per-page
     // errors are recorded onto the status here and do not abort the rest of
     // the pass.
-    await mapWithConcurrency(DISTRICT_PAGES, REFRESH_CONCURRENCY, async ([district, page]) => {
+    const outcomes = await mapWithConcurrency(DISTRICT_PAGES, REFRESH_CONCURRENCY, async ([district, page]) => {
       try {
-        await refreshOnePage(district, page)
+        return await refreshOnePage(district, page, signal)
       } catch (error) {
+        if (signal?.aborted === true) throw error
         status.recordError(
           USCG_LIGHT_LIST_SOURCE_ID,
           `Refresh worker failed for ${district}_${page}: ${String(error)}`
         )
+        return false
       }
-    })
+    }, signal)
     // The store no-ops this flush if the run has been closed mid-refresh, so a
     // torn-down run cannot write over a freshly started one at the same dir.
     await store.flush()
+    if (outcomes.every(Boolean)) {
+      status.recordListFetch(USCG_LIGHT_LIST_SOURCE_ID, store.recordCount())
+    }
   }
 
   return {
@@ -175,7 +182,7 @@ export function createUscgLightListSource (
       }
       // Year filter is applied source-side so the rest of the pipeline
       // (dedupe, notes output, alarms) never sees filtered records.
-      return filterByMinimumYear(result, minimumYear)
+      return withListProvenance(filterByMinimumYear(result, minimumYear), 'local')
     },
     getDetails: async (id: string): Promise<PoiDetailView> => {
       const record = store.snapshot().records[id]

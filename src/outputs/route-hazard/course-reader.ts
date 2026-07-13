@@ -89,6 +89,8 @@ export interface CourseReaderApp {
 export interface CourseReaderConfig {
   /** The SignalK app, used for the Course API, Resources API, and data model. */
   app: CourseReaderApp
+  /** Called after the cached route changes, including when it is cleared. */
+  onRouteChange?: () => void
 }
 
 /** Public surface of the course reader. */
@@ -194,7 +196,7 @@ function clampIndex (index: unknown, length: number): number {
  *   vessel state. `stop()` tears the reader down.
  */
 export function createCourseReader (config: CourseReaderConfig): CourseReader {
-  const { app } = config
+  const { app, onRouteChange = () => {} } = config
 
   let stopped = false
   // The most recently resolved route ahead, or null when no route is active.
@@ -296,6 +298,7 @@ export function createCourseReader (config: CourseReaderConfig): CourseReader {
       return
     }
     currentRoute = route
+    onRouteChange()
   }
 
   /**
@@ -391,6 +394,7 @@ export function createCourseReader (config: CourseReaderConfig): CourseReader {
       // overwrite the clear, then drop the cached polyline immediately.
       refreshGeneration += 1
       currentRoute = null
+      onRouteChange()
       return
     }
     scheduleRefresh()
