@@ -5,10 +5,13 @@ import { flush } from './helpers.js'
 
 test('close aborts the active refresh and closes the wrapped source', async () => {
   let capturedSignal: AbortSignal | undefined
+  let markRefreshStarted: () => void = () => {}
+  const refreshStarted = new Promise<void>((resolve) => { markRefreshStarted = resolve })
   let closed = false
   const source = {
     refreshAll: async (signal?: AbortSignal): Promise<void> => {
       capturedSignal = signal
+      markRefreshStarted()
       await new Promise<void>((_resolve, reject) => {
         signal?.addEventListener('abort', () => { reject(signal.reason) }, { once: true })
       })
@@ -23,10 +26,16 @@ test('close aborts the active refresh and closes the wrapped source', async () =
     initialDelayMs: 0
   })
 
-  await flush()
-  assert.equal(capturedSignal?.aborted, false)
-  scheduled.close()
-  assert.equal(capturedSignal?.aborted, true)
-  assert.equal(closed, true)
-  await flush()
+  let scheduledClosed = false
+  try {
+    await refreshStarted
+    assert.equal(capturedSignal?.aborted, false)
+    scheduled.close()
+    scheduledClosed = true
+    assert.equal(capturedSignal?.aborted, true)
+    assert.equal(closed, true)
+    await flush()
+  } finally {
+    if (!scheduledClosed) scheduled.close()
+  }
 })
