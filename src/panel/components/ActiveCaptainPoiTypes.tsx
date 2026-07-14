@@ -1,7 +1,8 @@
 /**
  * The ActiveCaptain POI-type selector: the 13 toggles laid out in four labeled
  * groups, with All and None bulk buttons. A note appears when nothing is
- * selected, because the plugin then imports every type rather than none.
+ * selected because chart notes stop while enabled safety alerts continue to
+ * request the types they require.
  */
 
 import type * as React from 'react'
@@ -58,8 +59,8 @@ export default function ActiveCaptainPoiTypes ({ config, onToggle, onSetAll }: P
         ? null
         : (
           <p style={S.hint}>
-            No POI types are selected, so the plugin imports every type. Choose
-            at least one to narrow the import.
+            No POI types are selected, so no notes appear on the chart. Enabled
+            safety alerts still fetch the hazard types they need.
           </p>
           )}
     </Fieldset>

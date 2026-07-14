@@ -140,7 +140,7 @@ No React component render tests: low value on a federation panel, matching the e
 ## 9. Rollout
 
 - Version 1.2.0.
-- Minimum SignalK admin UI 2.27.0 (it provides React 19), documented in the README.
+- Minimum SignalK admin UI 2.26.0, documented in the README.
 - `public/` is git-ignored and rebuilt by `prepack`; the npm tarball ships `dist/` and `public/`.
 - The `plugin.schema` property is kept: with the configurator keyword the admin UI ignores it, but non-admin tools may still read it.
 

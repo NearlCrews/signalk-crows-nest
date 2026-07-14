@@ -1,5 +1,9 @@
 # Worldwide Route-Draft Safety Check Implementation Plan
 
+> Historical document: the AI route-draft feature was removed in v0.12.0.
+> This file records the former implementation plan and must not be executed
+> against the current codebase.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Extend the AI route-draft safety check beyond US ENC waters so every leg of a drafted route is checked by every data provider whose coverage envelope reaches it, with every unverified dimension flagged explicitly and never silently passed.

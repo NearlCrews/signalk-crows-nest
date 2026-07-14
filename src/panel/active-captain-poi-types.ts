@@ -70,3 +70,21 @@ export const ACTIVE_CAPTAIN_POI_TYPE_GROUPS = definePoiTypeGroups([
     ]
   }
 ] as const)
+
+/** Summarize the selected ActiveCaptain POI types for the collapsed card. */
+export function activeCaptainPoiTypeSelectionLabel (
+  config: Partial<Record<PoiTypeFlag, boolean>>
+): string {
+  const groups: readonly ActiveCaptainPoiTypeGroup[] = ACTIVE_CAPTAIN_POI_TYPE_GROUPS
+  let selected = 0
+  let total = 0
+  for (const group of groups) {
+    for (const option of group.options) {
+      total++
+      if (config[option.flag] === true) selected++
+    }
+  }
+  if (selected === 0) return 'no POI types'
+  if (selected === total) return 'all POI types'
+  return `${selected} of ${total} POI types`
+}

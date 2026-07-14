@@ -1,5 +1,9 @@
 # Deterministic channel router: design
 
+> Historical document: the AI route-draft feature was removed in v0.12.0.
+> This file records the former design and does not describe current Crow's
+> Nest behavior.
+
 Status: design, inland-and-enclosed-water-worldwide revision (was US-ENC-only).
 Date: 2026-06-15.
 
@@ -93,7 +97,7 @@ A modular slice `src/route-draft/channel-router/`, all owned TypeScript, reusing
 existing plumbing, plus one new input-side module for the OSM water-and-land query.
 Per the one-plugin, modular-files rule, each file has one responsibility.
 
-- `src/inputs/openseamap/osm-water-query.ts` (new) — the worldwide water-and-land
+- `src/inputs/openseamap/osm-water-query.ts` (new): the worldwide water-and-land
   source. Tiles the route bbox like `coastline-query.ts`, calls a new
   `listWaterAreas` on the Overpass client per tile, dedupes elements by OSM `type/id`
   across tiles, and assembles each into a polygon `{ rings: number[][][] }` (outer
@@ -107,7 +111,7 @@ Per the one-plugin, modular-files rule, each file has one responsibility.
   not contained in any assembled outer ring (the unsafe invalid-multipolygon case).
   Threads the deadline signal and a per-query Overpass timeout bound, and enforces
   the element, vertex, and tile caps below.
-- `overpass-client.ts` (modify) — add `listWaterAreas(bbox, signal)` returning the
+- `overpass-client.ts` (modify): add `listWaterAreas(bbox, signal)` returning the
   raw water and land elements as a discriminated, homogeneous-enough type that flows
   through the existing `collectElements(data, parse, skipLabel)` loop with one
   `parseWaterElement(wire)`:
@@ -127,7 +131,7 @@ Per the one-plugin, modular-files rule, each file has one responsibility.
   - The query is `out geom;` with NO `tags` and NO `meta` (geometry and member roles
     only), and sets the server-side `[timeout:8]` so a public Overpass server gives
     up early rather than computing a 60 s query the Pi has already abandoned.
-- `nav-grid.ts` — builds the navigable grid over a bbox at a chosen cell size from
+- `nav-grid.ts`: builds the navigable grid over a bbox at a chosen cell size from
   the ENC `ChartedAreas` AND the OSM `{ water, land }` polygons, and owns: the
   lon/lat <-> cell transform (planar over the small bbox, the existing geo
   convention), the per-cell classification (below), and the distance-to-shore field
@@ -137,14 +141,14 @@ Per the one-plugin, modular-files rule, each file has one responsibility.
   inputs. The deadline is threaded into every synchronous pass (the OSM rasterize
   exactly like the ENC rasterize, the BFS, and the corridor pass), bailing to an
   empty (`hasWater = false`) grid on overrun.
-- `astar.ts` — pure A* over a `NavGrid`: 8-connectivity, an owned binary-heap
+- `astar.ts`: pure A* over a `NavGrid`: 8-connectivity, an owned binary-heap
   priority queue, a closed set, step cost `distance * (1 + standoffPenalty(cell))`,
   Euclidean heuristic, and a deadline bail. Returns the ordered cell path or
   `undefined` when start and goal are not connected by navigable cells. No I/O.
-- `path-simplify.ts` — Ramer-Douglas-Peucker reduction of the cell path to turning
+- `path-simplify.ts`: Ramer-Douglas-Peucker reduction of the cell path to turning
   waypoints, with a pixel/cell epsilon, then mapped back to lat/lon by the grid
   transform. Pure.
-- `channel-router.ts` — the orchestrator. Given the route endpoints, the vessel
+- `channel-router.ts`: the orchestrator. Given the route endpoints, the vessel
   draft and margin, the standoff, and an optional corridor polyline, it: validates
   and computes the route bbox (declining a cross-antimeridian or oversized
   waypoint-derived bbox BEFORE any fetch or tiling), fetches the ENC charted areas
@@ -454,7 +458,7 @@ router on the SAME single rate-limited Overpass client (`maxConcurrency 2`,
 
 ## Integration points
 
-- `src/route-draft/endpoint.ts` — call the channel router in `handleDraft` after
+- `src/route-draft/endpoint.ts`: call the channel router in `handleDraft` after
   `parseDraftedRoute` (draft) and after `anchorRouteEndpoints` (optimize), before
   `checkLegs`; replace `route.waypoints` on success and attach the OSM-water-success
   caveat when the path used OSM water, else attach the geometry fallback note. A
@@ -462,7 +466,7 @@ router on the SAME single rate-limited Overpass client (`maxConcurrency 2`,
   The router needs the ENC client, the Overpass client (already on the service), the
   configured draft and margin, the standoff, the usage bands, and (optimize only) the
   drawn polyline.
-- `src/route-draft/config.ts` — add a corridor-half-width default and the
+- `src/route-draft/config.ts`: add a corridor-half-width default and the
   standoff-cost weight only if they need to be tunable; otherwise keep them as
   module constants. Default to module constants (YAGNI) unless a reviewer argues for
   config.

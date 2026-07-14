@@ -49,11 +49,15 @@ duplicates that more than one source reports. POI detail summaries are fetched
 lazily and rendered into HTML descriptions. The queued sources' HTTP clients
 (ActiveCaptain and Overpass) rate-limit requests, retry `429` and `5xx`
 responses with exponential backoff, and honor `Retry-After`; the low-volume
-sources use a simpler one-shot client, with a shared conditional-GET envelope
-(`http-conditional-get.ts`) for the bulk downloads (USCG Light List, Local
-Notice to Mariners, and NOAA CO-OPS) and a shared ArcGIS REST paging protocol
-(`arcgis-query.ts`) for the bbox-queried services (NOAA ENC Direct and
-USACE). A cache holds detail responses so repeated queries do not refetch.
+sources use a bounded one-shot client with a wall-clock deadline. A shared
+conditional-GET envelope (`http-conditional-get.ts`) serves the periodic bulk
+downloads (USCG Light List, Local Notice to Mariners, and NOAA CO-OPS), a
+shared ArcGIS REST paging protocol (`arcgis-query.ts`) serves the bbox-queried
+services (NOAA ENC Direct and USACE), and World Port Index downloads its full
+snapshot on demand. ArcGIS requests split wrapped bounding boxes at the
+antimeridian, and every long-running source carries plugin shutdown through an
+`AbortSignal`. Disk-backed detail and dataset stores preserve usable data
+across restarts.
 
 The plugin ships its own configuration panel: a federated React app, loaded by
 the Signal K admin UI through Module Federation, that replaces the generated
@@ -76,12 +80,13 @@ src/                      # TypeScript source
 │   ├── input-registry.ts  # Holds the inputs, builds the aggregate PoiSource
 │   ├── http-client.ts     # Shared queued HTTP plumbing (ActiveCaptain, Overpass):
 │   │                      #   queue, throttle, retry, Retry-After
-│   ├── http-one-shot.ts   # One-shot GET shared by the low-volume raw clients
+│   ├── http-one-shot.ts   # Bounded, deadline-enforced GET shared by the
+│   │                      #   low-volume raw clients
 │   ├── http-conditional-get.ts # Conditional-GET envelope shared by the
 │   │                      #   bulk-download sources (USCG Light List, USCG LNM,
 │   │                      #   NOAA CO-OPS)
-│   ├── arcgis-query.ts    # Shared ArcGIS REST /query paging protocol
-│   │                      #   (NOAA ENC Direct, USACE)
+│   ├── arcgis-query.ts    # Shared ArcGIS REST /query paging, antimeridian
+│   │                      #   splitting, and result dedupe (NOAA ENC, USACE)
 │   ├── refresh-scheduler.ts # Periodic-refresh scheduler shared by the
 │   │                      #   full-download inputs (Light List, CO-OPS, LNM)
 │   ├── dedupe-pois.ts     # Merges duplicates against the ActiveCaptain base layer,
@@ -137,8 +142,10 @@ src/                      # TypeScript source
 │                         #   builders every opting-in source uses), html-escape.ts
 │                         #   (escapeHtml and labeledParagraph for the detail renderers),
 │                         #   relative-time-format.ts (shared relative-time stepping),
-│                         #   namespaced-id.ts (splitOnFirstUnderscore for the underscore
-│                         #   id form), notification-path.ts, notification-tracker.ts,
+│                         #   namespaced-id.ts (splitOnFirstSeparator plus the
+│                         #   underscore wrapper), longitude.ts (inclusive wrapped-
+│                         #   longitude checks), notification-path.ts,
+│                         #   notification-tracker.ts,
 │                         #   numbers.ts (toFiniteNumber, positiveFiniteNumber,
 │                         #   isValidLatitude/Longitude, isWireTruthy), cache.ts,
 │                         #   time.ts (MS_PER_SECOND/MINUTE/HOUR and
@@ -159,7 +166,7 @@ src/                      # TypeScript source
     ├── PluginConfigurationPanel.tsx  # Root panel component
     ├── config-reducer.ts  # Pure reducer over the plugin config (testable)
     ├── normalize-config.ts# Normalizes the raw config object
-    ├── active-captain-poi-types.ts  # UI metadata: the ActiveCaptain POI-type groups
+    ├── active-captain-poi-types.ts  # ActiveCaptain POI-type metadata and summary
     ├── relative-time.ts   # ISO timestamp to a localized "N minutes ago" phrase
     ├── styles.ts          # The --ac-* design tokens and theme blocks
     ├── unit-system.ts     # The display-units resolver keyed off the server unit preset
@@ -183,11 +190,12 @@ docs/                     # Project documentation
 .github/                  # Community files, issue templates, and CI workflows
 ```
 
-`dist/`, `public/`, and `assets/` are the directories published to npm (see
-the `files` field in `package.json`). `assets/icons/` holds the SignalK
-admin-UI icon set (the master SVG and the four rasterized PNGs), and the
-`build:icons` script copies them under `public/assets/icons/` so the SignalK
-admin's `express.static` mount can serve them at runtime.
+`dist/`, `public/`, `assets/`, and `CHANGELOG.md` are allowlisted for npm (see
+the `files` field in `package.json`); npm also includes `package.json`,
+`README.md`, and `LICENSE`. `assets/icons/` holds the Signal K admin UI icon set
+(the master SVG and the four rasterized PNGs), and the `build:icons` script
+copies them under `public/assets/icons/` so the Signal K admin's
+`express.static` mount can serve them at runtime.
 
 ## Testing
 
@@ -216,10 +224,23 @@ must set `skIcon` to a Freeboard-registered icon name; the field is required, so
 an omission is a compile error. See [CLAUDE.md](../CLAUDE.md) for the full
 architecture rule and conventions.
 
-### The two acquisition patterns
+### The four acquisition patterns
 
-Every input follows one of two acquisition patterns, each with shared
-machinery a new source reuses:
+Every input follows one of four acquisition patterns. A new source should reuse
+the matching transport, cache, lifecycle, and status machinery:
+
+- **Queued at-runtime bounding-box query.** ActiveCaptain and OpenSeaMap query
+  the current chart or alarm box through `src/inputs/http-client.ts`. The shared
+  queue limits concurrency, throttles each upstream, retries selected transient
+  statuses with `Retry-After`, and aborts queued and in-flight work on close.
+  Their geographic stale-while-revalidate caches suppress duplicate viewport
+  bursts while keeping the chart responsive.
+- **One-shot ArcGIS bounding-box query.** NOAA ENC Direct and USACE fan a list
+  request across the configured layers, page each result through
+  `src/inputs/arcgis-query.ts`, and keep raw features in a hydrated detail
+  cache. Wrapped boxes are split into ordinary ArcGIS envelopes and merged by
+  object identity. This pattern fits bbox-aware services whose result sets are
+  bounded but whose protocol does not need the queued client's retries.
 
 - **Periodic download with conditional GET.** `src/inputs/uscg-light-list/`
   is the reference: it fetches the full NAVCEN district file set on a
@@ -229,20 +250,24 @@ machinery a new source reuses:
   on-disk index under the plugin data directory, so list queries are served
   entirely from memory and survive a restart. This pattern fits datasets
   that are large but rarely change. The NOAA CO-OPS
-  (`src/inputs/noaa-coops/`), USCG Local Notice to Mariners
-  (`src/inputs/uscg-lnm/`), and World Port Index (`src/inputs/wpi/`) inputs
-  follow it too, through the shared machinery: the scheduler lives in
+  (`src/inputs/noaa-coops/`) and USCG Local Notice to Mariners
+  (`src/inputs/uscg-lnm/`) inputs follow it too. The scheduler lives in
   `src/inputs/refresh-scheduler.ts`, the conditional-GET envelope in
   `src/inputs/http-conditional-get.ts`, and the crash-safe store write in
   `src/shared/atomic-write-json.ts`.
-- **At-runtime bounding-box query.** `src/inputs/noaa-enc/` is the
-  reference: it fans the list request out across the configured ArcGIS REST
-  hazard layers in parallel, stashes raw features in an LRU detail cache,
-  and re-queries by `OBJECTID` on a detail-cache miss. This pattern fits
-  datasets where the upstream API is bbox-aware and the per-query result set
-  is bounded. The USACE input (`src/inputs/usace/`) follows it, and the
-  shared ArcGIS `/query` paging protocol both clients speak lives in
-  `src/inputs/arcgis-query.ts`.
+- **On-demand full snapshot.** World Port Index has no bbox endpoint and no
+  conditional validators. `src/inputs/wpi/` downloads the complete worldwide
+  set through `http-one-shot.ts` on the first request and after its configured
+  freshness period, replaces the prior snapshot atomically, and filters the
+  in-memory rows by bbox. Its hydrated store is the offline fallback.
+
+Every list result carries request-scoped provenance: `fresh`, `local`,
+`skipped`, or `stale`. The aggregate marks a source reachable only for a fresh
+upstream result, so a concurrent cache hit or intentional skip cannot overwrite
+a real failure. A source that serves stale disk data records the outage while
+still returning usable markers. New async work must also honor source close,
+recheck lifecycle state immediately before persistence, and avoid recording a
+late result onto a later plugin run.
 
 The US-only inputs (USCG Light List, NOAA ENC Direct, NOAA CO-OPS, USCG
 Local Notice to Mariners, and USACE) are gated on the vessel position: they

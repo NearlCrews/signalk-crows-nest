@@ -1,5 +1,9 @@
 # Vector-tile water source for the channel router: design
 
+> Historical document: the AI route-draft feature was removed in v0.12.0.
+> This file records the former design and does not describe current Crow's
+> Nest behavior.
+
 Status: design, hardened after review and a live spike.
 Date: 2026-06-15.
 
@@ -112,7 +116,7 @@ and tested known points against the decoded `water` layer:
 Two new modules, a swap in the orchestrator, one change to the re-check, and a
 removal of the now-superseded Overpass water code. Each file has one responsibility.
 
-- `src/inputs/vector-tiles/vector-tile-client.ts` (new) — thin HTTP and decode.
+- `src/inputs/vector-tiles/vector-tile-client.ts` (new): thin HTTP and decode.
   `createVectorTileClient(log, options?)` returns
   `{ resolveTemplate(styleUrl, signal?), fetchLayer(template, z, x, y, layerName, signal?), close() }`.
   `resolveTemplate` fetches the style JSON, follows its vector source `url` to the
@@ -124,7 +128,7 @@ removal of the now-superseded Overpass water code. Each file has one responsibil
   present, decodes with `new VectorTile(new Pbf(bytes))`, and returns the named
   layer's features (or an empty list when the layer is absent). Rejects on HTTP,
   network, or decode failure. Owns no tile math and no projection.
-- `src/route-draft/channel-router/tile-water-query.ts` (new) — the router's water
+- `src/route-draft/channel-router/tile-water-query.ts` (new): the router's water
   source. `queryTileWater(client, template, bbox, signal?, logger?): Promise<TileWater>`
   where `TileWater = { water: AreaPolygon[] }` and `AreaPolygon = { rings:
   number[][][] }` (outer first, then island holes; the same structural shape
@@ -137,7 +141,7 @@ removal of the now-superseded Overpass water code. Each file has one responsibil
   requests, bounded by a total-byte budget. Rejects only when every covering tile
   failed. Does NOT use `shared/bbox-tiles.ts` (that is the Overpass degree-tiling
   helper; this uses Web-Mercator XYZ tiles).
-- `src/route-draft/channel-router/channel-router.ts` (modify) — the injected
+- `src/route-draft/channel-router/channel-router.ts` (modify): the injected
   `queryWaterAreas` (Overpass) and `overpass` client become a `vectorTileClient` plus
   `queryTileWater` and the resolved template. The tile-water result feeds the grid's
   `osmWater` input; `osmLand` is empty (the water layer already excludes islands).
@@ -153,13 +157,13 @@ removal of the now-superseded Overpass water code. Each file has one responsibil
   `listWaterAreas` assertions and stub entries in the overpass-client test. The
   safety check uses `listCoastlineWays` and `listPointsOfInterest` only, so this is
   safe (verified by grep: no other consumer).
-- `src/route-draft/channel-router/index.ts` (modify) — export `queryTileWater` and
+- `src/route-draft/channel-router/index.ts` (modify): export `queryTileWater` and
   `TileWater`/`AreaPolygon` from `./tile-water-query.js` instead of from
   `./osm-water-query.js`; drop the removed exports.
-- `src/route-draft/config.ts` (modify) — add the configurable style URL (default the
+- `src/route-draft/config.ts` (modify): add the configurable style URL (default the
   OpenFreeMap liberty style) as a named constant and config key, alongside the
   existing Overpass endpoint config.
-- `src/route-draft/endpoint.ts` (modify) — build or hold the `vectorTileClient` on the
+- `src/route-draft/endpoint.ts` (modify): build or hold the `vectorTileClient` on the
   service, resolve the template, and pass `queryTileWater`, the client, and the
   template into `routeChannel` instead of `queryWaterAreas` and `overpass`. The safety
   check keeps its own `overpass` (independent). The depth caveat path is unchanged

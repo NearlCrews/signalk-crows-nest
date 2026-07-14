@@ -58,7 +58,7 @@ interface Props {
   onToggleEnabled?: (enabled: boolean) => void
   /**
    * Per-source status snapshot. When present, the card header surfaces a
-   * compact pill reporting the last list-fetch outcome (idle / ok /
+   * compact pill reporting the last list-fetch outcome (idle / waiting / ok /
    * error). The pill renders regardless of enabled state because a
    * recently-disabled source can still carry meaningful last-fetch state
    * for an operator triaging the panel.

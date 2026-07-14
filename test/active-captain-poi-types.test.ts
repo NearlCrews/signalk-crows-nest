@@ -1,6 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { ACTIVE_CAPTAIN_POI_TYPE_GROUPS } from '../src/panel/active-captain-poi-types.js'
+import {
+  ACTIVE_CAPTAIN_POI_TYPE_GROUPS,
+  activeCaptainPoiTypeSelectionLabel
+} from '../src/panel/active-captain-poi-types.js'
 import { POI_TYPE_FLAGS } from '../src/shared/poi-type-selection.js'
 
 test('the groups cover exactly the 13 POI-type flags, each once', () => {
@@ -19,4 +22,16 @@ test('every group has a non-empty title and labeled options', () => {
       assert.ok(option.label.length > 0, `${option.flag} has a display label`)
     }
   }
+})
+
+test('the selection label distinguishes none, some, and all POI types', () => {
+  assert.equal(activeCaptainPoiTypeSelectionLabel({}), 'no POI types')
+  assert.equal(
+    activeCaptainPoiTypeSelectionLabel({ includeMarinas: true, includeHazards: true }),
+    '2 of 13 POI types'
+  )
+  const allSelected = Object.fromEntries(
+    POI_TYPE_FLAGS.map(([flag]) => [flag, true])
+  )
+  assert.equal(activeCaptainPoiTypeSelectionLabel(allSelected), 'all POI types')
 })

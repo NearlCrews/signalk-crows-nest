@@ -54,6 +54,9 @@ reproducibility.
 - OpenSeaMap imports plain marinas only when the Harbours and moorings group is
   enabled. Empty OpenSeaMap, NOAA ENC Direct, and USACE layer selections are
   reported as intentional skips instead of successful upstream fetches.
+- The ActiveCaptain card no longer claims that selecting no POI types imports
+  every type. Its expanded hint and collapsed summary now match the chart
+  output and explain that enabled safety alerts still fetch required hazards.
 - Notification deltas use the current publication timestamp instead of
   reusing a previous value timestamp.
 - Async feed stores recheck their lifecycle immediately before each atomic

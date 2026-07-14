@@ -1,5 +1,9 @@
 # Deterministic Channel Router Implementation Plan
 
+> Historical document: the AI route-draft feature was removed in v0.12.0.
+> This file records the former implementation plan and must not be executed
+> against the current codebase.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make AI route-draft and optimize results follow navigable water instead of cutting across land, by computing the geometry with deterministic A* over a navigable grid (ENC depth in US waters, OSM water polygons worldwide, OSM land blockers) while the LLM keeps resolving intent and endpoints.
@@ -16,12 +20,12 @@ Spec: `docs/superpowers/specs/2026-06-15-channel-router-design.md`.
 
 ## File structure
 
-- Create `src/route-draft/channel-router/path-simplify.ts` — RDP reduction of a pixel/cell polyline to turning points. Pure.
-- Create `src/route-draft/channel-router/astar.ts` — owned binary min-heap and A* over a cell grid behind a small `AStarGrid` interface. Pure.
-- Create `src/route-draft/channel-router/nav-grid.ts` — `buildNavGrid` (depth-aware mask + standoff clearance) and the lon/lat <-> cell transform; implements `AStarGrid`. Pure given `ChartedAreas`.
-- Create `src/route-draft/channel-router/channel-router.ts` — orchestrator: fetch ENC over the route bbox, build grid, snap endpoints, A*, simplify, return `Position[]` or `undefined`.
-- Create `src/route-draft/channel-router/index.ts` — re-export `routeChannel` and its types.
-- Modify `src/route-draft/endpoint.ts` — call the router in `handleDraft` (draft and optimize), replace waypoints or attach the fallback note.
+- Create `src/route-draft/channel-router/path-simplify.ts`: RDP reduction of a pixel/cell polyline to turning points. Pure.
+- Create `src/route-draft/channel-router/astar.ts`: owned binary min-heap and A* over a cell grid behind a small `AStarGrid` interface. Pure.
+- Create `src/route-draft/channel-router/nav-grid.ts`: `buildNavGrid` (depth-aware mask + standoff clearance) and the lon/lat <-> cell transform; implements `AStarGrid`. Pure given `ChartedAreas`.
+- Create `src/route-draft/channel-router/channel-router.ts`: orchestrator: fetch ENC over the route bbox, build grid, snap endpoints, A*, simplify, return `Position[]` or `undefined`.
+- Create `src/route-draft/channel-router/index.ts`: re-export `routeChannel` and its types.
+- Modify `src/route-draft/endpoint.ts`: call the router in `handleDraft` (draft and optimize), replace waypoints or attach the fallback note.
 - Tests: one `test/route-draft-channel-*.test.ts` per module (path-simplify, astar, nav-grid, channel-router).
 
 Constants live as module constants in `nav-grid.ts`/`channel-router.ts` (YAGNI; not added to `RouteDraftConfig` in v1).

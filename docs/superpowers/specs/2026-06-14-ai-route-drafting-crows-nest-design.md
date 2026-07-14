@@ -1,5 +1,9 @@
 # AI route drafting in crows-nest (server-side half)
 
+> Historical document: the AI route-draft feature was removed in v0.12.0.
+> This file records the former design and does not describe current Crow's
+> Nest behavior.
+
 Status: design, revised after a four-lens review (SignalK and crows-nest fit, OpenRouter and
 structured outputs, ENC depth and safety honesty, and topology, contract, and completeness). For
 sign-off. Local-only working note (docs/superpowers is not published).

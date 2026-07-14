@@ -14,7 +14,6 @@
 import type * as React from 'react'
 import { memo, useMemo, type Dispatch } from 'react'
 import type { ConfigAction } from '../config-reducer.js'
-import { POI_TYPE_FLAGS } from '../../shared/poi-type-selection.js'
 import { SEAMARK_GROUP_REFS } from '../../shared/seamark-groups.js'
 import {
   ACTIVE_CAPTAIN_SOURCE_ID,
@@ -37,6 +36,7 @@ import { resolveScaleBand, SCALE_BAND_LABELS } from '../../shared/scale-band.js'
 import { S } from '../styles.js'
 import type { PluginConfig } from '../../shared/types.js'
 import type { SourceStatus, StatusSnapshot } from '../../status/status-types.js'
+import { activeCaptainPoiTypeSelectionLabel } from '../active-captain-poi-types.js'
 import ActiveCaptainSource from './ActiveCaptainSource.js'
 import DataSourceCard from './DataSourceCard.js'
 import NoaaCoopsSource from './NoaaCoopsSource.js'
@@ -61,11 +61,7 @@ interface Props {
 
 /** Build the ActiveCaptain card's collapsed one-line summary. */
 function activeCaptainSummary (state: PluginConfig): string {
-  const total = POI_TYPE_FLAGS.length
-  const selected = POI_TYPE_FLAGS.filter(([flag]) => state[flag] === true).length
-  // No selection means the plugin imports every type, so report it as such.
-  const types = selected === 0 ? 'all POI types' : `${selected} of ${total} POI types`
-  return `${types}, ${state.cachingDurationMinutes} min cache`
+  return `${activeCaptainPoiTypeSelectionLabel(state)}, ${state.cachingDurationMinutes} min cache`
 }
 
 /**

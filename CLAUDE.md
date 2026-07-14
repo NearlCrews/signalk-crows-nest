@@ -414,7 +414,8 @@ self-contained module registered on one line in `src/index.ts`.
   - `panel/` - federated React configuration panel. Root and reducer:
     `index.tsx` (Module Federation entry), `PluginConfigurationPanel.tsx`,
     `config-reducer.ts`, `normalize-config.ts`, plus the UI-metadata
-    modules `active-captain-poi-types.ts`, `styles.ts` (the `--ac-*` design
+    modules `active-captain-poi-types.ts` (the grouped options and collapsed
+    selection summary), `styles.ts` (the `--ac-*` design
     tokens: scale tokens plus light, dark, and red-preserving night theme
     blocks, each with `color-scheme`, and the `data-ac-theme` pinned
     overrides the theme toggle drives), `relative-time.ts`,
@@ -459,8 +460,9 @@ self-contained module registered on one line in `src/index.ts`.
   `screenshots/` (the admin-panel and Freeboard-SK images declared under
   `signalk.screenshots` for the plugin-registry listing).
 - `dist/` and `public/` - compiled plugin and bundled panel. Generated, not
-  committed. They are published to npm alongside `assets/` (see the `files`
-  field in `package.json`).
+  committed. They are published to npm alongside `assets/` and `CHANGELOG.md`
+  (see the `files` field in `package.json`). npm also includes `package.json`,
+  `README.md`, and `LICENSE` by default.
 
 ## Toolchain
 

@@ -94,13 +94,14 @@ air-draft check).
   detail alongside the HTML, documented in the
   [notes-resource integration guide](docs/notes-resource-format.md), so a
   richer chartplotter can render the sections natively and skip the HTML.
-- **Persistent, offline caching.** ActiveCaptain, OpenSeaMap, NOAA ENC, and
-  USACE details live in 30-day on-disk stores with stale-on-error fallback, so
-  an offline restart still renders previously fetched markers; the USCG Light
-  List index is sharded on disk and queried through an in-memory spatial
-  tile index for sub-millisecond bbox lookups; and the Local Notice to
-  Mariners, NOAA CO-OPS, and World Port Index datasets are held complete on
-  disk and survive restarts.
+- **Persistent, offline caching.** ActiveCaptain details and OpenSeaMap, NOAA
+  ENC, and USACE features live in 30-day on-disk stores. OpenSeaMap, NOAA ENC,
+  and USACE can rebuild previously visited markers from those stores after an
+  offline restart; ActiveCaptain can still resolve a known marker's persisted
+  detail, but a new ActiveCaptain list requires its upstream. The USCG Light
+  List index is sharded on disk and queried through an in-memory spatial tile
+  index, while Local Notice to Mariners, NOAA CO-OPS, and World Port Index keep
+  their complete datasets on disk and survive restarts.
 - **Refresh debounce per source**: each at-runtime source snaps the
   viewport to a coarse tile and serves stale while revalidating, so a
   Freeboard refresh burst on a stationary viewport reuses the cached
@@ -160,8 +161,9 @@ decimal degrees, distances and heights in meters).
 
 **Reads (from `vessels.self`):**
 
-- `navigation.position`: the viewport center for POI fetches, the US-waters
-  gate on the US-only feeds, and the proximity and route scans.
+- `navigation.position`: the US-waters gate on the US-only feeds and the
+  vessel position for proximity, route, and bridge air-draft scans. Chart
+  resource requests supply their own bounding box or search center.
 - `navigation.speedOverGround`: ETA math in the route-corridor scan.
 - `design.airHeight`: the vessel air draft for the bridge-clearance check
   (a configured fallback is used only when this path is absent).
@@ -184,9 +186,11 @@ The plugin also serves an admin-gated `GET` status endpoint.
 
 ## Requirements
 
-- [Signal K server](https://github.com/SignalK/signalk-server) 2.x with a
-  position source (a GPS) attached to `vessels.self`. The `notes`
-  resources and the notifications work on any 2.x server.
+- [Signal K server](https://github.com/SignalK/signalk-server) 2.x. The
+  `notes` layer does not require a GPS because the chartplotter supplies its
+  viewport. A `navigation.position` source on `vessels.self` is required for
+  the position-driven alarms and lets the plugin avoid US-only requests when
+  the vessel is clearly outside US waters.
 - Node.js 20.3 or newer.
 - A chartplotter that consumes Signal K `notes` resources. Freeboard-SK
   is the reference consumer; any client that reads `notes` resources will
@@ -226,18 +230,23 @@ The panel has these areas:
 1. **Theme toggle** in the top corner: Auto, Light, Dark, or a
    red-preserving Night mode for night vision at the helm; the choice
    persists across visits.
-2. **Per-source status bar**: reachability and last-fetch time for each
-   enabled source, a "checked Ns ago" freshness note, plus any recent
-   errors, each clickable to jump to the source card it belongs to.
+2. **Per-source status bar**: `reachable`, `unreachable`, or `not yet
+   contacted` for each enabled source, the last successful upstream list-fetch
+   time, a "checked Ns ago" freshness note, and recent errors. A
+   source-attributed error is clickable and opens the matching source card.
+   Local cache and index reads do not count as proof that an upstream is
+   reachable.
 3. **Data sources accordion** with one collapsible card per source
    (ActiveCaptain, OpenSeaMap, USCG Light List, NOAA ENC Direct, NOAA
    CO-OPS, USCG Local Notice to Mariners, NGA World Port Index, and USACE
    locks and dams). Each card's body groups its options into bordered
    fieldsets: import layers, refresh and freshness, filters (when present),
    and merge with ActiveCaptain. In brief, per card:
-   - **ActiveCaptain** (on by default): 13 POI-type toggles, a
-     minimum-rating filter, the detail freshness window (default 24 hours),
-     and the viewport refresh window (default 30 seconds).
+   - **ActiveCaptain** (always on): 13 POI-type toggles, a minimum-rating
+     filter, the detail freshness window (default 24 hours), and the viewport
+     refresh window (default 30 seconds). Selecting no POI types hides the
+     chart notes layer; enabled safety alerts still request the hazard types
+     they require.
    - **OpenSeaMap** (off by default): four seamark feature-group toggles, an
      earliest-year filter, the Overpass endpoint with optional fallback
      mirrors, and the viewport refresh window (default 10 minutes).
@@ -267,13 +276,15 @@ The panel has these areas:
 
 Per-source enable toggles live on each card's header, alongside the
 disclosure chevron. Each card carries a small live-status pill on the
-header (`✓ ok` for a healthy source, `… idle` for one that has not
-fetched yet, `! error` for the last attempt failing); the hover and
-screen-reader tooltip carries the longer "N POIs in last fetch, M minutes
-ago" detail. Disabled cards show a "Disabled." prefix on their summary so
-an off source never reads as live. Every numeric input clears cleanly
-mid-edit. Saving applies immediately; the plugin's internal cache rebuilds
-on the next request.
+header: `✓ ok` after a successful upstream list fetch, `… idle` before the
+first request or during an intentional skip, `… waiting` when a slow request
+continues after the five-second aggregate deadline, and `! error` after a
+failure. Idle pills include reasons such as `outside US waters`, and the ok
+tooltip carries the longer "N POIs in last fetch, M minutes ago" detail.
+Disabled cards show a "Disabled." prefix on their summary so an off source
+never reads as live. Every numeric input clears cleanly mid-edit. Saving
+applies immediately; the plugin rebuilds its runtime and in-memory viewport
+caches while retaining the on-disk data used for offline operation.
 
 ## Documentation
 

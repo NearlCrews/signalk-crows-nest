@@ -2,9 +2,9 @@
  * Bounded-concurrency fan-out shared across the plugin.
  *
  * Several places need to run an async operation over a list with a small worker
- * pool — overlapping independent work without flooding a single upstream — and
- * had each hand-rolled the same shared-cursor pool (a `next` counter drained by
- * `Math.min(limit, n)` workers). This is that pool, once.
+ * pool to overlap independent work without flooding a single upstream. Each
+ * call site had hand-rolled the same shared-cursor pool (a `next` counter
+ * drained by `Math.min(limit, n)` workers). This is that pool, once.
  */
 
 /**

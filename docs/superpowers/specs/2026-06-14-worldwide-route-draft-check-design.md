@@ -1,5 +1,9 @@
 # Worldwide route-draft safety check
 
+> Historical document: the AI route-draft feature was removed in v0.12.0.
+> This file records the former design and does not describe current Crow's
+> Nest behavior.
+
 Date: 2026-06-14
 Status: approved direction, design revised after review, pending implementation plan
 

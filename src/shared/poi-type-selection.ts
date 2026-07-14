@@ -1,15 +1,17 @@
 /**
  * Translation from the plugin's POI-type configuration toggles to the
  * comma-separated `poiTypes` string the aggregate POI source uses to scope
- * list requests. ActiveCaptain's bounding-box endpoint is the original
- * consumer, and other inputs accept the same comma-separated form.
+ * list requests. ActiveCaptain consumes the filter directly, while optional
+ * inputs apply their own source-specific layer selections. Position-driven
+ * outputs augment the string with the safety types they require.
  */
 
 import type { PluginConfig, PoiType, PoiTypeFlag } from './types.js'
 
 /**
- * Every selectable POI type, paired with the config flag that enables it. When
- * no flag is enabled the plugin falls back to requesting all of them.
+ * Every selectable POI type, paired with the config flag that enables it. An
+ * explicit all-false selection disables chart notes; a legacy configuration
+ * with no flag keys falls back to every type.
  */
 export const POI_TYPE_FLAGS: ReadonlyArray<readonly [PoiTypeFlag, PoiType]> = [
   ['includeMarinas', 'Marina'],
