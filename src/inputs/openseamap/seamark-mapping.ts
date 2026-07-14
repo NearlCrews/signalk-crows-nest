@@ -130,9 +130,8 @@ export const SEAMARK_GROUPS: readonly SeamarkGroup[] = SEAMARK_GROUP_REFS.map((r
  * covering every seamark type in the enabled groups. An unknown group id is
  * ignored. With no enabled group `types` is empty, so the regex is `^()$`,
  * which matches only the empty string: real `seamark:type` values are never
- * empty, so the filter matches no seamark feature. The list query is still
- * issued, since it also fetches `leisure=marina` elements outside the seamark
- * filter.
+ * empty, so the filter matches no seamark feature. The source treats a wholly
+ * empty selection as an intentional skip and does not issue this query.
  */
 export function seamarkRegex (groups: readonly string[]): string {
   const enabled = new Set(groups)

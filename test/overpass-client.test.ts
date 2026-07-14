@@ -24,34 +24,19 @@ test('listPointsOfInterest renders the bbox in south,west,north,east order', asy
       const body = String(calls.lastInit?.body)
       assert.ok(body.includes('[bbox:0,0,1,1]'), `expected the bbox in S,W,N,E order, got ${body}`)
       assert.ok(body.includes('"seamark:type"~"^(rock)$"'), 'expected the seamark regex in the query')
+      assert.ok(!body.includes('"leisure"="marina"'), 'marinas stay off unless their group is enabled')
     }
   )
 })
 
-test('listCoastlineWays issues a coastline out-geom query and parses geometry into points', async () => {
+test('listPointsOfInterest includes marinas only when requested', async () => {
   await withMockFetch(
-    () => jsonResponse({
-      elements: [
-        {
-          type: 'way',
-          id: 10,
-          geometry: [{ lat: 50, lon: 1 }, { lat: 50.1, lon: 1.1 }, { lat: 50.2, lon: 1.2 }]
-        },
-        // A way with a single valid vertex is dropped: a coastline segment
-        // needs at least two points.
-        { type: 'way', id: 11, geometry: [{ lat: 51, lon: 2 }] }
-      ]
-    }),
+    () => jsonResponse({ elements: [] }),
     async (calls) => {
       const client = createOverpassClient(endpoint, silentLog, fastLimits)
-      const ways = await client.listCoastlineWays(sampleBbox)
+      await client.listPointsOfInterest(sampleBbox, '^(harbour)$', true)
       const body = String(calls.lastInit?.body)
-      assert.ok(body.includes('"natural"="coastline"'), `expected a coastline query, got ${body}`)
-      assert.ok(body.includes('out geom;'), `expected an out geom query, got ${body}`)
-      // Points are ordered [lon, lat]; the single-vertex way is dropped.
-      assert.deepEqual(ways, [
-        { points: [[1, 50], [1.1, 50.1], [1.2, 50.2]] }
-      ])
+      assert.ok(body.includes('"leisure"="marina"'), `expected a marina query, got ${body}`)
     }
   )
 })
@@ -67,7 +52,7 @@ test('an already-aborted caller signal aborts the request', async () => {
     async (calls) => {
       const client = createOverpassClient(endpoint, silentLog, { ...fastLimits, maxRetries: 0 })
       await assert.rejects(
-        () => client.listCoastlineWays(sampleBbox, AbortSignal.abort()),
+        () => client.listPointsOfInterest(sampleBbox, '^(rock)$', false, AbortSignal.abort()),
         (error: unknown) => error instanceof DOMException && error.name === 'AbortError'
       )
       // The combined signal handed to fetch carried the caller's aborted state.
@@ -93,7 +78,7 @@ test('a caller abort rejects after exactly one attempt, not the whole retry budg
       }
       const client = createOverpassClient(endpoint, silentLog, retrying)
       await assert.rejects(
-        () => client.listCoastlineWays(sampleBbox, AbortSignal.abort()),
+        () => client.listPointsOfInterest(sampleBbox, '^(rock)$', false, AbortSignal.abort()),
         (error: unknown) => error instanceof DOMException && error.name === 'AbortError'
       )
       assert.equal(calls.count, 1, 'a caller abort must not retry')
@@ -126,6 +111,26 @@ test('an oversized bounding box is clamped around its center', async () => {
       await client.listPointsOfInterest({ north: 10, south: 0, east: 10, west: 0 }, '^(rock)$')
       const body = String(calls.lastInit?.body)
       assert.ok(body.includes('[bbox:4,4,6,6]'), `expected the box clamped to a 2-degree span, got ${body}`)
+    }
+  )
+})
+
+test('an oversized antimeridian bbox is clamped by its wrapped span', async () => {
+  await withMockFetch(
+    () => jsonResponse({ elements: [] }),
+    async (calls) => {
+      const client = createOverpassClient(endpoint, silentLog, fastLimits)
+      // The wrapped interval from 170 E to 170 W spans 20 degrees. Its center
+      // is the antimeridian, so the two-degree clamp is 179 E to 179 W.
+      await client.listPointsOfInterest(
+        { north: 1, south: 0, west: 170, east: -170 },
+        '^(rock)$'
+      )
+      const body = String(calls.lastInit?.body)
+      assert.ok(
+        body.includes('[bbox:0,179,1,-179]'),
+        `expected the wrapped box clamped to a 2-degree span, got ${body}`
+      )
     }
   )
 })
@@ -310,7 +315,7 @@ test('a caller abort stops endpoint failover instead of trying the next mirror',
       // a check no one is waiting on.
       const client = createOverpassClient(failoverEndpoints, silentLog, { ...fastLimits, maxRetries: 0 })
       await assert.rejects(
-        () => client.listPointsOfInterest(sampleBbox, '^(rock)$', AbortSignal.abort()),
+        () => client.listPointsOfInterest(sampleBbox, '^(rock)$', false, AbortSignal.abort()),
         (error: unknown) => error instanceof DOMException && error.name === 'AbortError'
       )
       assert.equal(calls.count, 1, 'an aborted caller signal must not fail over to the mirror')

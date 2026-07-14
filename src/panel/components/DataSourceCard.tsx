@@ -166,7 +166,7 @@ export function sourceCardDomId (cardId: string): string {
  *
  * The pill is NOT a live region: it carries no `role='status'`. The
  * StatusBar at the top of the panel already surfaces per-source health,
- * so making each of the up-to-four pills its own polite live region only
+ * so making every per-source pill its own polite live region only
  * produced redundant re-announcements as the relative "N minutes ago"
  * title ticked on every 5 s poll. The concise visible label (ok / idle /
  * error) is exposed to assistive tech; only the decorative glyph is

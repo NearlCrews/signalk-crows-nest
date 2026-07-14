@@ -15,21 +15,14 @@
 import type { ScaleBand } from '../../shared/scale-band.js'
 export type { ScaleBand }
 
-/**
- * The ENC Direct layers the plugin reads. The first three are the S-57 POINT
- * hazard layers published as POIs (wreck, obstruction, rock). The last two are
- * the S-57 POLYGON area layers (depthArea, land) read as an internal capability
- * by depth-area-query.ts; they are not published as POIs.
- */
-export type EncLayerKey = 'wreck' | 'obstruction' | 'rock' | 'depthArea' | 'land'
+/** The S-57 point hazard layers published as POIs. */
+export type EncLayerKey = 'wreck' | 'obstruction' | 'rock'
 
 /** Numeric ArcGIS layer ids per scale band, for each layer. */
 export interface LayerIds {
   readonly wreck: number
   readonly obstruction: number
   readonly rock: number
-  readonly depthArea: number
-  readonly land: number
 }
 
 /**
@@ -40,26 +33,6 @@ export interface EncPointGeometry {
   type: 'Point'
   coordinates: [number, number]
 }
-
-/**
- * A GeoJSON Polygon geometry: an array of linear rings, each ring an array of
- * `[longitude, latitude]` positions, the first ring the outer boundary and any
- * later rings holes. The Depth_Area and Land_Area layers return this shape.
- * Verified live: the ENC Direct GeoJSON export emits each multi-ring ESRI
- * polygon as a single GeoJSON `Polygon` (not a `MultiPolygon`), so a feature
- * with holes is one Polygon with several rings.
- */
-export interface EncPolygonGeometry {
-  type: 'Polygon'
-  coordinates: number[][][]
-}
-
-/**
- * The geometry an ENC Direct feature carries: Point for the hazard layers,
- * Polygon for the Depth_Area and Land_Area area layers. A consumer narrows on
- * `geometry.type` before reading coordinates.
- */
-export type EncGeometry = EncPointGeometry | EncPolygonGeometry
 
 /**
  * One ENC Direct GeoJSON feature as returned by the MapServer.
@@ -84,15 +57,11 @@ export type EncGeometry = EncPointGeometry | EncPolygonGeometry
  *    `EXPSOU`, `HEIGHT`, `SOUACC`, `TECSOU`, `VERACC`, `VERDAT`, `VERLEN`,
  *    `INFORM`, `SCAMIN`. The renderer must skip null fields, not write the
  *    word "null".
- *
- * The Depth_Area features add `DRVAL1` (shallow range minimum, meters) and
- * `DRVAL2` (deep range maximum, meters), both JSON numbers; `DRVAL1 < 0` is a
- * drying height above datum, decoded faithfully and classified downstream.
  */
 export interface EncFeature {
   type: 'Feature'
   id?: number
-  geometry: EncGeometry
+  geometry: EncPointGeometry
   properties: Record<string, unknown>
 }
 
@@ -103,10 +72,10 @@ export interface EncFeature {
  * survive so a contributor cannot silently ship a default-zero entry.
  */
 export const LAYER_IDS_BY_BAND: Readonly<Record<ScaleBand, LayerIds>> = {
-  overview: { wreck: 24, obstruction: 21, rock: 22, depthArea: 89, land: 93 },
-  general: { wreck: 29, obstruction: 26, rock: 27, depthArea: 117, land: 121 },
-  coastal: { wreck: 33, obstruction: 30, rock: 31, depthArea: 166, land: 171 },
-  approach: { wreck: 39, obstruction: 36, rock: 37, depthArea: 232, land: 238 },
-  harbour: { wreck: 36, obstruction: 33, rock: 34, depthArea: 227, land: 233 },
-  berthing: { wreck: 21, obstruction: 19, rock: 20, depthArea: 100, land: 103 }
+  overview: { wreck: 24, obstruction: 21, rock: 22 },
+  general: { wreck: 29, obstruction: 26, rock: 27 },
+  coastal: { wreck: 33, obstruction: 30, rock: 31 },
+  approach: { wreck: 39, obstruction: 36, rock: 37 },
+  harbour: { wreck: 36, obstruction: 33, rock: 34 },
+  berthing: { wreck: 21, obstruction: 19, rock: 20 }
 }

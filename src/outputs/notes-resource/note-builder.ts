@@ -122,8 +122,8 @@ export function buildNoteResource (input: NoteResourceInput): Record<string, unk
     properties.crowsNest = crowsNest
   }
   // Construct the position field-by-field rather than passing the source's
-  // position object through unchanged. Two of the four sources hand us a
-  // `{ ...spread }` clone of an upstream object, so a future upstream type
+  // position object through unchanged. Some sources hand us a `{ ...spread }`
+  // clone of an upstream object, so a future upstream type
   // that grows a stray field (a geohash, a precision, a chart datum) would
   // otherwise propagate it onto the wire.
   const note: Record<string, unknown> = {

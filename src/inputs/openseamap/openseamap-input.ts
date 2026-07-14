@@ -18,7 +18,10 @@ import {
   refreshSecondsSchema
 } from '../../shared/bbox-debounce-bounds.js'
 import { cappedDedupeRadius } from '../../shared/dedupe-radius.js'
-import { SEAMARK_GROUP_IDS } from '../../shared/seamark-groups.js'
+import {
+  normalizeSeamarkGroupIds,
+  SEAMARK_GROUP_IDS
+} from '../../shared/seamark-groups.js'
 import { OPENSEAMAP_SOURCE_ID } from '../../shared/source-ids.js'
 import type { PluginConfig } from '../../shared/types.js'
 import { clampMinimumYear, minimumYearSchema } from '../../shared/year-filter.js'
@@ -89,14 +92,6 @@ export function resolveEndpoints (config: PluginConfig): string[] {
   return normalizeFallbackEndpoints([primary, ...fallbacks])
 }
 
-/** Resolve the seamark groups from raw config, applying the all-groups default. */
-function resolveSeamarkGroups (raw: unknown): string[] {
-  if (!Array.isArray(raw)) {
-    return [...SEAMARK_GROUP_IDS]
-  }
-  return raw.filter((group): group is string => typeof group === 'string')
-}
-
 /** The OpenSeaMap input module. */
 export const openSeaMapInput: InputModule = {
   id: OPENSEAMAP_SOURCE_ID,
@@ -113,7 +108,7 @@ export const openSeaMapInput: InputModule = {
     const { app, config, status, dataDir } = context
     return createOpenSeaMapSource({
       client: createOverpassClient(resolveEndpoints(config), app),
-      seamarkGroups: resolveSeamarkGroups(config.openSeaMapSeamarkGroups),
+      seamarkGroups: normalizeSeamarkGroupIds(config.openSeaMapSeamarkGroups),
       minimumYear: clampMinimumYear(config.openSeaMapMinimumYear),
       refreshSeconds: clampBboxDebounceSeconds(
         config.openSeaMapRefreshSeconds, DEFAULT_OPENSEAMAP_DEBOUNCE_SECONDS

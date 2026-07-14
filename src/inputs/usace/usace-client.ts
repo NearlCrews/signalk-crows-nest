@@ -19,8 +19,10 @@
 import {
   arcgisByIdParams,
   arcgisEnvelopeParams,
+  mergeArcgisFeatureSets,
   arcgisPagedQuery,
-  arcgisQueryById
+  arcgisQueryById,
+  splitArcgisEnvelope
 } from '../arcgis-query.js'
 import type { Bbox } from '../../shared/types.js'
 import type { UsaceFeature, UsaceLayerKey } from './usace-types.js'
@@ -71,13 +73,16 @@ export function createUsaceClient (config: UsaceClientConfig = {}): UsaceClient 
   return {
     async queryLayer ({ layerKey, bbox, signal }) {
       const base = queryUrls[layerKey]
-      const features = await arcgisPagedQuery<UsaceFeature>({
-        label: UPSTREAM_LABEL,
-        context: layerKey,
-        buildPageUrl: (offset) => `${base}?${arcgisEnvelopeParams(bbox, offset).toString()}`,
-        signal
-      })
-      return { features }
+      const boxes = splitArcgisEnvelope(bbox)
+      const featureSets = await Promise.all(boxes.map(async (queryBbox, index) =>
+        await arcgisPagedQuery<UsaceFeature>({
+          label: UPSTREAM_LABEL,
+          context: `${layerKey}${boxes.length > 1 ? ` part ${index + 1}` : ''}`,
+          buildPageUrl: (offset) => `${base}?${arcgisEnvelopeParams(queryBbox, offset).toString()}`,
+          signal
+        })
+      ))
+      return { features: mergeArcgisFeatureSets(featureSets) }
     },
     async queryById ({ layerKey, objectId, signal }) {
       const url = `${queryUrls[layerKey]}?${arcgisByIdParams(objectId).toString()}`

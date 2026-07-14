@@ -168,8 +168,10 @@ export function createLnmStore (dataDir: string): LnmStore {
       if (closed || !dirty) return
       await mkdir(storeDir, { recursive: true })
       const index: LnmIndex = { generated, files: Object.fromEntries(files) }
-      await atomicWriteJson(indexPath, index)
-      dirty = false
+      const committed = await atomicWriteJson(indexPath, index, {
+        shouldCommit: () => !closed
+      })
+      if (committed) dirty = false
     },
 
     queryBbox (bbox) {

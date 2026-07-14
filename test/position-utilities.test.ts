@@ -101,6 +101,17 @@ test('positionToBbox returns a zero-size box for a zero distance', () => {
   assertClose(bbox.west, center.longitude, 1e-9, 'west collapses onto the center')
 })
 
+test('positionToBbox rejects finite coordinates outside geographic ranges', () => {
+  assert.throws(
+    () => positionToBbox({ latitude: 91, longitude: 0 }, 1000),
+    /invalid coordinate/
+  )
+  assert.throws(
+    () => positionToBbox({ latitude: 0, longitude: -181 }, 1000),
+    /invalid coordinate/
+  )
+})
+
 test('bboxContainsPoint includes and excludes points around a non-wrapping box', () => {
   const bbox: Bbox = { north: 43, south: 41, east: -70, west: -72 }
 

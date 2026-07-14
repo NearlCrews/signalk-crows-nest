@@ -104,10 +104,9 @@ export function effectivePeriodicRefreshSeconds (raw: unknown, fallback: number)
 
 /**
  * Config-schema fragment for a source's bbox-debounce window field, in seconds.
- * The at-runtime sources (ActiveCaptain, OpenSeaMap, NOAA ENC) each declare an
- * identical number field over the debounce bounds, differing only in its title
- * and per-source default, so the shape lives here next to the bounds it
- * carries.
+ * The at-runtime sources each declare an identical number field over the
+ * debounce bounds, differing only in its title and per-source default, so the
+ * shape lives here next to the bounds it carries.
  */
 export function refreshSecondsSchema (title: string, defaultSeconds: number): Record<string, unknown> {
   return boundedNumberSchema(

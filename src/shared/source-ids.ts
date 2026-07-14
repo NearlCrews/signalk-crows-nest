@@ -40,8 +40,8 @@ export const USACE_SOURCE_ID = 'usace'
 
 /**
  * Every source slug the plugin recognizes, as a runtime list. The panel's
- * jump-to-error shortcut narrows raw status slugs against it, so a fifth
- * source added here is picked up everywhere at once.
+ * jump-to-error shortcut narrows raw status slugs against it, so a new source
+ * added here is picked up everywhere at once.
  */
 export const SOURCE_SLUGS = [
   ACTIVE_CAPTAIN_SOURCE_ID,

@@ -1,14 +1,14 @@
 /**
- * Helpers for the within-source id encoding the OpenSeaMap and NOAA ENC sources
- * use, plus the aggregate registry's source-slug prefix.
+ * Helpers for the within-source id encoding the OpenSeaMap, NOAA ENC, and
+ * USACE sources use, plus the aggregate registry's source-slug prefix.
  *
- * Neither source can keep the upstream's slash form (`node/123`, `wreck/12345`)
+ * These sources cannot keep the upstream's slash form (`node/123`, `wreck/12345`)
  * in a resource id: SignalK serves resources at `/resources/notes/<id>`, so a
- * slash inside the id splits the path. Both encode the id as
+ * slash inside the id splits the path. They encode the id as
  * `prefix_remainder` (`node_123`, `wreck_12345`) and split on the first
  * underscore to recover the two halves. The aggregate registry uses the same
  * shape with a hyphen separator (`activecaptain-12345`). The split rule lives
- * here so all three callers share it rather than each re-deriving the same
+ * here so every caller shares it rather than each re-deriving the same
  * `indexOf(sep)` slice.
  */
 
@@ -31,7 +31,7 @@ export function splitOnFirstSeparator (
 
 /**
  * Split a `prefix_remainder` id on its first underscore. Thin wrapper over
- * {@link splitOnFirstSeparator} for the OpenSeaMap and NOAA ENC id form.
+ * {@link splitOnFirstSeparator} for the OpenSeaMap, NOAA ENC, and USACE id form.
  */
 export function splitOnFirstUnderscore (id: string): { prefix: string, remainder: string } | null {
   return splitOnFirstSeparator(id, '_')

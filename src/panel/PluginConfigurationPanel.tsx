@@ -49,7 +49,7 @@ export default function PluginConfigurationPanel ({ configuration, save }: Props
   const unitSystem = useUnitSystem()
   const [justSavedAt, setJustSavedAt] = useState<number | null>(null)
   // Per-source disclosure state lives at the panel root so it survives
-  // saves, so the four DataSourceCards can iterate it with a stable map,
+  // saves, so the DataSourceCards can iterate it with a stable map,
   // and so it can later be persisted to the URL or to local storage
   // without each card needing its own useState. The card-body subtree
   // itself stays mounted (the card swaps `display: none` rather than

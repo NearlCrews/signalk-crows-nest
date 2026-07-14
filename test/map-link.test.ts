@@ -31,6 +31,11 @@ test('a non-finite longitude falls back to the OpenSeaMap home page', () => {
   assert.equal(url, 'https://map.openseamap.org/')
 })
 
+test('out-of-range coordinates fall back to the OpenSeaMap home page', () => {
+  assert.equal(openSeaMapMarkerUrl(91, 0), 'https://map.openseamap.org/')
+  assert.equal(openSeaMapMarkerUrl(0, -181), 'https://map.openseamap.org/')
+})
+
 test('the marker URL does not encode hyphens or digits (they are URI-safe)', () => {
   // Sanity check that the helper does not over-encode numeric coordinates.
   const url = openSeaMapMarkerUrl(-33.8688, 151.2093)

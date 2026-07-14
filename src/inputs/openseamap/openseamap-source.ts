@@ -34,6 +34,7 @@ import { createBboxDebounceCache } from '../../shared/bbox-debounce.js'
 import { MAX_BBOX_CACHE_ENTRIES } from '../../shared/cache.js'
 import { createHydratedDetailCache } from '../../shared/hydrated-detail-cache.js'
 import { splitOnFirstUnderscore } from '../../shared/namespaced-id.js'
+import { normalizeSeamarkGroupIds } from '../../shared/seamark-groups.js'
 import { OPENSEAMAP_SOURCE_ID } from '../../shared/source-ids.js'
 import type { Bbox, PoiDetailView, PoiSummary } from '../../shared/types.js'
 import { filterByMinimumYear } from '../../shared/year-filter.js'
@@ -140,10 +141,15 @@ function toDetailView (element: OverpassElement): PoiDetailView {
 /** Create the OpenSeaMap POI source. */
 export function createOpenSeaMapSource (config: OpenSeaMapSourceConfig): PoiSource {
   const { client, seamarkGroups, minimumYear, refreshSeconds, status, dataDir } = config
+  const lifecycle = new AbortController()
 
   // The seamark filter is fixed for the life of the source: the configured
-  // groups do not change without a plugin restart.
-  const regex = seamarkRegex(seamarkGroups)
+  // groups do not change without a plugin restart. Normalize again at this
+  // boundary so a direct caller or hand-edited config cannot turn unknown ids
+  // into a pointless, apparently successful empty query.
+  const enabledGroups = normalizeSeamarkGroupIds(seamarkGroups)
+  const regex = seamarkRegex(enabledGroups)
+  const includeMarinas = enabledGroups.includes('harbours')
 
   // Detail cache, populated from every list query and hydrated from the
   // on-disk store so a cold start offline still renders previously fetched
@@ -157,7 +163,20 @@ export function createOpenSeaMapSource (config: OpenSeaMapSourceConfig): PoiSour
   // the raw Overpass elements for `refreshSeconds` before re-querying. The
   // cache holds raw elements (not summaries) so the per-call tagging,
   // detail-LRU repopulation, and year filter run outside the cache.
-  const bboxCache = createBboxDebounceCache<OverpassElement[]>(refreshSeconds, MAX_BBOX_CACHE_ENTRIES)
+  const bboxCache = createBboxDebounceCache<OverpassElement[]>(
+    refreshSeconds,
+    MAX_BBOX_CACHE_ENTRIES,
+    {
+      onRevalidationError: (error) => {
+        if (!lifecycle.signal.aborted) {
+          status.recordError(
+            OPENSEAMAP_SOURCE_ID,
+            `Background Overpass list refresh failed: ${String(error)}`
+          )
+        }
+      }
+    }
+  )
 
   return {
     id: OPENSEAMAP_SOURCE_ID,
@@ -167,6 +186,11 @@ export function createOpenSeaMapSource (config: OpenSeaMapSourceConfig): PoiSour
     // closes over. The `poiTypes` argument is therefore intentionally ignored
     // for this source.
     listPointsOfInterest: async (bbox: Bbox): Promise<PoiSummary[]> => {
+      lifecycle.signal.throwIfAborted()
+      if (enabledGroups.length === 0) {
+        status.recordSkipped(OPENSEAMAP_SOURCE_ID, 'no feature groups enabled')
+        return withListProvenance([], 'skipped')
+      }
       // Cache only the raw Overpass elements. The per-call tagging, the
       // detail-LRU repopulation, and the year filter run OUTSIDE the cache
       // so a runtime config change to `minimumYear` takes effect on the
@@ -178,17 +202,23 @@ export function createOpenSeaMapSource (config: OpenSeaMapSourceConfig): PoiSour
         OPENSEAMAP_SOURCE_ID,
         'Overpass unreachable',
         () => bboxCache.get(bbox, (fetchBbox) =>
-          client.listPointsOfInterest(fetchBbox, regex)),
+          client.listPointsOfInterest(
+            fetchBbox,
+            regex,
+            includeMarinas,
+            lifecycle.signal
+          )),
         () => filterByMinimumYear(
           staleSummariesWithinBbox(cache.values(), bbox,
             (element) => element.position, toSummary),
           minimumYear)
       )
+      lifecycle.signal.throwIfAborted()
       if (outcome.kind === 'stale') {
         return withListProvenance(outcome.summaries, 'stale')
       }
       const summaries: PoiSummary[] = []
-      for (const element of outcome.value) {
+      for (const element of outcome.value.value) {
         const summary = toSummary(element)
         cache.set(summary.id, element)
         persist(summary.id, element)
@@ -196,9 +226,13 @@ export function createOpenSeaMapSource (config: OpenSeaMapSourceConfig): PoiSour
       }
       // Year filter is applied source-side so the rest of the pipeline
       // (dedupe, notes output, alarms) never sees filtered elements.
-      return filterByMinimumYear(summaries, minimumYear)
+      return withListProvenance(
+        filterByMinimumYear(summaries, minimumYear),
+        outcome.value.provenance
+      )
     },
     getDetails: async (id: string): Promise<PoiDetailView> => {
+      lifecycle.signal.throwIfAborted()
       // A cache hit makes no upstream call, so it is not evidence of Overpass
       // reachability: serve it without recording a success (mirrors the NOAA
       // ENC source). Only the real getById below updates the status row.
@@ -213,7 +247,8 @@ export function createOpenSeaMapSource (config: OpenSeaMapSourceConfig): PoiSour
       // answer, so the not-found throw below cannot flip the status row to
       // unreachable.
       const element = await fetchDetailRecorded(status, OPENSEAMAP_SOURCE_ID,
-        () => client.getById(toOverpassTypedId(id)))
+        () => client.getById(toOverpassTypedId(id), lifecycle.signal),
+        lifecycle.signal)
       if (element === undefined) {
         throw new Error(`No OpenSeaMap element found for "${id}"`)
       }
@@ -223,6 +258,7 @@ export function createOpenSeaMapSource (config: OpenSeaMapSourceConfig): PoiSour
     },
     cacheSize: () => cache.size,
     close: () => {
+      lifecycle.abort(new Error('OpenSeaMap source closed'))
       // Flush any debounced write so a clean shutdown persists every element
       // fetched during the run, then drop the in-memory detail LRU so a
       // per-config-change restart does not carry a stopped run's entries,

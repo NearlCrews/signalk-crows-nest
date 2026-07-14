@@ -133,13 +133,14 @@ test('a changed refetch rewrites the index', async () => {
   })
 })
 
-test('a closed store does not flush', async () => {
+test('closing during a flush prevents the index from committing', async () => {
   await withTempDir('coops-store-', async (dir) => {
     const store = createCoopsStore(dir)
     await store.load()
     store.upsertType('tide', [station('8447386', 'tide', 41.7, -71.16)], {})
+    const flushing = store.flush()
     store.close()
-    await store.flush()
+    await flushing
 
     // Nothing was written, so a fresh store loads an empty index.
     const reopened = createCoopsStore(dir)

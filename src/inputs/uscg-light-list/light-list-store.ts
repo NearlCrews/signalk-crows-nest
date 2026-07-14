@@ -301,27 +301,27 @@ export function createLightListStore (dataDir: string): LightListStore {
         for (const record of records) {
           addRecordToIndex(record)
         }
-        // If the page file decoded to a different number of records than
-        // the metadata claims (missing file, parse failure, truncated
-        // restore, or a partial-decode that lost some entries), drop the
-        // cached If-Modified-Since / ETag for the page so the next refresh
-        // forces a 200 OK rather than getting a 304 from NAVCEN and leaving
-        // records permanently missing. Comparing against `meta.recordCount`
-        // (rather than just checking for an empty page) also catches the
-        // partial-decode case, where the page file decoded to some records
-        // but not all of them. Mark metadataDirty so the cleared headers
-        // are persisted on the next flush.
+        // If the page file differs from its metadata (missing file, parse
+        // failure, partial decode, or shutdown after a page rename but before
+        // the metadata rename), reconcile the metadata to the page and clear
+        // its validators. Comparing both the count and LLNR sequence catches a
+        // same-size replacement: count alone would retain the old LLNR list,
+        // and the next upsert would fail to remove the replacement records.
+        // Clearing If-Modified-Since and ETag forces a 200 response on the next
+        // refresh. Mark metadataDirty so the repair is persisted.
         const meta = index.districts[key]
-        if (meta !== undefined && records.length !== meta.recordCount) {
-          if (meta.lastModified !== undefined || meta.etag !== undefined) {
-            const cleared: DistrictMeta = {
-              recordCount: meta.recordCount,
-              fetchedAt: meta.fetchedAt,
-              llnrs: meta.llnrs
-            }
-            index.districts[key] = cleared
-            metadataDirty = true
+        const pageLlnrs = records.map(record => record.llnr)
+        const metadataMatches = meta !== undefined &&
+          records.length === meta.recordCount &&
+          pageLlnrs.length === (meta.llnrs?.length ?? 0) &&
+          pageLlnrs.every((llnr, i) => llnr === meta.llnrs?.[i])
+        if (meta !== undefined && !metadataMatches) {
+          index.districts[key] = {
+            recordCount: records.length,
+            fetchedAt: meta.fetchedAt,
+            llnrs: pageLlnrs
           }
+          metadataDirty = true
         }
       })
       return index
@@ -379,15 +379,21 @@ export function createLightListStore (dataDir: string): LightListStore {
           const record = index.records[String(llnr)]
           if (record !== undefined) records.push(record)
         }
-        await atomicWriteJson(join(pagesDir, `${key}.json`), records)
+        return await atomicWriteJson(join(pagesDir, `${key}.json`), records, {
+          shouldCommit: () => !closed
+        })
       })
-      await Promise.all(pageWrites)
+      const pagesCommitted = await Promise.all(pageWrites)
+      if (pagesCommitted.some(committed => !committed)) return
       // Metadata persists only the districts table, never the records map:
       // records live in their page files.
-      await atomicWriteJson(indexPath, {
+      const indexCommitted = await atomicWriteJson(indexPath, {
         generated: index.generated,
         districts: index.districts
+      }, {
+        shouldCommit: () => !closed
       })
+      if (!indexCommitted) return
       dirtyPages.clear()
       metadataDirty = false
     },

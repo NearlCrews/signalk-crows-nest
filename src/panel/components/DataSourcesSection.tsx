@@ -167,7 +167,7 @@ function useStatusBySource (
 /**
  * The per-source accordion shown in the configuration panel. Memoized so the
  * 5 s status-poll tick (which re-renders the panel root for the freshness
- * note) does not cascade into the four cards: every prop here keeps its
+ * note) does not cascade into the source cards: every prop here keeps its
  * identity across a tick.
  */
 export default memo(function DataSourcesSection (

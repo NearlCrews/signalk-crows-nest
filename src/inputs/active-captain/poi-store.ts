@@ -16,8 +16,7 @@
 import {
   createDetailStore,
   DEFAULT_DETAIL_STORE_RETENTION_MINUTES,
-  type DetailStore,
-  type StoredEntry
+  type DetailStore
 } from '../../shared/detail-store.js'
 import type { PoiDetails } from './active-captain-types.js'
 
@@ -32,10 +31,7 @@ const STORE_VERSION = 2
  * dropped on `load`. The window bounds file growth, not data freshness; the
  * in-memory cache's own TTL decides when an entry is refetched while online.
  */
-export const DEFAULT_STORE_RETENTION_MINUTES = DEFAULT_DETAIL_STORE_RETENTION_MINUTES
-
-/** A point-of-interest detail entry as held in the store, with its age. */
-export type StoredPoi = StoredEntry<PoiDetails>
+const DEFAULT_STORE_RETENTION_MINUTES = DEFAULT_DETAIL_STORE_RETENTION_MINUTES
 
 /** Public surface of the persistent point-of-interest detail store. */
 export type PoiStore = DetailStore<PoiDetails>

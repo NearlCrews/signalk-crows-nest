@@ -26,7 +26,7 @@ import { ACTIVE_CAPTAIN_POI_BASE_URL } from './templates.js'
 import { buildActiveCaptainSections } from './active-captain-sections.js'
 import { bridgeHeightToMeters } from './bridge-clearance.js'
 import { filterByRating } from './rating-filter.js'
-import type { PoiSource } from '../poi-source.js'
+import { withListProvenance, type PoiSource } from '../poi-source.js'
 import { createBboxDebounceCache } from '../../shared/bbox-debounce.js'
 import { MAX_BBOX_CACHE_ENTRIES } from '../../shared/cache.js'
 import type { PoiDetailView, PoiSummary, PoiType } from '../../shared/types.js'
@@ -35,13 +35,11 @@ import type { PluginStatus } from '../../status/plugin-status.js'
 import { ACTIVE_CAPTAIN_SOURCE_ID } from '../../shared/source-ids.js'
 
 /**
- * Human-readable attribution credit for ActiveCaptain data. The other three
- * sources lead with a `©` symbol and end with a `(license)` parenthetical
- * (ODbL, CC0, US Government public domain). ActiveCaptain reads as a
- * sentence because the data is proprietary and community-contributed: the
- * Garmin developer terms ask for a credit, not a copyright assertion. The
- * dedupe pass joins these credits with `'; '`, so a corroborated note
- * displays them side by side with the stylistic mismatch preserved.
+ * Human-readable attribution credit for ActiveCaptain data. ActiveCaptain
+ * reads as a sentence because the data is proprietary and community-
+ * contributed: the Garmin developer terms ask for a credit, not a copyright
+ * assertion. The dedupe pass joins provider credits with `'; '`, so a
+ * corroborated note displays them side by side.
  */
 const ACTIVE_CAPTAIN_ATTRIBUTION = 'Data from Garmin ActiveCaptain'
 
@@ -128,16 +126,28 @@ export function createActiveCaptainSource (config: ActiveCaptainSourceConfig): P
     client, cachingDurationMinutes, dataDir, status, app,
     minimumRating = 0, refreshSeconds = 0
   } = config
-  // Per-bbox debounce: a Freeboard refresh burst on the same view reuses the
-  // last summaries for `refreshSeconds` before re-querying ActiveCaptain.
-  // The detail cache below (TTL by POI id) is unrelated; this one keys on
-  // the bounding-box string and gates the list call only.
-  const bboxCache = createBboxDebounceCache<PoiSummary[]>(refreshSeconds, MAX_BBOX_CACHE_ENTRIES)
-
   // Set by close(). Once the source is closed, a load that resolves later
   // belongs to the torn-down run: its outcome must not touch a later run's
   // status, nor the on-disk store.
   let closed = false
+  // Per-bbox debounce: a Freeboard refresh burst on the same view reuses the
+  // last summaries for `refreshSeconds` before re-querying ActiveCaptain.
+  // The detail cache below (TTL by POI id) is unrelated; this one keys on
+  // the bounding-box string and gates the list call only.
+  const bboxCache = createBboxDebounceCache<PoiSummary[]>(
+    refreshSeconds,
+    MAX_BBOX_CACHE_ENTRIES,
+    {
+      onRevalidationError: (error) => {
+        if (!closed) {
+          status.recordError(
+            ACTIVE_CAPTAIN_SOURCE_ID,
+            `Background ActiveCaptain list refresh failed: ${String(error)}`
+          )
+        }
+      }
+    }
+  )
 
   // The store keeps its own long retention (30 days): the freshness TTL
   // decides when an entry is refetched while online, while retention only
@@ -195,7 +205,7 @@ export function createActiveCaptainSource (config: ActiveCaptainSourceConfig): P
       // key includes `poiTypes` because the Garmin endpoint filters
       // server-side on that argument: a notes-resource call without Hazard
       // must not poison a later proximity-alarm scan that needs Hazard.
-      const tagged = await bboxCache.get(bbox, async (fetchBbox) => {
+      const read = await bboxCache.get(bbox, async (fetchBbox) => {
         const summaries = await client.listPointsOfInterest(fetchBbox, poiTypes)
         // The client is source-agnostic; tag each summary with the source slug,
         // its public ActiveCaptain page, the attribution credit, and the
@@ -211,7 +221,10 @@ export function createActiveCaptainSource (config: ActiveCaptainSourceConfig): P
       // The minimum-rating filter runs OUTSIDE the cache so a runtime
       // change to minimumRating takes effect on the next list call rather
       // than after the bbox TTL expires.
-      return filterByRating(tagged, minimumRating)
+      const filtered = filterByRating(read.value, minimumRating)
+      // A cache hit returns the cache's array instance. Copy it before tagging
+      // so overlapping calls cannot overwrite one another's provenance.
+      return withListProvenance([...filtered], read.provenance)
     },
     getDetails: async (id: string): Promise<PoiDetailView> => {
       const entity = await cache.get(id)

@@ -47,8 +47,8 @@ test('a positive TTL caches the result and returns it on the next get', async ()
   const cache = createBboxDebounceCache<number>(30, 16)
   const first = await cache.get(SAMPLE, async () => { calls++; return 42 })
   const second = await cache.get(SAMPLE, async () => { calls++; return 999 })
-  assert.equal(first, 42)
-  assert.equal(second, 42, 'the second get returns the cached value')
+  assert.deepEqual(first, { value: 42, provenance: 'fresh' })
+  assert.deepEqual(second, { value: 42, provenance: 'local' }, 'the second get returns the cached value')
   assert.equal(calls, 1, 'the fetcher was called once')
 })
 
@@ -111,20 +111,45 @@ test('a stale entry is served immediately and revalidated in the background', as
   let clock = 1000
   let calls = 0
   const cache = createBboxDebounceCache<number>(30, 16, { now: () => clock })
-  assert.equal(await cache.get(SAMPLE, async () => { calls++; return calls }), 1)
-  assert.equal(await cache.get(SAMPLE, async () => { calls++; return calls }), 1, 'fresh hit')
+  assert.deepEqual(
+    await cache.get(SAMPLE, async () => { calls++; return calls }),
+    { value: 1, provenance: 'fresh' }
+  )
+  assert.deepEqual(
+    await cache.get(SAMPLE, async () => { calls++; return calls }),
+    { value: 1, provenance: 'local' },
+    'fresh cache hit is local, not proof of upstream reachability'
+  )
   assert.equal(calls, 1)
 
   clock += 31_000 // past the 30 s TTL
   const stale = await cache.get(SAMPLE, async () => { calls++; return calls })
-  assert.equal(stale, 1, 'the stale value is served immediately')
+  assert.deepEqual(stale, { value: 1, provenance: 'local' }, 'the stale value is served immediately')
   await flush() // let the background refresh settle
   assert.equal(calls, 2, 'a background refresh ran')
-  assert.equal(
-    await cache.get(SAMPLE, async () => { calls++; return calls }), 2,
-    'the refreshed value is now served fresh'
+  assert.deepEqual(
+    await cache.get(SAMPLE, async () => { calls++; return calls }),
+    { value: 2, provenance: 'fresh' },
+    'the first observer of the refreshed value records its upstream success'
   )
   assert.equal(calls, 2, 'the fresh read did not fetch again')
+})
+
+test('a failed background revalidation is reported while the stale value remains local', async () => {
+  let clock = 1000
+  const errors: unknown[] = []
+  const cache = createBboxDebounceCache<number>(30, 16, {
+    now: () => clock,
+    onRevalidationError: (error) => errors.push(error)
+  })
+  await cache.get(SAMPLE, async () => 7)
+  clock += 31_000
+
+  const stale = await cache.get(SAMPLE, async () => { throw new Error('offline') })
+  assert.deepEqual(stale, { value: 7, provenance: 'local' })
+  await flush()
+  assert.equal(errors.length, 1)
+  assert.match(String(errors[0]), /offline/)
 })
 
 test('a non-cacheable (vetoed) result is returned but not cached, so the next call refetches', async () => {
@@ -132,8 +157,8 @@ test('a non-cacheable (vetoed) result is returned but not cached, so the next ca
   const cache = createBboxDebounceCache<{ ok: boolean }>(30, 16)
   const first = await cache.get(SAMPLE, async () => { calls++; return { ok: false } }, undefined, (v) => v.ok)
   const second = await cache.get(SAMPLE, async () => { calls++; return { ok: true } }, undefined, (v) => v.ok)
-  assert.equal(first.ok, false)
-  assert.equal(second.ok, true)
+  assert.equal(first.value.ok, false)
+  assert.equal(second.value.ok, true)
   assert.equal(calls, 2, 'the vetoed result was not cached')
 })
 
@@ -191,7 +216,7 @@ test('an extraKey discriminates cache entries for the same bbox', async () => {
   const second = await cache.get(SAMPLE, async () => { marinaCalls++; return 'oops' }, 'Marina')
   assert.equal(marinaCalls, 1, 'Marina was fetched only once')
   assert.equal(hazardCalls, 1, 'Hazard was fetched separately')
-  assert.equal(second, 'marina', 'the Marina key returned its own cached value')
+  assert.equal(second.value, 'marina', 'the Marina key returned its own cached value')
 })
 
 test('omitting the extraKey shares the cache slot with another omitted call', async () => {
@@ -242,7 +267,8 @@ test('a warm hit near a tile edge prefetches the neighbor tile in the background
   // The prefetched tile then serves the crossing without a blocking fetch
   // of its own tile; the warm crossing chains one prefetch further east, so
   // a vessel underway always has the next tile warming ahead of it.
-  await cache.get({ south: 0.04, west: 0.14, north: 0.06, east: 0.19 }, fetcher)
+  const crossing = await cache.get({ south: 0.04, west: 0.14, north: 0.06, east: 0.19 }, fetcher)
+  assert.equal(crossing.provenance, 'fresh', 'the prefetched upstream result is observed once as fresh')
   assert.equal(fetched.length, 3, 'the crossing fetches nothing for its own tile')
   assert.deepEqual(fetched[2], { south: 0, west: 0.2, north: 0.1, east: 0.3 })
 })
@@ -280,6 +306,43 @@ test('a wide viewport near an edge does not prefetch', async () => {
   await cache.get(wide, fetcher)
   await cache.get(wide, fetcher)
   assert.equal(calls, 1, 'wide viewports skip the prefetch')
+})
+
+test('antimeridian neighbor prefetches stay inside valid longitude ranges', async () => {
+  const fetched: Bbox[] = []
+  const cache = createBboxDebounceCache<number>(30, 16)
+  const fetcher = async (bbox: Bbox): Promise<number> => {
+    fetched.push(bbox)
+    return fetched.length
+  }
+  const wrapped: Bbox = {
+    south: 0.04,
+    west: 179.91,
+    north: 0.06,
+    east: -179.91
+  }
+  await cache.get(wrapped, fetcher)
+  await cache.get(wrapped, fetcher)
+  assert.deepEqual(fetched.slice(1), [
+    { south: 0, west: -180, north: 0.1, east: -179.8 },
+    { south: 0, west: 179.8, north: 0.1, east: 180 }
+  ])
+  assert.ok(fetched.every(bbox => bbox.west >= -180 && bbox.east <= 180))
+})
+
+test('a wide wrapped viewport does not prefetch', async () => {
+  let calls = 0
+  const cache = createBboxDebounceCache<number>(30, 16)
+  const fetcher = async (): Promise<number> => ++calls
+  const wideWrapped: Bbox = {
+    south: 0.04,
+    west: 170.01,
+    north: 0.06,
+    east: -170.01
+  }
+  await cache.get(wideWrapped, fetcher)
+  await cache.get(wideWrapped, fetcher)
+  assert.equal(calls, 1, 'wrapped width is measured across the antimeridian')
 })
 
 test('prefetch can be disabled through the option', async () => {

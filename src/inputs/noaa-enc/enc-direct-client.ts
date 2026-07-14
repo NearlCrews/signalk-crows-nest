@@ -27,8 +27,10 @@ import {
 import {
   arcgisByIdParams,
   arcgisEnvelopeParams,
+  mergeArcgisFeatureSets,
   arcgisPagedQuery,
-  arcgisQueryById
+  arcgisQueryById,
+  splitArcgisEnvelope
 } from '../arcgis-query.js'
 import type { Bbox } from '../../shared/types.js'
 
@@ -89,13 +91,18 @@ export function createEncDirectClient (
   return {
     async queryLayer ({ band, layerKey, bbox, signal }) {
       const layerId = LAYER_IDS_BY_BAND[band][layerKey]
-      const features = await arcgisPagedQuery<EncFeature>({
-        label: UPSTREAM_LABEL,
-        context: `${band}/${layerKey}`,
-        buildPageUrl: (offset) => layerQueryUrl(baseUrl, band, layerId, arcgisEnvelopeParams(bbox, offset)),
-        signal
-      })
-      return { features }
+      const boxes = splitArcgisEnvelope(bbox)
+      const featureSets = await Promise.all(boxes.map(async (queryBbox, index) =>
+        await arcgisPagedQuery<EncFeature>({
+          label: UPSTREAM_LABEL,
+          context: `${band}/${layerKey}${boxes.length > 1 ? ` part ${index + 1}` : ''}`,
+          buildPageUrl: (offset) => layerQueryUrl(
+            baseUrl, band, layerId, arcgisEnvelopeParams(queryBbox, offset)
+          ),
+          signal
+        })
+      ))
+      return { features: mergeArcgisFeatureSets(featureSets) }
     },
     async queryById ({ band, layerKey, objectId, signal }) {
       const layerId = LAYER_IDS_BY_BAND[band][layerKey]

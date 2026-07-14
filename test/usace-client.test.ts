@@ -58,6 +58,40 @@ test('queryLayer issues a bbox envelope query and parses the GeoJSON response', 
   }
 })
 
+test('queryLayer splits an antimeridian bbox and removes duplicate features', async () => {
+  const server = await startServer((req) => {
+    const geometry = new URL(req.url ?? '/', 'http://stub').searchParams.get('geometry') ?? ''
+    const sideId = geometry.startsWith('170,') ? 204 : 205
+    return {
+      body: {
+        type: 'FeatureCollection',
+        features: [
+          lockFeature,
+          {
+            ...lockFeature,
+            id: sideId,
+            properties: { ...lockFeature.properties, OBJECTID: sideId }
+          }
+        ]
+      }
+    }
+  })
+  try {
+    const client = createUsaceClient({ queryUrls: { lock: server.url, dam: server.url } })
+    const result = await client.queryLayer({
+      layerKey: 'lock',
+      bbox: { south: 51, west: 170, north: 53, east: -170 }
+    })
+    assert.deepEqual(result.features.map(feature => feature.id), [203, 204, 205])
+    assert.equal(server.requests.length, 2)
+    const geometries = server.requests.map(request =>
+      new URL(request.url, 'http://stub').searchParams.get('geometry'))
+    assert.deepEqual(geometries, ['170,51,180,53', '-180,51,-170,53'])
+  } finally {
+    await server.close()
+  }
+})
+
 test('queryLayer pages while the upstream signals exceededTransferLimit', async () => {
   const server = await startServer((_req, page) => {
     if (page === 1) {

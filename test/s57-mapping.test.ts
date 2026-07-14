@@ -32,6 +32,8 @@ import {
   lookupParsedCode,
   parseS57Code,
   readNumber,
+  formatSordatDisplay,
+  sordatToIsoTimestamp,
   WATLEV,
   QUASOU,
   TECSOU
@@ -108,6 +110,16 @@ test('parseS57Code reads the wire shapes and rejects non-numbers', () => {
   assert.equal(parseS57Code(undefined), undefined)
   assert.equal(parseS57Code(' '), undefined)
   assert.equal(parseS57Code('not a number'), undefined)
+  assert.equal(parseS57Code('6junk'), undefined)
+  assert.equal(parseS57Code('6.5'), undefined)
+  assert.equal(parseS57Code(6.5), undefined)
+})
+
+test('SORDAT parsing rejects non-digits and impossible calendar dates', () => {
+  assert.equal(formatSordatDisplay('20x401'), undefined)
+  assert.equal(formatSordatDisplay('20230229'), undefined)
+  assert.equal(formatSordatDisplay('20240229'), '2024-02-29')
+  assert.equal(sordatToIsoTimestamp('20240229'), '2024-02-29T00:00:00.000Z')
 })
 
 test('lookupParsedCode indexes a table with an already-parsed code', () => {

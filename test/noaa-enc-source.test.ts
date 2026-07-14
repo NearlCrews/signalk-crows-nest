@@ -15,6 +15,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { createNoaaEncSource } from '../src/inputs/noaa-enc/noaa-enc-source.js'
 import type { EncFeature, EncLayerKey, ScaleBand } from '../src/inputs/noaa-enc/enc-direct-types.js'
+import { getListProvenance } from '../src/inputs/poi-source.js'
 import type { Bbox } from '../src/shared/types.js'
 import { NOAA_ENC_SOURCE_ID } from '../src/shared/source-ids.js'
 import { createStubStatus, withTempDir } from './helpers.js'
@@ -48,8 +49,8 @@ const unnamedObstruction: EncFeature = {
 }
 
 interface FakeClient {
-  queryLayer: (request: { band: ScaleBand, layerKey: EncLayerKey, bbox: Bbox }) => Promise<{ features: EncFeature[] }>
-  queryById: (request: { band: ScaleBand, layerKey: EncLayerKey, objectId: number }) => Promise<EncFeature | undefined>
+  queryLayer: (request: { band: ScaleBand, layerKey: EncLayerKey, bbox: Bbox, signal?: AbortSignal }) => Promise<{ features: EncFeature[] }>
+  queryById: (request: { band: ScaleBand, layerKey: EncLayerKey, objectId: number, signal?: AbortSignal }) => Promise<EncFeature | undefined>
 }
 
 test('listPointsOfInterest fans out across enabled layers and tags summaries', async () => {
@@ -159,6 +160,33 @@ test('listPointsOfInterest only queries layers that are enabled', async () => {
   assert.deepEqual(calls, ['wreck'])
 })
 
+test('with no layers enabled the source returns a skipped empty list', async () => {
+  let calls = 0
+  const client: FakeClient = {
+    queryLayer: async () => { calls++; return { features: [] } },
+    queryById: async () => undefined
+  }
+  const { events, status } = createStubStatus()
+  const source = createNoaaEncSource({
+    client: client as never,
+    band: 'coastal',
+    includeWrecks: false,
+    includeObstructions: false,
+    includeRocks: false,
+    minimumYear: 0,
+    refreshSeconds: 0,
+    status,
+    getCurrentPosition: () => undefined
+  })
+  const summaries = await source.listPointsOfInterest(
+    { south: 41, west: -72, north: 43, east: -70 }, '')
+  assert.equal(summaries.length, 0)
+  assert.equal(calls, 0)
+  assert.equal(getListProvenance(summaries), 'skipped')
+  assert.ok(events.includes(`skipped:${NOAA_ENC_SOURCE_ID}:no ENC layers enabled`))
+  source.close()
+})
+
 test('listPointsOfInterest skips outbound work when the vessel is outside US waters', async () => {
   const calls: string[] = []
   const client: FakeClient = {
@@ -185,6 +213,39 @@ test('listPointsOfInterest skips outbound work when the vessel is outside US wat
   assert.equal(summaries.length, 0)
   assert.equal(calls.length, 0)
   assert.ok(events.some(e => e.startsWith(`skipped:${NOAA_ENC_SOURCE_ID}`)))
+})
+
+test('close aborts an in-flight layer query without recording an outage', async () => {
+  let requestStarted!: () => void
+  const started = new Promise<void>((resolve) => { requestStarted = resolve })
+  let requestSignal: AbortSignal | undefined
+  const client: FakeClient = {
+    queryLayer: async ({ signal }) => await new Promise((_resolve, reject) => {
+      requestSignal = signal
+      requestStarted()
+      signal?.addEventListener('abort', () => reject(signal.reason), { once: true })
+    }),
+    queryById: async () => undefined
+  }
+  const { events, status } = createStubStatus()
+  const source = createNoaaEncSource({
+    client: client as never,
+    band: 'coastal',
+    includeWrecks: true,
+    includeObstructions: false,
+    includeRocks: false,
+    minimumYear: 0,
+    refreshSeconds: 0,
+    status,
+    getCurrentPosition: () => undefined
+  })
+  const pending = source.listPointsOfInterest(
+    { south: 41, west: -72, north: 43, east: -70 }, '')
+  await started
+  source.close()
+  await assert.rejects(() => pending, /source closed/)
+  assert.equal(requestSignal?.aborted, true)
+  assert.equal(events.filter(event => event.startsWith('error:')).length, 0)
 })
 
 test('listPointsOfInterest records a per-layer error when one layer query fails', async () => {
@@ -314,6 +375,38 @@ test('getDetails records detail success only on a cache miss that hits the upstr
   )
 })
 
+test('close aborts an in-flight detail query without recording a result', async () => {
+  let requestStarted!: () => void
+  const started = new Promise<void>((resolve) => { requestStarted = resolve })
+  let requestSignal: AbortSignal | undefined
+  const client: FakeClient = {
+    queryLayer: async () => ({ features: [] }),
+    queryById: async ({ signal }) => await new Promise((_resolve, reject) => {
+      requestSignal = signal
+      requestStarted()
+      signal?.addEventListener('abort', () => reject(signal.reason), { once: true })
+    })
+  }
+  const { events, status } = createStubStatus()
+  const source = createNoaaEncSource({
+    client: client as never,
+    band: 'coastal',
+    includeWrecks: true,
+    includeObstructions: false,
+    includeRocks: false,
+    minimumYear: 0,
+    refreshSeconds: 0,
+    status,
+    getCurrentPosition: () => undefined
+  })
+  const pending = source.getDetails('wreck_99999')
+  await started
+  source.close()
+  await assert.rejects(() => pending, /source closed/)
+  assert.equal(requestSignal?.aborted, true)
+  assert.deepEqual(events, [])
+})
+
 test('getDetails fetches by objectId on a cache miss and caches the result', async () => {
   let queryByIdCalls = 0
   const client: FakeClient = {
@@ -343,9 +436,10 @@ test('getDetails fetches by objectId on a cache miss and caches the result', asy
 })
 
 test('getDetails rejects when the upstream has no feature for the id', async () => {
+  let queryByIdCalls = 0
   const client: FakeClient = {
     queryLayer: async () => ({ features: [] }),
-    queryById: async () => undefined
+    queryById: async () => { queryByIdCalls++; return undefined }
   }
   const { status, events } = createStubStatus()
   const source = createNoaaEncSource({
@@ -359,7 +453,11 @@ test('getDetails rejects when the upstream has no feature for the id', async () 
     status,
     getCurrentPosition: () => undefined
   })
+  await assert.rejects(() => source.getDetails('wreck_12junk'), /Malformed NOAA ENC id/)
+  await assert.rejects(() => source.getDetails('wreck_0'), /Malformed NOAA ENC id/)
+  assert.equal(queryByIdCalls, 0, 'malformed ids never reach ArcGIS')
   await assert.rejects(() => source.getDetails('wreck_404'), /wreck_404/)
+  assert.equal(queryByIdCalls, 1)
   // The ArcGIS query answered normally, so the miss records a detail
   // success, never an error that would flip the status row to unreachable.
   assert.deepEqual(events, [`detail-ok:${NOAA_ENC_SOURCE_ID}`])

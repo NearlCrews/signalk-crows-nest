@@ -11,11 +11,11 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 <a id="v0140"></a>
 
-## [0.14.0] - 2026-07-13
+## [0.14.0] - 2026-07-14
 
 Route safety checks now respond to active-route changes without waiting for
-vessel movement. This release also tightens source cancellation, complete
-dataset replacement, request validation, status reporting, and package
+vessel movement. This release also tightens source cancellation, cache
+provenance, request validation, dateline handling, persistence, and package
 reproducibility.
 
 ### Changed
@@ -39,15 +39,33 @@ reproducibility.
   snapshot instead of merging into it, so ports removed upstream disappear
   from memory and disk.
 - Source status provenance is tracked per request. Concurrent resource reads
-  no longer overwrite one another, and a local cache read cannot hide an
-  upstream refresh failure.
-- Resource queries reject non-finite coordinates, malformed bounding boxes,
-  and invalid distance values. Course geometry also ignores invalid positions,
-  and shared concurrency helpers reject invalid limits.
+  no longer overwrite one another, local cache reads no longer count as fresh
+  upstream results, and background cache refresh failures remain visible.
+- Resource queries reject non-finite or out-of-range coordinates, malformed
+  bounding boxes, and invalid distance values. Course geometry ignores invalid
+  positions, shared concurrency helpers reject invalid limits, and ArcGIS
+  object identifiers and ENC survey dates require complete, valid values.
+- NOAA ENC Direct and USACE ArcGIS queries split antimeridian-crossing boxes
+  into valid envelopes and remove duplicated boundary features. OpenSeaMap's
+  query-span limit now measures wrapped viewports correctly.
+- NOAA ENC Direct and USACE requests abort when their sources close. One-shot
+  HTTP requests enforce a wall-clock deadline and a bounded response body, so
+  trickling or oversized responses cannot run forever or exhaust memory.
+- OpenSeaMap imports plain marinas only when the Harbours and moorings group is
+  enabled. Empty OpenSeaMap, NOAA ENC Direct, and USACE layer selections are
+  reported as intentional skips instead of successful upstream fetches.
 - Notification deltas use the current publication timestamp instead of
   reusing a previous value timestamp.
-- Closing a detail store waits for an in-progress write, and hydrated caches
-  can replace complete snapshots without leaving stale entries behind.
+- Async feed stores recheck their lifecycle immediately before each atomic
+  commit, so a flush that finishes after shutdown cannot publish stale data.
+  The Light List store repairs page and metadata disagreement after an
+  interrupted multi-file flush, and hydrated caches can replace complete
+  snapshots without leaving stale entries behind.
+
+### Removed
+
+- Unused depth-area, coastline, and bbox-tiling helpers left behind by the
+  route-draft feature removal, along with their obsolete tests and type fields.
 
 <a id="v0131"></a>
 

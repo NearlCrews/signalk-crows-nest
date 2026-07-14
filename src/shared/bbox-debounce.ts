@@ -27,9 +27,9 @@
  * cache, and the raw viewport (no snap) is fetched on every call. The freshness
  * window is in seconds because the typical chartplotter cadence is sub-minute.
  *
- * The cache is per-source: ActiveCaptain, NOAA ENC, and OpenSeaMap each
- * instantiate their own. They share the `MAX_BBOX_CACHE_ENTRIES` ceiling
- * from `src/shared/cache.ts` so a runaway zoom-pan never exhausts memory.
+ * The cache is per-source: ActiveCaptain, NOAA ENC, OpenSeaMap, and USACE each
+ * instantiate their own. They share the `MAX_BBOX_CACHE_ENTRIES` ceiling from
+ * `src/shared/cache.ts` so a runaway zoom-pan never exhausts memory.
  *
  * The canonical refresh-period bounds, the per-source defaults, the clamp
  * helper, and the config-schema fragment live in the dependency-free
@@ -40,6 +40,7 @@
  */
 
 import { LRUCache } from 'lru-cache'
+import { wrapLongitude } from './longitude.js'
 import { MS_PER_SECOND } from './time.js'
 import type { Bbox } from './types.js'
 
@@ -76,9 +77,18 @@ export interface BboxDebounceCache<T> {
     fetch: (fetchBbox: Bbox) => Promise<T>,
     extraKey?: string,
     shouldCache?: (value: T) => boolean
-  ) => Promise<T>
+  ) => Promise<BboxDebounceRead<T>>
   /** Drop every entry. Called by the source on close to release memory. */
   clear: () => void
+}
+
+/** Whether this read observed an upstream result or reused local memory. */
+export type BboxDebounceProvenance = 'fresh' | 'local'
+
+/** One cache read with the provenance needed for honest source status. */
+export interface BboxDebounceRead<T> {
+  value: T
+  provenance: BboxDebounceProvenance
 }
 
 /**
@@ -162,15 +172,25 @@ const CELL_DEGREES = 1 / SNAP_CELLS_PER_DEGREE
  */
 const PREFETCH_MAX_SPAN_CELLS = 2
 
+/** Float tolerance when comparing snapped degree spans to a cell boundary. */
+const SPAN_EPSILON_DEGREES = 1e-9
+
+/** Width of a normal or antimeridian-crossing longitude interval. */
+function longitudeSpan (bbox: Bbox): number {
+  return bbox.east >= bbox.west
+    ? bbox.east - bbox.west
+    : 360 - bbox.west + bbox.east
+}
+
 /** Translate a bbox by the given cell offsets (east-positive, north-positive). */
 function translateBbox (bbox: Bbox, eastCells: number, northCells: number): Bbox {
   const east = eastCells * CELL_DEGREES
   const north = northCells * CELL_DEGREES
   return {
     south: bbox.south + north,
-    west: bbox.west + east,
+    west: wrapLongitude(bbox.west + east),
     north: bbox.north + north,
-    east: bbox.east + east
+    east: wrapLongitude(bbox.east + east)
   }
 }
 
@@ -186,6 +206,8 @@ interface GeoEntry<T> {
   ok: boolean
   /** True while a background revalidation of this tile is in flight. */
   revalidating: boolean
+  /** True when a completed background fetch has not yet been observed. */
+  freshResultPending: boolean
 }
 
 /** Optional knobs for {@link createBboxDebounceCache}. */
@@ -199,6 +221,8 @@ export interface BboxDebounceCacheOptions {
    * that assert exact fetch counts opt out.
    */
   prefetchNeighbors?: boolean
+  /** Report a failed stale-entry refresh without failing the local read. */
+  onRevalidationError?: (error: unknown) => void
 }
 
 /**
@@ -217,6 +241,7 @@ export function createBboxDebounceCache<T extends NonNullable<unknown>> (
 ): BboxDebounceCache<T> {
   const now = options.now ?? Date.now
   const prefetchEnabled = options.prefetchNeighbors !== false
+  const onRevalidationError = options.onRevalidationError
   const ttlMs = Math.max(0, ttlSeconds) * MS_PER_SECOND
   const cache = ttlMs > 0
     ? new LRUCache<string, GeoEntry<T>>({ max: maxEntries })
@@ -230,7 +255,8 @@ export function createBboxDebounceCache<T extends NonNullable<unknown>> (
     key: string,
     fetchBbox: Bbox,
     fetch: (fetchBbox: Bbox) => Promise<T>,
-    shouldCache?: (value: T) => boolean
+    shouldCache?: (value: T) => boolean,
+    background = false
   ): GeoEntry<T> {
     // The promise is assigned just after the entry is built so its callbacks
     // can close over the entry they update; the placeholder is overwritten at
@@ -240,13 +266,15 @@ export function createBboxDebounceCache<T extends NonNullable<unknown>> (
       value: undefined,
       freshAt: 0,
       ok: false,
-      revalidating: false
+      revalidating: false,
+      freshResultPending: false
     }
     entry.promise = fetch(fetchBbox)
       .then((value) => {
         entry.value = value
         entry.freshAt = now()
         entry.ok = true
+        entry.freshResultPending = background
         if (shouldCache !== undefined && !shouldCache(value) && cache?.get(key) === entry) {
           cache.delete(key)
         }
@@ -273,14 +301,18 @@ export function createBboxDebounceCache<T extends NonNullable<unknown>> (
     entry.revalidating = true
     fetch(fetchBbox)
       .then((value) => {
+        if (cache?.get(key) !== entry) return
         if (shouldCache !== undefined && !shouldCache(value)) {
-          if (cache?.get(key) === entry) cache.delete(key)
+          cache.delete(key)
           return
         }
         entry.value = value
         entry.freshAt = now()
+        entry.freshResultPending = true
       })
-      .catch(() => { /* keep serving the stale entry; retry on a later read */ })
+      .catch((error: unknown) => {
+        if (cache?.get(key) === entry) onRevalidationError?.(error)
+      })
       .finally(() => { entry.revalidating = false })
   }
 
@@ -301,7 +333,10 @@ export function createBboxDebounceCache<T extends NonNullable<unknown>> (
   ): void {
     // Wide viewports skip the warmup entirely (see PREFETCH_MAX_SPAN_CELLS).
     const maxSpan = PREFETCH_MAX_SPAN_CELLS * CELL_DEGREES
-    if (fetchBbox.east - fetchBbox.west > maxSpan || fetchBbox.north - fetchBbox.south > maxSpan) {
+    if (
+      longitudeSpan(fetchBbox) > maxSpan + SPAN_EPSILON_DEGREES ||
+      fetchBbox.north - fetchBbox.south > maxSpan + SPAN_EPSILON_DEGREES
+    ) {
       return
     }
     // Scalar edge distances, checked before any allocation: the common case
@@ -334,14 +369,14 @@ export function createBboxDebounceCache<T extends NonNullable<unknown>> (
       if (cache?.peek(key) !== undefined) continue
       // Fire and forget; fetchInto already evicts the entry on rejection so
       // a failed prefetch costs nothing and the real crossing just fetches.
-      fetchInto(key, neighbor, fetch, shouldCache).promise.catch(() => {})
+      fetchInto(key, neighbor, fetch, shouldCache, true).promise.catch(() => {})
     }
   }
 
   return {
     get: async (bbox, fetch, extraKey, shouldCache) => {
       if (cache === null) {
-        return await fetch(bbox)
+        return { value: await fetch(bbox), provenance: 'fresh' }
       }
       const fetchBbox = snapBbox(bbox)
       const key = bboxKey(fetchBbox, extraKey)
@@ -349,21 +384,28 @@ export function createBboxDebounceCache<T extends NonNullable<unknown>> (
       if (existing !== undefined) {
         if (!existing.ok) {
           // A cold fetch is still in flight: share it (collapse the burst).
-          return await existing.promise
+          const value = await existing.promise
+          existing.freshResultPending = false
+          return { value, provenance: 'fresh' }
         }
         if (prefetchEnabled) {
           prefetchNeighbors(bbox, fetchBbox, fetch, extraKey, shouldCache)
         }
         if (now() - existing.freshAt < ttlMs) {
-          return existing.value as T
+          const provenance = existing.freshResultPending ? 'fresh' : 'local'
+          existing.freshResultPending = false
+          return { value: existing.value as T, provenance }
         }
         // Stale: serve the last-known value now, revalidate once in background.
         if (!existing.revalidating) {
           revalidate(key, fetchBbox, fetch, existing, shouldCache)
         }
-        return existing.value as T
+        return { value: existing.value as T, provenance: 'local' }
       }
-      return await fetchInto(key, fetchBbox, fetch, shouldCache).promise
+      return {
+        value: await fetchInto(key, fetchBbox, fetch, shouldCache).promise,
+        provenance: 'fresh'
+      }
     },
     clear: () => { cache?.clear() }
   }

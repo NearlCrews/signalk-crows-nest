@@ -126,20 +126,20 @@ test('store falls back to an empty index when index.json is unparseable', async 
   }
 })
 
-test('a closed store does not flush dirty data to disk', async () => {
-  // Write protection lives in the store: after close(), even a dirty flush is
-  // a no-op, so a run torn down mid-refresh cannot write its index over a
-  // freshly started run sharing the same data dir.
+test('closing during a flush prevents dirty data from committing to disk', async () => {
+  // flush() has already started when close() runs. The commit-time lifecycle
+  // check must still prevent this stopped run from publishing its index.
   const dir = await mkdtemp(join(tmpdir(), 'll-store-'))
   try {
     const store = createLightListStore(dir)
     await store.load()
     store.upsertDistrict('D01', 1, [sampleRecord(100)], {}) // marks the page dirty
+    const flushing = store.flush()
     store.close()
-    await store.flush()
+    await flushing
     assert.equal(
       existsSync(join(dir, 'uscg-light-list', 'index.json')), false,
-      'a closed store writes nothing on flush'
+      'a stopped store does not commit an in-flight flush'
     )
   } finally {
     await rm(dir, { recursive: true, force: true })
@@ -280,6 +280,40 @@ test('load drops cached conditional-GET headers when the page file is missing', 
     await store2.flush()
     const reloaded2 = await createLightListStore(dir).load()
     assert.equal(reloaded2.districts.D01_1.etag, undefined)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('load repairs same-size page and metadata disagreement', async () => {
+  // A multi-file flush can commit a page immediately before close vetoes the
+  // metadata commit. The page and metadata can then have the same count but
+  // different LLNRs. Load must adopt the page LLNRs and clear validators so a
+  // later upsert removes the right old records and forces a complete refresh.
+  const dir = await mkdtemp(join(tmpdir(), 'll-store-'))
+  try {
+    const store1 = createLightListStore(dir)
+    await store1.load()
+    store1.upsertDistrict('D01', 1, [sampleRecord(100)], {
+      lastModified: 'Thu, 22 May 2026 09:26:29 GMT',
+      etag: '"abc"'
+    })
+    await store1.flush()
+    await writeFile(
+      join(dir, 'uscg-light-list', 'pages', 'D01_1.json'),
+      JSON.stringify([sampleRecord(200)]),
+      'utf8'
+    )
+
+    const store2 = createLightListStore(dir)
+    const reloaded = await store2.load()
+    assert.deepEqual(reloaded.districts.D01_1.llnrs, [200])
+    assert.equal(reloaded.districts.D01_1.lastModified, undefined)
+    assert.equal(reloaded.districts.D01_1.etag, undefined)
+
+    store2.upsertDistrict('D01', 1, [sampleRecord(300)], {})
+    assert.equal(reloaded.records['200'], undefined)
+    assert.equal(reloaded.records['300']?.llnr, 300)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

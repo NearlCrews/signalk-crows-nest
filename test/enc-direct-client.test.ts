@@ -49,6 +49,45 @@ test('queryLayer issues a bbox query and parses the GeoJSON response', async () 
   }
 })
 
+test('queryLayer splits an antimeridian bbox and removes duplicate features', async () => {
+  const shared = {
+    type: 'Feature' as const,
+    id: 1,
+    geometry: { type: 'Point' as const, coordinates: [180, 52] as [number, number] },
+    properties: { OBJECTID: 1 }
+  }
+  const server = await startServer((req) => {
+    const geometry = new URL(req.url ?? '/', 'http://stub').searchParams.get('geometry') ?? ''
+    const sideId = geometry.startsWith('170,') ? 2 : 3
+    return {
+      type: 'FeatureCollection',
+      features: [
+        shared,
+        {
+          ...shared,
+          id: sideId,
+          properties: { OBJECTID: sideId }
+        }
+      ]
+    }
+  })
+  try {
+    const client = createEncDirectClient({ baseUrl: server.url })
+    const result = await client.queryLayer({
+      band: 'coastal',
+      layerKey: 'wreck',
+      bbox: { south: 51, west: 170, north: 53, east: -170 }
+    })
+    assert.deepEqual(result.features.map(feature => feature.id), [1, 2, 3])
+    assert.equal(server.requests.length, 2)
+    const geometries = server.requests.map(request =>
+      new URL(request.url, 'http://stub').searchParams.get('geometry'))
+    assert.deepEqual(geometries, ['170,51,180,53', '-180,51,-170,53'])
+  } finally {
+    await server.close()
+  }
+})
+
 test('queryLayer pages through exceededTransferLimit responses', async () => {
   const featureA = {
     type: 'Feature' as const,

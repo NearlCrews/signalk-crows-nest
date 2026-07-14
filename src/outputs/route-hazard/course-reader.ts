@@ -34,7 +34,7 @@
 
 import type { CourseInfo, NormalizedDelta, Path } from '@signalk/server-api'
 import { toPosition } from '../../geo/position-utilities.js'
-import { toFiniteNumber } from '../../shared/numbers.js'
+import { isValidLatitude, isValidLongitude, toFiniteNumber } from '../../shared/numbers.js'
 import { SELF_POSITION_PATH, SELF_SOG_PATH } from '../../shared/self-paths.js'
 import type { Position, RoutePolyline, VesselState } from '../../shared/types.js'
 
@@ -130,7 +130,7 @@ function toGeoJsonPosition (entry: unknown): Position | null {
   const [longitude, latitude] = entry as unknown[]
   const lon = toFiniteNumber(longitude)
   const lat = toFiniteNumber(latitude)
-  if (lon === null || lat === null) {
+  if (lon === null || lat === null || !isValidLongitude(lon) || !isValidLatitude(lat)) {
     return null
   }
   return { latitude: lat, longitude: lon }

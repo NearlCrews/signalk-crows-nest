@@ -16,7 +16,7 @@ import { S } from '../styles.js'
 import Fieldset from './Fieldset.js'
 
 /** One checkbox in the include-toggles grid. */
-export interface IncludeToggle {
+interface IncludeToggle {
   /** Stable id, used as the React key. */
   id: string
   /** The checkbox's visible label. */

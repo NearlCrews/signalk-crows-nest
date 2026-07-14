@@ -110,7 +110,7 @@ export interface InputModule {
  * transport failure records a per-source error, while a normal upstream
  * answer records a detail success even when the feature turns out to be
  * absent or unusable, because an API answering normally is not a
- * reachability failure. The OpenSeaMap and NOAA ENC sources both wrap their
+ * reachability failure. The OpenSeaMap, NOAA ENC, and USACE sources wrap their
  * client call in this helper (mirroring the ActiveCaptain 404 handling), so
  * the miss-vs-outage policy lives once: a not-found thrown by the caller
  * AFTER this resolves cannot flip the status row to unreachable.
@@ -118,15 +118,19 @@ export interface InputModule {
 export async function fetchDetailRecorded<T> (
   status: PluginStatus,
   sourceId: string,
-  fetchUpstream: () => Promise<T>
+  fetchUpstream: () => Promise<T>,
+  lifecycleSignal?: AbortSignal
 ): Promise<T> {
   let result: T
   try {
     result = await fetchUpstream()
   } catch (error) {
-    status.recordError(sourceId, `Detail request failed: ${String(error)}`)
+    if (lifecycleSignal?.aborted !== true) {
+      status.recordError(sourceId, `Detail request failed: ${String(error)}`)
+    }
     throw error
   }
+  lifecycleSignal?.throwIfAborted()
   status.recordDetailSuccess(sourceId)
   return result
 }
@@ -143,8 +147,8 @@ export type ListFetchOutcome<T> =
  * visited areas still show their markers after a restart. `recordStaleServe`
  * keeps the status honest: `apiReachable` is set false and the aggregate does
  * not count the serve as a reachable list fetch. With no stale data to show,
- * the original error propagates instead. The OpenSeaMap and NOAA ENC sources
- * both wrap their bbox fetch in this helper, so the fallback control flow
+ * the original error propagates instead. The OpenSeaMap, NOAA ENC, and USACE
+ * sources wrap their bbox fetch in this helper, so the fallback control flow
  * lives once; only the per-source summary rebuild varies.
  */
 export async function fetchListWithOfflineFallback<T> (

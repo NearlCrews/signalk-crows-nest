@@ -19,7 +19,7 @@
  *    cannot build a query that hits the server's runtime limit. Distant
  *    points of interest are picked up on a later, recentered request.
  *
- * Error contract: both query methods REJECT on any HTTP, network, or parsing
+ * Error contract: both query methods reject on any HTTP, network, or parsing
  * failure. `getById` resolves with `undefined` for a query that succeeds but
  * matches no element, which is how a deleted OSM element reads.
  */
@@ -29,6 +29,7 @@ import { PLUGIN_USER_AGENT } from '../../shared/plugin-id.js'
 import { MS_PER_SECOND } from '../../shared/time.js'
 import { normalizeFallbackEndpoints } from '../../shared/overpass-endpoints.js'
 import { splitOnFirstSeparator } from '../../shared/namespaced-id.js'
+import { wrapLongitude } from '../../shared/longitude.js'
 import { isValidLatitude, isValidLongitude } from '../../shared/numbers.js'
 import type { Bbox, Logger, Position } from '../../shared/types.js'
 
@@ -90,11 +91,9 @@ const REQUEST_TIMEOUT_MS = 70 * MS_PER_SECOND
  * Maximum span, in degrees, of either edge of a queried bounding box. A wider
  * box is clamped around its center: a single Overpass query stays small enough
  * to finish inside its runtime budget, and distant points of interest are
- * picked up on a later request once the vessel has moved. Exported so the
- * coastline helper tiles a wide box to exactly this span, defeating the clamp
- * rather than silently truncating coverage.
+ * picked up on a later request once the vessel has moved.
  */
-export const MAX_BBOX_SPAN_DEGREES = 2
+const MAX_BBOX_SPAN_DEGREES = 2
 
 /**
  * Rate-limiting defaults. The public Overpass endpoints publish a strict usage
@@ -113,20 +112,20 @@ const DEFAULTS: RateLimitOptions = {
   maxRetryAfterMs: 300_000
 }
 
-/** One coastline way (a `natural=coastline` line) as an ordered vertex list. */
-export interface CoastlineWay {
-  points: number[][]
-}
-
 /** Public surface of the Overpass client. */
 export interface OverpassClient {
   /**
    * List elements within a bounding box whose `seamark:type` tag matches the
-   * given alternation regex, plus every `leisure=marina`. Resolves with a
-   * normalized array (possibly empty). Rejects on any failure. An optional
-   * caller `signal` lets a deadline cancel an in-flight request.
+   * given alternation regex. `includeMarinas` adds `leisure=marina` elements
+   * when the Harbours and moorings group is enabled. Resolves with a normalized
+   * array, possibly empty. Rejects on any failure.
    */
-  listPointsOfInterest: (bbox: Bbox, seamarkRegex: string, signal?: AbortSignal) => Promise<OverpassElement[]>
+  listPointsOfInterest: (
+    bbox: Bbox,
+    seamarkRegex: string,
+    includeMarinas?: boolean,
+    signal?: AbortSignal
+  ) => Promise<OverpassElement[]>
   /**
    * Fetch one element by its typed id (`node/123`, `way/456`,
    * `relation/789`). Resolves with the element, or `undefined` when the query
@@ -134,14 +133,6 @@ export interface OverpassClient {
    * optional caller `signal` lets a deadline cancel an in-flight request.
    */
   getById: (typedId: string, signal?: AbortSignal) => Promise<OverpassElement | undefined>
-  /**
-   * List the `natural=coastline` ways within a bounding box as ordered vertex
-   * lists for caller land and coastline queries. Resolves with an array (possibly
-   * empty); ways with fewer than two valid vertices are dropped. Rejects on
-   * any failure. An optional caller `signal` lets a deadline cancel an
-   * in-flight request.
-   */
-  listCoastlineWays: (bbox: Bbox, signal?: AbortSignal) => Promise<CoastlineWay[]>
   /**
    * Abort any in-flight requests and stop retrying. Call this from
    * plugin.stop so a late response cannot record onto a later run's state.
@@ -162,10 +153,27 @@ function clampSpan (low: number, high: number, maxSpan: number): [number, number
   return [center - maxSpan / 2, center + maxSpan / 2]
 }
 
+/**
+ * Clamp a longitude interval while preserving antimeridian semantics. A
+ * wrapped interval is unrolled past 180 before measuring and centering it,
+ * then its clamped edges are wrapped back into the standard range.
+ */
+function clampLongitudeSpan (west: number, east: number, maxSpan: number): [number, number] {
+  if (west <= east) return clampSpan(west, east, maxSpan)
+  const unwrappedEast = east + 360
+  if (unwrappedEast - west <= maxSpan) return [west, east]
+  const [clampedWest, clampedEast] = clampSpan(west, unwrappedEast, maxSpan)
+  return [wrapLongitude(clampedWest), wrapLongitude(clampedEast)]
+}
+
 /** Clamp both edges of a bounding box to {@link MAX_BBOX_SPAN_DEGREES}. */
 function clampBbox (bbox: Bbox): Bbox {
   const [south, north] = clampSpan(bbox.south, bbox.north, MAX_BBOX_SPAN_DEGREES)
-  const [west, east] = clampSpan(bbox.west, bbox.east, MAX_BBOX_SPAN_DEGREES)
+  const [west, east] = clampLongitudeSpan(
+    bbox.west,
+    bbox.east,
+    MAX_BBOX_SPAN_DEGREES
+  )
   return { south, north, west, east }
 }
 
@@ -175,15 +183,13 @@ function clampBbox (bbox: Bbox): Bbox {
  * every statement in the query. `out center tags` returns full tags and, for
  * a way or a relation, a representative center point.
  */
-function buildListQuery (bbox: Bbox, seamarkRegex: string): string {
+function buildListQuery (bbox: Bbox, seamarkRegex: string, includeMarinas: boolean): string {
   const { south, west, north, east } = clampBbox(bbox)
   return (
     `[out:json][timeout:${LIST_QUERY_TIMEOUT_SECONDS}][bbox:${south},${west},${north},${east}];` +
     '(' +
     `nwr["seamark:type"~"${seamarkRegex}"];` +
-    // OpenStreetMap tags most marinas with `leisure=marina` rather than a
-    // `seamark:type`, so they are fetched alongside the seamark features.
-    'nwr["leisure"="marina"];' +
+    (includeMarinas ? 'nwr["leisure"="marina"];' : '') +
     ');' +
     'out center tags meta;'
   )
@@ -195,22 +201,6 @@ function buildDetailQuery (type: OsmElementType, id: number): string {
     `[out:json][timeout:${DETAIL_QUERY_TIMEOUT_SECONDS}];` +
     `${type}(id:${id});` +
     'out center tags meta;'
-  )
-}
-
-/**
- * Build the Overpass QL for a coastline-way query. `out geom` returns, per way,
- * a `geometry` array of `{ lat, lon }` vertices, which caller queries consume as
- * polylines. The bbox is clamped to {@link MAX_BBOX_SPAN_DEGREES}, the same clamp
- * the list query applies; the coastline helper tiles a wide box so the clamp never
- * silently truncates coverage.
- */
-function buildCoastlineQuery (bbox: Bbox): string {
-  const { south, west, north, east } = clampBbox(bbox)
-  return (
-    `[out:json][timeout:${LIST_QUERY_TIMEOUT_SECONDS}][bbox:${south},${west},${north},${east}];` +
-    'way["natural"="coastline"];' +
-    'out geom;'
   )
 }
 
@@ -241,8 +231,6 @@ interface OverpassWireElement {
   tags?: Record<string, string>
   /** Present only when the query requested `out ... meta;`. */
   timestamp?: string
-  /** Per-vertex geometry, present only when the query requested `out geom;`. */
-  geometry?: Array<{ lat?: number, lon?: number }>
 }
 
 /** Response body of an Overpass query. */
@@ -288,30 +276,6 @@ function parseElement (wire: OverpassWireElement): OverpassElement | null {
     }
   }
   return element
-}
-
-/**
- * Parse one `out geom;` way element into a coastline way: the `geometry` array
- * of `{ lat, lon }` vertices becomes ordered `[lon, lat]` points. Drops invalid
- * vertices and returns null for a way left with fewer than two, so a degenerate
- * way cannot pass as a coastline segment.
- */
-function parseCoastlineWay (wire: OverpassWireElement): CoastlineWay | null {
-  if (wire == null || !Array.isArray(wire.geometry)) {
-    return null
-  }
-  const points: number[][] = []
-  for (const vertex of wire.geometry) {
-    const lat = vertex?.lat
-    const lon = vertex?.lon
-    if (isValidLatitude(lat) && isValidLongitude(lon)) {
-      points.push([lon, lat])
-    }
-  }
-  if (points.length < 2) {
-    return null
-  }
-  return { points }
 }
 
 /**
@@ -435,11 +399,14 @@ export function createOverpassClient (
   }
 
   async function listPointsOfInterest (
-    bbox: Bbox, seamarkRegex: string, signal?: AbortSignal
+    bbox: Bbox,
+    seamarkRegex: string,
+    includeMarinas = false,
+    signal?: AbortSignal
   ): Promise<OverpassElement[]> {
     try {
       const data = await runRawQuery(
-        buildListQuery(bbox, seamarkRegex),
+        buildListQuery(bbox, seamarkRegex, includeMarinas),
         'Overpass list request failed',
         signal
       )
@@ -477,26 +444,9 @@ export function createOverpassClient (
     }
   }
 
-  async function listCoastlineWays (
-    bbox: Bbox, signal?: AbortSignal
-  ): Promise<CoastlineWay[]> {
-    try {
-      const data = await runRawQuery(
-        buildCoastlineQuery(bbox),
-        'Overpass coastline request failed',
-        signal
-      )
-      return collectElements(data, parseCoastlineWay, 'coastline way(s) with too few valid vertices')
-    } catch (error) {
-      log.debug(`Overpass coastline failed for ${JSON.stringify(bbox)}: ${String(error)}`)
-      throw error
-    }
-  }
-
   return {
     listPointsOfInterest,
     getById,
-    listCoastlineWays,
     close: () => { http.close() }
   }
 }

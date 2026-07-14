@@ -55,7 +55,7 @@ self-contained module registered on one line in `src/index.ts`.
       implements, plus the shared per-source policy helpers:
       `fetchDetailRecorded` (the miss-vs-outage detail policy),
       `fetchListWithOfflineFallback` (the offline list-fallback control flow
-      the OpenSeaMap and NOAA ENC sources share), and
+      the OpenSeaMap, NOAA ENC, and USACE sources share), and
       `staleSummariesWithinBbox` (the cheap-position-first stale-summary
       rebuild the fallback consumes).
     - `input-registry.ts` - holds the registered inputs and builds the
@@ -63,20 +63,18 @@ self-contained module registered on one line in `src/index.ts`.
       to every enabled input, namespaces resource ids with the producing
       source's slug, unions the results, records per-source status, and runs
       the dedupe pass. Its per-source status recording skips `recordListFetch`
-      for a source whose result did not come from a reachable upstream fetch
-      (a skip or a stale offline serve, read through
-      `wasListFetchSuppressed`), so neither is laundered into a reachable
-      fetch.
+      for a source whose request-scoped list provenance is local, skipped, or
+      stale, so none is laundered into a reachable fetch.
     - `http-client.ts` - shared HTTP client plumbing for the queued clients
       (ActiveCaptain and Overpass): a concurrency-limited and throttled
       request queue, retry with exponential backoff that honors HTTP 429/503
       `Retry-After`, and a `close()` that aborts in-flight work.
     - `http-one-shot.ts` - the `requestText` one-shot GET the raw-client
       sources build on: it selects the `http`/`https` transport, buffers the
-      body, aborts on a per-request timeout, and honors an optional caller
-      `AbortSignal`; plus `requestJson`, the status-guarded JSON envelope the
-      ArcGIS protocol and the World Port Index client share. Those feeds are
-      low-volume and deliberately skip the queue and retry of
+      body up to a fixed ceiling, enforces a wall-clock deadline, and honors an
+      optional caller `AbortSignal`; plus `requestJson`, the status-guarded
+      JSON envelope the ArcGIS protocol and the World Port Index client share.
+      Those feeds are low-volume and deliberately skip the queue and retry of
       `http-client.ts`.
     - `http-conditional-get.ts` - the `conditionalGet` download envelope built
       on `http-one-shot.ts` and shared by the USCG Light List, USCG LNM, and
@@ -86,7 +84,8 @@ self-contained module registered on one line in `src/index.ts`.
       each caller its own body parsing.
     - `arcgis-query.ts` - the ArcGIS REST query protocol shared by the NOAA
       ENC Direct and USACE clients: the envelope and by-id query parameters,
-      the JSON fetch with status guard, and the bounded
+      antimeridian envelope splitting and result deduplication, the JSON fetch
+      with status guard, and the bounded
       `exceededTransferLimit` pagination loop, parameterized by a per-request
       URL resolver and an upstream label for error messages.
     - `refresh-scheduler.ts` - `startRefreshScheduler`, the periodic-refresh
@@ -139,10 +138,10 @@ self-contained module registered on one line in `src/index.ts`.
       `http-client.ts`, with the required `User-Agent`; it takes an ordered
       endpoint list, a primary plus any configured fallback mirrors, and fails
       over to the next on a failure so a single instance outage does not take
-      the source offline. It exposes `listPointsOfInterest`, `listCoastlineWays`,
-      the `MAX_BBOX_SPAN_DEGREES` clamp, and the `CoastlineWay` wire type; every
-      query threads an optional `AbortSignal` so an abandoned check cancels its
-      in-flight requests),
+      the source offline. Its list query conditionally includes plain
+      `leisure=marina` features only when the Harbours and moorings group is
+      enabled, clamps oversized viewports, and threads an optional
+      `AbortSignal` so an abandoned check cancels its in-flight requests),
       `seamark-mapping.ts` (one table mapping every `seamark:type` value to
       the plugin's `PoiType` union, a Freeboard-registered `:sk-` icon, and a
       plain-English label in lockstep, with isolated-danger marks rendered as
@@ -150,12 +149,9 @@ self-contained module registered on one line in `src/index.ts`.
       seamark feature groups), `openseamap-detail.ts` (the plain-English HTML
       detail renderer), `clearance.ts` (parses the OSM vertical-clearance tags for the
       bridge air-draft check), `openseamap-sections.ts` (the
-      normalized-detail section builder), `element-summary.ts` (the shared
+      normalized-detail section builder), and `element-summary.ts` (the shared
       element-to-`PoiSummary` mapper extracted from the source so the icon,
-      type, and name logic lives once), and `coastline-query.ts` (the tiled
-      `natural=coastline` Overpass query; it lives here because it reuses the
-      Overpass client and tiles a wide bbox so the client's center clamp never
-      silently truncates coverage).
+      type, and name logic lives once).
     - `uscg-light-list/` - the USCG Light List input (US Aids to Navigation,
       US-only, defaults off): `uscg-light-list-input.ts` (the `InputModule`
       with the periodic refresh scheduler), `uscg-light-list-source.ts` (the
@@ -197,11 +193,9 @@ self-contained module registered on one line in `src/index.ts`.
       helper that turns a hazard's category into its dangerous or
       non-dangerous status, and `encDepthLabel`, the datum-tagged
       least-depth or charted-depth label shared by the HTML renderer and the
-      section builder),
-      `enc-direct-detail.ts` (the plain-English S-57 HTML detail renderer),
-      `noaa-enc-sections.ts` (the normalized-detail section builder), and
-      `depth-area-query.ts` (the charted `Depth_Area` and `Land_Area` polygon
-      query built on the same `EncDirectClient`; not published as POIs).
+      section builder), `enc-direct-detail.ts` (the plain-English S-57 HTML
+      detail renderer), and `noaa-enc-sections.ts` (the normalized-detail
+      section builder).
     - `noaa-coops/` - the NOAA CO-OPS input (US tide and current stations,
       US-only, defaults off): `noaa-coops-input.ts` (the `InputModule` with the
       periodic refresh scheduler on `noaaCoopsRefreshHours`),
@@ -290,9 +284,9 @@ self-contained module registered on one line in `src/index.ts`.
   - `status/` - `plugin-status.ts` (records request outcomes, produces a
     `StatusSnapshot`; besides list, detail, error, and skip outcomes it exposes
     `recordStaleServe` so a source that serves cached markers while its
-    upstream is unreachable reads as in error, and the consume-on-read
-    `wasListFetchSuppressed`, raised by a skip or a stale serve, that the
-    aggregate registry checks before recording a reachable list fetch),
+    upstream is unreachable reads as in error. Request-scoped list provenance
+    tells the aggregate registry whether a fulfilled list proves upstream
+    reachability),
     `status-router.ts` (Express router that serves the
     snapshot behind the shared admin gate), `admin-gate.ts` (the
     `ensureApiAdminGate` helper that installs the server admin middleware on the
@@ -305,15 +299,17 @@ self-contained module registered on one line in `src/index.ts`.
     `plugin-id.ts` (the plugin id, the canonical repo URL, and the shared
     `PLUGIN_USER_AGENT` every upstream client consumes, all in one
     module so a rename touches one place),
-    `source-ids.ts` (the four PoiSource id constants, the `SOURCE_SLUGS`
+    `source-ids.ts` (the eight PoiSource id constants, the `SOURCE_SLUGS`
     runtime list, and the `SourceSlug` union derived from it, shared by the
     input modules and the panel; extracted so the browser-bundled panel can
     import them without pulling in any node-only dependencies the source
     modules reach),
+    `longitude.ts` (the inclusive longitude-wrap helper shared by projection,
+    bbox-cache neighbor prefetch, and Overpass span clamping),
     `poi-type-selection.ts` (maps the config POI-type toggles to the
     `poiTypes` string the aggregate source uses), `seamark-groups.ts` (the
-    OpenSeaMap seamark group ids and labels, the single source of truth
-    consumed by the OpenSeaMap input, its config-schema fragment, and the
+    OpenSeaMap seamark group ids, labels, and config normalizer, the single
+    source of truth consumed by the OpenSeaMap input, source, schema, and
     panel), `overpass-endpoints.ts` (the browser-safe single source of truth
     for the default Overpass endpoint, the vetted fallback-mirror suggestions,
     `resolvePrimaryEndpoint`, and `normalizeFallbackEndpoints`, shared by the
@@ -322,8 +318,7 @@ self-contained module registered on one line in `src/index.ts`.
     Switzerland-only extract), `us-waters.ts` (the `isInUsWaters` gate plus the
     `shouldSkipOutsideUsWaters` helper the US-only inputs call to skip
     outbound HTTP, and record the skip, when the vessel is outside US
-    waters), `bbox-tiles.ts` (the `tileBbox` splitter that breaks a wide bbox
-    into sub-boxes within a span), `abort.ts` (the `combineAbortSignals`
+    waters), `abort.ts` (the `combineAbortSignals`
     helper, shared by the queued HTTP client, that folds an optional caller
     signal into an `AbortSignal.any` and returns the lone signal when only one
     is defined),
@@ -351,7 +346,9 @@ self-contained module registered on one line in `src/index.ts`.
     `<p><strong>Label:</strong> value.</p>` builder the structured detail
     renderers share, and `labeledMeters`, its meters-formatting sibling),
     `atomic-write-json.ts` (the async temp-file-and-rename JSON write the
-    USCG Light List, USCG LNM, and NOAA CO-OPS stores share), `url-safety.ts` (the `safeLinkUrl` scheme allowlist both
+    USCG Light List, USCG LNM, and NOAA CO-OPS stores share, with a commit-time
+    lifecycle predicate that prevents a stopped run from publishing),
+    `url-safety.ts` (the `safeLinkUrl` scheme allowlist both
     the Handlebars detail templates and the structured section builders gate a
     link value through), `notification-path.ts` (builds path-safe SignalK
     notification deltas, shared by the alarm outputs, with a `sourceSuffix`
@@ -386,13 +383,13 @@ self-contained module registered on one line in `src/index.ts`.
     `detail-store.ts` (the generic disk-backed detail store: an atomic-write,
     debounced, retention-bounded, entry-capped JSON store generic over the
     value type with a caller-supplied guard, node-only; the ActiveCaptain
-    `poi-store.ts` binds it directly, and the OpenSeaMap and NOAA ENC sources
-    reach it through `hydrated-detail-cache.ts`, so a restart offline does not
-    blank them), `hydrated-detail-cache.ts` (the LRU-plus-store lifecycle glue
-    the OpenSeaMap and NOAA ENC sources share: hydrates the detail LRU from
-    disk at construction, mirrors inserts to the store, and on close flushes
-    the pending write, drops the store reference so a late list resolution
-    persists nothing, and clears the cache),
+    `poi-store.ts` binds it directly, and the OpenSeaMap, NOAA ENC, and USACE
+    sources reach it through `hydrated-detail-cache.ts`, so a restart offline
+    does not blank them), `hydrated-detail-cache.ts` (the LRU-plus-store
+    lifecycle glue the OpenSeaMap, NOAA ENC, and USACE sources share: hydrates
+    the detail LRU from disk at construction, mirrors inserts to the store, and
+    on close flushes the pending write, drops the store reference so a late
+    list resolution persists nothing, and clears the cache),
     `relative-time-format.ts` (the `formatRelativeDelta` unit-stepping the
     panel's status bar and the ActiveCaptain detail renderer share),
     `namespaced-id.ts` (the `splitOnFirstSeparator` helper, plus its

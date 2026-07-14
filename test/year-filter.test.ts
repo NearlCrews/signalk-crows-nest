@@ -40,8 +40,13 @@ test('a POI with no timestamp is always included (filter only narrows)', () => {
 })
 
 test('a malformed timestamp is treated as absent and included', () => {
-  const result = filterByMinimumYear([poi('1', 'not a date'), poi('2', '1950-01-01T00:00:00Z')], 2000)
-  assert.deepEqual(result.map((p) => p.id), ['1'])
+  const result = filterByMinimumYear([
+    poi('1', 'not a date'),
+    poi('2', '20x4-01-01T00:00:00Z'),
+    poi('3', '1950-not-a-date'),
+    poi('4', '1950-01-01T00:00:00Z')
+  ], 2000)
+  assert.deepEqual(result.map((p) => p.id), ['1', '2', '3'])
 })
 
 test('a POI exactly at the threshold year is kept', () => {

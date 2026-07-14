@@ -35,3 +35,19 @@ export const SEAMARK_GROUP_REFS: readonly SeamarkGroupRef[] = [
 
 /** Every seamark group id, in display order. */
 export const SEAMARK_GROUP_IDS: readonly string[] = SEAMARK_GROUP_REFS.map((group) => group.id)
+
+/** Known ids for fast validation of persisted or externally supplied config. */
+const SEAMARK_GROUP_ID_SET: ReadonlySet<string> = new Set(SEAMARK_GROUP_IDS)
+
+/**
+ * Normalize an untyped group selection. An omitted or non-array value keeps
+ * the backward-compatible all-groups default; an explicit array preserves
+ * order while dropping non-strings and unknown ids, including an intentional
+ * empty selection.
+ */
+export function normalizeSeamarkGroupIds (raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [...SEAMARK_GROUP_IDS]
+  return raw.filter(
+    (group): group is string => typeof group === 'string' && SEAMARK_GROUP_ID_SET.has(group)
+  )
+}

@@ -35,20 +35,38 @@ export function finiteOrUndefined (value: unknown): number | undefined {
  * validators that branch on finiteness rather than reading the value out, so a
  * caller does not hand-roll `typeof x === 'number' && Number.isFinite(x)`.
  */
-export function isFiniteNumber (value: unknown): value is number {
+function isFiniteNumber (value: unknown): value is number {
   return toFiniteNumber(value) !== null
 }
 
 /**
- * Narrow an unknown value into a strictly positive finite `number`, or
- * return `null` when it is not. The three input modules' optional
- * config-key validators all want this exact shape (a positive merge
- * radius, never zero or negative): a non-positive value means "fall back
- * to the source's default" rather than "off."
+ * Narrow an unknown value into a strictly positive finite `number`, or return
+ * `null` when it is not. Configuration and wire-value readers share this
+ * exact shape whenever zero or a negative value is invalid.
  */
 export function positiveFiniteNumber (value: unknown): number | null {
   const finite = toFiniteNumber(value)
   return finite !== null && finite > 0 ? finite : null
+}
+
+/** Decimal spelling accepted by {@link toPositiveSafeInteger}. */
+const POSITIVE_INTEGER_TEXT = /^[1-9]\d*$/
+
+/**
+ * Narrow a number or plain-decimal string into a positive safe integer.
+ * Exponential notation, fractional values, signs, leading zeroes, and trailing
+ * text are rejected so an externally supplied identifier cannot be parsed only
+ * partially (for example, `"12junk"` becoming `12`).
+ */
+export function toPositiveSafeInteger (value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && value > 0 ? value : null
+  }
+  if (typeof value !== 'string' || !POSITIVE_INTEGER_TEXT.test(value)) {
+    return null
+  }
+  const parsed = Number(value)
+  return Number.isSafeInteger(parsed) ? parsed : null
 }
 
 /**

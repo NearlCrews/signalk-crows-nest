@@ -33,7 +33,11 @@ import { createBboxDebounceCache } from '../../shared/bbox-debounce.js'
 import { MAX_BBOX_CACHE_ENTRIES } from '../../shared/cache.js'
 import { createHydratedDetailCache } from '../../shared/hydrated-detail-cache.js'
 import { splitOnFirstUnderscore } from '../../shared/namespaced-id.js'
-import { isValidLatitude, isValidLongitude } from '../../shared/numbers.js'
+import {
+  isValidLatitude,
+  isValidLongitude,
+  toPositiveSafeInteger
+} from '../../shared/numbers.js'
 import type { Bbox, PoiDetailView, PoiSummary, Position } from '../../shared/types.js'
 import { shouldSkipOutsideUsWaters } from '../../shared/us-waters.js'
 import { openSeaMapMarkerUrl } from '../../shared/map-link.js'
@@ -107,9 +111,9 @@ function enabledLayers (config: NoaaEncSourceConfig): EncLayerKey[] {
  * always match on the live wire, but the fallback covers a partial response.
  */
 function featureObjectId (feature: EncFeature): number | undefined {
-  if (typeof feature.id === 'number') return feature.id
-  const fromProps = feature.properties.OBJECTID
-  return typeof fromProps === 'number' ? fromProps : undefined
+  return toPositiveSafeInteger(feature.id) ??
+    toPositiveSafeInteger(feature.properties.OBJECTID) ??
+    undefined
 }
 
 /** The hazard layer keys a summary id can carry, the subset of EncLayerKey this source publishes. */
@@ -146,8 +150,8 @@ function parseSummaryId (id: string): { layerKey: EncLayerKey, objectId: number 
   // EncLayerKey member is then not silently admitted as a hazard layer here.
   const layerKey = HAZARD_LAYER_KEYS.find((key) => key === split.prefix)
   if (layerKey === undefined) return undefined
-  const objectId = Number.parseInt(split.remainder, 10)
-  return Number.isFinite(objectId) ? { layerKey, objectId } : undefined
+  const objectId = toPositiveSafeInteger(split.remainder)
+  return objectId !== null ? { layerKey, objectId } : undefined
 }
 
 /** Name for the popup: the OBJNAM string when present, layer label otherwise. */
@@ -232,6 +236,7 @@ type LayerFeatures = Array<{ layerKey: EncLayerKey, features: EncFeature[] }>
 /** Create the NOAA ENC Direct POI source. */
 export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
   const { client, band, minimumYear, refreshSeconds, status, getCurrentPosition, dataDir } = config
+  const lifecycle = new AbortController()
   // Detail cache, hydrated from the on-disk store so a cold start offline
   // still renders previously fetched features.
   const { cache, persist, close: closeCache } = createHydratedDetailCache<CachedFeature>({
@@ -279,14 +284,15 @@ export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
     // instead: the per-layer flags are baked in at construction. The
     // `poiTypes` argument is therefore intentionally ignored for this source.
     listPointsOfInterest: async (bbox: Bbox): Promise<PoiSummary[]> => {
+      lifecycle.signal.throwIfAborted()
       if (shouldSkipOutsideUsWaters(getCurrentPosition, status, NOAA_ENC_SOURCE_ID)) {
         return withListProvenance([], 'skipped')
       }
-      // No enabled layers is a configured-empty list, not a failure: return
-      // empty so the aggregate sees a fulfilled empty result and the source
-      // is correctly reachable.
+      // No enabled layers is a configured-empty list, not a failure: return a
+      // skipped result so no request is mistaken for proof of reachability.
       if (layers.length === 0) {
-        return []
+        status.recordSkipped(NOAA_ENC_SOURCE_ID, 'no ENC layers enabled')
+        return withListProvenance([], 'skipped')
       }
       // Cache only the raw per-layer features. The per-call tagging, the
       // detail-LRU repopulation, and the year filter run OUTSIDE the cache
@@ -301,10 +307,16 @@ export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
         () => bboxCache.get(bbox, async (fetchBbox) => {
           const results = await Promise.allSettled(
             layers.map(async (layerKey) => {
-              const response = await client.queryLayer({ band, layerKey, bbox: fetchBbox })
+              const response = await client.queryLayer({
+                band,
+                layerKey,
+                bbox: fetchBbox,
+                signal: lifecycle.signal
+              })
               return { layerKey, features: response.features }
             })
           )
+          lifecycle.signal.throwIfAborted()
           const layerFeatures: LayerFeatures = []
           let anyLayerOk = false
           let firstRejection: unknown
@@ -339,11 +351,12 @@ export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
         }, undefined, (layerFeatures) => layerFeatures.length === layers.length),
         () => rebuildStale(bbox)
       )
+      lifecycle.signal.throwIfAborted()
       if (outcome.kind === 'stale') {
         return withListProvenance(outcome.summaries, 'stale')
       }
       const summaries: PoiSummary[] = []
-      for (const { layerKey, features } of outcome.value) {
+      for (const { layerKey, features } of outcome.value.value) {
         for (const feature of features) {
           // A feature with no OBJECTID, no geometry, or out-of-range
           // coordinates is dropped rather than minting an
@@ -372,9 +385,10 @@ export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
           summaries.push(summary)
         }
       }
-      return summaries
+      return withListProvenance(summaries, outcome.value.provenance)
     },
     getDetails: async (id: string): Promise<PoiDetailView> => {
+      lifecycle.signal.throwIfAborted()
       const hit = cache.get(id)
       if (hit !== undefined) {
         // A cache hit is not evidence of upstream reachability: a stale
@@ -403,8 +417,11 @@ export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
       // flip the status row to unreachable.
       const feature = await fetchDetailRecorded(status, NOAA_ENC_SOURCE_ID,
         () => client.queryById({
-          band, layerKey: parsed.layerKey, objectId: parsed.objectId
-        }))
+          band,
+          layerKey: parsed.layerKey,
+          objectId: parsed.objectId,
+          signal: lifecycle.signal
+        }), lifecycle.signal)
       if (feature === undefined) {
         throw new Error(`No NOAA ENC feature for "${id}"`)
       }
@@ -422,6 +439,7 @@ export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
     // ephemeral, so it is intentionally not added here.
     cacheSize: () => cache.size,
     close: () => {
+      lifecycle.abort(new Error('NOAA ENC source closed'))
       // Flush any debounced write so a clean shutdown persists every feature
       // fetched during the run. The on-disk store is left in place so a later
       // cold start can hydrate it; only the in-memory caches are dropped.

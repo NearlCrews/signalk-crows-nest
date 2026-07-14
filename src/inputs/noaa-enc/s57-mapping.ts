@@ -82,26 +82,34 @@ export const TECSOU: Readonly<Record<number, string>> = {
   14: 'found by levelling'
 }
 
+/** Strict decimal spellings used by the S-57 code and date readers. */
+const S57_CODE_TEXT = /^\d+$/
+const SORDAT_TEXT = /^\d{6}(?:\d{2})?$/
+
+/** Calendar months with 30 days. */
+const THIRTY_DAY_MONTHS: ReadonlySet<number> = new Set([4, 6, 9, 11])
+
 /**
  * Parse an S-57 code to its number. Accepts the wire shapes the ENC Direct
  * service produces: a JSON number, a single-digit JSON string, `null`,
- * `undefined`, or a blank string. Returns `undefined` for any value that does
- * not parse to a finite number. Exported so a caller that reads one raw code
+ * `undefined`, or a blank string. Returns `undefined` for anything other than
+ * a non-negative integer or its plain-decimal spelling. Exported so a caller
+ * that reads one raw code
  * for several derivations (e.g. QUASOU for both the depth label and the
  * position-quality lookup) can parse it once and pass the number on.
  */
 export function parseS57Code (raw: unknown): number | undefined {
   const numeric = toFiniteNumber(raw)
   if (numeric !== null) {
-    return numeric
+    return Number.isInteger(numeric) && numeric >= 0 ? numeric : undefined
   }
   if (typeof raw === 'string') {
     const trimmed = raw.trim()
-    if (trimmed.length === 0) {
+    if (!S57_CODE_TEXT.test(trimmed)) {
       return undefined
     }
-    const parsed = Number.parseInt(trimmed, 10)
-    return Number.isFinite(parsed) ? parsed : undefined
+    const parsed = Number(trimmed)
+    return Number.isSafeInteger(parsed) ? parsed : undefined
   }
   return undefined
 }
@@ -207,54 +215,15 @@ export function categoryLabel (
 /** Read a finite numeric property, treating null and non-numbers as absent. */
 export const readNumber = finiteOrUndefined
 
-/** The decoded shallow and deep range of an ENC Direct Depth_Area feature. */
-export interface DepthRange {
-  /**
-   * `DRVAL1`, the shallow range minimum in meters at chart datum (MLLW on US
-   * ENCs). A NEGATIVE value is a drying height (the area dries to that many
-   * meters above datum), preserved here and classified downstream as land.
-   */
-  shallowMeters?: number
-  /** `DRVAL2`, the deep range maximum in meters at chart datum. */
-  deepMeters?: number
-}
-
-/**
- * Decode the depth range from a Depth_Area feature's `DRVAL1` and `DRVAL2`
- * attributes. Both ship as JSON numbers in meters referenced to chart datum,
- * verified live (e.g. `DRVAL1: 0`, `DRVAL2: 18.2`). Either field is `undefined`
- * when the wire value is null or non-numeric.
- *
- * Decoding is faithful: a negative `DRVAL1` is preserved, not clamped or
- * dropped. A negative `DRVAL1` is a DRYING HEIGHT (the area dries to that many
- * meters above datum at low water), not a water depth, so the leg-check
- * consumer classifies it as effectively land. Classification is the consumer's
- * job, not this decoder's. Verified live: harbour Depth_Area returns `DRVAL1`
- * values such as `-1.6` and `-1.4`, the drying intertidal areas. Reuse
- * {@link encDepthLabel} when tagging the value with its MLLW datum.
- */
-export function decodeDepthRange (properties: Record<string, unknown>): DepthRange {
-  return {
-    shallowMeters: readNumber(properties.DRVAL1),
-    deepMeters: readNumber(properties.DRVAL2)
-  }
-}
-
 /**
  * Layer-derived fallback label for a feature, used as the popup header and the
  * list name when a hazard feature carries no OBJNAM. Shared by the source's
- * `featureName` and the detail renderer so the two cannot drift. The hazard
- * layers (wreck, obstruction, rock) are the POI path that reads this; the
- * depth-area and land labels keep the table exhaustive over `EncLayerKey` and
- * give the leg check a name for those area layers, which are not published as
- * POIs.
+ * `featureName` and the detail renderer so the two cannot drift.
  */
 export const LAYER_LABEL: Readonly<Record<EncLayerKey, string>> = {
   wreck: 'Wreck',
   obstruction: 'Obstruction',
-  rock: 'Rock',
-  depthArea: 'Depth area',
-  land: 'Land'
+  rock: 'Rock'
 }
 
 /**
@@ -278,7 +247,7 @@ export const LAYER_SK_ICON = 'hazard'
 function parseSordat (raw: unknown): { year: number, month: number, day?: number } | undefined {
   if (typeof raw !== 'string') return undefined
   const trimmed = raw.trim()
-  if (trimmed.length !== 6 && trimmed.length !== 8) return undefined
+  if (!SORDAT_TEXT.test(trimmed)) return undefined
   const year = Number.parseInt(trimmed.slice(0, 4), 10)
   const month = Number.parseInt(trimmed.slice(4, 6), 10)
   // Reject out-of-range months and days so Date.UTC does not silently wrap
@@ -290,7 +259,11 @@ function parseSordat (raw: unknown): { year: number, month: number, day?: number
   }
   if (trimmed.length === 6) return { year, month }
   const day = Number.parseInt(trimmed.slice(6, 8), 10)
-  if (!Number.isFinite(day) || day < 1 || day > 31) return undefined
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
+  const daysInMonth = month === 2
+    ? (leapYear ? 29 : 28)
+    : (THIRTY_DAY_MONTHS.has(month) ? 30 : 31)
+  if (!Number.isFinite(day) || day < 1 || day > daysInMonth) return undefined
   return { year, month, day }
 }
 
@@ -318,8 +291,10 @@ export function sordatToIsoTimestamp (raw: unknown): string | undefined {
   const parts = parseSordat(raw)
   if (parts === undefined) return undefined
   const day = parts.day ?? 1
-  // `Date.UTC` accepts months 0-indexed; SORDAT months are 1-indexed.
-  const ms = Date.UTC(parts.year, parts.month - 1, day)
-  if (!Number.isFinite(ms)) return undefined
-  return new Date(ms).toISOString()
+  // setUTCFullYear preserves years 0000 through 0099. Date.UTC treats them as
+  // 1900 through 1999 for historical compatibility.
+  const date = new Date(0)
+  date.setUTCHours(0, 0, 0, 0)
+  date.setUTCFullYear(parts.year, parts.month - 1, day)
+  return date.toISOString()
 }

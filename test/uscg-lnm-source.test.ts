@@ -209,6 +209,19 @@ test('upsertFile replaces a file record set, dropping an upstream-removed record
   })
 })
 
+test('closing during a store flush prevents the index from committing', async () => {
+  await withStore(async (store, dir) => {
+    store.upsertFile('haznav_1', [noticeRecord(58, 42.4, -70.9)], {})
+    const flushing = store.flush()
+    store.close()
+    await flushing
+
+    const reopened = createLnmStore(dir)
+    await reopened.load()
+    assert.equal(reopened.recordCount(), 0, 'a stopped store does not publish an in-flight flush')
+  })
+})
+
 test('a persisted store hydrates a cold start, and a failed refresh keeps prior records', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'lnm-src-'))
   try {

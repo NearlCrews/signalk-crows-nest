@@ -13,6 +13,7 @@
  * module supports the `position` plus `distance` form the chartplotter sends.
  */
 
+import { wrapLongitude } from '../shared/longitude.js'
 import { isValidLatitude, isValidLongitude } from '../shared/numbers.js'
 import type { Position, Bbox } from '../shared/types.js'
 
@@ -34,17 +35,6 @@ function toRadians (degrees: number): number {
 
 function toDegrees (radians: number): number {
   return (radians * 180) / Math.PI
-}
-
-/**
- * Wrap a longitude in degrees into the canonical [-180, 180) range.
- *
- * A great-circle projection near the antimeridian can produce a longitude
- * outside that range (for example 181 degrees). SignalK and the ActiveCaptain
- * API both expect normalized longitudes, so the projected value is wrapped.
- */
-function normalizeLongitude (longitude: number): number {
-  return ((longitude + 540) % 360) - 180
 }
 
 /**
@@ -102,7 +92,7 @@ export function projectPosition (position: Position, bearingDegrees: number, dis
 
   return {
     latitude: toDegrees(newLatitudeRad),
-    longitude: normalizeLongitude(toDegrees(newLongitudeRad))
+    longitude: wrapLongitude(toDegrees(newLongitudeRad))
   }
 }
 
@@ -155,30 +145,26 @@ export function distanceMeters (a: Position, b: Position): number {
  *
  * Known limitations:
  *
- * - Not antimeridian-aware. When the search circle straddles +/-180 degrees
- *   longitude the projected `west` edge ends up numerically greater than
- *   the `east` edge, so a downstream consumer that assumes `west <= east`
- *   builds the wrong (inside-out) box.
+ * - An antimeridian-crossing result uses `west > east`. Consumers must retain
+ *   that wrapped representation or split it into two ordinary boxes.
  * - Not pole-aware. At a latitude extremely close to +/-90 degrees, one
  *   degree of longitude collapses toward zero meters, so the projected NW
  *   and SE corner longitudes wrap and the returned box can be degenerate.
  *
- * Both limitations affect only vessels operating in those corner cases,
- * and the latitude is clamped to `[-90, 90]` so a numerically out-of-range
- * input cannot reach an upstream query as `lat=99`.
+ * The input position is range-checked before projection, and the projected
+ * latitude is clamped to `[-90, 90]`.
  *
- * Throws when `position` carries a non-finite coordinate or `distanceMeters`
- * is not a finite non-negative number: every upstream that would consume
- * the returned box expects finite edges, and silently emitting `NaN` to a
- * remote service is worse than failing loudly here.
+ * Throws when `position` carries an invalid coordinate or `distanceMeters` is
+ * not a finite non-negative number. Every upstream that consumes the returned
+ * box expects valid edges.
  *
  * @param position - The center of the bounding box.
  * @param distanceMeters - Search radius in meters that the box must enclose.
  * @returns A `Bbox` with `north`, `south`, `east`, and `west` edges in degrees.
  */
 export function positionToBbox (position: Position, distanceMeters: number): Bbox {
-  if (!Number.isFinite(position.latitude) || !Number.isFinite(position.longitude)) {
-    throw new Error('positionToBbox: position carries a non-finite coordinate')
+  if (!isValidLatitude(position.latitude) || !isValidLongitude(position.longitude)) {
+    throw new Error('positionToBbox: position carries an invalid coordinate')
   }
   if (!Number.isFinite(distanceMeters) || distanceMeters < 0) {
     throw new Error('positionToBbox: distanceMeters must be a finite non-negative number')

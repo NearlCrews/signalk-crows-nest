@@ -28,12 +28,17 @@ route-corridor, and bridge air-draft alarms.
   active route now requests a fresh safety scan immediately, and the scan
   limits a long first leg to the 10-nautical-mile look-ahead.
 - **Cleaner source shutdown and refresh behavior.** Stopping the plugin now
-  cancels retry delays and bulk refreshes promptly. Complete World Port Index
-  refreshes also remove ports that are no longer present upstream.
+  cancels retry delays, bulk refreshes, and NOAA or USACE ArcGIS requests
+  promptly. Async stores cannot commit a flush after shutdown, and complete
+  World Port Index refreshes remove ports that are no longer present upstream.
 - **More accurate status and resource responses.** Concurrent requests keep
   their own source provenance, cached reads no longer hide refresh failures,
-  malformed spatial queries are rejected, and notification timestamps reflect
-  the current publication time.
+  empty source selections read as intentional skips, malformed spatial queries
+  are rejected, and notification timestamps reflect the current publication
+  time.
+- **Safer spatial and transport boundaries.** ArcGIS queries split correctly
+  at the antimeridian, OpenSeaMap respects the selected feature groups, and
+  one-shot requests have wall-clock deadlines and bounded response bodies.
 - **Reproducible package contents.** The npm `prepack` lifecycle now cleans and
   rebuilds the plugin and panel for both `npm pack` and `npm publish`.
 
@@ -89,9 +94,9 @@ air-draft check).
   detail alongside the HTML, documented in the
   [notes-resource integration guide](docs/notes-resource-format.md), so a
   richer chartplotter can render the sections natively and skip the HTML.
-- **Persistent, offline caching.** ActiveCaptain, OpenSeaMap, and NOAA ENC
-  details live in 30-day on-disk stores with stale-on-error fallback, so an
-  offline restart still renders previously fetched markers; the USCG Light
+- **Persistent, offline caching.** ActiveCaptain, OpenSeaMap, NOAA ENC, and
+  USACE details live in 30-day on-disk stores with stale-on-error fallback, so
+  an offline restart still renders previously fetched markers; the USCG Light
   List index is sharded on disk and queried through an in-memory spatial
   tile index for sub-millisecond bbox lookups; and the Local Notice to
   Mariners, NOAA CO-OPS, and World Port Index datasets are held complete on

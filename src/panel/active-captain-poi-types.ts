@@ -8,19 +8,34 @@
 import type { PoiTypeFlag } from '../shared/types.js'
 
 /** A single POI-type toggle: its PluginConfig flag and its display label. */
-export interface ActiveCaptainPoiTypeOption {
+interface ActiveCaptainPoiTypeOption {
   flag: PoiTypeFlag
   label: string
 }
 
 /** A labeled group of related ActiveCaptain POI-type toggles. */
-export interface ActiveCaptainPoiTypeGroup {
+interface ActiveCaptainPoiTypeGroup {
   title: string
   options: readonly ActiveCaptainPoiTypeOption[]
 }
 
+/**
+ * Keep the literal group shape while requiring it to cover every PoiTypeFlag.
+ * The option constraint rejects unknown flags, and the conditional intersection
+ * rejects a list that leaves any known flag out.
+ */
+function definePoiTypeGroups<const Groups extends readonly ActiveCaptainPoiTypeGroup[]> (
+  groups: Groups & (
+    Exclude<PoiTypeFlag, Groups[number]['options'][number]['flag']> extends never
+      ? unknown
+      : { missingPoiTypeFlags: Exclude<PoiTypeFlag, Groups[number]['options'][number]['flag']> }
+  )
+): Groups {
+  return groups
+}
+
 /** The four ActiveCaptain POI-type groups, in display order. */
-export const ACTIVE_CAPTAIN_POI_TYPE_GROUPS = [
+export const ACTIVE_CAPTAIN_POI_TYPE_GROUPS = definePoiTypeGroups([
   {
     title: 'Berthing and services',
     options: [
@@ -54,21 +69,4 @@ export const ACTIVE_CAPTAIN_POI_TYPE_GROUPS = [
       { flag: 'includeAirports', label: 'Airports' }
     ]
   }
-] as const satisfies readonly ActiveCaptainPoiTypeGroup[]
-
-/**
- * The flag set covered by ACTIVE_CAPTAIN_POI_TYPE_GROUPS, derived from the
- * literal `as const` shape above. The exhaustiveness check below uses it.
- */
-type GroupedFlag = typeof ACTIVE_CAPTAIN_POI_TYPE_GROUPS[number]['options'][number]['flag']
-
-/**
- * Compile-time guard that the grouped UI list covers every PoiTypeFlag
- * exactly. Adding a flag to PluginConfig without listing it in a group, or
- * listing a flag here that PluginConfig does not carry, makes this fail.
- */
-type AssertExhaustive =
-  Exclude<PoiTypeFlag, GroupedFlag> extends never
-    ? Exclude<GroupedFlag, PoiTypeFlag> extends never ? true : 'extra flag in panel groups'
-    : 'PoiTypeFlag missing from panel groups'
-export const ACTIVE_CAPTAIN_POI_TYPE_GROUPS_EXHAUSTIVE_WITNESS: AssertExhaustive = true
+] as const)

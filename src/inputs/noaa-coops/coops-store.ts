@@ -244,12 +244,14 @@ export function createCoopsStore (dataDir: string): CoopsStore {
       if (closed) return
       if (!dirty) return
       await mkdir(storeDir, { recursive: true })
-      await atomicWriteJson(indexPath, {
+      const committed = await atomicWriteJson(indexPath, {
         generated: index.generated,
         types: index.types,
         records: index.records
+      }, {
+        shouldCommit: () => !closed
       })
-      dirty = false
+      if (committed) dirty = false
     },
 
     snapshot () {

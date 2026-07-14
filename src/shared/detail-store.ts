@@ -6,8 +6,8 @@
  * plugin data directory so the in-memory detail cache can be hydrated on a cold
  * start, giving the source offline data without a network round-trip. This is
  * the mechanism the ActiveCaptain `poi-store.ts` established, hoisted here so
- * the OpenSeaMap and NOAA ENC sources reuse one implementation rather than each
- * copying it. The value type is a type parameter and the caller supplies the
+ * the OpenSeaMap, NOAA ENC, and USACE sources reuse one implementation rather
+ * than each copying it. The value type is a type parameter and the caller supplies the
  * `isValue` guard, so the store stays source-agnostic while a hydrated entry is
  * still validated before use.
  *

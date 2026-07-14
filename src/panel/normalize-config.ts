@@ -5,7 +5,7 @@
 
 import { POI_TYPE_FLAGS } from '../shared/poi-type-selection.js'
 import { toFiniteNumber } from '../shared/numbers.js'
-import { SEAMARK_GROUP_IDS } from '../shared/seamark-groups.js'
+import { normalizeSeamarkGroupIds } from '../shared/seamark-groups.js'
 import type { PluginConfig } from '../shared/types.js'
 
 // Every bound, default, and clamp below is owned by its src/shared module;
@@ -97,11 +97,7 @@ export function normalizeConfig (configuration: unknown): PluginConfig {
   // An old config omits the seamark groups entirely; it then imports every
   // group. An explicit array is kept, filtered to the known group ids, so a
   // user can legitimately narrow or even clear the selection.
-  const seamarkGroups = raw.openSeaMapSeamarkGroups
-  config.openSeaMapSeamarkGroups = Array.isArray(seamarkGroups)
-    ? (seamarkGroups as unknown[]).filter(
-        (group): group is string => typeof group === 'string' && SEAMARK_GROUP_IDS.includes(group))
-    : [...SEAMARK_GROUP_IDS]
+  config.openSeaMapSeamarkGroups = normalizeSeamarkGroupIds(raw.openSeaMapSeamarkGroups)
 
   // Dedupe defaults on, matching the schema: an old config that omits the key
   // still merges OpenSeaMap duplicates of an ActiveCaptain marker. Only an

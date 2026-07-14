@@ -13,6 +13,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { createUsaceSource } from '../src/inputs/usace/usace-source.js'
 import type { UsaceFeature, UsaceLayerKey } from '../src/inputs/usace/usace-types.js'
+import { getListProvenance } from '../src/inputs/poi-source.js'
 import type { Bbox } from '../src/shared/types.js'
 import { USACE_SOURCE_ID } from '../src/shared/source-ids.js'
 import { createStubStatus, withTempDir } from './helpers.js'
@@ -49,8 +50,8 @@ const dam: UsaceFeature = {
 }
 
 interface FakeClient {
-  queryLayer: (request: { layerKey: UsaceLayerKey, bbox: Bbox }) => Promise<{ features: UsaceFeature[] }>
-  queryById: (request: { layerKey: UsaceLayerKey, objectId: number }) => Promise<UsaceFeature | undefined>
+  queryLayer: (request: { layerKey: UsaceLayerKey, bbox: Bbox, signal?: AbortSignal }) => Promise<{ features: UsaceFeature[] }>
+  queryById: (request: { layerKey: UsaceLayerKey, objectId: number, signal?: AbortSignal }) => Promise<UsaceFeature | undefined>
 }
 
 const BOX: Bbox = { south: 40, west: -81, north: 41, east: -79 }
@@ -117,10 +118,18 @@ test('with no layers enabled the source returns empty and queries nothing', asyn
     queryLayer: async ({ layerKey }) => { calls.push(layerKey); return { features: [] } },
     queryById: async () => undefined
   }
-  const source = makeSource(client, { includeLocks: false, includeDams: false })
+  const { events, status } = createStubStatus()
+  const source = makeSource(client, {
+    includeLocks: false,
+    includeDams: false,
+    status: status as never
+  })
   const summaries = await source.listPointsOfInterest(BOX, '')
   assert.equal(summaries.length, 0)
   assert.equal(calls.length, 0)
+  assert.equal(getListProvenance(summaries), 'skipped')
+  assert.ok(events.includes(`skipped:${USACE_SOURCE_ID}:no structure layers enabled`))
+  source.close()
 })
 
 test('listPointsOfInterest skips outbound work when the vessel is outside US waters', async () => {
@@ -139,6 +148,31 @@ test('listPointsOfInterest skips outbound work when the vessel is outside US wat
   assert.equal(summaries.length, 0)
   assert.equal(calls.length, 0)
   assert.ok(events.some((e) => e.startsWith(`skipped:${USACE_SOURCE_ID}`)))
+})
+
+test('close aborts an in-flight layer query without recording an outage', async () => {
+  let requestStarted!: () => void
+  const started = new Promise<void>((resolve) => { requestStarted = resolve })
+  let requestSignal: AbortSignal | undefined
+  const client: FakeClient = {
+    queryLayer: async ({ signal }) => await new Promise((_resolve, reject) => {
+      requestSignal = signal
+      requestStarted()
+      signal?.addEventListener('abort', () => reject(signal.reason), { once: true })
+    }),
+    queryById: async () => undefined
+  }
+  const { events, status } = createStubStatus()
+  const source = makeSource(client, {
+    includeDams: false,
+    status: status as never
+  })
+  const pending = source.listPointsOfInterest(BOX, '')
+  await started
+  source.close()
+  await assert.rejects(() => pending, /source closed/)
+  assert.equal(requestSignal?.aborted, true)
+  assert.equal(events.filter(event => event.startsWith('error:')).length, 0)
 })
 
 test('listPointsOfInterest records a per-layer error when one layer query fails', async () => {
@@ -216,14 +250,41 @@ test('getDetails fetches by objectId on a cache miss, records success, and cache
   assert.ok(events.some((e) => e === `detail-ok:${USACE_SOURCE_ID}`))
 })
 
-test('getDetails rejects a malformed id and a missing feature', async () => {
+test('close aborts an in-flight detail query without recording a result', async () => {
+  let requestStarted!: () => void
+  const started = new Promise<void>((resolve) => { requestStarted = resolve })
+  let requestSignal: AbortSignal | undefined
   const client: FakeClient = {
     queryLayer: async () => ({ features: [] }),
-    queryById: async () => undefined
+    queryById: async ({ signal }) => await new Promise((_resolve, reject) => {
+      requestSignal = signal
+      requestStarted()
+      signal?.addEventListener('abort', () => reject(signal.reason), { once: true })
+    })
+  }
+  const { events, status } = createStubStatus()
+  const source = makeSource(client, { status: status as never })
+  const pending = source.getDetails('lock_203')
+  await started
+  source.close()
+  await assert.rejects(() => pending, /source closed/)
+  assert.equal(requestSignal?.aborted, true)
+  assert.deepEqual(events, [])
+})
+
+test('getDetails rejects a malformed id and a missing feature', async () => {
+  let queryByIdCalls = 0
+  const client: FakeClient = {
+    queryLayer: async () => ({ features: [] }),
+    queryById: async () => { queryByIdCalls++; return undefined }
   }
   const source = makeSource(client)
   await assert.rejects(() => source.getDetails('nope'), /Malformed USACE id/)
+  await assert.rejects(() => source.getDetails('lock_12junk'), /Malformed USACE id/)
+  await assert.rejects(() => source.getDetails('lock_0'), /Malformed USACE id/)
+  assert.equal(queryByIdCalls, 0, 'malformed ids never reach ArcGIS')
   await assert.rejects(() => source.getDetails('lock_404'), /lock_404/)
+  assert.equal(queryByIdCalls, 1)
 })
 
 test('getDetails on a cache miss skips outbound HTTP when the vessel is outside US waters', async () => {

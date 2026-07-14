@@ -1,11 +1,13 @@
 /**
  * Public-map deep-link builders for POI "view this in a browser" buttons.
  *
- * Two of the plugin's sources have no canonical per-feature viewer:
+ * Several plugin sources need a public-map fallback because their upstream
+ * does not expose a stable per-feature viewer:
  *
- * - NAVCEN's old Light List search-result deep link (`/light-list-search-results?...`)
- *   was retired when NAVCEN migrated to Drupal in 2020; the MSI app at
- *   `navcen.uscg.gov/msi` has no per-LLNR URL routing.
+ * - NAVCEN's old Light List search-result deep link
+ *   (`/light-list-search-results?...`) was retired when NAVCEN migrated to
+ *   Drupal in 2020; the MSI app at `navcen.uscg.gov/msi` has no per-LLNR or
+ *   per-notice URL routing.
  *   (https://www.navcen.uscg.gov/LNM-and-LL-app-frequently-asked-questions)
  *
  * - NOAA's ENC Direct viewer at `encdirect.noaa.gov` is an Esri Web
@@ -14,10 +16,14 @@
  *   regardless of input.
  *   (https://doc.arcgis.com/en/web-appbuilder/latest/manage-apps/app-url-parameters.htm)
  *
- * Both sources therefore fall back to an OpenSeaMap marker deep link. The
- * popup body still names the source-specific identifier (LLNR for USCG,
- * `DSNM` chart cell and survey date for NOAA) so a mariner can cross-reference
- * the feature back to its USCG or NOAA publication manually.
+ * - The World Port Index dataset and public USACE lock and dam ArcGIS services
+ *   expose records through bulk or query endpoints but provide no stable,
+ *   user-facing page for one feature.
+ *
+ * NOAA CO-OPS also uses this fallback when a station record does not contain
+ * enough information to construct its normal station page. Popup bodies still
+ * carry source-specific identifiers and details so a mariner can
+ * cross-reference a feature with its source publication.
  *
  * OpenSeaMap is chosen over plain OpenStreetMap because it renders the
  * marine seamark overlay (lights, buoys, depth contours) on top of the OSM
@@ -28,6 +34,8 @@
  * Marker URL format per the OpenSeaMap wiki:
  *   https://wiki.openseamap.org/wiki/h:En:Marker_in_URL
  */
+
+import { isValidLatitude, isValidLongitude } from './numbers.js'
 
 /** Default zoom for a marker view. Matches the zoom every other deep link uses. */
 const DEFAULT_ZOOM = 15
@@ -49,12 +57,12 @@ const FALLBACK_URL = 'https://map.openseamap.org/'
 /**
  * Build an OpenSeaMap marker deep link centered on the given lat/lon. The
  * marker parameters (`mlat`, `mlon`) drop a pin so the feature is visible
- * without zooming around. A non-finite coordinate falls back to the
- * OpenSeaMap home page rather than producing a `lat=NaN` URL that would
+ * without zooming around. An invalid coordinate falls back to the OpenSeaMap
+ * home page rather than producing an out-of-range or `lat=NaN` URL that would
  * silently land somewhere meaningless.
  */
 export function openSeaMapMarkerUrl (latitude: number, longitude: number): string {
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+  if (!isValidLatitude(latitude) || !isValidLongitude(longitude)) {
     return FALLBACK_URL
   }
   const lat = latitude.toFixed(COORDINATE_PRECISION)

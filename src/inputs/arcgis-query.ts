@@ -19,9 +19,14 @@ import { requestJson } from './http-one-shot.js'
 import { PLUGIN_USER_AGENT } from '../shared/plugin-id.js'
 import type { Bbox } from '../shared/types.js'
 import { MS_PER_MINUTE } from '../shared/time.js'
+import {
+  isValidLatitude,
+  isValidLongitude,
+  toPositiveSafeInteger
+} from '../shared/numbers.js'
 
 /** ArcGIS' per-response cap. A client pages while the upstream signals more. */
-export const ARCGIS_PAGE_SIZE = 1000
+const ARCGIS_PAGE_SIZE = 1000
 
 /**
  * Upper bound on pagination passes per query. A misbehaving server that pins
@@ -30,7 +35,7 @@ export const ARCGIS_PAGE_SIZE = 1000
  * first and rejects with a clear error so the source records it and the caller
  * backs off.
  */
-export const ARCGIS_MAX_PAGES = 200
+const ARCGIS_MAX_PAGES = 200
 
 /**
  * Per-request timeout in milliseconds. A hung TCP connection (a silently
@@ -53,8 +58,60 @@ interface ArcGisFeatureCollection<F> {
   exceededTransferLimit?: boolean
 }
 
+/** Feature fields ArcGIS commonly uses as a stable object identity. */
+interface ArcGisIdentifiableFeature {
+  id?: unknown
+  properties?: Record<string, unknown>
+}
+
+/**
+ * Split an antimeridian-crossing bbox into ordinary ArcGIS envelopes. ArcGIS
+ * envelopes use minimum and maximum X coordinates, so a wrapped `west > east`
+ * box must become one request on each side of the dateline.
+ */
+export function splitArcgisEnvelope (bbox: Bbox): Bbox[] {
+  if (
+    !isValidLatitude(bbox.south) || !isValidLatitude(bbox.north) ||
+    !isValidLongitude(bbox.west) || !isValidLongitude(bbox.east) ||
+    bbox.south > bbox.north
+  ) {
+    throw new Error('ArcGIS query received an invalid bounding box')
+  }
+  if (bbox.west <= bbox.east) return [bbox]
+  return [
+    { ...bbox, east: 180 },
+    { ...bbox, west: -180 }
+  ]
+}
+
+/** Merge split-envelope results without duplicating an ArcGIS object id. */
+export function mergeArcgisFeatureSets<F extends ArcGisIdentifiableFeature> (
+  featureSets: readonly (readonly F[])[]
+): F[] {
+  const merged: F[] = []
+  const seen = new Set<string>()
+  for (const features of featureSets) {
+    for (const feature of features) {
+      const rawId = feature.id ?? feature.properties?.OBJECTID
+      if (typeof rawId === 'number' || typeof rawId === 'string') {
+        const key = `${typeof rawId}:${rawId}`
+        if (seen.has(key)) continue
+        seen.add(key)
+      }
+      merged.push(feature)
+    }
+  }
+  return merged
+}
+
 /** The URLSearchParams for a bbox envelope query at a given paging offset. */
 export function arcgisEnvelopeParams (bbox: Bbox, offset: number): URLSearchParams {
+  if (splitArcgisEnvelope(bbox).length !== 1) {
+    throw new Error('ArcGIS envelope must not cross the antimeridian')
+  }
+  if (!Number.isSafeInteger(offset) || offset < 0) {
+    throw new Error('ArcGIS result offset must be a non-negative safe integer')
+  }
   return new URLSearchParams({
     geometry: `${bbox.west},${bbox.south},${bbox.east},${bbox.north}`,
     geometryType: 'esriGeometryEnvelope',
@@ -70,8 +127,12 @@ export function arcgisEnvelopeParams (bbox: Bbox, offset: number): URLSearchPara
 
 /** The URLSearchParams for a single-feature by-object-id query. */
 export function arcgisByIdParams (objectId: number): URLSearchParams {
+  const validId = toPositiveSafeInteger(objectId)
+  if (validId === null) {
+    throw new Error('ArcGIS object id must be a positive safe integer')
+  }
   return new URLSearchParams({
-    objectIds: String(objectId),
+    objectIds: String(validId),
     outFields: '*',
     returnGeometry: 'true',
     f: 'geojson'

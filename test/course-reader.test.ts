@@ -283,6 +283,8 @@ test('getRouteAhead skips malformed coordinate entries', async () => {
       ['bad', 51],
       [11],
       [Number.NaN, 52],
+      [12, 91],
+      [181, 53],
       [12, 53]
     ])
   })

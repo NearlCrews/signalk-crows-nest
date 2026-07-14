@@ -16,7 +16,7 @@ import type * as React from 'react'
 import { S } from '../styles.js'
 
 /** The props the render prop must spread onto its control element. */
-export interface LabeledControlProps {
+interface LabeledControlProps {
   id: string
   'aria-describedby': string
 }

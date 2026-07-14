@@ -16,7 +16,7 @@ import type { OutputContext, OutputHandle, OutputModule } from './output.js'
  * that actually started. `failedIds` carries the enabled outputs whose
  * `start()` threw, so a caller can surface them without re-deriving the set.
  */
-export interface StartedOutputs {
+interface StartedOutputs {
   /** Handles for the outputs that started. */
   handles: OutputHandle[]
   /** Ids of the outputs that started. */

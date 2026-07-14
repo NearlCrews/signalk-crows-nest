@@ -48,9 +48,8 @@ export const DEFAULT_MINIMUM_YEAR = OFF_SENTINEL_YEAR
 /**
  * Clamp a raw minimum-year value to `[MIN_YEAR, MAX_YEAR]` and truncate to an
  * integer. A non-numeric or non-finite value falls back to the off default.
- * The four call sites (three input modules, plus the panel's
- * normalize-config) all route their per-source year through this helper so
- * the bounds and the fallback rule live in one place.
+ * Runtime inputs and the panel's normalize-config route every per-source year
+ * through this helper so the bounds and fallback rule live in one place.
  */
 export function clampMinimumYear (raw: unknown): number {
   return clampNumber(raw, MIN_YEAR, MAX_YEAR, DEFAULT_MINIMUM_YEAR, true)
@@ -99,6 +98,8 @@ export function passesMinimumYear (timestamp: string | undefined, minimumYear: n
 
 /** Character code for `-`, used by the ISO fast path in {@link isOnOrAfter}. */
 const HYPHEN_CODE = 0x2d
+const ZERO_CODE = 0x30
+const NINE_CODE = 0x39
 
 /**
  * True when `timestamp` represents a year greater than or equal to
@@ -106,15 +107,32 @@ const HYPHEN_CODE = 0x2d
  * filter never drops a POI on absent or malformed wire data.
  *
  * Fast path: every source produces ISO-8601 (`YYYY-MM-DDTHH:MM:SSZ`) whose
- * first four characters are the year, so the common case is a single slice
- * plus a parseInt rather than constructing a Date object per POI. The slow
- * path handles any other parseable form via `Date.parse`.
+ * first four characters are decimal year digits, so the common case reads
+ * their character codes rather than constructing a Date object per POI. The
+ * slow path handles any other parseable form via `Date.parse`.
  */
 function isOnOrAfter (timestamp: string | undefined, minimumYear: number): boolean {
-  if (timestamp === undefined || timestamp.length < 4) return true
-  const fastYear = Number.parseInt(timestamp.slice(0, 4), 10)
-  if (Number.isFinite(fastYear) && timestamp.charCodeAt(4) === HYPHEN_CODE) {
-    return fastYear >= minimumYear
+  if (timestamp === undefined || timestamp.length < 5) return true
+  const digit0 = timestamp.charCodeAt(0)
+  const digit1 = timestamp.charCodeAt(1)
+  const digit2 = timestamp.charCodeAt(2)
+  const digit3 = timestamp.charCodeAt(3)
+  if (
+    timestamp.charCodeAt(4) === HYPHEN_CODE &&
+    digit0 >= ZERO_CODE && digit0 <= NINE_CODE &&
+    digit1 >= ZERO_CODE && digit1 <= NINE_CODE &&
+    digit2 >= ZERO_CODE && digit2 <= NINE_CODE &&
+    digit3 >= ZERO_CODE && digit3 <= NINE_CODE
+  ) {
+    const fastYear =
+      (digit0 - ZERO_CODE) * 1000 +
+      (digit1 - ZERO_CODE) * 100 +
+      (digit2 - ZERO_CODE) * 10 +
+      digit3 - ZERO_CODE
+    if (fastYear >= minimumYear) return true
+    // Confirm an apparently old timestamp before filtering it out. A malformed
+    // value such as `1950-not-a-date` shares the fast prefix but is treated as
+    // undated and kept, matching the filter's fail-open safety policy.
   }
   const parsedMs = Date.parse(timestamp)
   if (!Number.isFinite(parsedMs)) return true

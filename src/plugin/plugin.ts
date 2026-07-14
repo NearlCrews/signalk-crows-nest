@@ -5,9 +5,8 @@
  * the config schema from the modules' fragments, and its `start`/`stop`
  * lifecycle builds the aggregate POI source, starts the enabled outputs, and
  * builds the shared position monitor from the outputs' scan contributors.
- * The plugin serves POI inputs (ActiveCaptain, OpenSeaMap, USCG Light List,
- * NOAA ENC Direct) and outputs (notes-resource, proximity-alarm, route-hazard,
- * bridge-air-draft), the status API, and the position monitor.
+ * The plugin serves the registered POI inputs and safety outputs, the status
+ * API, and the position monitor.
  */
 
 import type { Plugin, ServerAPI } from '@signalk/server-api'
@@ -28,7 +27,7 @@ import type { IRouter } from 'express'
 
 const PLUGIN_NAME = "Crow's Nest"
 const PLUGIN_DESCRIPTION =
-  'Imports Garmin ActiveCaptain, OpenSeaMap, USCG Light List and Local Notice to Mariners, NOAA ENC Direct and CO-OPS, NGA World Port Index, and USACE points of interest as SignalK resources, with proximity, route-corridor, and bridge air-draft alarms'
+  'Imports Garmin ActiveCaptain, OpenSeaMap, USCG Light List, USCG Local Notices to Mariners, NOAA ENC Direct, NOAA CO-OPS, NGA World Port Index, and USACE points of interest as SignalK resources, with proximity, route-corridor, and bridge air-draft alarms'
 
 /** OpenAPI description of the plugin's internal status API. */
 const OPEN_API = {

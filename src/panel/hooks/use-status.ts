@@ -78,7 +78,7 @@ export function useStatus (): UseStatusResult {
           // Skip the state update when the payload is byte-identical to the
           // last one committed, so a downstream useMemo keyed on `status`
           // (DataSourcesSection.useStatusBySource, the per-card status prop)
-          // keeps stable identity across polls and the four DataSourceCards
+          // keeps stable identity across polls and the DataSourceCards
           // do not re-render once per 5 s for no user-visible change.
           // JSON.stringify is the cheap canonical comparison for a snapshot in
           // the kilobyte range; comparing against the stored JSON stringifies

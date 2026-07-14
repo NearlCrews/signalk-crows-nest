@@ -4,9 +4,10 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { createOpenSeaMapSource } from '../src/inputs/openseamap/openseamap-source.js'
 import type { OverpassClient, OverpassElement } from '../src/inputs/openseamap/overpass-client.js'
+import { getListProvenance } from '../src/inputs/poi-source.js'
 import type { PluginStatus } from '../src/status/plugin-status.js'
 import type { Bbox } from '../src/shared/types.js'
-import { withTempDir } from './helpers.js'
+import { createStubStatus, withTempDir } from './helpers.js'
 
 const sampleBbox: Bbox = { north: 1, south: 0, east: 1, west: 0 }
 
@@ -47,7 +48,6 @@ function fakeClient (overrides: Partial<OverpassClient> = {}): {
       calls++
       return rockNode
     },
-    listCoastlineWays: async () => [],
     close: () => {},
     ...overrides
   }
@@ -81,6 +81,98 @@ test('listPointsOfInterest maps elements to source-tagged summaries', async () =
     }
   ])
   source.close()
+})
+
+test('list queries include plain marinas only when the harbours group is enabled', async () => {
+  const marinaFlags: boolean[] = []
+  const { client } = fakeClient({
+    listPointsOfInterest: async (_bbox, _regex, includeMarinas) => {
+      marinaFlags.push(includeMarinas === true)
+      return []
+    }
+  })
+  const hazards = createOpenSeaMapSource({
+    client,
+    seamarkGroups: ['hazards'],
+    minimumYear: 0,
+    refreshSeconds: 0,
+    status: silentStatus()
+  })
+  await hazards.listPointsOfInterest(sampleBbox, '')
+  hazards.close()
+
+  const harbours = createOpenSeaMapSource({
+    client,
+    seamarkGroups: ['harbours'],
+    minimumYear: 0,
+    refreshSeconds: 0,
+    status: silentStatus()
+  })
+  await harbours.listPointsOfInterest(sampleBbox, '')
+  harbours.close()
+  assert.deepEqual(marinaFlags, [false, true])
+})
+
+test('with no feature groups the source skips the query and returns empty', async () => {
+  let calls = 0
+  const { client } = fakeClient({
+    listPointsOfInterest: async () => { calls++; return [] }
+  })
+  const { events, status } = createStubStatus()
+  const source = createOpenSeaMapSource({
+    client,
+    seamarkGroups: [],
+    minimumYear: 0,
+    refreshSeconds: 0,
+    status
+  })
+  const list = await source.listPointsOfInterest(sampleBbox, '')
+  assert.equal(calls, 0)
+  assert.equal(list.length, 0)
+  assert.equal(getListProvenance(list), 'skipped')
+  assert.ok(events.includes('skipped:openseamap:no feature groups enabled'))
+  source.close()
+})
+
+test('unknown feature groups are normalized to an intentional skip', async () => {
+  let calls = 0
+  const { client } = fakeClient({
+    listPointsOfInterest: async () => { calls++; return [] }
+  })
+  const source = createOpenSeaMapSource({
+    client,
+    seamarkGroups: ['unknown-group'],
+    minimumYear: 0,
+    refreshSeconds: 0,
+    status: silentStatus()
+  })
+  const list = await source.listPointsOfInterest(sampleBbox, '')
+  assert.equal(calls, 0)
+  assert.equal(getListProvenance(list), 'skipped')
+  source.close()
+})
+
+test('a list that resolves after close cannot repopulate the source cache', async () => {
+  let resolveList!: (elements: OverpassElement[]) => void
+  const { client } = fakeClient({
+    listPointsOfInterest: async () => await new Promise<OverpassElement[]>((resolve) => {
+      resolveList = resolve
+    })
+  })
+  const { events, status } = createStubStatus()
+  const source = createOpenSeaMapSource({
+    client,
+    seamarkGroups: ['hazards'],
+    minimumYear: 0,
+    refreshSeconds: 0,
+    status
+  })
+  const pending = source.listPointsOfInterest(sampleBbox, '')
+  source.close()
+  resolveList([rockNode])
+  await assert.rejects(() => pending, /source closed/)
+  assert.equal(source.cacheSize(), 0)
+  assert.deepEqual(events, [])
 })
 
 test('a navaid element rides the navigation-structure skIcon', async () => {
@@ -215,6 +307,29 @@ test('getDetails records a per-source detail success on a real upstream fetch (c
   source.close()
 })
 
+test('a detail that resolves after close records nothing and stays uncached', async () => {
+  let resolveDetail!: (element: OverpassElement) => void
+  const { client } = fakeClient({
+    getById: async () => await new Promise<OverpassElement>((resolve) => {
+      resolveDetail = resolve
+    })
+  })
+  const { events, status } = createStubStatus()
+  const source = createOpenSeaMapSource({
+    client,
+    seamarkGroups: ['hazards'],
+    minimumYear: 0,
+    refreshSeconds: 0,
+    status
+  })
+  const pending = source.getDetails('node_123')
+  source.close()
+  resolveDetail(rockNode)
+  await assert.rejects(() => pending, /source closed/)
+  assert.equal(source.cacheSize(), 0)
+  assert.deepEqual(events, [])
+})
+
 test('getDetails records a per-source detail error when the client rejects', async () => {
   const errors: Array<{ source: string, message: string }> = []
   const status: PluginStatus = {
@@ -307,11 +422,13 @@ test('listPointsOfInterest reuses the bbox-cached result within refreshSeconds',
     }
   })
   const source = createOpenSeaMapSource({ client, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 60, status: silentStatus() })
-  await source.listPointsOfInterest(sampleBbox, '')
-  await source.listPointsOfInterest(sampleBbox, '')
+  const first = await source.listPointsOfInterest(sampleBbox, '')
+  const second = await source.listPointsOfInterest(sampleBbox, '')
   // sampleBbox is tile-aligned, so its snapped tile is itself.
   const viewportFetches = fetchedTiles.filter((tile) => tile === '0_0_1_1')
   assert.equal(viewportFetches.length, 1, 'the second call within the TTL hits the bbox cache')
+  assert.equal(getListProvenance(first), 'fresh')
+  assert.equal(getListProvenance(second), 'local')
   source.close()
 })
 
@@ -371,7 +488,6 @@ test('a listed element survives a restart and renders offline from the on-disk s
     const offlineClient: OverpassClient = {
       listPointsOfInterest: async () => { throw new Error('offline') },
       getById: async () => { getByIdCalls++; throw new Error('offline') },
-      listCoastlineWays: async () => [],
       close: () => {}
     }
     const second = createOpenSeaMapSource({ client: offlineClient, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 0, status: silentStatus(), dataDir: dir })
@@ -408,7 +524,6 @@ test('an offline list falls back to hydrated markers within the bbox and records
     const offlineClient: OverpassClient = {
       listPointsOfInterest: async () => { throw new Error('offline') },
       getById: async () => { throw new Error('offline') },
-      listCoastlineWays: async () => [],
       close: () => {}
     }
     const second = createOpenSeaMapSource({ client: offlineClient, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 0, status, dataDir: dir })
@@ -432,7 +547,6 @@ test('an offline list with nothing cached inside the bbox rethrows the upstream 
     const offlineClient: OverpassClient = {
       listPointsOfInterest: async () => { throw new Error('offline') },
       getById: async () => { throw new Error('offline') },
-      listCoastlineWays: async () => [],
       close: () => {}
     }
     const second = createOpenSeaMapSource({ client: offlineClient, seamarkGroups: ['hazards'], minimumYear: 0, refreshSeconds: 0, status, dataDir: dir })

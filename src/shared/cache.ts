@@ -1,10 +1,9 @@
 /**
  * Cache-sizing constants shared by the plugin's POI caches.
  *
- * Both the ActiveCaptain and the OpenSeaMap source keep an in-memory cache of
- * detail responses keyed by POI id. The at-runtime sources (NOAA ENC,
- * OpenSeaMap) additionally keep a small bbox-debounce cache so a
- * Freeboard-refresh burst on the same viewport does not flood the upstream.
+ * Several inputs and outputs keep bounded in-memory detail caches keyed by POI
+ * id. The at-runtime sources additionally keep a small bbox-debounce cache so
+ * a Freeboard refresh burst on the same viewport does not flood the upstream.
  * The ceilings live here so every source agrees on the same numbers.
  */
 
