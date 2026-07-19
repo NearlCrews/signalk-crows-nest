@@ -22,25 +22,22 @@ route-corridor, and bridge air-draft alarms.
 > safety-of-life navigation: always cross-check against official charts and
 > your primary instruments.
 
-## What's new in 0.14.0
+## What's new in 0.15.0
 
-- **Route warnings react while the vessel is stationary.** Changing the
-  active route now requests a fresh safety scan immediately, and the scan
-  limits a long first leg to the 10-nautical-mile look-ahead.
-- **Cleaner source shutdown and refresh behavior.** Stopping the plugin now
-  cancels retry delays, bulk refreshes, and NOAA or USACE ArcGIS requests
-  promptly. Async stores cannot commit a flush after shutdown, and complete
-  World Port Index refreshes remove ports that are no longer present upstream.
-- **More accurate status and resource responses.** Concurrent requests keep
-  their own source provenance, cached reads no longer hide refresh failures,
-  empty source selections read as intentional skips, malformed spatial queries
-  are rejected, and notification timestamps reflect the current publication
-  time.
-- **Safer spatial and transport boundaries.** ArcGIS queries split correctly
-  at the antimeridian, OpenSeaMap respects the selected feature groups, and
-  one-shot requests have wall-clock deadlines and bounded response bodies.
-- **Reproducible package contents.** The npm `prepack` lifecycle now cleans and
-  rebuilds the plugin and panel for both `npm pack` and `npm publish`.
+- **A shared, consistent configuration UI.** The panel now uses
+  `signalk-nearlcrews-ui` 0.3.0 for its shell, controls, and token-driven
+  themes. Fresh profiles start in Light mode, existing `ac-theme` choices
+  migrate automatically, and unsupported browsers receive a clear update
+  message.
+- **Current compatible dependencies.** Runtime and development packages are
+  updated to the latest versions supported by Node.js 20, TypeScript ESLint,
+  and neostandard.
+- **Bounded searches around the date line.** Explicit `notes` bounding boxes
+  cannot exceed the 20-degree search limit, and route or position-monitor
+  searches crossing the antimeridian retain the shortest longitude interval.
+- **Independent alarm identities.** Point-of-interest ids that contain unsafe
+  path characters now receive collision-free notification suffixes, so one
+  hazard cannot suppress or clear another hazard with a similar id.
 
 ## What it does
 
@@ -125,7 +122,7 @@ one panel.
 
 | ActiveCaptain hazard | USCG Light List aid | Configuration panel |
 | --- | --- | --- |
-| [![An ActiveCaptain hazard note open in Freeboard-SK, showing the rating, the review text, and a staleness warning](assets/screenshots/freeboard-activecaptain-hazard.png)](assets/screenshots/freeboard-activecaptain-hazard.png) | [![A USCG Light List buoy note open in Freeboard-SK, showing the light characteristic and the source citation](assets/screenshots/freeboard-uscg-light-list.png)](assets/screenshots/freeboard-uscg-light-list.png) | [![The Crow's Nest configuration panel, showing per-source live status and the data-source cards](assets/screenshots/admin-panel.png)](assets/screenshots/admin-panel.png) |
+| [![An ActiveCaptain hazard note open in Freeboard-SK, showing the rating, the review text, and a staleness warning](assets/screenshots/freeboard-activecaptain-hazard.png)](assets/screenshots/freeboard-activecaptain-hazard.png) | [![A USCG Light List buoy note open in Freeboard-SK, showing the light characteristic and the source citation](assets/screenshots/freeboard-uscg-light-list.png)](assets/screenshots/freeboard-uscg-light-list.png) | [![The light-themed Crow's Nest configuration panel, showing per-source live status and the data-source cards](assets/screenshots/admin-panel.png)](assets/screenshots/admin-panel.png) |
 
 ## Architecture
 

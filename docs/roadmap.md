@@ -39,7 +39,9 @@ terms-of-service exposure.
 - "Navigate to this POI": one-tap set the Course API destination.
 - Map preview in the configuration panel.
 - Bridge and lock schedule notifications on approach.
-- Night-vision (red) theme for the panel and the rendered note descriptions.
+- Night-vision (red) theme for the panel. Shipped in v0.8.2 and migrated to the
+  shared UI system in v0.15.0.
+- Night-vision theme for rendered note descriptions.
 - NOAA tide and current cross-reference for the nearest station.
 - CI release automation and SignalK App Store polish (icon, metadata). Shipped:
   a GitHub-release-driven npm publish with provenance, the plugin app icon,

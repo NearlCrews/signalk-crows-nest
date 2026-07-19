@@ -11,6 +11,14 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+<a id="v0150"></a>
+
+## [0.15.0] - 2026-07-19
+
+This release moves the configuration panel onto the shared NearlCrews UI
+system, refreshes the dependency set, and closes geographic and notification
+identity edge cases.
+
 ### Changed
 
 - Updated the runtime and development dependency set to the latest versions
