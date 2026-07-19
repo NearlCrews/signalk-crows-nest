@@ -153,7 +153,7 @@ test('unionBbox retains the full-world and zero-width seam conventions', () => {
       { north: 1, south: -1, west: 180, east: -180 },
       { north: 2, south: -2, west: -180, east: -180 }
     ),
-    { north: 2, south: -2, west: 180, east: 180 }
+    { north: 2, south: -2, west: 180, east: -180 }
   )
 })
 
@@ -193,6 +193,15 @@ test('bboxContainsPoint wraps across the antimeridian when west exceeds east', (
   assert.ok(bboxContainsPoint(bbox, 175, 52), 'a point at the western edge is contained')
   assert.ok(!bboxContainsPoint(bbox, 0, 52), 'a point on the far side of the globe is excluded')
   assert.ok(!bboxContainsPoint(bbox, 179, 40), 'a latitude outside the box is excluded even in the wrap span')
+})
+
+test('bboxContainsPoint treats both antimeridian spellings as the zero-width seam', () => {
+  const seam: Bbox = { north: 1, south: -1, west: 180, east: -180 }
+
+  assert.ok(bboxContainsPoint(seam, 180, 0))
+  assert.ok(bboxContainsPoint(seam, -180, 0))
+  assert.ok(!bboxContainsPoint(seam, 179.999, 0))
+  assert.ok(!bboxContainsPoint(seam, -179.999, 0))
 })
 
 // An eastward leg one degree of longitude long, on the equator. Its great

@@ -324,6 +324,12 @@ export function unionBbox (a: Bbox, b: Bbox): Bbox {
     } else {
       west = wrapLongitude(bestStart)
       east = wrapLongitude(bestEnd)
+      // Canonicalize the zero-width seam so containment accepts both numeric
+      // spellings of the same geographic point, -180 and 180.
+      if (bestWidth === 0 && Math.abs(west) === 180 && Math.abs(east) === 180) {
+        west = 180
+        east = -180
+      }
     }
   }
 
