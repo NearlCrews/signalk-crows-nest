@@ -12,6 +12,7 @@
  */
 
 import type * as React from 'react'
+import { Checkbox } from 'signalk-nearlcrews-ui'
 import { S } from '../styles.js'
 import Fieldset from './Fieldset.js'
 
@@ -48,15 +49,12 @@ export default function IncludeToggles ({ legend, options, emptyWarning, childre
       {children}
       <div style={S.checkboxGrid}>
         {options.map((option) => (
-          <label key={option.id} style={S.checkboxLabel}>
-            <input
-              type='checkbox'
-              style={S.checkbox}
-              checked={option.checked}
-              onChange={(e) => option.onChange(e.target.checked)}
-            />
-            {option.label}
-          </label>
+          <Checkbox
+            key={option.id}
+            label={option.label}
+            checked={option.checked}
+            onChange={(event) => option.onChange(event.target.checked)}
+          />
         ))}
       </div>
       {allOff && <p style={S.hint}>{emptyWarning}</p>}

@@ -4,17 +4,15 @@
  * hint text. Every numeric setting on the panel uses this so the draft-commit
  * dance does not have to be re-implemented in each component.
  *
- * The field renders inside the standard `S.fieldRow` row by default. Pass
- * `dense` for the tighter `S.labelledInputRow` layout used inside an alarm
- * fieldset, where the field sits below a toggle rather than at the top of a
- * section.
+ * Pass `dense` for the shared compact layout used inside an alarm fieldset,
+ * where the field sits below a toggle rather than at the top of a section.
  */
 
 import type * as React from 'react'
+import { NumberInput } from 'signalk-nearlcrews-ui'
 import { useNumberDraft } from '../hooks/use-number-draft.js'
 import type { NumberDraftOptions } from '../hooks/use-number-draft.js'
 import LabeledField from './LabeledField.js'
-import { S } from '../styles.js'
 
 interface Props extends NumberDraftOptions {
   /** Stable id linking the visible label to the input. */
@@ -55,13 +53,11 @@ export default function NumberField ({
   return (
     <LabeledField id={id} label={label} hint={hint} dense={dense}>
       {(controlProps) => (
-        <input
+        <NumberInput
           {...controlProps}
-          type='number'
           min={min}
           max={max}
           step={step}
-          style={S.input}
           disabled={disabled}
           value={draft.display}
           onChange={(e) => draft.handleChange(e.target.value)}

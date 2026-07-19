@@ -5,8 +5,8 @@
  */
 
 import type * as React from 'react'
+import { TextInput } from 'signalk-nearlcrews-ui'
 import LabeledField from './LabeledField.js'
-import { S } from '../styles.js'
 
 /** Stable id linking the visible label to its input. */
 const FIELD_ID = 'ac-openseamap-endpoint'
@@ -30,10 +30,9 @@ export default function EndpointUrlField ({ value, onChange }: Props): React.Rea
       }
     >
       {(controlProps) => (
-        <input
+        <TextInput
           {...controlProps}
           type='url'
-          style={S.inputWide}
           value={value}
           onChange={(e) => onChange(e.target.value)}
         />

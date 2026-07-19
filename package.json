@@ -8,7 +8,8 @@
     "dist",
     "public",
     "assets",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "scripts": {
     "build": "npm run build:plugin && npm run build:panel && npm run build:icons",
@@ -85,26 +86,30 @@
   },
   "dependencies": {
     "handlebars": "^4.7.9",
-    "lru-cache": "^11.5.1"
+    "lru-cache": "^11.5.2"
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",
     "@babel/preset-react": "^7.29.7",
     "@babel/preset-typescript": "^7.29.7",
-    "@signalk/server-api": "^2.28.0",
+    "@signalk/server-api": "^2.30.0",
     "@types/express": "^5.0.6",
-    "@types/node": "^26.0.1",
+    "@types/node": "^26.1.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "babel-loader": "^10.1.1",
-    "eslint": "^9.39.4",
+    "eslint": "^9.39.5",
     "eslint-plugin-react": "^7.37.5",
     "neostandard": "^0.13.0",
-    "react": "^19.2.6",
-    "react-dom": "^19.2.6",
-    "tsx": "^4.22.3",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "signalk-nearlcrews-ui": "0.3.0",
+    "tsx": "^4.23.1",
     "typescript": "^6.0.3",
-    "webpack": "^5.108.0",
-    "webpack-cli": "^7.0.3"
+    "webpack": "^5.108.4",
+    "webpack-cli": "^7.2.1"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true
   }
 }

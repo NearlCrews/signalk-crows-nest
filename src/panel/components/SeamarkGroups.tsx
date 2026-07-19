@@ -5,6 +5,7 @@
  */
 
 import type * as React from 'react'
+import { Checkbox } from 'signalk-nearlcrews-ui'
 import { SEAMARK_GROUP_REFS } from '../../shared/seamark-groups.js'
 import { S } from '../styles.js'
 import Fieldset from './Fieldset.js'
@@ -24,15 +25,12 @@ export default function SeamarkGroups ({ selected, onToggle }: Props): React.Rea
       <Fieldset title='Feature groups to import'>
         <div style={S.checkboxGrid}>
           {SEAMARK_GROUP_REFS.map((group) => (
-            <label key={group.id} style={S.checkboxLabel}>
-              <input
-                type='checkbox'
-                style={S.checkbox}
-                checked={selectedSet.has(group.id)}
-                onChange={(e) => onToggle(group.id, e.target.checked)}
-              />
-              {group.label}
-            </label>
+            <Checkbox
+              key={group.id}
+              label={group.label}
+              checked={selectedSet.has(group.id)}
+              onChange={(event) => onToggle(group.id, event.target.checked)}
+            />
           ))}
         </div>
       </Fieldset>

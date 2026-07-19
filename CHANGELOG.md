@@ -9,6 +9,17 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 > development milestones that preceded this publication. Their content is
 > incorporated into the 0.4.2 release.
 
+## [Unreleased]
+
+### Changed
+
+- Updated the runtime and development dependency set to the latest versions
+  compatible with Node.js 20, TypeScript ESLint, and neostandard.
+- Rebuilt the configuration panel on the shared `signalk-nearlcrews-ui` 0.3.0
+  controls and themes. Existing `ac-theme` preferences migrate automatically,
+  fresh profiles default to Light, and unsupported browsers receive a clear
+  compatibility message.
+
 <a id="v0140"></a>
 
 ## [0.14.0] - 2026-07-14

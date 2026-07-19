@@ -1,14 +1,13 @@
 /**
- * Presentational shell for a titled fieldset: the standard `S.group` fieldset,
- * its legend, an optional hint paragraph, and a `children` slot for the field or
- * fields the group holds. This is the plain grouping shell with no toggle;
+ * Adapter for the shared UI field group with Crow's Nest's existing title and
+ * hint prop names. This is the plain grouping shell with no toggle;
  * `ToggleFieldset` composes it and adds the opt-in checkbox row on top, so a
  * group that is a sub-section of one master toggle uses this directly rather
  * than showing a redundant checkbox of its own.
  */
 
 import type * as React from 'react'
-import { S } from '../styles.js'
+import { FieldGroup } from 'signalk-nearlcrews-ui'
 
 interface Props {
   /** Fieldset legend, the group name. */
@@ -24,10 +23,8 @@ interface Props {
 /** A titled fieldset shell with an optional legend action slot, an optional hint, and a children slot. */
 export default function Fieldset ({ title, actions, hint, children }: Props): React.ReactElement {
   return (
-    <fieldset style={S.group}>
-      <legend style={S.groupTitle}>{title}{actions}</legend>
-      {hint !== undefined && <p style={S.hint}>{hint}</p>}
+    <FieldGroup legend={title} actions={actions} description={hint}>
       {children}
-    </fieldset>
+    </FieldGroup>
   )
 }

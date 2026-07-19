@@ -14,8 +14,8 @@
  */
 
 import type * as React from 'react'
+import { Checkbox } from 'signalk-nearlcrews-ui'
 import Fieldset from './Fieldset.js'
-import { S } from '../styles.js'
 
 interface Props {
   /** Fieldset legend, the section name. */
@@ -43,16 +43,12 @@ export default function ToggleFieldset ({
 }: Props): React.ReactElement {
   return (
     <Fieldset title={title}>
-      <label style={S.checkboxRow}>
-        <input
-          type='checkbox'
-          style={S.checkbox}
-          checked={enabled}
-          onChange={(e) => onToggleEnabled(e.target.checked)}
-        />
-        {toggleLabel}
-      </label>
-      {toggleHint !== undefined && <p style={S.hint}>{toggleHint}</p>}
+      <Checkbox
+        label={toggleLabel}
+        description={toggleHint}
+        checked={enabled}
+        onChange={(event) => onToggleEnabled(event.target.checked)}
+      />
       {children}
     </Fieldset>
   )

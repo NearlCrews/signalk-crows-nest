@@ -6,6 +6,7 @@
  */
 
 import type * as React from 'react'
+import { Button, Checkbox, FieldGroup } from 'signalk-nearlcrews-ui'
 import { ACTIVE_CAPTAIN_POI_TYPE_GROUPS } from '../active-captain-poi-types.js'
 import type { PluginConfig, PoiTypeFlag } from '../../shared/types.js'
 import { S } from '../styles.js'
@@ -32,28 +33,24 @@ export default function ActiveCaptainPoiTypes ({ config, onToggle, onSetAll }: P
       title='Import layers'
       actions={
         <span style={S.bulkButtons}>
-          <button type='button' style={S.btnBulk} onClick={() => onSetAll(true)}>All</button>
-          <button type='button' style={S.btnBulk} onClick={() => onSetAll(false)}>None</button>
+          <Button size='compact' shape='pill' onClick={() => onSetAll(true)}>All</Button>
+          <Button size='compact' shape='pill' onClick={() => onSetAll(false)}>None</Button>
         </span>
       }
     >
       {ACTIVE_CAPTAIN_POI_TYPE_GROUPS.map((group) => (
-        <fieldset key={group.title} style={S.subGroup}>
-          <legend style={S.subGroupTitle}>{group.title}</legend>
+        <FieldGroup key={group.title} legend={group.title}>
           <div style={S.checkboxGrid}>
             {group.options.map((option) => (
-              <label key={option.flag} style={S.checkboxLabel}>
-                <input
-                  type='checkbox'
-                  style={S.checkbox}
-                  checked={config[option.flag] === true}
-                  onChange={(e) => onToggle(option.flag, e.target.checked)}
-                />
-                {option.label}
-              </label>
+              <Checkbox
+                key={option.flag}
+                label={option.label}
+                checked={config[option.flag] === true}
+                onChange={(event) => onToggle(option.flag, event.target.checked)}
+              />
             ))}
           </div>
-        </fieldset>
+        </FieldGroup>
       ))}
       {anySelected
         ? null
