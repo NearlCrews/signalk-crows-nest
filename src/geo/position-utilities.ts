@@ -13,7 +13,7 @@
  * module supports the `position` plus `distance` form the chartplotter sends.
  */
 
-import { wrapLongitude } from '../shared/longitude.js'
+import { longitudeSpanDegrees, wrapLongitude } from '../shared/longitude.js'
 import { isValidLatitude, isValidLongitude } from '../shared/numbers.js'
 import type { Position, Bbox } from '../shared/types.js'
 
@@ -270,12 +270,10 @@ export function projectPointOntoLeg (
 /**
  * The smallest bounding box that encloses both inputs.
  *
- * Known limitation: this function is not antimeridian-aware. It takes the
- * min/max of each edge, so two boxes on opposite sides of the +/-180 degree
- * meridian union into one box spanning the long way around the globe instead
- * of the short way across the meridian. This affects only vessels operating
- * right at the 180 degree meridian; a correct fix would have to detect the
- * wrap and is deliberately out of scope here.
+ * Longitude is treated as a circular interval. The result follows the
+ * shortest arc that contains both boxes and retains `west > east` when that
+ * arc crosses the antimeridian. `west=-180, east=180` is the full-world
+ * convention; `west=180, east=-180` is the zero-width antimeridian point.
  *
  * Throws when either input carries a non-finite edge: `Math.max(NaN, x)` is
  * NaN, so the propagation would silently emit `lat=NaN` to an upstream.
@@ -289,11 +287,57 @@ export function unionBbox (a: Bbox, b: Bbox): Bbox {
   ) {
     throw new Error('unionBbox: input carries a non-finite edge')
   }
+
+  const aSpan = longitudeSpanDegrees(a.west, a.east)
+  const bSpan = longitudeSpanDegrees(b.west, b.east)
+  let west: number
+  let east: number
+
+  if (aSpan >= 360 || bSpan >= 360) {
+    west = -180
+    east = 180
+  } else {
+    // Unroll each circular interval from its west edge. Keeping A fixed and
+    // trying the three equivalent spellings of B finds the narrowest linear
+    // hull, which is the shortest circular interval containing both boxes.
+    const aStart = a.west
+    const aEnd = aStart + aSpan
+    let bestStart = 0
+    let bestEnd = 0
+    let bestWidth = Number.POSITIVE_INFINITY
+    for (const shift of [-360, 0, 360]) {
+      const bStart = b.west + shift
+      const bEnd = bStart + bSpan
+      const start = Math.min(aStart, bStart)
+      const end = Math.max(aEnd, bEnd)
+      const width = end - start
+      if (width < bestWidth) {
+        bestStart = start
+        bestEnd = end
+        bestWidth = width
+      }
+    }
+
+    if (bestWidth >= 360) {
+      west = -180
+      east = 180
+    } else {
+      west = wrapLongitude(bestStart)
+      east = wrapLongitude(bestEnd)
+      // Canonicalize the zero-width seam so containment accepts both numeric
+      // spellings of the same geographic point, -180 and 180.
+      if (bestWidth === 0 && Math.abs(west) === 180 && Math.abs(east) === 180) {
+        west = 180
+        east = -180
+      }
+    }
+  }
+
   return {
     north: Math.max(a.north, b.north),
     south: Math.min(a.south, b.south),
-    east: Math.max(a.east, b.east),
-    west: Math.min(a.west, b.west)
+    east,
+    west
   }
 }
 

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { bboxContainsPoint, positionToBbox, projectPointOntoLeg } from '../src/geo/position-utilities.js'
+import { bboxContainsPoint, positionToBbox, projectPointOntoLeg, unionBbox } from '../src/geo/position-utilities.js'
 import type { Bbox, Position } from '../src/shared/types.js'
 
 /** Assert that two numbers are within `epsilon` of each other. */
@@ -112,6 +112,61 @@ test('positionToBbox rejects finite coordinates outside geographic ranges', () =
   )
 })
 
+test('unionBbox encloses ordinary overlapping boxes', () => {
+  assert.deepEqual(
+    unionBbox(
+      { north: 11, south: 10, west: 20, east: 22 },
+      { north: 10, south: 9, west: 21, east: 24 }
+    ),
+    { north: 11, south: 9, west: 20, east: 24 }
+  )
+})
+
+test('unionBbox preserves the shortest interval across the antimeridian', () => {
+  assert.deepEqual(
+    unionBbox(
+      { north: 53, south: 51, west: 175, east: -175 },
+      { north: 54, south: 52, west: 178, east: -170 }
+    ),
+    { north: 54, south: 51, west: 175, east: -170 }
+  )
+})
+
+test('unionBbox joins boxes on opposite sides of the antimeridian narrowly', () => {
+  assert.deepEqual(
+    unionBbox(
+      { north: 2, south: 0, west: 179, east: 180 },
+      { north: 3, south: 1, west: -180, east: -179 }
+    ),
+    { north: 3, south: 0, west: 179, east: -179 }
+  )
+})
+
+test('unionBbox retains the full-world and zero-width seam conventions', () => {
+  const local: Bbox = { north: 1, south: -1, west: 10, east: 20 }
+  assert.deepEqual(
+    unionBbox({ north: 90, south: -90, west: -180, east: 180 }, local),
+    { north: 90, south: -90, west: -180, east: 180 }
+  )
+  assert.deepEqual(
+    unionBbox(
+      { north: 1, south: -1, west: 180, east: -180 },
+      { north: 2, south: -2, west: -180, east: -180 }
+    ),
+    { north: 2, south: -2, west: 180, east: -180 }
+  )
+})
+
+test('unionBbox rejects a non-finite edge', () => {
+  assert.throws(
+    () => unionBbox(
+      { north: 1, south: -1, west: 10, east: Number.NaN },
+      { north: 1, south: -1, west: 10, east: 20 }
+    ),
+    /non-finite edge/
+  )
+})
+
 test('bboxContainsPoint includes and excludes points around a non-wrapping box', () => {
   const bbox: Bbox = { north: 43, south: 41, east: -70, west: -72 }
 
@@ -138,6 +193,15 @@ test('bboxContainsPoint wraps across the antimeridian when west exceeds east', (
   assert.ok(bboxContainsPoint(bbox, 175, 52), 'a point at the western edge is contained')
   assert.ok(!bboxContainsPoint(bbox, 0, 52), 'a point on the far side of the globe is excluded')
   assert.ok(!bboxContainsPoint(bbox, 179, 40), 'a latitude outside the box is excluded even in the wrap span')
+})
+
+test('bboxContainsPoint treats both antimeridian spellings as the zero-width seam', () => {
+  const seam: Bbox = { north: 1, south: -1, west: 180, east: -180 }
+
+  assert.ok(bboxContainsPoint(seam, 180, 0))
+  assert.ok(bboxContainsPoint(seam, -180, 0))
+  assert.ok(!bboxContainsPoint(seam, 179.999, 0))
+  assert.ok(!bboxContainsPoint(seam, -179.999, 0))
 })
 
 // An eastward leg one degree of longitude long, on the equator. Its great

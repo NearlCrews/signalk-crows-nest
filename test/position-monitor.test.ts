@@ -344,6 +344,35 @@ test('unions every contributor fetch box into one list request', async () => {
   monitor.stop()
 })
 
+test('unions contributor boxes across the antimeridian without querying the globe', async () => {
+  const mockApp = createMockApp()
+  const mockClient = createMockClient()
+  const westSide = createMockContributor(
+    ['Hazard'], { north: 11, south: 10, west: 179, east: 180 })
+  const eastSide = createMockContributor(
+    ['Bridge'], { north: 10, south: 9, west: -180, east: -179 })
+
+  const monitor = createPositionMonitor({
+    app: mockApp.app,
+    client: mockClient.client,
+    contributors: [westSide.contributor, eastSide.contributor],
+    poiTypes: 'Hazard,Bridge',
+    now: createClock().now
+  })
+
+  mockApp.emit({ latitude: 10, longitude: 179.5 })
+  await flush()
+
+  assert.equal(mockClient.calls.length, 1)
+  assert.deepEqual(
+    mockClient.calls[0].bbox,
+    { north: 11, south: 9, west: 179, east: -179 },
+    'the shared request keeps the narrow wrapped interval'
+  )
+
+  monitor.stop()
+})
+
 test('a throwing contributor.buildFetchBox does not short-circuit its siblings', async () => {
   // Safety: a crash in the route-hazard fetch-box code must never silently
   // disable the proximity alarm for the same tick. Each contributor's

@@ -146,7 +146,7 @@ test('sanitizes a POI id that carries path-breaking characters', () => {
 
   alarms.evaluate([corridorPoi('a.b/c', 'Hazard', 'Rock', 800)])
 
-  assert.equal(captured[0].path, 'notifications.navigation.crowsNest.route.a_b_c')
+  assert.equal(captured[0].path, 'notifications.navigation.crowsNest.route.escaped.YS5iL2M')
 })
 
 test('clearAll clears every active route alarm exactly once', () => {

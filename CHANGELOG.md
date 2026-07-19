@@ -20,6 +20,19 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   fresh profiles default to Light, and unsupported browsers receive a clear
   compatibility message.
 
+### Fixed
+
+- Explicit `notes` bounding-box queries now reject latitude or wrapped
+  longitude spans over 20 degrees, preventing near-global requests from
+  bypassing the existing resource-search limit and fanning out to every
+  enabled source.
+- Route-corridor and shared position-monitor bounding boxes now union across
+  the antimeridian along the shortest longitude interval instead of expanding
+  a local scan into a near-global request.
+- Unsafe point-of-interest ids now use a collision-free base64url notification
+  suffix, while already-safe ids keep their existing paths. Distinct ids such
+  as `a.b` and `a_b` can raise and clear alarms independently.
+
 <a id="v0140"></a>
 
 ## [0.14.0] - 2026-07-14

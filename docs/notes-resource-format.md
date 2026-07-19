@@ -32,8 +32,11 @@ GET /signalk/v2/api/resources/notes?bbox=[west,south,east,north]
 ```
 
 `bbox` is a JSON array in GeoJSON (longitude-first) order. The provider is
-query-scoped: it returns nothing without a `bbox`, so always send one. The
-response is an object keyed by note id:
+query-scoped: it returns nothing without a `bbox`, so always send one. Each
+latitude and wrapped-longitude span must be no more than 20 degrees. A box
+crossing the antimeridian keeps `west > east`, such as
+`[179,-5,-179,5]`. Missing, malformed, and oversized boxes return no notes.
+The response is an object keyed by note id:
 
 ```jsonc
 {

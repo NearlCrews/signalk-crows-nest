@@ -40,7 +40,7 @@
  */
 
 import { LRUCache } from 'lru-cache'
-import { wrapLongitude } from './longitude.js'
+import { longitudeSpanDegrees, wrapLongitude } from './longitude.js'
 import { MS_PER_SECOND } from './time.js'
 import type { Bbox } from './types.js'
 
@@ -174,13 +174,6 @@ const PREFETCH_MAX_SPAN_CELLS = 2
 
 /** Float tolerance when comparing snapped degree spans to a cell boundary. */
 const SPAN_EPSILON_DEGREES = 1e-9
-
-/** Width of a normal or antimeridian-crossing longitude interval. */
-function longitudeSpan (bbox: Bbox): number {
-  return bbox.east >= bbox.west
-    ? bbox.east - bbox.west
-    : 360 - bbox.west + bbox.east
-}
 
 /** Translate a bbox by the given cell offsets (east-positive, north-positive). */
 function translateBbox (bbox: Bbox, eastCells: number, northCells: number): Bbox {
@@ -334,7 +327,7 @@ export function createBboxDebounceCache<T extends NonNullable<unknown>> (
     // Wide viewports skip the warmup entirely (see PREFETCH_MAX_SPAN_CELLS).
     const maxSpan = PREFETCH_MAX_SPAN_CELLS * CELL_DEGREES
     if (
-      longitudeSpan(fetchBbox) > maxSpan + SPAN_EPSILON_DEGREES ||
+      longitudeSpanDegrees(fetchBbox.west, fetchBbox.east) > maxSpan + SPAN_EPSILON_DEGREES ||
       fetchBbox.north - fetchBbox.south > maxSpan + SPAN_EPSILON_DEGREES
     ) {
       return

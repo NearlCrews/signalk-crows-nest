@@ -9,6 +9,7 @@
  * emitter that wraps a value into that delta is shared here too.
  */
 
+import { Buffer } from 'node:buffer'
 import type { Delta, Path, SourceRef, Timestamp } from '@signalk/server-api'
 import { PLUGIN_ID } from './plugin-id.js'
 
@@ -33,22 +34,30 @@ export interface NotificationValue {
 }
 
 /**
- * Make a POI id safe to embed in a dot-delimited SignalK path. ActiveCaptain
- * ids are numeric, but the alarm outputs' `evaluate` is a public entry point:
- * a stray `.` would silently fork the notification onto a different path, so
- * any character outside `[A-Za-z0-9_-]` is replaced.
+ * Make a POI id safe to append to a dot-delimited SignalK path. IDs made only
+ * of `[A-Za-z0-9_-]` stay unchanged, preserving existing notification paths.
+ * Every other id is encoded as UTF-8 base64url beneath the controlled
+ * `escaped` segment. The controlled dot keeps encoded values disjoint from
+ * every unchanged safe id, while base64url preserves distinct unsafe ids
+ * without introducing path-breaking characters.
  *
- * An empty id (or one whose characters all sanitize away) would otherwise
- * yield an empty segment, so two POIs with empty ids would collide on the
- * same notification path and silently overwrite each other's raise / clear
- * bookkeeping. A guaranteed `_` fallback prevents that.
+ * Base64url for an empty string is empty, which would create an empty path
+ * segment. The reserved `_` payload represents only the empty id. A non-empty
+ * byte sequence cannot have a one-character base64url representation, so the
+ * marker cannot collide with an encoded non-empty id.
  */
-/** Characters not safe in a SignalK notification path segment, hoisted so the per-tick `sanitizePoiId` does not rebuild it. */
-const UNSAFE_ID_CHARS = /[^A-Za-z0-9_-]/g
+const SAFE_ID = /^[A-Za-z0-9_-]+$/
+const ESCAPED_ID_PREFIX = 'escaped.'
+const EMPTY_ID_PAYLOAD = '_'
 
 export function sanitizePoiId (poiId: string): string {
-  const sanitized = poiId.replace(UNSAFE_ID_CHARS, '_')
-  return sanitized.length > 0 ? sanitized : '_'
+  if (SAFE_ID.test(poiId)) {
+    return poiId
+  }
+  const payload = poiId.length === 0
+    ? EMPTY_ID_PAYLOAD
+    : Buffer.from(poiId, 'utf8').toString('base64url')
+  return `${ESCAPED_ID_PREFIX}${payload}`
 }
 
 /**
@@ -69,7 +78,7 @@ export interface NotificationEmitterApp {
  * update in the `vessels.self` context (the default when a delta carries no
  * context), carrying the plugin id as `$source`, the value's own `timestamp`,
  * and one path/value pair. The path is `pathPrefix` completed with the
- * path-safe POI id, and `value` is the per-output notification object.
+ * path-safe POI id suffix, and `value` is the per-output notification object.
  *
  * `sourceSuffix` differentiates the `$source` per alarm output, so consumers
  * filtering by `$source` can tell a proximity alarm from a route-corridor

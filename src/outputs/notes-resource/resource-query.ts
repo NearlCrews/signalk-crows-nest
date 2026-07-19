@@ -4,11 +4,22 @@
  */
 
 import { positionToBbox } from '../../geo/position-utilities.js'
+import { longitudeSpanDegrees } from '../../shared/longitude.js'
 import { isValidLatitude, isValidLongitude, toFiniteNumber } from '../../shared/numbers.js'
 import type { Bbox, Position } from '../../shared/types.js'
 
 /** Largest chart resource search radius accepted, in meters. */
 const MAX_SEARCH_DISTANCE_METERS = 1_000_000
+
+/**
+ * Largest latitude or wrapped-longitude span accepted from an explicit box.
+ *
+ * Twenty degrees is approximately the diameter of the largest accepted
+ * position-plus-distance search, with enough room for its projected square
+ * corners. It prevents a zoomed-out or hostile request from fanning a
+ * near-global query out to every enabled source.
+ */
+const MAX_EXPLICIT_BBOX_SPAN_DEGREES = 20
 
 /**
  * Coerce a single loosely typed query component into a finite number, or
@@ -64,7 +75,8 @@ export function resolvePosition (raw: unknown): Position | null {
  * The box is four numbers in GeoJSON bounding-box order (RFC 7946),
  * `[minLongitude, minLatitude, maxLongitude, maxLatitude]`, supplied either as
  * an array or as a comma-separated string (with or without surrounding
- * brackets). Returns null when the value is not four finite numbers.
+ * brackets). Returns null when the value is not four finite numbers or either
+ * edge spans more than the supported search area.
  */
 function resolveExplicitBbox (raw: unknown): Bbox | null {
   let parts: unknown[]
@@ -89,7 +101,9 @@ function resolveExplicitBbox (raw: unknown): Bbox | null {
     !isValidLongitude(east) ||
     !isValidLatitude(south) ||
     !isValidLatitude(north) ||
-    north < south
+    north < south ||
+    north - south > MAX_EXPLICIT_BBOX_SPAN_DEGREES ||
+    longitudeSpanDegrees(west, east) > MAX_EXPLICIT_BBOX_SPAN_DEGREES
   ) {
     return null
   }
