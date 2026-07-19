@@ -8,6 +8,7 @@
 
 import type * as React from 'react'
 import type { Dispatch } from 'react'
+import { Select } from 'signalk-nearlcrews-ui'
 import type { ConfigAction } from '../config-reducer.js'
 import { DEFAULT_MINIMUM_YEAR } from '../../shared/year-filter.js'
 import { DEFAULT_NOAA_ENC_DEBOUNCE_SECONDS } from '../../shared/bbox-debounce-bounds.js'
@@ -82,16 +83,15 @@ export default function NoaaEncSource ({ state, dispatch }: Props): React.ReactE
             'Coastal is the recommended default for most underway use.'}
         >
           {(controlProps) => (
-            <select
+            <Select
               {...controlProps}
-              style={S.input}
               value={band}
               onChange={(e) => dispatch({ type: 'setNoaaEncScaleBand', band: e.target.value })}
             >
               {SCALE_BANDS.map((bandId) => (
                 <option key={bandId} value={bandId}>{SCALE_BAND_LABELS[bandId]}</option>
               ))}
-            </select>
+            </Select>
           )}
         </LabeledField>
       </IncludeToggles>

@@ -80,6 +80,10 @@ newer. On an older server the plugin still works: the admin UI falls back to
 the standard generated settings form, which exposes the plugin configuration
 without the grouped layout, theme control, or live status section.
 
+The shared panel themes also require a browser with native CSS `@scope`
+support. An unsupported browser displays an update message instead of a
+partially styled configuration form.
+
 If you are on a new enough server and the panel still does not appear, do a
 full browser reload of the admin UI so it re-fetches the panel bundle.
 

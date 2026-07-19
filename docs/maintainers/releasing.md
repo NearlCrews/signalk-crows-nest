@@ -19,11 +19,12 @@ token, or a Granular token with publish and read access to this package).
 Secret names are case-insensitive in GitHub Actions, but `NPM_TOKEN` is the
 canonical form.
 
-The package's `files` field publishes `dist/`, `public/`, `assets/`, and
-`CHANGELOG.md`. npm also includes `package.json`, `README.md`, and `LICENSE` by
-default; source, tests, and the rest of `docs/` are not shipped. The `assets/`
-directory carries the Signal K admin UI icon set (the master SVG plus the four
-rasterized PNGs); the `build:icons` script also copies them under
+The package's `files` field publishes `dist/`, `public/`, `assets/`,
+`CHANGELOG.md`, and `THIRD_PARTY_NOTICES.md`. npm also includes `package.json`,
+`README.md`, and `LICENSE` by default; source, tests, and the rest of `docs/`
+are not shipped. The `assets/` directory carries the Signal K admin UI icon
+set (the master SVG plus the four rasterized PNGs); the `build:icons` script
+also copies them under
 `public/assets/icons/` so the admin's `express.static` mount can serve them. It
 also carries `assets/screenshots/`, the images declared under
 `signalk.screenshots` for the plugin-registry listing. Both the icons and the
@@ -56,8 +57,9 @@ Before creating the GitHub release:
    ```
    Inspect the dry-run manifest, not only its exit code. Confirm the package
    version, `dist/`, the panel under `public/`, icons, every declared
-   screenshot, `CHANGELOG.md`, `README.md`, and `LICENSE`; confirm source and
-   tests are absent. The runtime audit must report no known vulnerabilities.
+   screenshot, `CHANGELOG.md`, `README.md`, `LICENSE`, and
+   `THIRD_PARTY_NOTICES.md`; confirm source and tests are absent. The runtime
+   audit must report no known vulnerabilities.
 4. Update `README.md`, `CHANGELOG.md`, and the `docs/` tree if the release
    changes documented behavior, commands, or configuration options.
 5. Review the package metadata and plugin-registry inputs: description,

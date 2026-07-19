@@ -1,24 +1,22 @@
 /**
- * The shared label + control + hint scaffold every labeled field on the panel
- * renders: a one-row label-control pair, then the hint as a sibling block
- * below, so a narrow control does not push the hint into a cramped wrap
- * beside the field.
+ * Adapter for the shared UI label, control, and description scaffold used by
+ * every labeled field on the panel.
  *
  * The control is supplied through a render prop that receives the `id` (for
  * the label's `htmlFor`) and an `aria-describedby` pointing at the hint
- * paragraph, so the hint text is programmatically linked to the control and a
+ * description, so the hint text is programmatically linked to the control and a
  * screen-reader user hears the constraint text, not just the label. Building
  * the wiring into the scaffold makes the link impossible to forget in a new
  * field.
  */
 
 import type * as React from 'react'
-import { S } from '../styles.js'
+import { LabeledField as SharedLabeledField } from 'signalk-nearlcrews-ui'
 
 /** The props the render prop must spread onto its control element. */
 interface LabeledControlProps {
   id: string
-  'aria-describedby': string
+  'aria-describedby'?: string
 }
 
 interface Props {
@@ -26,24 +24,25 @@ interface Props {
   id: string
   /** Visible field label. */
   label: string
-  /** Hint paragraph rendered below the row, linked via aria-describedby. */
+  /** Description linked to the control through aria-describedby. */
   hint: React.ReactNode
-  /** Use the tighter labelled-input row layout used below an alarm toggle. */
+  /** Use the shared compact field density used below an alarm toggle. */
   dense?: boolean
   /** Render the control, spreading the given props onto it. */
   children: (controlProps: LabeledControlProps) => React.ReactElement
 }
 
-/** A label + control + hint row; the control comes from the render prop. */
+/** A labeled shared UI field whose control comes from the render prop. */
 export default function LabeledField ({ id, label, hint, dense, children }: Props): React.ReactElement {
-  const hintId = `${id}-hint`
+  const control = children({ id })
   return (
-    <>
-      <div style={dense === true ? S.labelledInputRow : S.fieldRow}>
-        <label htmlFor={id} style={S.label}>{label}</label>
-        {children({ id, 'aria-describedby': hintId })}
-      </div>
-      <p id={hintId} style={S.hintBelow}>{hint}</p>
-    </>
+    <SharedLabeledField
+      label={label}
+      description={hint}
+      layout='inline'
+      density={dense === true ? 'compact' : 'comfortable'}
+    >
+      {control}
+    </SharedLabeledField>
   )
 }

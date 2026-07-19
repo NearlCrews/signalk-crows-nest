@@ -63,9 +63,14 @@ module.exports = {
         './PluginConfigurationPanel': './src/panel/index.tsx'
       },
       // The panel uses React hooks only; it never imports react-dom (the admin
-      // UI host owns rendering), so only react is shared.
+      // UI host owns rendering), so only react is shared. Disabling the fallback
+      // keeps a second React implementation out of the remote bundle.
       shared: {
-        react: { singleton: true, requiredVersion: '^19' }
+        react: {
+          singleton: true,
+          requiredVersion: '>=19.2.0 <20.0.0',
+          import: false
+        }
       }
     })
   ]

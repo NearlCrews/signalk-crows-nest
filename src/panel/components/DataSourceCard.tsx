@@ -28,6 +28,7 @@
  */
 
 import type * as React from 'react'
+import { Badge, type StatusTone } from 'signalk-nearlcrews-ui'
 import { useCollapseFocusRestore } from '../hooks/use-collapse-focus-restore.js'
 import { S } from '../styles.js'
 import { pillContent, pillVariant } from '../source-status-pill.js'
@@ -175,24 +176,20 @@ export function sourceCardDomId (cardId: string): string {
  */
 function SourceStatusPill ({ status }: { status: SourceStatus }): React.ReactElement {
   const variant = pillVariant(status)
-  const pillStyle = variant === 'error'
-    ? PILL_ERROR
-    : variant === 'idle' || variant === 'waiting'
-      ? PILL_IDLE
-      : S.sourceStatusPill
+  const tone: StatusTone = variant === 'error'
+    ? 'danger'
+    : variant === 'waiting'
+      ? 'warning'
+      : variant === 'idle'
+        ? 'neutral'
+        : 'success'
   const { glyph, label, title } = pillContent(status, variant)
   return (
-    <span style={pillStyle} title={title}>
+    <Badge tone={tone} title={title}>
       <span aria-hidden='true'>{glyph}</span> {label}
-    </span>
+    </Badge>
   )
 }
 
 // pillVariant + pillContent are in `../source-status-pill.ts` so the
 // unit tests can import them without bringing in JSX.
-
-// Pre-computed style objects for the non-default pill variants, so React
-// sees a stable identity across renders rather than a fresh spread per
-// render. The base S.sourceStatusPill is used directly for the ok case.
-const PILL_ERROR = { ...S.sourceStatusPill, ...S.sourceStatusPillError }
-const PILL_IDLE = { ...S.sourceStatusPill, ...S.sourceStatusPillIdle }

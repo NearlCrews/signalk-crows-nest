@@ -1,16 +1,10 @@
 /**
- * A bordered, collapsible container for one of the panel's top-level
- * sections (Data sources, Alerts).
+ * Adapter for the shared UI collapsible section used by the panel's top-level
+ * Data sources and Alerts sections.
  *
- * Each section is its own card: a clickable header carrying a real
- * `<h2>` (so screen-reader heading navigation can jump to it) plus a
- * disclosure chevron, plus a body that holds the section's children.
- * The outer `<section>` carries `aria-labelledby` referencing the
- * heading so the landmark has an accessible name. Sections collapse
- * independently. The Data sources section defaults open (the
+ * Sections collapse independently. The Data sources section defaults open (the
  * operator's primary work area); the Alerts section defaults
- * closed. Children stay mounted (visibility flips via
- * CSS) so an in-progress NumberField draft inside a child card
+ * closed. Children stay mounted so an in-progress NumberField draft inside a child card
  * survives a collapse.
  *
  * `defaultExpanded` is read ONCE on mount (the standard `useState`
@@ -20,9 +14,7 @@
  */
 
 import type * as React from 'react'
-import { useState } from 'react'
-import { useCollapseFocusRestore } from '../hooks/use-collapse-focus-restore.js'
-import { S } from '../styles.js'
+import { CollapsibleSection } from 'signalk-nearlcrews-ui'
 
 interface Props {
   /** Stable id used as the body region id for aria-controls / aria-labelledby. */
@@ -46,42 +38,14 @@ export default function SectionBox ({
   defaultExpanded = true,
   children
 }: Props): React.ReactElement {
-  const [expanded, setExpanded] = useState(defaultExpanded)
-  const { bodyRef, buttonRef, restoreFocusBeforeCollapse } = useCollapseFocusRestore()
-  const bodyId = `ac-section-body-${cardId}`
-  const titleId = `ac-section-title-${cardId}`
-
-  function handleToggle (): void {
-    // Restore focus to the disclosure button before collapsing, so the
-    // `display: none` flip does not strand a keyboard user on document.body.
-    if (expanded) restoreFocusBeforeCollapse()
-    setExpanded((open) => !open)
-  }
-
   return (
-    <section style={S.sectionBox} aria-labelledby={titleId}>
-      <h2 style={S.sectionBoxHeading}>
-        <button
-          ref={buttonRef}
-          type='button'
-          style={S.sectionBoxHeader}
-          aria-expanded={expanded}
-          aria-controls={bodyId}
-          onClick={handleToggle}
-        >
-          <span id={titleId} style={S.sectionBoxTitle}>{title}</span>
-          <span style={S.sectionBoxChevron} aria-hidden='true'>{expanded ? '▾' : '▸'}</span>
-        </button>
-      </h2>
-      <div
-        ref={bodyRef}
-        id={bodyId}
-        style={expanded ? S.sectionBoxBody : S.collapsedBody}
-        aria-hidden={!expanded}
-        inert={!expanded}
-      >
-        {children}
-      </div>
-    </section>
+    <CollapsibleSection
+      id={`ac-section-${cardId}`}
+      title={title}
+      defaultOpen={defaultExpanded}
+      mountStrategy='retain'
+    >
+      {children}
+    </CollapsibleSection>
   )
 }

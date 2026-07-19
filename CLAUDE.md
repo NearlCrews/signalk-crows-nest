@@ -415,18 +415,16 @@ self-contained module registered on one line in `src/index.ts`.
     `index.tsx` (Module Federation entry), `PluginConfigurationPanel.tsx`,
     `config-reducer.ts`, `normalize-config.ts`, plus the UI-metadata
     modules `active-captain-poi-types.ts` (the grouped options and collapsed
-    selection summary), `styles.ts` (the `--ac-*` design
-    tokens: scale tokens plus light, dark, and red-preserving night theme
-    blocks, each with `color-scheme`, and the `data-ac-theme` pinned
-    overrides the theme toggle drives), `relative-time.ts`,
+    selection summary), `styles.ts` (plugin-specific layout and status styles,
+    with the remaining `--ac-*` aliases mapped to the shared
+    `signalk-nearlcrews-ui` theme tokens), `relative-time.ts`,
     `source-status-pill.ts` (the pure `pillVariant` + `pillContent` helpers
     used by the per-source live-status pill on each card header),
     `request-timeout.ts` (the panel-wide per-request timeout the status
     poller and the unit-preferences fetch share), and `unit-system.ts` (the
     React-free display-units module keyed off the server unit-preset's
     `categories.length.targetUnit`). `hooks/` holds `use-config`,
-    `use-status` (which also exposes `lastUpdatedMs`), `use-theme` (the
-    localStorage-persisted `ac-theme` choice), `use-unit-system` (resolves
+    `use-status` (which also exposes `lastUpdatedMs`), `use-unit-system` (resolves
     the display system from the server's unit preferences), `use-number-draft`
     (the raw-text draft state for clearable numeric inputs), and
     `use-collapse-focus-restore` (the shared focus-restore-on-collapse hook).
@@ -445,12 +443,12 @@ self-contained module registered on one line in `src/index.ts`.
     `FallbackEndpointsField`, `Fieldset`, `Disclosure`, `ToggleFieldset`,
     `RatingFilterField`, `MinimumYearField`, `RefreshSecondsField`,
     `MergeWithActiveCaptain`, `ProximityAlarmFields`, `RouteHazardScanFields`,
-    `BridgeAirDraftFields`, `ActiveCaptainPoiTypes`, `SeamarkGroups`,
-    `SegmentedControl`, `ThemeToggle`, and `SaveStatus`.
-    The panel is a per-source accordion: a top control bar with the theme
-    toggle, the status bar, a collapsible card per data source, then the
-    Alerts section. Card disclosure state lives at the panel root so the
-    card bodies share one stable map.
+    `BridgeAirDraftFields`, `ActiveCaptainPoiTypes`, `SeamarkGroups`, and
+    `SaveStatus`. The local field and layout adapters compose shared
+    `signalk-nearlcrews-ui` controls. The panel is a per-source accordion: a
+    top control bar with the shared theme toggle, the status bar, a collapsible
+    card per data source, then the Alerts section. Card disclosure state lives
+    at the panel root so the card bodies share one stable map.
 - `test/` - `node:test` test suite, run through `tsx`.
 - `docs/` - project documentation: the development guide, troubleshooting, the
   notes-resource integration guide (`notes-resource-format.md`), the Garmin API
@@ -460,15 +458,18 @@ self-contained module registered on one line in `src/index.ts`.
   `screenshots/` (the admin-panel and Freeboard-SK images declared under
   `signalk.screenshots` for the plugin-registry listing).
 - `dist/` and `public/` - compiled plugin and bundled panel. Generated, not
-  committed. They are published to npm alongside `assets/` and `CHANGELOG.md`
-  (see the `files` field in `package.json`). npm also includes `package.json`,
-  `README.md`, and `LICENSE` by default.
+  committed. They are published to npm alongside `assets/`, `CHANGELOG.md`, and
+  `THIRD_PARTY_NOTICES.md` (see the `files` field in `package.json`). npm also
+  includes `package.json`, `README.md`, and `LICENSE` by default.
 
 ## Toolchain
 
 - TypeScript 6. The Node plugin is compiled with `tsc` (`tsconfig.json`).
 - The React panel under `src/panel/` is bundled to `public/` by webpack as a
   Module Federation remote (`webpack.config.cjs`, `tsconfig.panel.json`).
+- `signalk-nearlcrews-ui` 0.3.0 supplies the panel shell, theme system, and
+  shared controls. It is pinned exactly, and the host supplies the React 19
+  singleton without a bundled fallback.
 - The test suite is type-checked separately (`tsconfig.test.json`); all three
   configs run under `npm run typecheck`.
 - ESLint 9 with [neostandard](https://github.com/neostandard/neostandard)

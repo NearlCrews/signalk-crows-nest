@@ -113,7 +113,9 @@ air-draft check).
   has not been confirmed in over two years.
 - **A React configuration panel** with a per-source status bar, an
   accordion of cards each with a live-status pill, an Alerts section, and
-  a theme toggle with light, dark, and a red-preserving night mode.
+  shared `signalk-nearlcrews-ui` controls and themes. Fresh profiles start in
+  Light mode, with Dark, red-preserving Night, and Auto available from the
+  theme toggle.
 
 ## Screenshots
 
@@ -131,7 +133,8 @@ Crow's Nest is one plugin built from focused modules:
 
 - **TypeScript 6 under strict flags.** The Node plugin compiles with `tsc`;
   the React configuration panel bundles with webpack 5 as a Module
-  Federation remote that the Signal K admin UI loads.
+  Federation remote that the Signal K admin UI loads. The panel uses
+  `signalk-nearlcrews-ui` for shared controls and token-driven themes.
 - **Inputs and outputs.** Every POI source is a self-contained input module
   (ActiveCaptain, OpenSeaMap, USCG Light List, NOAA ENC Direct, NOAA CO-OPS,
   USCG Local Notice to Mariners, NGA World Port Index, and USACE locks and
@@ -227,9 +230,9 @@ In the Signal K admin UI, open **Server, then Plugin Config**, find
 ActiveCaptain-only setup; opt in to the other sources from their cards.
 The panel has these areas:
 
-1. **Theme toggle** in the top corner: Auto, Light, Dark, or a
-   red-preserving Night mode for night vision at the helm; the choice
-   persists across visits.
+1. **Theme toggle** in the top corner: Light, Dark, a red-preserving Night
+   mode for night vision at the helm, or Auto. Light is the default for a
+   fresh profile, and an explicit choice persists across visits.
 2. **Per-source status bar**: `reachable`, `unreachable`, or `not yet
    contacted` for each enabled source, the last successful upstream list-fetch
    time, a "checked Ns ago" freshness note, and recent errors. A
@@ -300,8 +303,8 @@ caches while retaining the on-disk data used for offline operation.
 ## Development
 
 This project targets Node 20.3 or newer and develops against
-`@signalk/server-api` 2.25.0 or newer, with TypeScript 6 (development
-only).
+`@signalk/server-api` 2.30.0 or newer, with TypeScript 6 and the exact shared
+UI package `signalk-nearlcrews-ui` 0.3.0 (development only).
 
 ```bash
 git clone https://github.com/NearlCrews/signalk-crows-nest.git
@@ -323,6 +326,8 @@ See the [development guide](docs/development.md) for the full workflow.
 MIT: see [LICENSE](LICENSE) for the full text. The software is provided
 "AS IS", without warranty of any kind. Treat the imported data and the
 alarms as advisory, and always carry independent means of navigation.
+Bundled dependency licenses are listed in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Acknowledgments
 

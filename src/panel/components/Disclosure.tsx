@@ -8,7 +8,7 @@
  */
 
 import type * as React from 'react'
-import { S } from '../styles.js'
+import { Disclosure as SharedDisclosure } from 'signalk-nearlcrews-ui'
 
 interface Props {
   /** The always-visible summary label. Defaults to "Advanced", the only label in use. */
@@ -19,10 +19,5 @@ interface Props {
 
 /** A native, accessible collapsible section for advanced or rarely-used controls. */
 export default function Disclosure ({ summary = 'Advanced', children }: Props): React.ReactElement {
-  return (
-    <details style={S.disclosure}>
-      <summary style={S.disclosureSummary}>{summary}</summary>
-      <div style={S.disclosureBody}>{children}</div>
-    </details>
-  )
+  return <SharedDisclosure title={summary}>{children}</SharedDisclosure>
 }

@@ -13,6 +13,7 @@
 
 import type * as React from 'react'
 import { memo, useMemo, type Dispatch } from 'react'
+import { Banner } from 'signalk-nearlcrews-ui'
 import type { ConfigAction } from '../config-reducer.js'
 import { SEAMARK_GROUP_REFS } from '../../shared/seamark-groups.js'
 import {
@@ -33,7 +34,6 @@ import {
   DEFAULT_USCG_LNM_DEBOUNCE_SECONDS
 } from '../../shared/bbox-debounce-bounds.js'
 import { resolveScaleBand, SCALE_BAND_LABELS } from '../../shared/scale-band.js'
-import { S } from '../styles.js'
 import type { PluginConfig } from '../../shared/types.js'
 import type { SourceStatus, StatusSnapshot } from '../../status/status-types.js'
 import { activeCaptainPoiTypeSelectionLabel } from '../active-captain-poi-types.js'
@@ -184,12 +184,12 @@ export default memo(function DataSourcesSection (
     <SectionBox cardId='data-sources' title='Data sources' defaultExpanded>
       {noOptionalSourceEnabled
         ? (
-          <p style={S.infoCallout}>
-            Getting started: Garmin ActiveCaptain is always on. The other
+          <Banner tone='info' title='Getting started'>
+            Garmin ActiveCaptain is always on. The other
             sources below are off by default; expand a card and toggle one on
             to layer OpenSeaMap, US government, or worldwide port data onto
             the chart.
-          </p>
+          </Banner>
           )
         : null}
       <DataSourceCard

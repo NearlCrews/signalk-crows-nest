@@ -12,18 +12,24 @@
 
 import type * as React from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  Banner,
+  Cluster,
+  PanelRoot,
+  Stack,
+  supportsNativeCssScope,
+  ThemeToggle
+} from 'signalk-nearlcrews-ui'
 import AlertsSection from './components/AlertsSection.js'
 import DataSourcesSection from './components/DataSourcesSection.js'
 import { sourceCardDomId } from './components/DataSourceCard.js'
 import FooterBar from './components/FooterBar.js'
 import StatusBar from './components/StatusBar.js'
-import ThemeToggle from './components/ThemeToggle.js'
 import { useConfig } from './hooks/use-config.js'
 import { useStatus } from './hooks/use-status.js'
-import { useTheme } from './hooks/use-theme.js'
 import { UnitSystemContext, useUnitSystem } from './hooks/use-unit-system.js'
 import { SOURCE_SLUGS, type SourceSlug } from '../shared/source-ids.js'
-import { S, THEME_STYLE } from './styles.js'
+import { THEME_STYLE } from './styles.js'
 
 /** How long, in milliseconds, the "Saved" confirmation pill stays visible. */
 const SAVED_PILL_MS = 2500
@@ -39,10 +45,25 @@ interface Props {
 }
 
 /** The configuration panel rendered inside the Signal K admin UI. */
-export default function PluginConfigurationPanel ({ configuration, save }: Props): React.ReactElement {
+export default function PluginConfigurationPanel (props: Props): React.ReactElement {
+  if (typeof window === 'undefined' || !supportsNativeCssScope(window)) {
+    return (
+      <div data-browser-compatibility-message='' role='alert'>
+        <h2>Browser update required</h2>
+        <p>
+          This panel requires native CSS @scope. Update the browser or embedded WebView before
+          reopening Signal K Admin.
+        </p>
+      </div>
+    )
+  }
+
+  return <SupportedPluginConfigurationPanel {...props} />
+}
+
+function SupportedPluginConfigurationPanel ({ configuration, save }: Props): React.ReactElement {
   const { status, error, lastUpdatedMs } = useStatus()
   const { state, savedState, dispatch, markSaved } = useConfig(configuration)
-  const [theme, setTheme] = useTheme()
   // The display system the server's unit preferences select; the LengthFields
   // read it through context so the meters-backed config renders in feet when
   // the active preset is imperial.
@@ -119,39 +140,40 @@ export default function PluginConfigurationPanel ({ configuration, save }: Props
 
   return (
     <UnitSystemContext.Provider value={unitSystem}>
-      <div
+      <PanelRoot
         className='ac-config-panel'
-        data-ac-theme={theme === 'auto' ? undefined : theme}
-        style={S.root}
+        legacyThemeStorageKeys={['ac-theme']}
       >
         <style>{THEME_STYLE}</style>
-        <div style={S.controlBar}>
-          <ThemeToggle value={theme} onChange={setTheme} />
-        </div>
-        <StatusBar status={status} lastUpdatedMs={lastUpdatedMs} onJumpToSource={jumpToSource} />
-        {error !== null
-          ? (
-            <div role='alert' style={S.errorBanner}>
-              Status unavailable: {error}. The next poll will retry automatically.
-            </div>
-            )
-          : null}
-        <DataSourcesSection
-          state={state}
-          dispatch={dispatch}
-          status={status}
-          expanded={expandedCards}
-          onToggleExpanded={toggleCard}
-        />
-        <AlertsSection state={state} dispatch={dispatch} />
-        <FooterBar
-          dirty={dirty}
-          unconfigured={unconfigured}
-          justSavedAt={justSavedAt}
-          onSave={handleSave}
-          onDiscard={handleDiscard}
-        />
-      </div>
+        <Stack gap={4}>
+          <Cluster justify='end'>
+            <ThemeToggle />
+          </Cluster>
+          <StatusBar status={status} lastUpdatedMs={lastUpdatedMs} onJumpToSource={jumpToSource} />
+          {error !== null
+            ? (
+              <Banner live='polite' tone='danger' title='Status unavailable'>
+                {error}. The next poll will retry automatically.
+              </Banner>
+              )
+            : null}
+          <DataSourcesSection
+            state={state}
+            dispatch={dispatch}
+            status={status}
+            expanded={expandedCards}
+            onToggleExpanded={toggleCard}
+          />
+          <AlertsSection state={state} dispatch={dispatch} />
+          <FooterBar
+            dirty={dirty}
+            unconfigured={unconfigured}
+            justSavedAt={justSavedAt}
+            onSave={handleSave}
+            onDiscard={handleDiscard}
+          />
+        </Stack>
+      </PanelRoot>
     </UnitSystemContext.Provider>
   )
 }

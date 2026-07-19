@@ -6,7 +6,7 @@
  */
 
 import type * as React from 'react'
-import { S } from '../styles.js'
+import { StatusIndicator } from 'signalk-nearlcrews-ui'
 
 interface Props {
   dirty: boolean
@@ -16,7 +16,7 @@ interface Props {
 
 /** The save-state indicator: "Unsaved changes", a "Saved" pill, or nothing. */
 export default function SaveStatus ({ dirty, justSavedAt }: Props): React.ReactElement | null {
-  if (dirty) return <span style={S.dirty}>Unsaved changes</span>
-  if (justSavedAt !== null) return <span role='status' style={S.savedPill}>Saved</span>
+  if (dirty) return <StatusIndicator>Unsaved changes</StatusIndicator>
+  if (justSavedAt !== null) return <StatusIndicator role='status' tone='success'>Saved</StatusIndicator>
   return null
 }

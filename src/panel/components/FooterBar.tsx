@@ -8,9 +8,9 @@
 
 import type * as React from 'react'
 import { memo } from 'react'
+import { ActionBar, Button } from 'signalk-nearlcrews-ui'
 import SaveStatus from './SaveStatus.js'
 import { saveButtonDisabled } from '../footer-bar-state.js'
-import { S } from '../styles.js'
 
 interface Props {
   dirty: boolean
@@ -34,17 +34,20 @@ interface Props {
 export default memo(function FooterBar ({ dirty, unconfigured, justSavedAt, onSave, onDiscard }: Props): React.ReactElement {
   const saveDisabled = saveButtonDisabled(dirty, unconfigured)
   return (
-    <div style={S.footer}>
-      <button type='button' style={S.btnPrimary} onClick={onSave} disabled={saveDisabled}>
-        Save
-      </button>
-      <button type='button' style={S.btnSecondary} onClick={onDiscard} disabled={!dirty}>
-        Discard
-      </button>
-      <SaveStatus dirty={dirty} justSavedAt={justSavedAt} />
-      {unconfigured && !dirty
-        ? <span style={S.hint}>Save to enable the plugin.</span>
-        : null}
-    </div>
+    <ActionBar
+      sticky
+      status={
+        <>
+          <SaveStatus dirty={dirty} justSavedAt={justSavedAt} />
+          {unconfigured && !dirty ? <span>Save to enable the plugin.</span> : null}
+        </>
+      }
+      actions={
+        <>
+          <Button variant='primary' onClick={onSave} disabled={saveDisabled}>Save</Button>
+          <Button onClick={onDiscard} disabled={!dirty}>Discard</Button>
+        </>
+      }
+    />
   )
 })

@@ -61,7 +61,9 @@ across restarts.
 
 The plugin ships its own configuration panel: a federated React app, loaded by
 the Signal K admin UI through Module Federation, that replaces the generated
-settings form with a live status section and grouped POI-type toggles.
+settings form with a live status section and grouped POI-type toggles. The
+panel uses the exact `signalk-nearlcrews-ui` 0.3.0 package for its shell,
+themes, and shared controls, while the Signal K host supplies React.
 
 
 ## Project structure
@@ -168,9 +170,9 @@ src/                      # TypeScript source
     ├── normalize-config.ts# Normalizes the raw config object
     ├── active-captain-poi-types.ts  # ActiveCaptain POI-type metadata and summary
     ├── relative-time.ts   # ISO timestamp to a localized "N minutes ago" phrase
-    ├── styles.ts          # The --ac-* design tokens and theme blocks
+    ├── styles.ts          # Plugin layout styles and shared-theme token aliases
     ├── unit-system.ts     # The display-units resolver keyed off the server unit preset
-    ├── hooks/             # use-config, use-status, use-theme, use-unit-system,
+    ├── hooks/             # use-config, use-status, use-unit-system,
     │                      #   use-number-draft, use-collapse-focus-restore
     └── components/        # StatusBar, FooterBar, DataSourcesSection (per-source
                            #   accordion shell), DataSourceCard (one collapsible card),
@@ -178,8 +180,8 @@ src/                      # TypeScript source
                            #   NoaaEncSource, NoaaCoopsSource, UscgLnmSource, WpiSource,
                            #   UsaceSource (card bodies), AlertsSection (the proximity,
                            #   route-hazard, and bridge air-draft controls),
-                           #   ThemeToggle; and the per-field input components, including
-                           #   the shared NumberField, LengthField (the meters-backed,
+                           #   and the per-field input adapters, including NumberField,
+                           #   LengthField (the meters-backed,
                            #   unit-aware wrapper), MinimumYearField (the per-source
                            #   earliest-year filter), ProximityAlarmFields, and
                            #   RouteHazardScanFields
@@ -190,12 +192,12 @@ docs/                     # Project documentation
 .github/                  # Community files, issue templates, and CI workflows
 ```
 
-`dist/`, `public/`, `assets/`, and `CHANGELOG.md` are allowlisted for npm (see
-the `files` field in `package.json`); npm also includes `package.json`,
-`README.md`, and `LICENSE`. `assets/icons/` holds the Signal K admin UI icon set
-(the master SVG and the four rasterized PNGs), and the `build:icons` script
-copies them under `public/assets/icons/` so the Signal K admin's
-`express.static` mount can serve them at runtime.
+`dist/`, `public/`, `assets/`, `CHANGELOG.md`, and `THIRD_PARTY_NOTICES.md` are
+allowlisted for npm (see the `files` field in `package.json`); npm also includes
+`package.json`, `README.md`, and `LICENSE`. `assets/icons/` holds the Signal K
+admin UI icon set (the master SVG and the four rasterized PNGs), and the
+`build:icons` script copies them under `public/assets/icons/` so the Signal K
+admin's `express.static` mount can serve them at runtime.
 
 ## Testing
 
