@@ -13,9 +13,31 @@ test('sanitizePoiId leaves a path-safe id unchanged', () => {
   assert.equal(sanitizePoiId('keep-_ok'), 'keep-_ok')
 })
 
-test('sanitizePoiId replaces every path-breaking character', () => {
-  assert.equal(sanitizePoiId('a.b/c'), 'a_b_c')
-  assert.equal(sanitizePoiId('x y.z'), 'x_y_z')
+test('sanitizePoiId encodes unsafe UTF-8 ids without collisions', () => {
+  assert.equal(sanitizePoiId('a.b/c'), 'escaped.YS5iL2M')
+  assert.equal(sanitizePoiId('x y.z'), 'escaped.eCB5Lno')
+  assert.equal(sanitizePoiId('港⚓'), 'escaped.5riv4pqT')
+
+  const suffixes = new Set([
+    sanitizePoiId('a.b'),
+    sanitizePoiId('a_b'),
+    sanitizePoiId('a/b'),
+    sanitizePoiId('a b')
+  ])
+  assert.equal(suffixes.size, 4, 'distinct ids keep distinct notification suffixes')
+})
+
+test('sanitizePoiId gives the empty id an unambiguous non-empty suffix', () => {
+  assert.equal(sanitizePoiId(''), 'escaped._')
+  assert.notEqual(sanitizePoiId('_'), sanitizePoiId(''))
+  assert.notEqual(sanitizePoiId('escaped._'), sanitizePoiId(''))
+})
+
+test('sanitizePoiId emits only controlled Signal K-safe path segments', () => {
+  for (const id of ['a.b/c', 'x y.z', '港⚓', '', 'escaped.YS5i']) {
+    const segments = sanitizePoiId(id).split('.')
+    assert.ok(segments.every(segment => /^[A-Za-z0-9_-]+$/.test(segment)))
+  }
 })
 
 test('emitNotification builds the shared notification delta', () => {
@@ -79,5 +101,5 @@ test('emitNotification sanitizes the POI id embedded in the path', () => {
     }
   )
 
-  assert.deepEqual(paths, ['notifications.navigation.crowsNest.route.a_b_c'])
+  assert.deepEqual(paths, ['notifications.navigation.crowsNest.route.escaped.YS5iL2M'])
 })

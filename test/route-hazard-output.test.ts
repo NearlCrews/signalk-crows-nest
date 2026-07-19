@@ -133,6 +133,24 @@ test('buildFetchBox returns a corridor box for the active route', async () => {
   handle.stop()
 })
 
+test('buildFetchBox keeps an antimeridian-crossing route corridor narrow', async () => {
+  const seamRoute: Array<[number, number]> = [[179.95, 0], [-179.95, 0]]
+  const { context } = createContext({
+    course: courseWithRoute('/resources/routes/seam-route'),
+    resource: routeResource(seamRoute)
+  })
+  const handle = routeHazardOutput.start(context)
+  await flush()
+  assert.ok(handle.positionScan)
+
+  const box = handle.positionScan.buildFetchBox({ latitude: 0, longitude: 179.94 })
+  assert.ok(box !== null)
+  assert.ok(box.west > box.east, 'the route corridor crosses the antimeridian')
+  assert.ok(360 - box.west + box.east < 1, 'the route corridor spans less than one degree')
+
+  handle.stop()
+})
+
 test('a tick with a route raises an alarm, a tick without a route clears it', async () => {
   let course = courseWithRoute('/resources/routes/route-1')
   const { context, messages, emitCourseDelta } = createContext({

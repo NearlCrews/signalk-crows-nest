@@ -134,3 +134,39 @@ test('resolveBbox preserves an antimeridian-crossing bbox supplied as an array',
   assert.equal(wrap?.west, 178.5)
   assert.equal(wrap?.east, -178.5)
 })
+
+test('resolveBbox rejects an explicit bbox whose latitude span is too large', () => {
+  assert.equal(resolveBbox({ bbox: [-10, -10.01, 10, 10] }), null)
+  assert.equal(resolveBbox({ bbox: '-10,-10.01,10,10' }), null)
+})
+
+test('resolveBbox rejects ordinary and wrapped longitude spans over the limit', () => {
+  assert.equal(resolveBbox({ bbox: [-10.01, -5, 10, 5] }), null)
+  assert.equal(resolveBbox({ bbox: '169,-5,-170,5' }), null)
+})
+
+test('resolveBbox accepts a small wrapped explicit bbox', () => {
+  assert.deepEqual(
+    resolveBbox({ bbox: [179, -5, -179, 5] }),
+    { west: 179, south: -5, east: -179, north: 5 }
+  )
+})
+
+test('resolveBbox accepts ordinary and wrapped boxes at the span limit', () => {
+  assert.deepEqual(
+    resolveBbox({ bbox: [-10, -10, 10, 10] }),
+    { west: -10, south: -10, east: 10, north: 10 }
+  )
+  assert.deepEqual(
+    resolveBbox({ bbox: [170, -10, -170, 10] }),
+    { west: 170, south: -10, east: -170, north: 10 }
+  )
+})
+
+test('resolveBbox distinguishes a full-world box from a seam point', () => {
+  assert.equal(resolveBbox({ bbox: [-180, -5, 180, 5] }), null)
+  assert.deepEqual(
+    resolveBbox({ bbox: [180, -5, -180, 5] }),
+    { west: 180, south: -5, east: -180, north: 5 }
+  )
+})

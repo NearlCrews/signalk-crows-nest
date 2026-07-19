@@ -157,33 +157,35 @@ test('sanitizes a POI id that carries path-breaking characters', () => {
 
   alarms.evaluate(ORIGIN, [poi('a.b/c', 'Hazard', 'Rock', northOfOrigin(100))])
 
-  assert.equal(captured[0].path, 'notifications.navigation.crowsNest.hazard.a_b_c')
+  assert.equal(captured[0].path, 'notifications.navigation.crowsNest.hazard.escaped.YS5iL2M')
 })
 
-test('two distinct ids that sanitize to the same key share one alarm path and tracker entry', () => {
+test('unsafe and safe ids that previously collided raise and clear independently', () => {
   const { app, captured } = createCapturingApp()
   const alarms = createProximityAlarms(app, 500)
 
-  // `a.b` and `a_b` are distinct source ids, but the path sanitizer maps the
-  // `.` to `_`, so both resolve to the segment `a_b`. The tracker keys by the
-  // sanitized id, so the two collapse to a single alarm: the first raises it,
-  // the second finds the key already active. This collision is the documented
-  // contract, not a bug: two POIs that sanitize identically cannot hold
-  // independent alarms on one shared notification path.
+  const dotted = poi('a.b', 'Hazard', 'Dotted rock', northOfOrigin(100))
+  const scored = poi('a_b', 'Hazard', 'Scored rock', northOfOrigin(120))
   alarms.evaluate(ORIGIN, [
-    poi('a.b', 'Hazard', 'Dotted rock', northOfOrigin(100)),
-    poi('a_b', 'Hazard', 'Scored rock', northOfOrigin(120))
+    dotted,
+    scored
   ])
 
-  assert.equal(captured.length, 1, 'the two colliding ids raise exactly one alarm')
-  assert.equal(captured[0].path, 'notifications.navigation.crowsNest.hazard.a_b')
+  assert.deepEqual(captured.map(entry => entry.path), [
+    'notifications.navigation.crowsNest.hazard.escaped.YS5i',
+    'notifications.navigation.crowsNest.hazard.a_b'
+  ])
+  assert.ok(captured.every(entry => entry.value.state === 'alarm'))
 
-  // One tracker entry means clearAll emits exactly one clear on the shared path.
-  alarms.clearAll()
-  const clears = captured.slice(1)
-  assert.equal(clears.length, 1, 'the single shared entry clears once')
-  assert.equal(clears[0].path, 'notifications.navigation.crowsNest.hazard.a_b')
-  assert.equal(clears[0].value.state, 'normal')
+  alarms.evaluate(ORIGIN, [dotted])
+  assert.equal(captured.length, 3)
+  assert.equal(captured[2].path, 'notifications.navigation.crowsNest.hazard.a_b')
+  assert.equal(captured[2].value.state, 'normal')
+
+  alarms.evaluate(ORIGIN, [])
+  assert.equal(captured.length, 4)
+  assert.equal(captured[3].path, 'notifications.navigation.crowsNest.hazard.escaped.YS5i')
+  assert.equal(captured[3].value.state, 'normal')
 })
 
 test('clearAll clears every active hazard exactly once', () => {

@@ -30,7 +30,7 @@ export interface NotificationTrackerApp extends NotificationEmitterApp {
 /** Inputs for {@link createNotificationTracker}. */
 export interface NotificationTrackerConfig<T> {
   app: NotificationTrackerApp
-  /** Notification path prefix, completed with the sanitized POI id. */
+  /** Notification path prefix, completed with the encoded POI id suffix. */
   pathPrefix: string
   /**
    * Optional `$source` suffix appended to the plugin id, so the clear
@@ -65,7 +65,7 @@ export interface NotificationTracker<T> {
   set: (poiId: string, entry: T) => string
   /**
    * Clear every active entry whose POI id is not in `activeIds`. The ids are
-   * sanitized into the tracker's key space before the comparison, so a caller
+   * encoded into the tracker's key space before the comparison, so a caller
    * can pass raw POI ids and the kept set still matches the wire identities. A
    * raw-vs-sanitized key-space mismatch would otherwise clear and re-raise a
    * still-active alarm every tick (alarm chatter on a safety alarm).
@@ -78,36 +78,33 @@ export interface NotificationTracker<T> {
 /**
  * Create an alarm tracker bound to the given app and notification path.
  *
- * The tracker keys its internal map by the sanitized POI id, the same value
+ * The tracker keys its internal map by the encoded POI id suffix, the same value
  * `emitNotification` puts on the wire. Keying by the raw id would let two
- * ids that sanitize identically (a `.` and a `_` in the same slot, for
- * example) be treated as distinct entries that share a single SignalK
- * notification path, so `set(A)` then `set(B)` would clobber each other on
- * the wire while the tracker thought both were live.
+ * callers accidentally disagree about the identity they use for active-state
+ * bookkeeping and the identity emitted on the wire.
  */
 export function createNotificationTracker<T> (
   config: NotificationTrackerConfig<T>
 ): NotificationTracker<T> {
   const { app, pathPrefix, sourceSuffix, buildClearValue, describeClear } = config
-  const active = new Map<string, { entry: T, raisedAt: string }>()
+  const active = new Map<string, { entry: T, poiId: string, raisedAt: string }>()
 
   // Clear one alarming entry: emit its `normal` notification, drop it from
-  // the active set, and optionally log. A no-op when `poiId` is not active.
+  // the active set, and optionally log. A no-op when `safeId` is not active.
   // Internal only; the callers drive clears through clearStale and clearAll.
-  function clear (poiId: string): void {
-    const safeId = sanitizePoiId(poiId)
+  function clear (safeId: string): void {
     const record = active.get(safeId)
     if (record === undefined) {
       return
     }
-    // emitNotification re-sanitizes the id it is given; that second pass is
-    // deliberately redundant (sanitizing is idempotent) because each side
-    // guards an independent invariant: the map key space here, the on-wire
-    // path safety there.
-    emitNotification(app, pathPrefix, safeId, buildClearValue(record.entry, record.raisedAt), sourceSuffix)
+    // Keep the raw id with the record. An encoded suffix deliberately contains
+    // the controlled `escaped.` separator, so passing that suffix back through
+    // sanitizePoiId would correctly treat it as a raw unsafe id and encode it
+    // again. Emitting the original id avoids that double encoding.
+    emitNotification(app, pathPrefix, record.poiId, buildClearValue(record.entry, record.raisedAt), sourceSuffix)
     active.delete(safeId)
     if (describeClear !== undefined) {
-      app.debug(describeClear(safeId, record.entry))
+      app.debug(describeClear(record.poiId, record.entry))
     }
   }
 
@@ -139,7 +136,7 @@ export function createNotificationTracker<T> (
       // Preserve the episode start across an overwrite (a message refresh);
       // stamp it only when the id enters the alarm state.
       const raisedAt = active.get(safeId)?.raisedAt ?? new Date().toISOString()
-      active.set(safeId, { entry, raisedAt })
+      active.set(safeId, { entry, poiId, raisedAt })
       return raisedAt
     },
     clearStale,

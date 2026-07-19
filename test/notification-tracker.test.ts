@@ -33,11 +33,11 @@ function createTracker (): { tracker: ReturnType<typeof createNotificationTracke
   return { tracker, captured }
 }
 
-test('clearStale keeps a still-active entry whose raw id sanitizes, matching the wire identity', () => {
+test('clearStale keeps a still-active entry whose raw id is encoded, matching the wire identity', () => {
   const { tracker, captured } = createTracker()
-  // An id with a '.' sanitizes to '_' on the wire and in the tracker key.
+  // An id with a '.' is encoded on the wire and in the tracker key.
   tracker.set('wreck.123', { name: 'Wreck' })
-  // The caller passes the RAW id as still active. clearStale sanitizes it into
+  // The caller passes the raw id as still active. clearStale encodes it into
   // the tracker's key space, so the still-active entry is NOT cleared. The old
   // raw-vs-sanitized comparison would have cleared and re-raised it every tick.
   tracker.clearStale(['wreck.123'])
@@ -85,7 +85,29 @@ test('the clear delta reuses the preserved raisedAt, not the clear time', () => 
   assert.equal(captured[0].createdAt, raisedAt, 'the clear delta carries the episode start, preserved across the refresh')
 })
 
-test('has and get report entries by sanitized id, and clearAll empties the tracker', () => {
+test('distinct raw ids do not alias in tracker state or on-wire paths', () => {
+  const { tracker, captured } = createTracker()
+  tracker.set('a.b', { name: 'Dotted' })
+  tracker.set('a_b', { name: 'Scored' })
+
+  assert.equal(tracker.has('a.b'), true)
+  assert.equal(tracker.has('a_b'), true)
+  assert.deepEqual(tracker.get('a.b'), { name: 'Dotted' })
+  assert.deepEqual(tracker.get('a_b'), { name: 'Scored' })
+
+  tracker.clearStale(['a.b'])
+  assert.equal(tracker.has('a.b'), true, 'the dotted id remains active')
+  assert.equal(tracker.has('a_b'), false, 'the scored id clears independently')
+  assert.deepEqual(captured.map(entry => entry.path), ['notifications.test.a_b'])
+
+  tracker.clearAll()
+  assert.deepEqual(captured.map(entry => entry.path), [
+    'notifications.test.a_b',
+    'notifications.test.escaped.YS5i'
+  ])
+})
+
+test('has and get report entries by raw id, and clearAll empties the tracker', () => {
   const { tracker, captured } = createTracker()
   assert.equal(tracker.has('poi-1'), false, 'an unknown id is not active')
   assert.equal(tracker.get('poi-1'), undefined, 'an unknown id has no entry')
@@ -94,11 +116,12 @@ test('has and get report entries by sanitized id, and clearAll empties the track
   tracker.set('poi-2', { name: 'Two' })
   assert.equal(tracker.has('poi-1'), true)
   assert.deepEqual(tracker.get('poi-1'), { name: 'One' }, 'get returns the stored entry')
-  // get and has sanitize their argument, so a raw id with a path-breaking
-  // character reads the same entry its sanitized wire identity was stored under.
+  // get and has encode their argument into the same key space used on the wire.
+  // A distinct safe id that resembles the old replacement form must not alias.
   tracker.set('dot.id', { name: 'Dotted' })
-  assert.equal(tracker.has('dot_id'), true, 'the sanitized form resolves to the stored entry')
-  assert.deepEqual(tracker.get('dot_id'), { name: 'Dotted' })
+  assert.equal(tracker.has('dot.id'), true)
+  assert.equal(tracker.has('dot_id'), false, 'a distinct safe id does not alias')
+  assert.equal(tracker.get('dot_id'), undefined)
 
   tracker.clearAll()
   assert.equal(captured.length, 3, 'clearAll emits one clear per active entry')
