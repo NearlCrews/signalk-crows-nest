@@ -55,6 +55,21 @@ test('upsertType persists records that survive a reload', async () => {
   })
 })
 
+test('the first empty result still persists type metadata and validators', async () => {
+  await withTempDir('coops-store-', async (dir) => {
+    const store = createCoopsStore(dir)
+    await store.load()
+    store.upsertType('tide', [], { etag: 'empty-v1' })
+    await store.flush()
+
+    const reopened = createCoopsStore(dir)
+    const index = await reopened.load()
+    assert.equal(reopened.recordCount(), 0)
+    assert.equal(index.types.tide?.recordCount, 0)
+    assert.equal(index.types.tide?.etag, 'empty-v1')
+  })
+})
+
 test('tide and current stations coexist and re-upsert replaces only one type', async () => {
   await withTempDir('coops-store-', async (dir) => {
     const store = createCoopsStore(dir)
@@ -87,16 +102,16 @@ test('queryBbox returns only stations inside the box', async () => {
   })
 })
 
-test('an identical refetch writes nothing and keeps the prior headers', async () => {
+test('an identical refetch with changed headers updates the stored headers', async () => {
   await withTempDir('coops-store-', async (dir) => {
     const store = createCoopsStore(dir)
     await store.load()
     store.upsertType('tide', [station('8447386', 'tide', 41.7, -71.16)], { etag: 'v1' })
     await store.flush()
 
-    // Overwrite the persisted index with a sentinel. A guarded no-op refresh
-    // leaves the in-memory index clean, so flush skips the write and the
-    // sentinel survives; an unguarded re-stamp would rewrite it away.
+    // Overwrite the persisted index with a sentinel. When the headers changed
+    // (etag v1→v2) but the content is unchanged, the store still updates its
+    // header metadata and marks dirty, so flush overwrites the sentinel.
     const indexPath = join(dir, 'noaa-coops', 'index.json')
     await writeFile(indexPath, 'SENTINEL', 'utf8')
 
@@ -105,8 +120,49 @@ test('an identical refetch writes nothing and keeps the prior headers', async ()
     store.upsertType('tide', [station('8447386', 'tide', 41.7, -71.16)], { etag: 'v2' })
     await store.flush()
 
+    const persisted = await readFile(indexPath, 'utf8')
+    assert.notEqual(persisted, 'SENTINEL', 'flush wrote the updated headers')
+    assert.equal(store.snapshot().types.tide?.etag, 'v2', 'changed header updates the stored etag')
+  })
+})
+
+test('an identical refetch with unchanged headers writes nothing', async () => {
+  await withTempDir('coops-store-', async (dir) => {
+    const store = createCoopsStore(dir)
+    await store.load()
+    store.upsertType('tide', [station('8447386', 'tide', 41.7, -71.16)], { etag: 'v1' })
+    await store.flush()
+
+    const indexPath = join(dir, 'noaa-coops', 'index.json')
+    await writeFile(indexPath, 'SENTINEL', 'utf8')
+
+    // Same content, same headers: nothing changed, so flush skips the write.
+    store.upsertType('tide', [station('8447386', 'tide', 41.7, -71.16)], { etag: 'v1' })
+    await store.flush()
+
     assert.equal(await readFile(indexPath, 'utf8'), 'SENTINEL', 'flush wrote nothing')
-    assert.equal(store.snapshot().types.tide?.etag, 'v1', 'unchanged content keeps the prior etag')
+    assert.equal(store.snapshot().types.tide?.etag, 'v1', 'unchanged headers keep the stored etag')
+  })
+})
+
+test('an identical refetch clears validators omitted by the latest response', async () => {
+  await withTempDir('coops-store-', async (dir) => {
+    const store = createCoopsStore(dir)
+    await store.load()
+    store.upsertType('tide', [station('8447386', 'tide', 41.7, -71.16)], {
+      etag: 'v1',
+      lastModified: 'Mon, 01 Jun 2026 00:00:00 GMT'
+    })
+    await store.flush()
+
+    const indexPath = join(dir, 'noaa-coops', 'index.json')
+    await writeFile(indexPath, 'SENTINEL', 'utf8')
+    store.upsertType('tide', [station('8447386', 'tide', 41.7, -71.16)], {})
+    await store.flush()
+
+    assert.notEqual(await readFile(indexPath, 'utf8'), 'SENTINEL')
+    assert.equal(store.snapshot().types.tide?.etag, undefined)
+    assert.equal(store.snapshot().types.tide?.lastModified, undefined)
   })
 })
 

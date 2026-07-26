@@ -23,6 +23,7 @@ import {
 import AlertsSection from './components/AlertsSection.js'
 import DataSourcesSection from './components/DataSourcesSection.js'
 import { sourceCardDomId } from './components/DataSourceCard.js'
+import ErrorBoundary from './components/ErrorBoundary.js'
 import FooterBar from './components/FooterBar.js'
 import StatusBar from './components/StatusBar.js'
 import { useConfig } from './hooks/use-config.js'
@@ -58,7 +59,17 @@ export default function PluginConfigurationPanel (props: Props): React.ReactElem
     )
   }
 
-  return <SupportedPluginConfigurationPanel {...props} />
+  return (
+    <PanelRoot
+      className='ac-config-panel'
+      legacyThemeStorageKeys={['ac-theme']}
+    >
+      <style>{THEME_STYLE}</style>
+      <ErrorBoundary>
+        <SupportedPluginConfigurationPanel {...props} />
+      </ErrorBoundary>
+    </PanelRoot>
+  )
 }
 
 function SupportedPluginConfigurationPanel ({ configuration, save }: Props): React.ReactElement {
@@ -140,40 +151,34 @@ function SupportedPluginConfigurationPanel ({ configuration, save }: Props): Rea
 
   return (
     <UnitSystemContext.Provider value={unitSystem}>
-      <PanelRoot
-        className='ac-config-panel'
-        legacyThemeStorageKeys={['ac-theme']}
-      >
-        <style>{THEME_STYLE}</style>
-        <Stack gap={4}>
-          <Cluster justify='end'>
-            <ThemeToggle />
-          </Cluster>
-          <StatusBar status={status} lastUpdatedMs={lastUpdatedMs} onJumpToSource={jumpToSource} />
-          {error !== null
-            ? (
-              <Banner live='polite' tone='danger' title='Status unavailable'>
-                {error}. The next poll will retry automatically.
-              </Banner>
-              )
-            : null}
-          <DataSourcesSection
-            state={state}
-            dispatch={dispatch}
-            status={status}
-            expanded={expandedCards}
-            onToggleExpanded={toggleCard}
-          />
-          <AlertsSection state={state} dispatch={dispatch} />
-          <FooterBar
-            dirty={dirty}
-            unconfigured={unconfigured}
-            justSavedAt={justSavedAt}
-            onSave={handleSave}
-            onDiscard={handleDiscard}
-          />
-        </Stack>
-      </PanelRoot>
+      <Stack gap={4}>
+        <Cluster justify='end'>
+          <ThemeToggle />
+        </Cluster>
+        <StatusBar status={status} lastUpdatedMs={lastUpdatedMs} onJumpToSource={jumpToSource} />
+        {error !== null
+          ? (
+            <Banner live='polite' tone='danger' title='Status unavailable'>
+              {error}. The next poll will retry automatically.
+            </Banner>
+            )
+          : null}
+        <DataSourcesSection
+          state={state}
+          dispatch={dispatch}
+          status={status}
+          expanded={expandedCards}
+          onToggleExpanded={toggleCard}
+        />
+        <AlertsSection state={state} dispatch={dispatch} />
+        <FooterBar
+          dirty={dirty}
+          unconfigured={unconfigured}
+          justSavedAt={justSavedAt}
+          onSave={handleSave}
+          onDiscard={handleDiscard}
+        />
+      </Stack>
     </UnitSystemContext.Provider>
   )
 }

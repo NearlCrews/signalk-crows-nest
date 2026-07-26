@@ -359,6 +359,8 @@ test('normalizeConfig accepts a positive integer minimum year and truncates frac
 test('normalizeConfig clamps an out-of-range minimum year', () => {
   const negative = normalizeConfig({ noaaEncMinimumSurveyYear: -500 })
   assert.equal(negative.noaaEncMinimumSurveyYear, 0)
+  const tooEarly = normalizeConfig({ noaaEncMinimumSurveyYear: 1899 })
+  assert.equal(tooEarly.noaaEncMinimumSurveyYear, 1900)
   const farFuture = normalizeConfig({ noaaEncMinimumSurveyYear: 99999 })
   assert.equal(farFuture.noaaEncMinimumSurveyYear, 9999)
 })

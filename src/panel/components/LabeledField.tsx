@@ -3,11 +3,11 @@
  * every labeled field on the panel.
  *
  * The control is supplied through a render prop that receives the `id` (for
- * the label's `htmlFor`) and an `aria-describedby` pointing at the hint
- * description, so the hint text is programmatically linked to the control and a
- * screen-reader user hears the constraint text, not just the label. Building
- * the wiring into the scaffold makes the link impossible to forget in a new
- * field.
+ * the label's `htmlFor`). The shared `LabeledField` handles `aria-describedby`
+ * internally: it generates its own description id, clones the child element
+ * with the correct attribute, and renders the description with the matching id,
+ * so the hint text is programmatically linked to the control and a
+ * screen-reader user hears the constraint text, not just the label.
  */
 
 import type * as React from 'react'
@@ -16,7 +16,6 @@ import { LabeledField as SharedLabeledField } from 'signalk-nearlcrews-ui'
 /** The props the render prop must spread onto its control element. */
 interface LabeledControlProps {
   id: string
-  'aria-describedby'?: string
 }
 
 interface Props {

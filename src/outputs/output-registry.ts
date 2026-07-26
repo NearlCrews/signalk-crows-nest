@@ -2,9 +2,9 @@
  * Output registry.
  *
  * Holds the registered `OutputModule`s, exposes their config-schema fragments,
- * and starts the enabled ones for a plugin start. A failing output start is
- * isolated and logged so one broken output cannot stop the others, mirroring
- * how the legacy entrypoint isolated the position monitor.
+ * and starts the enabled ones for a plugin start. A failing enablement check or
+ * output start is isolated and logged so one broken output cannot stop the
+ * others, mirroring how the legacy entrypoint isolated the position monitor.
  */
 
 import type { OutputContext, OutputHandle, OutputModule } from './output.js'
@@ -13,7 +13,7 @@ import type { OutputContext, OutputHandle, OutputModule } from './output.js'
  * The result of starting the enabled outputs. `handles` and `startedIds` are
  * aligned and in registration order, and both exclude any output whose
  * `start()` threw and was isolated, so a caller can log exactly the outputs
- * that actually started. `failedIds` carries the enabled outputs whose
+ * that actually started. `failedIds` carries outputs whose `isEnabled()` or
  * `start()` threw, so a caller can surface them without re-deriving the set.
  */
 interface StartedOutputs {
@@ -21,7 +21,7 @@ interface StartedOutputs {
   handles: OutputHandle[]
   /** Ids of the outputs that started. */
   startedIds: string[]
-  /** Ids of the enabled outputs whose `start()` threw and was isolated. */
+  /** Ids of outputs whose enablement check or start threw and was isolated. */
   failedIds: string[]
 }
 
@@ -32,9 +32,9 @@ export interface OutputRegistry {
   /** Each module's config-schema fragment, in registration order. */
   configSchemaFragments: () => Array<Record<string, unknown>>
   /**
-   * Start every enabled output. A start that throws is logged through
-   * `context.app.error` and skipped; the remaining outputs still start. The
-   * result reports the outputs that started and the enabled ones that threw.
+   * Start every enabled output. An enablement check or start that throws is
+   * logged through `context.app.error` and skipped; the remaining outputs still
+   * start. The result reports the outputs that started and those that failed.
    */
   startEnabled: (context: OutputContext) => StartedOutputs
 }
@@ -49,7 +49,18 @@ export function createOutputRegistry (modules: readonly OutputModule[]): OutputR
       const startedIds: string[] = []
       const failedIds: string[] = []
       for (const module of modules) {
-        if (!module.isEnabled(context.config)) {
+        let enabled: boolean
+        try {
+          enabled = module.isEnabled(context.config)
+        } catch (error) {
+          // A broken isEnabled is treated as disabled, not a full stop:
+          // record it, log it, and move on so one faulty module cannot block
+          // the rest or let the plugin report a misleading healthy start.
+          failedIds.push(module.id)
+          context.app.error(`Cannot check isEnabled for output ${module.id}: ${String(error)}`)
+          continue
+        }
+        if (!enabled) {
           continue
         }
         try {

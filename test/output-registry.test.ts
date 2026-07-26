@@ -52,3 +52,31 @@ test('startEnabled isolates a failing module start and logs it', () => {
   assert.match(errors[0], /Cannot start output a/, 'the log names the failing module')
   assert.match(errors[0], /boom/, 'the log carries the underlying error')
 })
+
+test('startEnabled isolates a failing isEnabled check so one broken module does not block others', () => {
+  let checkResults = ''
+  let started = ''
+  const registry = createOutputRegistry([
+    {
+      ...stubModule('a', true, () => {}),
+      isEnabled: () => { throw new Error('bad config') }
+    },
+    {
+      ...stubModule('b', true, () => {}),
+      isEnabled: () => { checkResults += 'b-check'; return true },
+      start: () => { started += 'b'; return { stop: () => {} } }
+    },
+    {
+      ...stubModule('c', true, () => {}),
+      isEnabled: () => { checkResults += 'c-check'; return false },
+      start: () => { started += 'c'; return { stop: () => {} } }
+    }
+  ])
+  const { handles, startedIds, failedIds } = registry.startEnabled(
+    { app: { error: () => {} }, config: {}, pois: {}, status: {} } as never)
+  assert.equal(checkResults, 'b-checkc-check', 'every surviving module still gets its isEnabled checked')
+  assert.equal(started, 'b', 'the enabled surviving module still starts')
+  assert.equal(handles.length, 1)
+  assert.deepEqual(startedIds, ['b'])
+  assert.deepEqual(failedIds, ['a'], 'the plugin can surface the failed output')
+})

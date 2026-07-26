@@ -163,7 +163,7 @@ export async function fetchListWithOfflineFallback<T> (
   } catch (error) {
     const summaries = rebuildStale()
     if (summaries.length === 0) throw error
-    status.recordStaleServe?.(sourceId, outageReason)
+    status.recordStaleServe(sourceId, outageReason)
     return { kind: 'stale', summaries }
   }
 }

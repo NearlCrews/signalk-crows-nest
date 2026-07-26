@@ -7,7 +7,7 @@
  */
 
 import type * as React from 'react'
-import { MAX_YEAR, MIN_YEAR } from '../../shared/year-filter.js'
+import { clampMinimumYear, MAX_YEAR } from '../../shared/year-filter.js'
 import NumberField from './NumberField.js'
 
 interface Props {
@@ -37,8 +37,8 @@ export default function MinimumYearField ({
       label={label}
       hint={hint}
       value={value}
-      onChange={onChange}
-      min={MIN_YEAR}
+      onChange={(year) => onChange(clampMinimumYear(year))}
+      min={0}
       max={MAX_YEAR}
       integer
       step={1}

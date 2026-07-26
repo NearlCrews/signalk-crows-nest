@@ -134,9 +134,9 @@ function pushToBucket (
 /** Per-source detail tracked for a surviving base POI as duplicates merge in. */
 interface Corroboration {
   /** Contributing source slugs, base first, in merge order. */
-  slugs: string[]
+  slugs: Set<string>
   /** Distinct attribution credit strings, base first, in merge order. */
-  attributions: string[]
+  attributions: Set<string>
   /**
    * The most conservative (smallest) vertical clearance, in meters, reported
    * by the base POI or any merged duplicate. Undefined when none of them
@@ -258,8 +258,8 @@ export function dedupeAgainstBase (
     const [x, y] = cellCoords(base)
     pushToBucket(grid, packCellKey(x, y), base)
     corroboration.set(base, {
-      slugs: [base.source],
-      attributions: [base.attribution],
+      slugs: new Set([base.source]),
+      attributions: new Set([base.attribution]),
       clearance: base.verticalClearanceMeters
     })
   }
@@ -291,10 +291,10 @@ export function dedupeAgainstBase (
     }
     const merged = corroboration.get(base)
     if (merged !== undefined) {
-      if (!merged.slugs.includes(poi.source)) {
-        merged.slugs.push(poi.source)
-        if (!merged.attributions.includes(poi.attribution)) {
-          merged.attributions.push(poi.attribution)
+      if (!merged.slugs.has(poi.source)) {
+        merged.slugs.add(poi.source)
+        if (!merged.attributions.has(poi.attribution)) {
+          merged.attributions.add(poi.attribution)
         }
       }
       // Fold every merged duplicate's clearance, including a second duplicate
@@ -316,8 +316,8 @@ export function dedupeAgainstBase (
     // the base's missing value.
     return {
       ...base,
-      sources: merged.slugs,
-      attribution: merged.attributions.join('; '),
+      sources: [...merged.slugs],
+      attribution: [...merged.attributions].join('; '),
       ...(merged.clearance !== undefined && { verticalClearanceMeters: merged.clearance })
     }
   })

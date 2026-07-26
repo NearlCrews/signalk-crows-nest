@@ -51,6 +51,24 @@ test('omits the ETA when the corridor POI carries no etaSeconds', () => {
   assert.ok(!captured[0].value.message.includes('ETA'), 'no ETA when speed is unavailable')
 })
 
+test('formats every ETA under one minute as less than one minute', () => {
+  const { app, captured } = createCapturingApp()
+  const alarms = createRouteHazardAlarms(app)
+
+  alarms.evaluate([corridorPoi('b1', 'Bridge', 'Nearby bridge', 100, 59)])
+
+  assert.match(captured[0].value.message, /ETA <1 min/)
+})
+
+test('omits an invalid negative ETA', () => {
+  const { app, captured } = createCapturingApp()
+  const alarms = createRouteHazardAlarms(app)
+
+  alarms.evaluate([corridorPoi('b1', 'Bridge', 'Nearby bridge', 100, -10)])
+
+  assert.doesNotMatch(captured[0].value.message, /ETA/)
+})
+
 test('formats an along-track distance of a kilometer or more in km', () => {
   const { app, captured } = createCapturingApp()
   const alarms = createRouteHazardAlarms(app)

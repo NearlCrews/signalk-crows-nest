@@ -446,7 +446,7 @@ test('a source that served stale offline data ships its markers but is not recor
   const status = createPluginStatus([{ source: 'stale', name: 'Stale Source' }])
   const staleModule = stubModule('stale', true, stubSource('stale', {
     list: async () => {
-      status.recordStaleServe?.('stale', 'upstream unreachable')
+      status.recordStaleServe('stale', 'upstream unreachable')
       return withListProvenance(
         [summary('1', 'stale'), summary('2', 'stale')],
         'stale'

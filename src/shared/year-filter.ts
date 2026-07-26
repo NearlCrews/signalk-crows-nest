@@ -19,7 +19,7 @@
  *   authorize.
  */
 
-import { clampNumber } from './numbers.js'
+import { clampNumber, toFiniteNumber } from './numbers.js'
 import { boundedNumberSchema } from './config-schema.js'
 import type { PoiSummary } from './types.js'
 
@@ -32,8 +32,15 @@ import type { PoiSummary } from './types.js'
  */
 const OFF_SENTINEL_YEAR = 0
 
-/** Lower bound on every minimum-year filter, alias of {@link OFF_SENTINEL_YEAR}. */
-export const MIN_YEAR = OFF_SENTINEL_YEAR
+/**
+ * Validation floor for every enabled minimum-year filter. Positive values
+ * below this floor are not useful as practical freshness thresholds, so they
+ * are raised to the floor.
+ */
+export const YEAR_VALIDATION_FLOOR = 1900
+
+/** Lower bound on every minimum-year filter. */
+export const MIN_YEAR = YEAR_VALIDATION_FLOOR
 
 /**
  * Upper bound on every minimum-year filter. Generous (a far-future year) so a
@@ -48,21 +55,28 @@ export const DEFAULT_MINIMUM_YEAR = OFF_SENTINEL_YEAR
 /**
  * Clamp a raw minimum-year value to `[MIN_YEAR, MAX_YEAR]` and truncate to an
  * integer. A non-numeric or non-finite value falls back to the off default.
- * Runtime inputs and the panel's normalize-config route every per-source year
- * through this helper so the bounds and fallback rule live in one place.
+ * The off sentinel (`0`) bypasses the clamp so the filter-disabled state is
+ * always available. Non-positive values normalize to off, while positive
+ * values below the validation floor are raised to the floor. Runtime inputs
+ * and the panel's normalize-config route every per-source year through this
+ * helper so the bounds and fallback rule live in one place.
  */
 export function clampMinimumYear (raw: unknown): number {
+  const num = toFiniteNumber(raw)
+  if (num !== null && num <= 0) return OFF_SENTINEL_YEAR
   return clampNumber(raw, MIN_YEAR, MAX_YEAR, DEFAULT_MINIMUM_YEAR, true)
 }
 
 /**
  * Config-schema fragment for a source's earliest-year filter field. Each
- * opting-in input declares an identical number field over `[MIN_YEAR,
+ * opting-in input declares an identical number field over `[0,
  * MAX_YEAR]` defaulting to the off sentinel, differing only in its title, so
- * the shape lives here next to the bounds it carries.
+ * the shape lives here next to the bounds it carries. The schema minimum is
+ * the off sentinel (`0`) rather than the runtime validation floor so the
+ * off value is always a valid configuration entry.
  */
 export function minimumYearSchema (title: string): Record<string, unknown> {
-  return boundedNumberSchema(title, DEFAULT_MINIMUM_YEAR, MIN_YEAR, MAX_YEAR)
+  return boundedNumberSchema(title, DEFAULT_MINIMUM_YEAR, OFF_SENTINEL_YEAR, MAX_YEAR)
 }
 
 /**

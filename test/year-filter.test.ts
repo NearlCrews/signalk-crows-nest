@@ -1,6 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { filterByMinimumYear } from '../src/shared/year-filter.js'
+import {
+  clampMinimumYear,
+  filterByMinimumYear,
+  MAX_YEAR,
+  MIN_YEAR,
+  minimumYearSchema
+} from '../src/shared/year-filter.js'
 import type { PoiSummary } from '../src/shared/types.js'
 
 function poi (id: string, timestamp?: string): PoiSummary {
@@ -17,6 +23,27 @@ function poi (id: string, timestamp?: string): PoiSummary {
   if (timestamp !== undefined) summary.timestamp = timestamp
   return summary
 }
+
+test('clampMinimumYear preserves off and clamps enabled values to the year bounds', () => {
+  assert.equal(clampMinimumYear(0), 0)
+  assert.equal(clampMinimumYear(-1), 0)
+  assert.equal(clampMinimumYear(1), MIN_YEAR)
+  assert.equal(clampMinimumYear(MIN_YEAR - 1), MIN_YEAR)
+  assert.equal(clampMinimumYear(2020.9), 2020)
+  assert.equal(clampMinimumYear(MAX_YEAR + 1), MAX_YEAR)
+  assert.equal(clampMinimumYear(Number.NaN), 0)
+  assert.equal(clampMinimumYear('2020'), 0)
+})
+
+test('minimumYearSchema accepts the off sentinel and carries the shared upper bound', () => {
+  assert.deepEqual(minimumYearSchema('Earliest year'), {
+    type: 'number',
+    title: 'Earliest year',
+    default: 0,
+    minimum: 0,
+    maximum: MAX_YEAR
+  })
+})
 
 test('a zero minimum-year returns the input unchanged (filter off)', () => {
   const input = [poi('1', '2000-01-01T00:00:00Z'), poi('2', '1950-01-01T00:00:00Z')]

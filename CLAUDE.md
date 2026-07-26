@@ -88,6 +88,16 @@ self-contained module registered on one line in `src/index.ts`.
       with status guard, and the bounded
       `exceededTransferLimit` pagination loop, parameterized by a per-request
       URL resolver and an upstream label for error messages.
+    - `arcgis-poi-source.ts` - the shared `PoiSource` factory the NOAA ENC
+      Direct and USACE sources are built on. Both are ArcGIS REST point
+      services that share the same fan-out, bbox-debounce, hydrated-detail-cache,
+      offline-fallback, and US-waters gate patterns; the factory parameterizes
+      the source-specific bits (layer keys, feature mappers, the client
+      closures) so each source file is a thin config wrapper. A layer-query
+      request fans out across every enabled layer in parallel via
+      `Promise.allSettled`; a partial failure is served but not cached so the
+      failed layer is retried on the next call, and an all-layers failure
+      rejects so the aggregate registry's reachability check trips correctly.
     - `refresh-scheduler.ts` - `startRefreshScheduler`, the periodic-refresh
       installer the USCG Light List, USCG LNM, and NOAA CO-OPS input modules
       share: the in-flight guard, the initial and periodic timers, and the
@@ -171,17 +181,13 @@ self-contained module registered on one line in `src/index.ts`.
       reusing the renderer's humanizers).
     - `noaa-enc/` - the NOAA ENC Direct input (US authoritative wrecks,
       obstructions, and underwater rocks, US-only, defaults off):
-      `noaa-enc-input.ts` (the `InputModule`), `noaa-enc-source.ts` (the
-      `PoiSource` adapter over the ArcGIS REST client; fans the bbox query
-      out across the enabled hazard layers in parallel, stashes raw features
-      in an LRU detail cache backed by the shared disk detail store that
-      hydrates the cache on a cold start, falls back on an upstream list failure
-      to rebuilding summaries from the hydrated cache within the requested bbox
-      and recording a stale serve (see `plugin-status.ts`) so previously visited
-      areas reappear offline, gates outbound HTTP on `isInUsWaters`
-      on BOTH the list path and the detail-miss path, and
-      uses an underscore-separated id form like `wreck_12345` so the slash
-      in `wreck/12345` does not split the resource URL),
+      `noaa-enc-input.ts` (the `InputModule`), `noaa-enc-source.ts` (a thin
+      wrapper that builds an `ArcGisSourceConfig` from the source-specific
+      mappers and client, then delegates to the shared `arcgis-poi-source.ts`
+      factory; the factory owns the layer fan-out, hydrated detail cache,
+      offline stale fallback, and US-waters gate, and uses an
+      underscore-separated id form like `wreck_12345` so the slash in
+      `wreck/12345` does not split the resource URL),
       `enc-direct-client.ts` (the ArcGIS REST client built on
       `http-one-shot.ts`, with band-and-layer-id query and paging),
       `enc-direct-types.ts` (the ENC Direct wire types, including JSDoc on
@@ -233,9 +239,9 @@ self-contained module registered on one line in `src/index.ts`.
     - `usace/` - the USACE locks and dams input (US inland waterways,
       defaults off; locks default on, dams default off because the National
       Inventory of Dams would bury the chart): `usace-input.ts` (the
-      `InputModule`), `usace-source.ts` (the `PoiSource`; per-layer ArcGIS
-      fan-out mirroring the NOAA ENC shape, with the US-waters gate on the
-      list and detail-miss paths and the offline stale fallback),
+      `InputModule`), `usace-source.ts` (a thin wrapper that builds an
+      `ArcGisSourceConfig` and delegates to the shared `arcgis-poi-source.ts`
+      factory, mirroring the NOAA ENC shape),
       `usace-client.ts` (the ArcGIS REST client on `http-one-shot.ts` with
       envelope query and paging), `usace-mapping.ts` (locks map to `Lock`
       and dams to `Dam`, the types the route-hazard scan treats specially;
@@ -245,7 +251,8 @@ self-contained module registered on one line in `src/index.ts`.
     - `output.ts` - the `OutputModule`, `OutputHandle`, `OutputContext`, and
       `PositionScanContributor` contracts an output implements.
     - `output-registry.ts` - holds the registered outputs and starts the
-      enabled ones.
+      enabled ones. A failing `isEnabled` check or `start` is isolated and
+      logged so one broken output cannot block the rest.
     - `notes-resource/` - the `notes` resource output: `notes-resource-output.ts`
       (the `OutputModule` that registers the SignalK `notes` provider),
       `note-builder.ts` (turns a POI into a `notes` resource object, publishing
@@ -270,8 +277,10 @@ self-contained module registered on one line in `src/index.ts`.
       same raise-once, clear-once hysteresis as the proximity hazard alarm), and
       `bridge-clearance-resolver.ts` (resolves a bridge's clearance: a
       synchronous OpenSeaMap summary hit, or a deduped, cached ActiveCaptain
-      detail fetch). The route-hazard output consumes this resolver too, for its
-      route-ahead clearance warning.
+      detail fetch with a per-fetch timeout that releases the in-flight slot
+      if the detail hangs and ignores any late response after that timeout).
+      The route-hazard output consumes this resolver too, for its route-ahead
+      clearance warning.
   - `monitoring/` - `position-monitor.ts` subscribes to `navigation.position`,
     exposes the latest fix through `getCurrentPosition` (read by the US-only
     inputs to gate outbound HTTP), and drives the per-tick scan from the
@@ -426,10 +435,14 @@ self-contained module registered on one line in `src/index.ts`.
     `categories.length.targetUnit`). `hooks/` holds `use-config`,
     `use-status` (which also exposes `lastUpdatedMs`), `use-unit-system` (resolves
     the display system from the server's unit preferences), `use-number-draft`
-    (the raw-text draft state for clearable numeric inputs), and
-    `use-collapse-focus-restore` (the shared focus-restore-on-collapse hook).
-    `components/` holds the layout pieces: `SectionBox` (the shared
-    collapsible-section primitive), `StatusBar`, `FooterBar` (sticky,
+    (the raw-text draft state for clearable numeric inputs),
+    and `use-collapse-focus-restore` (the shared focus-restore-on-collapse
+    hook).
+    `components/` holds the layout pieces: `ErrorBoundary` (a class-component
+    error boundary inside the shared panel shell that catches hook and render
+    errors and shows a styled fallback so a single rendering failure does not
+    unmount the panel), `SectionBox` (the shared collapsible-section primitive),
+    `StatusBar`, `FooterBar` (sticky,
     composing `SaveStatus`), `DataSourcesSection` (the per-source accordion
     shell), `DataSourceCard` (one collapsible card, with an in-header
     live-status pill), `ActiveCaptainSource`, `OpenSeaMapSource`,

@@ -303,8 +303,8 @@ export interface PluginConfig {
   /**
    * Hide OpenSeaMap features whose OSM element timestamp is older than this
    * year. `0` disables the filter; features without a timestamp are always
-   * included. Clamped to the shared `[MIN_YEAR, MAX_YEAR]` range from
-   * `src/shared/year-filter.ts`.
+   * included. Normalized to `0` or the shared `[MIN_YEAR, MAX_YEAR]` range
+   * from `src/shared/year-filter.ts`.
    */
   openSeaMapMinimumYear?: number
   /**

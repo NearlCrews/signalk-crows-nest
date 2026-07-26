@@ -185,13 +185,13 @@ export const S = {
   },
   statusErrorItem: {
     display: 'flex',
-    gap: 8,
+    gap: 'var(--ac-space-1)',
     fontSize: 'var(--ac-font-small)',
     color: 'var(--ac-danger-fg)',
     background: 'var(--ac-danger-bg)',
     border: '1px solid var(--ac-danger-border)',
     borderRadius: 'var(--ac-radius-sm)',
-    padding: '4px 8px'
+    padding: 'var(--snui-space-1) var(--ac-space-1)'
   },
   statusErrorTime: { color: 'var(--ac-text-faint)', flexShrink: 0 },
   // A recent-error entry rendered as a jump-to-card button: inherits the
@@ -230,7 +230,7 @@ export const S = {
    */
   hintBelow: {
     ...HINT_BASE,
-    margin: '0 0 12px'
+    margin: '0 0 var(--ac-space-2)'
   },
 
   // Grouped-options sections: a header with bulk actions, and one fieldset

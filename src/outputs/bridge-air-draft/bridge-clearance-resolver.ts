@@ -31,7 +31,7 @@ import { ACTIVE_CAPTAIN_SOURCE_ID } from '../../shared/source-ids.js'
 import { BRIDGE_POI_TYPE } from './bridge-clearance-alarms.js'
 import { MAX_POI_CACHE_ENTRIES } from '../../shared/cache.js'
 import { MINUTES_PER_DAY, MS_PER_MINUTE } from '../../shared/time.js'
-import { toFiniteNumber } from '../../shared/numbers.js'
+import { positiveFiniteNumber, toFiniteNumber } from '../../shared/numbers.js'
 import type { PoiDetailView, PoiSummary } from '../../shared/types.js'
 
 /**
@@ -41,6 +41,9 @@ import type { PoiDetailView, PoiSummary } from '../../shared/types.js'
  * plugin restart while keeping any single approach on one fetch.
  */
 const DEFAULT_CLEARANCE_TTL_MINUTES = MINUTES_PER_DAY
+
+/** Wall-clock limit for one bridge detail lookup. */
+const DEFAULT_CLEARANCE_FETCH_TIMEOUT_MS = 30_000
 
 /** Dependencies for {@link createBridgeClearanceResolver}. */
 export interface ClearanceResolverDeps {
@@ -56,6 +59,13 @@ export interface ClearanceResolverDeps {
   ttlMinutes?: number
   /** Clock source, injectable for tests. Defaults to `Date.now`. */
   now?: () => number
+  /**
+   * Per-fetch timeout, in milliseconds. A fetch that does not resolve within
+   * this window is abandoned so the id is released from `inFlight`, unblocking
+   * future clearance resolution for that bridge. Defaults to
+   * {@link DEFAULT_CLEARANCE_FETCH_TIMEOUT_MS}.
+   */
+  fetchTimeoutMs?: number
 }
 
 /** Public surface of the bridge clearance resolver. */
@@ -80,6 +90,8 @@ export function createBridgeClearanceResolver (deps: ClearanceResolverDeps): Bri
   const { getDetails, debug } = deps
   const ttlMs = (deps.ttlMinutes ?? DEFAULT_CLEARANCE_TTL_MINUTES) * MS_PER_MINUTE
   const now = deps.now ?? Date.now
+  const fetchTimeoutMs =
+    positiveFiniteNumber(deps.fetchTimeoutMs) ?? DEFAULT_CLEARANCE_FETCH_TIMEOUT_MS
   // Resolved ActiveCaptain clearances, keyed by POI id. Bounded by an LRU so a
   // long voyage past many bridges cannot grow the map without limit. A
   // CachedClearance wrapper lets a "detail carried no clearance" result be
@@ -92,9 +104,29 @@ export function createBridgeClearanceResolver (deps: ClearanceResolverDeps): Bri
 
   function startFetch (id: string): void {
     inFlight.add(id)
-    getDetails(id)
+    // Keep cache mutation after the race. If a timed-out request eventually
+    // resolves, its late value must not overwrite a newer retry's result.
+    let detailPromise: Promise<PoiDetailView>
+    try {
+      detailPromise = getDetails(id)
+    } catch (error) {
+      // The production dependency is async, but this also contains a
+      // synchronously throwing test double or future adapter as another fetch
+      // failure.
+      detailPromise = Promise.reject(error)
+    }
+    let timer: ReturnType<typeof setTimeout>
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error(`Bridge clearance fetch timed out after ${fetchTimeoutMs} ms`))
+      }, fetchTimeoutMs)
+    })
+    Promise.race([detailPromise, timeout])
       .then((detail) => {
-        cache.set(id, { clearance: toFiniteNumber(detail.verticalClearanceMeters), resolvedAt: now() })
+        cache.set(id, {
+          clearance: toFiniteNumber(detail.verticalClearanceMeters),
+          resolvedAt: now()
+        })
       })
       .catch((error: unknown) => {
         // Transient failure: leave it uncached so a later encounter retries.
@@ -103,6 +135,7 @@ export function createBridgeClearanceResolver (deps: ClearanceResolverDeps): Bri
         debug(`Bridge clearance fetch failed for ${id}: ${String(error)}`)
       })
       .finally(() => {
+        clearTimeout(timer)
         inFlight.delete(id)
       })
   }

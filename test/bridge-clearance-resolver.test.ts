@@ -157,3 +157,53 @@ test('never fetches for a non-bridge ActiveCaptain POI', async () => {
   await flush()
   assert.equal(calls, 0)
 })
+
+test('a timed-out fetch releases inFlight and cannot overwrite a newer retry', async () => {
+  let calls = 0
+  let resolveFirst: ((value: PoiDetailView) => void) | undefined
+  let resolveSecond: ((value: PoiDetailView) => void) | undefined
+  const resolver = createBridgeClearanceResolver({
+    getDetails: async () => {
+      calls += 1
+      return await new Promise<PoiDetailView>((resolve) => {
+        if (calls === 1) resolveFirst = resolve
+        else resolveSecond = resolve
+      })
+    },
+    debug: () => {},
+    fetchTimeoutMs: 10
+  })
+  const ac = bridge({ id: 'ac-timeout' })
+  assert.equal(resolver.clearanceMeters(ac), null, 'first tick: unknown, fetch started')
+  assert.equal(calls, 1)
+  await new Promise((resolve) => setTimeout(resolve, 20))
+
+  assert.equal(resolver.clearanceMeters(ac), null, 'after timeout: still unknown, retry started')
+  assert.equal(calls, 2, 'a second fetch is started after the timeout releases the slot')
+  resolveSecond?.(detail(3))
+  await flush()
+  assert.equal(resolver.clearanceMeters(ac), 3, 'the retry populates the cache')
+
+  // The original request resolves after the retry. Its stale value must be
+  // ignored rather than replacing the newer result.
+  resolveFirst?.(detail(9))
+  await flush()
+  assert.equal(resolver.clearanceMeters(ac), 3, 'a late timed-out result is ignored')
+})
+
+test('a synchronous detail adapter failure stays fire-and-forget and can retry', async () => {
+  let calls = 0
+  const resolver = createBridgeClearanceResolver({
+    getDetails: () => {
+      calls += 1
+      throw new Error('synchronous failure')
+    },
+    debug: () => {},
+    fetchTimeoutMs: 10
+  })
+  const ac = bridge({ id: 'ac-sync-failure' })
+  assert.doesNotThrow(() => resolver.clearanceMeters(ac))
+  await flush()
+  assert.doesNotThrow(() => resolver.clearanceMeters(ac))
+  assert.equal(calls, 2)
+})

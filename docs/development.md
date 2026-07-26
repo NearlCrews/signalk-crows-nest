@@ -29,7 +29,8 @@ npm run clean         # Remove dist/ and the panel build artifacts
 ```
 
 The `prepack` lifecycle runs `clean` then `build` automatically before
-`npm pack` or `npm publish`.
+`npm pack` or `npm publish`. It does not run when a registry consumer installs
+the published package.
 
 ## Architecture
 
@@ -52,8 +53,9 @@ responses with exponential backoff, and honor `Retry-After`; the low-volume
 sources use a bounded one-shot client with a wall-clock deadline. A shared
 conditional-GET envelope (`http-conditional-get.ts`) serves the periodic bulk
 downloads (USCG Light List, Local Notice to Mariners, and NOAA CO-OPS), a
-shared ArcGIS REST paging protocol (`arcgis-query.ts`) serves the bbox-queried
-services (NOAA ENC Direct and USACE), and World Port Index downloads its full
+shared ArcGIS REST paging protocol (`arcgis-query.ts`) and a shared ArcGIS
+POI source factory (`arcgis-poi-source.ts`) serve the bbox-queried services
+(NOAA ENC Direct and USACE), and World Port Index downloads its full
 snapshot on demand. ArcGIS requests split wrapped bounding boxes at the
 antimeridian, and every long-running source carries plugin shutdown through an
 `AbortSignal`. Disk-backed detail and dataset stores preserve usable data
@@ -89,6 +91,9 @@ src/                      # TypeScript source
 │   │                      #   NOAA CO-OPS)
 │   ├── arcgis-query.ts    # Shared ArcGIS REST /query paging, antimeridian
 │   │                      #   splitting, and result dedupe (NOAA ENC, USACE)
+│   ├── arcgis-poi-source.ts # Shared ArcGIS PoiSource factory: layer fan-out,
+│   │                      #   bbox-debounce, hydrated detail cache, offline
+│   │                      #   fallback, US-waters gate (NOAA ENC, USACE)
 │   ├── refresh-scheduler.ts # Periodic-refresh scheduler shared by the
 │   │                      #   full-download inputs (Light List, CO-OPS, LNM)
 │   ├── dedupe-pois.ts     # Merges duplicates against the ActiveCaptain base layer,
@@ -174,7 +179,7 @@ src/                      # TypeScript source
     ├── unit-system.ts     # The display-units resolver keyed off the server unit preset
     ├── hooks/             # use-config, use-status, use-unit-system,
     │                      #   use-number-draft, use-collapse-focus-restore
-    └── components/        # StatusBar, FooterBar, DataSourcesSection (per-source
+    └── components/        # ErrorBoundary, StatusBar, FooterBar, DataSourcesSection (per-source
                            #   accordion shell), DataSourceCard (one collapsible card),
                            #   ActiveCaptainSource, OpenSeaMapSource, UscgLightListSource,
                            #   NoaaEncSource, NoaaCoopsSource, UscgLnmSource, WpiSource,
@@ -240,9 +245,12 @@ the matching transport, cache, lifecycle, and status machinery:
 - **One-shot ArcGIS bounding-box query.** NOAA ENC Direct and USACE fan a list
   request across the configured layers, page each result through
   `src/inputs/arcgis-query.ts`, and keep raw features in a hydrated detail
-  cache. Wrapped boxes are split into ordinary ArcGIS envelopes and merged by
-  object identity. This pattern fits bbox-aware services whose result sets are
-  bounded but whose protocol does not need the queued client's retries.
+  cache. Both sources are thin wrappers over the shared
+  `src/inputs/arcgis-poi-source.ts` factory, which owns the layer fan-out,
+  bbox-debounce, offline stale fallback, and US-waters gate. Wrapped boxes are
+  split into ordinary ArcGIS envelopes and merged by object identity. This
+  pattern fits bbox-aware services whose result sets are bounded but whose
+  protocol does not need the queued client's retries.
 
 - **Periodic download with conditional GET.** `src/inputs/uscg-light-list/`
   is the reference: it fetches the full NAVCEN district file set on a
@@ -292,9 +300,9 @@ and calling `filterByMinimumYear` from `src/shared/year-filter.ts` at the
 end of `listPointsOfInterest`. The matching panel card mounts the shared
 `MinimumYearField` component with a source-specific label and hint, and
 the input module's config-schema fragment adds the source's
-`<source>MinimumXxxYear` key clamped to the shared `[MIN_YEAR, MAX_YEAR]`
-range. Three sources today follow this pattern: NOAA ENC Direct,
-USCG Light List, and OpenSeaMap.
+`<source>MinimumXxxYear` key normalized to the off sentinel `0` or the shared
+`[MIN_YEAR, MAX_YEAR]` range. Three sources today follow this pattern: NOAA ENC
+Direct, USCG Light List, and OpenSeaMap.
 
 For details of the ActiveCaptain API the client talks to, see
 [docs/garmin-api.md](garmin-api.md).

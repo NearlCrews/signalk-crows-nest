@@ -11,6 +11,54 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+<a id="v0151"></a>
+
+## [0.15.1] - 2026-07-26
+
+This patch release hardens source refreshes, output startup, bridge clearance
+lookups, route ETAs, and the configuration panel. It also consolidates the
+shared ArcGIS source machinery and adds a runtime dependency audit to CI.
+
+### Added
+
+- The configuration panel now catches hook and render failures inside a styled
+  error boundary with an accessible message and reload action, so one component
+  failure does not leave the entire panel blank.
+
+### Changed
+
+- The NOAA ENC Direct and USACE sources now share a common ArcGIS POI source
+  factory (`arcgis-poi-source.ts`), so the fan-out, bbox-debounce, hydrated
+  detail cache, offline fallback, and US-waters gate live in one place. Each
+  source file is now a thin config wrapper.
+- The panel request timeout is raised from 4 s to 15 s for slow satellite and
+  mobile connections. The poller's overlapping-request guard prevents stacking
+  when a request runs long.
+- The minimum-year filter normalizes non-positive values to the `0` off
+  sentinel and clamps positive values below 1900 to the validation floor. The
+  config schema still accepts `0`, so the filter-disabled state is always a
+  valid entry. The custom panel applies the same normalization before saving.
+- CI now runs `npm audit --omit=dev --audit-level=moderate` on every push and
+  pull request.
+- The dedupe pass tracks contributing source slugs and attributions with `Set`s
+  rather than repeated array scans while preserving insertion order and unique
+  output values.
+
+### Fixed
+
+- Bridge clearance detail lookups now time out after 30 seconds, release their
+  in-flight slot, and ignore late results so an older request cannot overwrite
+  a newer retry.
+- A failing output module `isEnabled` check is now isolated and logged rather
+  than stopping the entire output registry. It is also reported as a failed
+  output so the plugin cannot announce a healthy start.
+- A route-hazard ETA under one minute now renders as `<1 min` instead of
+  `0 min`, and an invalid negative ETA is omitted.
+- The NOAA CO-OPS store updates its stored `ETag` and `Last-Modified` headers
+  when an identical-content refetch changes or omits a validator, keeping the
+  next conditional request aligned with the latest response. An empty first
+  result now also persists its type metadata and validators.
+
 <a id="v0150"></a>
 
 ## [0.15.0] - 2026-07-19

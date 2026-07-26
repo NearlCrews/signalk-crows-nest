@@ -210,11 +210,31 @@ export function createCoopsStore (dataDir: string): CoopsStore {
       // unchanged (it does not honor conditional GET), so an unchanged refresh
       // would otherwise re-stamp every record, bump `generated`, mark the index
       // dirty, and rewrite the whole index.json to the SD card each time. When
-      // the incoming set matches the held set by id and content, skip the work
-      // and leave the index clean so flush writes nothing. The stored etag and
-      // lastModified are left as-is: they still describe the unchanged content,
-      // and a server that ignores conditional GET makes refreshing them moot.
-      if (sameRecordSet(held, records)) {
+      // the incoming set matches the held set by id and content, skip replacing
+      // the records but still keep the stored conditional-GET headers current.
+      // This includes clearing a validator omitted by the latest response. A
+      // changed validator also advances fetchedAt and marks the metadata dirty,
+      // so a server that starts honoring conditional GET can return 304 on the
+      // next refresh instead of requiring another full response first.
+      const existingMeta = index.types[stationType]
+      if (existingMeta !== undefined && sameRecordSet(held, records)) {
+        const headersChanged =
+          headers.lastModified !== existingMeta.lastModified ||
+          headers.etag !== existingMeta.etag
+        if (headersChanged) {
+          const nextMeta: CoopsTypeMeta = {
+            recordCount: existingMeta.recordCount,
+            fetchedAt: new Date().toISOString()
+          }
+          if (headers.lastModified !== undefined) {
+            nextMeta.lastModified = headers.lastModified
+          }
+          if (headers.etag !== undefined) {
+            nextMeta.etag = headers.etag
+          }
+          index.types[stationType] = nextMeta
+          dirty = true
+        }
         return
       }
       for (const record of held) {

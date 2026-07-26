@@ -79,6 +79,9 @@ function formatDistance (meters: number): string {
  * `<h> h <m> min` beyond that.
  */
 function formatEta (seconds: number): string {
+  if (seconds >= 0 && seconds < SECONDS_PER_MINUTE) {
+    return '<1 min'
+  }
   const totalMinutes = Math.round(seconds / SECONDS_PER_MINUTE)
   if (totalMinutes < MINUTES_PER_HOUR) {
     return `${totalMinutes} min`
@@ -150,7 +153,9 @@ export function createRouteHazardAlarms (app: RouteAlarmApp): RouteHazardAlarms 
   function buildMessage (poi: CorridorPoi, verdict?: BridgeClearanceVerdict): string {
     const distance = formatDistance(poi.alongTrackDistanceMeters)
     const etaSeconds = toFiniteNumber(poi.etaSeconds)
-    const eta = etaSeconds !== null ? `, ETA ${formatEta(etaSeconds)}` : ''
+    const eta = etaSeconds !== null && etaSeconds >= 0
+      ? `, ETA ${formatEta(etaSeconds)}`
+      : ''
     const base = `${poi.type} "${poi.name}" is on the route ahead, ${distance} away${eta}`
     if (verdict === undefined) {
       return base

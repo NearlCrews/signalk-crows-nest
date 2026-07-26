@@ -56,10 +56,9 @@ export interface PluginStatus {
    * reachable list fetch: it sets `apiReachable` false and logs the outage, so
    * the source reads as in error even while its cached markers stay on the
    * chart. The returned POI array is tagged as stale so the aggregate does not
-   * launder it into a reachable success. Optional only so a lightweight test
-   * stub need not implement it; the production recorder always does.
+   * launder it into a reachable success.
    */
-  recordStaleServe?: (source: string, reason: string) => void
+  recordStaleServe: (source: string, reason: string) => void
   /**
    * Produce a point-in-time snapshot. The caller supplies `cachedPoiCount`
    * because the cached entry count is owned by the cache, not the recorder.

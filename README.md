@@ -22,22 +22,22 @@ route-corridor, and bridge air-draft alarms.
 > safety-of-life navigation: always cross-check against official charts and
 > your primary instruments.
 
-## What's new in 0.15.0
+## What's new in 0.15.1
 
-- **A shared, consistent configuration UI.** The panel now uses
-  `signalk-nearlcrews-ui` 0.3.0 for its shell, controls, and token-driven
-  themes. Fresh profiles start in Light mode, existing `ac-theme` choices
-  migrate automatically, and unsupported browsers receive a clear update
-  message.
-- **Current compatible dependencies.** Runtime and development packages are
-  updated to the latest versions supported by Node.js 20, TypeScript ESLint,
-  and neostandard.
-- **Bounded searches around the date line.** Explicit `notes` bounding boxes
-  cannot exceed the 20-degree search limit, and route or position-monitor
-  searches crossing the antimeridian retain the shortest longitude interval.
-- **Independent alarm identities.** Point-of-interest ids that contain unsafe
-  path characters now receive collision-free notification suffixes, so one
-  hazard cannot suppress or clear another hazard with a similar id.
+- **Safer bridge and route warnings.** Bridge detail lookups now have a
+  30-second deadline and ignore late results after a retry. Route ETAs under
+  one minute render as `<1 min`, and invalid negative ETAs are omitted.
+- **More reliable source state.** NOAA CO-OPS conditional-request validators
+  stay aligned with the latest response, including empty initial datasets and
+  omitted validators. Output enablement failures are isolated, logged, and
+  reported as failed startup instead of allowing a misleading healthy status.
+- **Stronger configuration handling.** Positive earliest-year values below
+  1900 normalize to 1900, while `0` continues to disable the filter. The panel
+  also catches rendering failures and shows a styled fallback with a reload
+  action.
+- **Shared ArcGIS machinery and stricter CI.** NOAA ENC Direct and USACE now
+  use one tested ArcGIS POI source factory, and every push and pull request
+  audits runtime dependencies for moderate or higher vulnerabilities.
 
 ## What it does
 
@@ -268,7 +268,9 @@ The panel has these areas:
      (default 30 minutes).
 
    Every card except ActiveCaptain also carries a merge-with-ActiveCaptain
-   toggle (on by default) and its per-source merge radius.
+   toggle (on by default) and its per-source merge radius. For every
+   earliest-year filter, `0` means off; positive values below 1900 normalize
+   to 1900.
 4. **Alerts section** (collapsed by default, opens automatically when an
    alarm is enabled): the proximity-alarm, route-corridor scan, and
    bridge air-draft check controls, each in its own fieldset with an

@@ -202,7 +202,7 @@ test('recordStaleServe marks the source unreachable without a list fetch', () =>
   // apiReachable goes false and no lastListFetch is recorded, so the source
   // reads as in error rather than as a fresh successful fetch.
   const status = createPluginStatus(SOURCES)
-  status.recordStaleServe?.('openseamap', 'Overpass unreachable')
+  status.recordStaleServe('openseamap', 'Overpass unreachable')
   const row = status.snapshot(0).sources.find(s => s.source === 'openseamap')
   assert.equal(row?.apiReachable, false)
   assert.equal(row?.lastListFetch, null)
@@ -214,9 +214,9 @@ test('recordStaleServe logs a single recent error even across repeated ticks', (
   // The message is count-free, so a burst of identical offline ticks collapses
   // to one recent-errors entry rather than crowding out other sources.
   const status = createPluginStatus(SOURCES)
-  status.recordStaleServe?.('openseamap', 'Overpass unreachable')
-  status.recordStaleServe?.('openseamap', 'Overpass unreachable')
-  status.recordStaleServe?.('openseamap', 'Overpass unreachable')
+  status.recordStaleServe('openseamap', 'Overpass unreachable')
+  status.recordStaleServe('openseamap', 'Overpass unreachable')
+  status.recordStaleServe('openseamap', 'Overpass unreachable')
   const errors = status.snapshot(0).recentErrors.filter(e => e.source === 'openseamap')
   assert.equal(errors.length, 1)
   assert.match(errors[0].message, /Serving cached data offline/)
@@ -224,7 +224,7 @@ test('recordStaleServe logs a single recent error even across repeated ticks', (
 
 test('a real list fetch after a stale serve restores reachability', () => {
   const status = createPluginStatus(SOURCES)
-  status.recordStaleServe?.('openseamap', 'Overpass unreachable')
+  status.recordStaleServe('openseamap', 'Overpass unreachable')
   status.recordListFetch('openseamap', 3)
   const row = status.snapshot(0).sources.find(s => s.source === 'openseamap')
   assert.equal(row?.apiReachable, true)
