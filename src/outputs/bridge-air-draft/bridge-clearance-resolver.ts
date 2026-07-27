@@ -130,8 +130,10 @@ export function createBridgeClearanceResolver (deps: ClearanceResolverDeps): Bri
       })
       .catch((error: unknown) => {
         // Transient failure: leave it uncached so a later encounter retries.
-        // getDetails has its own retry/backoff and the monitor ticks at most
-        // once a minute, so this cannot become a tight loop.
+        // The bound that prevents a tight loop is the inFlight dedupe set
+        // (one fetch per bridge id at a time) plus getDetails' own
+        // retry/backoff; scan ticks are usually a minute apart but a forced
+        // scan can arrive sooner, so the dedupe is the guarantee that holds.
         debug(`Bridge clearance fetch failed for ${id}: ${String(error)}`)
       })
       .finally(() => {

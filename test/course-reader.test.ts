@@ -409,7 +409,11 @@ test('a course delta refreshes the cached route', async () => {
   reader.stop()
 })
 
-test('a committed course refresh requests a position scan', async () => {
+test('a committed course refresh requests a scan only when the route changed', async () => {
+  // The subscription path also carries re-publications of an unchanged
+  // destination (an NMEA autopilot repeats it continuously), and
+  // onRouteChange reaches a forced scan that bypasses the position monitor's
+  // interval and movement gates, so only a genuine change may fire it.
   let course = courseWithoutRoute()
   let changes = 0
   const { app, emitCourseDelta } = createMockApp({
@@ -418,12 +422,26 @@ test('a committed course refresh requests a position scan', async () => {
   })
   const reader = createCourseReader({ app, onRouteChange: () => { changes++ } })
   await flush()
-  assert.equal(changes, 1, 'the initial no-route state is committed')
+  assert.equal(changes, 0, 'the initial no-route state matches the cache and forces nothing')
 
   course = courseWithRoute('/resources/routes/route-1', 0, false)
   emitCourseDelta()
   await flush()
-  assert.equal(changes, 2, 'the activated route requests another scan')
+  assert.equal(changes, 1, 'the activated route requests a scan')
+
+  emitCourseDelta()
+  await flush()
+  assert.equal(changes, 1, 'a re-published unchanged destination forces nothing')
+
+  course = courseWithRoute('/resources/routes/route-1', 1, false)
+  emitCourseDelta()
+  await flush()
+  assert.equal(changes, 2, 'a waypoint advance shortens the passage and requests a scan')
+
+  course = courseWithoutRoute()
+  emitCourseDelta()
+  await flush()
+  assert.equal(changes, 3, 'clearing the route requests a scan')
   reader.stop()
 })
 

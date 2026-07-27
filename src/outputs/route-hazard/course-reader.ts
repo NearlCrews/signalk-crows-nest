@@ -290,15 +290,38 @@ export function createCourseReader (config: CourseReaderConfig): CourseReader {
   }
 
   /**
+   * Whether two resolved routes describe the same remaining passage: same
+   * route id and the same waypoints ahead. A waypoint advance shrinks the
+   * ahead list, so the length check catches it; a name change alone does not
+   * affect hazard scanning and deliberately compares equal.
+   */
+  function sameRoute (a: RoutePolyline | null, b: RoutePolyline | null): boolean {
+    if (a === null || b === null) return a === b
+    if (a.routeId !== b.routeId || a.waypoints.length !== b.waypoints.length) {
+      return false
+    }
+    return a.waypoints.every((waypoint, i) =>
+      waypoint.latitude === b.waypoints[i].latitude &&
+      waypoint.longitude === b.waypoints[i].longitude)
+  }
+
+  /**
    * Commit a refresh result, unless the reader has stopped or a newer refresh
-   * has already superseded this one.
+   * has already superseded this one. `onRouteChange` fires only when the
+   * resolved route actually differs from the cached one: the subscription
+   * path also carries re-publications of an unchanged destination (an NMEA
+   * autopilot repeats it continuously), and `onRouteChange` reaches a forced
+   * scan that bypasses the position monitor's interval and movement gates, so
+   * an unconditional call would turn the deliberate once-per-minute scan
+   * cadence into one scan per delta.
    */
   function applyRefresh (generation: number, route: RoutePolyline | null): void {
     if (stopped || generation !== refreshGeneration) {
       return
     }
+    const changed = !sameRoute(currentRoute, route)
     currentRoute = route
-    onRouteChange()
+    if (changed) onRouteChange()
   }
 
   /**
