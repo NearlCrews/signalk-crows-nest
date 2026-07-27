@@ -31,6 +31,9 @@ test('saveButtonDisabled is false (Save enabled) when configured and dirty', () 
 })
 
 test('saveButtonDisabled is true (Save disabled) when configured and not dirty', () => {
-  // Previously saved plugin with no pending edits: nothing to save.
+  // Previously saved plugin with no pending edits: nothing to save. This is
+  // also the state right after the FIRST save of the session: useConfig's
+  // markSaved clears the unconfigured flag, so Save disables and the "Save
+  // to enable the plugin" hint does not reappear when the Saved pill expires.
   assert.equal(saveButtonDisabled(false, false), true)
 })

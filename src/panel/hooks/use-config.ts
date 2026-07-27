@@ -21,6 +21,13 @@ export interface UseConfigResult {
   dispatch: Dispatch<ConfigAction>
   /** Records the current state as saved, clearing the dirty flag. */
   markSaved: () => void
+  /**
+   * True until the plugin has been saved at least once, counting a save made
+   * in this session. The admin UI passes a null or undefined configuration
+   * for a never-saved plugin and does not re-send the prop after the panel's
+   * fire-and-forget save, so the first markSaved clears this here.
+   */
+  unconfigured: boolean
 }
 
 /**
@@ -32,6 +39,7 @@ export function useConfig (configuration: unknown): UseConfigResult {
   const [initial] = useState<PluginConfig>(() => normalizeConfig(configuration))
   const [state, dispatch] = useReducer(configReducer, initial)
   const [savedState, setSavedState] = useState<PluginConfig>(initial)
+  const [unconfigured, setUnconfigured] = useState(() => configuration == null)
 
   // Keep markSaved's identity stable across renders by reading the latest
   // state through a ref, assigned during render (the same pattern the panel
@@ -43,7 +51,10 @@ export function useConfig (configuration: unknown): UseConfigResult {
   stateRef.current = state
   const markSaved = useCallback((): void => {
     setSavedState(stateRef.current)
+    // The first save configures the plugin; the setter's identity is stable,
+    // so markSaved stays identity-stable too.
+    setUnconfigured(false)
   }, [])
 
-  return { state, savedState, dispatch, markSaved }
+  return { state, savedState, dispatch, markSaved, unconfigured }
 }

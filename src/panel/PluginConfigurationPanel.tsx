@@ -74,7 +74,7 @@ export default function PluginConfigurationPanel (props: Props): React.ReactElem
 
 function SupportedPluginConfigurationPanel ({ configuration, save }: Props): React.ReactElement {
   const { status, error, lastUpdatedMs } = useStatus()
-  const { state, savedState, dispatch, markSaved } = useConfig(configuration)
+  const { state, savedState, dispatch, markSaved, unconfigured } = useConfig(configuration)
   // The display system the server's unit preferences select; the LengthFields
   // read it through context so the meters-backed config renders in feet when
   // the active preset is imperial.
@@ -114,11 +114,6 @@ function SupportedPluginConfigurationPanel ({ configuration, save }: Props): Rea
   // Every reducer case returns a new object only on a real change, so identity
   // inequality against the last-saved snapshot is a sound dirty check.
   const dirty = state !== savedState
-
-  // The plugin has never been saved when the admin UI passes null or undefined.
-  // Save must stay enabled in that state so the user can persist defaults to
-  // enable the plugin without making a throwaway edit first.
-  const unconfigured = configuration == null
 
   // Warn before a tab close or reload while edits are unsaved, so a
   // fat-fingered close cannot silently lose in-progress configuration.

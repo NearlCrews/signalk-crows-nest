@@ -15,9 +15,9 @@ import { saveButtonDisabled } from '../footer-bar-state.js'
 interface Props {
   dirty: boolean
   /**
-   * True when the admin UI passed a null or undefined configuration prop,
-   * meaning the plugin has never been saved. Save stays enabled in this
-   * state so the user can persist defaults to enable the plugin.
+   * True while the plugin has never been saved, counting a save made in this
+   * session. Save stays enabled in this state so the user can persist
+   * defaults to enable the plugin.
    */
   unconfigured: boolean
   /** Epoch milliseconds of the last successful save, or null. Drives the "Saved" pill. */
