@@ -82,7 +82,12 @@ export function createNoaaCoopsSource (config: NoaaCoopsSourceConfig): NoaaCoops
   // restarts the plugin), so it is captured once as a Set for the list filter.
   const enabledTypes = new Set<CoopsStationType>(stationTypes)
 
-  async function refreshOneType (stationType: CoopsStationType, signal?: AbortSignal): Promise<boolean> {
+  /**
+   * Refresh one station type. Resolves the record count a 200 ingested (a 304
+   * ingests nothing) or null on a recorded failure, so the pass reports what
+   * it actually fetched rather than the whole on-disk index size.
+   */
+  async function refreshOneType (stationType: CoopsStationType, signal?: AbortSignal): Promise<number | null> {
     const previous = store.snapshot().types[stationType]
     const previousHeaders = previous !== undefined
       ? { lastModified: previous.lastModified, etag: previous.etag }
@@ -90,27 +95,39 @@ export function createNoaaCoopsSource (config: NoaaCoopsSourceConfig): NoaaCoops
     const result = await client.downloadStations(stationType, previousHeaders, signal)
     if (result.status === 'ok') {
       store.upsertType(stationType, result.records, result.headers)
-    } else if (result.status === 'error') {
+      return result.records.length
+    }
+    if (result.status === 'error') {
       status.recordError(
         NOAA_COOPS_SOURCE_ID,
         `Refresh failed for ${stationType} stations: ${result.message}`
       )
-      return false
+      return null
     }
-    return true
+    return 0
   }
 
   async function refreshAll (signal?: AbortSignal): Promise<void> {
+    if (stationTypes.length === 0) {
+      // Enabled source with both station families off: record why it stays
+      // quiet, matching OpenSeaMap's "no feature groups enabled" and the
+      // ArcGIS factory's no-layers skip, instead of a bare idle pill.
+      status.recordSkipped(NOAA_COOPS_SOURCE_ID, 'no station types enabled', false)
+      return
+    }
     if (shouldSkipOutsideUsWaters(getCurrentPosition, status, NOAA_COOPS_SOURCE_ID)) {
       return
     }
     // The two lists are independent and low-volume, so a small sequential walk
     // is plenty; a per-type error is recorded and does not abort the rest.
     let allSucceeded = true
+    let ingested = 0
     for (const stationType of stationTypes) {
       signal?.throwIfAborted()
       try {
-        if (!await refreshOneType(stationType, signal)) allSucceeded = false
+        const count = await refreshOneType(stationType, signal)
+        if (count === null) allSucceeded = false
+        else ingested += count
       } catch (error) {
         signal?.throwIfAborted()
         allSucceeded = false
@@ -123,8 +140,10 @@ export function createNoaaCoopsSource (config: NoaaCoopsSourceConfig): NoaaCoops
     // The store no-ops this flush if the run has been closed mid-refresh, so a
     // torn-down run cannot write over a freshly started one at the same dir.
     await store.flush()
-    if (stationTypes.length > 0 && allSucceeded) {
-      status.recordListFetch(NOAA_COOPS_SOURCE_ID, store.recordCount())
+    // The count reports what this pass actually ingested (0 when both types
+    // answered 304), never the on-disk index size.
+    if (allSucceeded) {
+      status.recordListFetch(NOAA_COOPS_SOURCE_ID, ingested)
     }
   }
 
@@ -135,6 +154,11 @@ export function createNoaaCoopsSource (config: NoaaCoopsSourceConfig): NoaaCoops
     // type selection, and this source's own enable and per-type toggles are its
     // filter.
     listPointsOfInterest: async (bbox: Bbox): Promise<PoiSummary[]> => {
+      // Both station families off: an empty result by configuration, tagged
+      // as skipped so the registry does not read it as a served local list.
+      if (enabledTypes.size === 0) {
+        return withListProvenance([], 'skipped')
+      }
       const result: PoiSummary[] = []
       for (const record of store.queryBbox(bbox)) {
         // Defensive: the store only holds enabled types (refresh fetches only

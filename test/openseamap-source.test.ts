@@ -19,6 +19,7 @@ function silentStatus (): PluginStatus {
     recordError: () => {},
     recordSkipped: () => {},
     recordStaleServe: () => {},
+    unreachableSources: () => [],
     snapshot: () => ({}) as never
   }
 }

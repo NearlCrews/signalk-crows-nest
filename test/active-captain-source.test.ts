@@ -240,7 +240,7 @@ test('a 404 detail failure records a detail success, not an error', async () => 
   }
 })
 
-test('a non-404 detail failure records an error and sets the plugin error', async () => {
+test('a non-404 detail failure records an error without escalating to the plugin banner', async () => {
   const { dataDir, cleanup } = makeTempDir()
   try {
     const { client } = fakeClient({
@@ -258,7 +258,10 @@ test('a non-404 detail failure records an error and sets the plugin error', asyn
     })
     await assert.rejects(source.getDetails('1'))
     assert.equal(spy.calls.recordError, 1)
-    assert.equal(spy.calls.setPluginError, 1)
+    // The per-source status row is the right surface; the server-wide banner
+    // is reserved for start errors, so a transient per-POI failure must not
+    // replace it.
+    assert.equal(spy.calls.setPluginError, 0)
     assert.equal(spy.calls.detailSuccess, 0)
     source.close()
   } finally {
@@ -316,7 +319,7 @@ test('an aborted detail fetch while the source is running is recorded as an erro
     await assert.rejects(source.getDetails('1'))
     assert.equal(spy.calls.detailSuccess, 0)
     assert.equal(spy.calls.recordError, 1)
-    assert.equal(spy.calls.setPluginError, 1)
+    assert.equal(spy.calls.setPluginError, 0)
     source.close()
   } finally {
     cleanup()

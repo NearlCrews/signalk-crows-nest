@@ -90,16 +90,25 @@ function toSummary (record: LnmRecord): PoiSummary {
 export function createUscgLnmSource (config: UscgLnmSourceConfig): UscgLnmSource {
   const { client, store, status, getCurrentPosition } = config
 
-  async function refreshOnePage (layer: LnmLayer, page: number, signal?: AbortSignal): Promise<boolean> {
+  /**
+   * Refresh one (layer, page). Reports the record count a 200 ingested (a 304
+   * ingests nothing) and a failure description instead of recording onto the
+   * status itself, so the pass aggregates its failures into one recorded
+   * error rather than flooding the capped recent-errors list.
+   */
+  async function refreshOnePage (
+    layer: LnmLayer, page: number, signal?: AbortSignal
+  ): Promise<{ ingested: number, failure?: string }> {
     const key = lnmFileKey(layer.slug, page)
     const result = await client.downloadLayerPage(layer, page, store.headersFor(key), signal)
     if (result.status === 'ok') {
       store.upsertFile(key, result.records, result.headers)
-    } else if (result.status === 'error') {
-      status.recordError(USCG_LNM_SOURCE_ID, `Refresh failed for ${key}: ${result.message}`)
-      return false
+      return { ingested: result.records.length }
     }
-    return true
+    if (result.status === 'error') {
+      return { ingested: 0, failure: `${key}: ${result.message}` }
+    }
+    return { ingested: 0 }
   }
 
   async function refreshAll (signal?: AbortSignal): Promise<void> {
@@ -113,24 +122,37 @@ export function createUscgLnmSource (config: UscgLnmSourceConfig): UscgLnmSource
     }
     // Concurrency-capped fan-out: a small worker pool pulls (layer, page)
     // pairs off the shared cursor until the pinned catalog is drained.
-    // Per-file errors are recorded onto the status and do not abort the pass.
+    // Per-file failures are collected and do not abort the pass.
     const outcomes = await mapWithConcurrency(LNM_LAYER_PAGES, REFRESH_CONCURRENCY, async ({ layer, page }) => {
       try {
         return await refreshOnePage(layer, page, signal)
       } catch (error) {
         if (signal?.aborted === true) throw error
-        status.recordError(
-          USCG_LNM_SOURCE_ID,
-          `Refresh worker failed for ${lnmFileKey(layer.slug, page)}: ${String(error)}`
-        )
-        return false
+        return { ingested: 0, failure: `${lnmFileKey(layer.slug, page)}: ${String(error)}` }
       }
     }, signal)
+    const failures = outcomes
+      .map((outcome) => outcome.failure)
+      .filter((failure): failure is string => failure !== undefined)
+    if (failures.length > 0) {
+      // One aggregated error per pass, so a NAVCEN-wide outage occupies one
+      // slot in the capped recent-errors list rather than all of them.
+      status.recordError(
+        USCG_LNM_SOURCE_ID,
+        `Refresh failed for ${failures.length} of ${LNM_LAYER_PAGES.length} files (first: ${failures[0]})`
+      )
+    }
     // The store no-ops this flush if the run has been closed mid-refresh, so a
     // torn-down run cannot write over a freshly started one at the same dir.
     await store.flush()
-    if (outcomes.every(Boolean)) {
-      status.recordListFetch(USCG_LNM_SOURCE_ID, store.recordCount())
+    // The empty-catalog guard keeps a vacuous pass from recording a reachable
+    // fetch that issued no HTTP; the count reports what this pass actually
+    // ingested (0 when every file answered 304), never the union size.
+    if (outcomes.length > 0 && failures.length === 0) {
+      status.recordListFetch(
+        USCG_LNM_SOURCE_ID,
+        outcomes.reduce((sum, outcome) => sum + outcome.ingested, 0)
+      )
     }
   }
 

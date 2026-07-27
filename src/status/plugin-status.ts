@@ -60,6 +60,13 @@ export interface PluginStatus {
    */
   recordStaleServe: (source: string, reason: string) => void
   /**
+   * Ids of sources whose most recent real request failed. A cheap read off
+   * the live states map, with no snapshot allocation, for per-poll callers:
+   * the notes output appends an offline note to the server-wide plugin
+   * status line so an outage is visible without opening the panel.
+   */
+  unreachableSources: () => string[]
+  /**
    * Produce a point-in-time snapshot. The caller supplies `cachedPoiCount`
    * because the cached entry count is owned by the cache, not the recorder.
    */
@@ -181,6 +188,11 @@ export function createPluginStatus (sources: ReadonlyArray<StatusSource>): Plugi
         }
       }
     },
+
+    unreachableSources: (): string[] =>
+      [...states.entries()]
+        .filter(([, state]) => state.apiReachable === false)
+        .map(([source]) => source),
 
     snapshot: (cachedPoiCount: number): StatusSnapshot => ({
       sources: [...states.entries()].map(([source, state]): SourceStatus => ({

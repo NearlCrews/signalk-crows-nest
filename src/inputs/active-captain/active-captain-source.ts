@@ -190,9 +190,11 @@ export function createActiveCaptainSource (config: ActiveCaptainSourceConfig): P
       if (error instanceof HttpError && error.status === HTTP_NOT_FOUND) {
         status.recordDetailSuccess(ACTIVE_CAPTAIN_SOURCE_ID)
       } else {
-        const message = `Detail request failed: ${String(error)}`
-        status.recordError(ACTIVE_CAPTAIN_SOURCE_ID, message)
-        app.setPluginError(message)
+        // Recorded on the per-source status only, like every peer source's
+        // detail failures. Escalating to setPluginError replaced the
+        // server-wide banner (which the guarded app reserves for start
+        // errors) with a transient per-POI failure.
+        status.recordError(ACTIVE_CAPTAIN_SOURCE_ID, `Detail request failed: ${String(error)}`)
       }
     }
   }, store)

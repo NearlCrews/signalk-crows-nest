@@ -32,7 +32,7 @@ const READ_ONLY_MESSAGE = "Crow's nest notes resources are read-only"
 
 /** Build the resource-provider methods bound to one plugin run's context. */
 function buildMethods (context: OutputContext): ResourceProviderMethods {
-  const { app, config, pois } = context
+  const { app, config, pois, status } = context
 
   // The selected POI-types string is fixed for the life of the plugin run
   // (config does not change without a restart), so build it once here rather
@@ -70,7 +70,17 @@ function buildMethods (context: OutputContext): ResourceProviderMethods {
         app.setPluginError(message)
         throw error
       }
-      app.setPluginStatus(`${entities.length} ${entities.length === 1 ? 'point' : 'points'} of interest from the last search`)
+      // A stale offline serve fulfills the list, so without this note the
+      // server-wide plugin line would read as a normal green status through
+      // an outage of any length; the panel is honest but nobody opens it
+      // underway. The per-source pills carry the detail.
+      const offline = status.unreachableSources().length
+      const offlineNote = offline > 0
+        ? `; ${offline} ${offline === 1 ? 'source' : 'sources'} offline, showing cached data`
+        : ''
+      app.setPluginStatus(
+        `${entities.length} ${entities.length === 1 ? 'point' : 'points'} of interest from the last search${offlineNote}`
+      )
 
       const resources: Record<string, unknown> = {}
       for (const entity of entities) {

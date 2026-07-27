@@ -110,7 +110,16 @@ export function createUscgLightListSource (
 ): UscgLightListSource {
   const { client, store, minimumYear, status, getCurrentPosition } = config
 
-  async function refreshOnePage (district: string, page: number, signal?: AbortSignal): Promise<boolean> {
+  /**
+   * Refresh one (district, page). Reports the record count a 200 ingested (a
+   * 304 ingests nothing) and a failure description instead of recording onto
+   * the status itself, so the pass can aggregate: per-page error recording
+   * flooded the small capped recent-errors list during a NAVCEN outage and
+   * hid every other source's failures.
+   */
+  async function refreshOnePage (
+    district: string, page: number, signal?: AbortSignal
+  ): Promise<{ ingested: number, failure?: string }> {
     const key = `${district}_${page}`
     const previous = store.snapshot().districts[key]
     const previousHeaders = previous !== undefined
@@ -119,14 +128,12 @@ export function createUscgLightListSource (
     const result = await client.downloadDistrict(district, page, previousHeaders, signal)
     if (result.status === 'ok') {
       store.upsertDistrict(district, page, result.records, result.headers)
-    } else if (result.status === 'error') {
-      status.recordError(
-        USCG_LIGHT_LIST_SOURCE_ID,
-        `Refresh failed for ${key}: ${result.message}`
-      )
-      return false
+      return { ingested: result.records.length }
     }
-    return true
+    if (result.status === 'error') {
+      return { ingested: 0, failure: `${key}: ${result.message}` }
+    }
+    return { ingested: 0 }
   }
 
   async function refreshAll (signal?: AbortSignal): Promise<void> {
@@ -140,25 +147,37 @@ export function createUscgLightListSource (
     }
     // Concurrency-capped fan-out: a small worker pool pulls (district, page)
     // pairs off the shared cursor until the table is drained. Per-page
-    // errors are recorded onto the status here and do not abort the rest of
-    // the pass.
+    // failures are collected and do not abort the rest of the pass.
     const outcomes = await mapWithConcurrency(DISTRICT_PAGES, REFRESH_CONCURRENCY, async ([district, page]) => {
       try {
         return await refreshOnePage(district, page, signal)
       } catch (error) {
         if (signal?.aborted === true) throw error
-        status.recordError(
-          USCG_LIGHT_LIST_SOURCE_ID,
-          `Refresh worker failed for ${district}_${page}: ${String(error)}`
-        )
-        return false
+        return { ingested: 0, failure: `${district}_${page}: ${String(error)}` }
       }
     }, signal)
+    const failures = outcomes
+      .map((outcome) => outcome.failure)
+      .filter((failure): failure is string => failure !== undefined)
+    if (failures.length > 0) {
+      // One aggregated error per pass, so a NAVCEN-wide outage occupies one
+      // slot in the capped recent-errors list rather than all of them.
+      status.recordError(
+        USCG_LIGHT_LIST_SOURCE_ID,
+        `Refresh failed for ${failures.length} of ${DISTRICT_PAGES.length} pages (first: ${failures[0]})`
+      )
+    }
     // The store no-ops this flush if the run has been closed mid-refresh, so a
     // torn-down run cannot write over a freshly started one at the same dir.
     await store.flush()
-    if (outcomes.every(Boolean)) {
-      status.recordListFetch(USCG_LIGHT_LIST_SOURCE_ID, store.recordCount())
+    // The empty-table guard keeps a vacuous pass from recording a reachable
+    // fetch that issued no HTTP; the count reports what this pass actually
+    // ingested (0 when every page answered 304), never the on-disk index size.
+    if (outcomes.length > 0 && failures.length === 0) {
+      status.recordListFetch(
+        USCG_LIGHT_LIST_SOURCE_ID,
+        outcomes.reduce((sum, outcome) => sum + outcome.ingested, 0)
+      )
     }
   }
 

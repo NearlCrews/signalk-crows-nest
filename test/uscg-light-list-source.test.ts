@@ -452,3 +452,53 @@ test('refreshAll prunes a store page that left the pinned table', async () => {
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+test('a refresh pass aggregates its page failures into one recorded error', async () => {
+  let downloads = 0
+  const client: LightListClient = {
+    downloadDistrict: async (district, page): Promise<DownloadResult> => {
+      downloads++
+      if (district === 'D01' && (page === 1 || page === 2)) {
+        return { status: 'error', message: 'HTTP 404' }
+      }
+      return { status: 'not-modified' }
+    }
+  }
+  const { events, status } = createStubStatus()
+  const source = createUscgLightListSource({
+    client,
+    store: createLightListStore(await mkdtemp(join(tmpdir(), 'll-agg-'))),
+    minimumYear: 0,
+    status,
+    getCurrentPosition: () => ({ latitude: 42, longitude: -71 })
+  })
+  await source.refreshAll()
+  assert.equal(downloads, DISTRICT_PAGES.length)
+  const errors = events.filter((event) => event.startsWith('error:'))
+  assert.equal(errors.length, 1, 'one aggregated error per pass, not one per page')
+  assert.match(errors[0], /2 of 61 pages/)
+  assert.ok(!events.some((event) => event.startsWith('list:')),
+    'a failing pass records no reachable list fetch')
+})
+
+test('an all-304 refresh pass records the ingested count, not the index size', async () => {
+  const { events, status } = createStubStatus()
+  const dir = await mkdtemp(join(tmpdir(), 'll-304-'))
+  try {
+    const store = createLightListStore(dir)
+    await store.load()
+    loadOne(store)
+    const source = createUscgLightListSource({
+      client: fakeClient(),
+      store,
+      minimumYear: 0,
+      status,
+      getCurrentPosition: () => ({ latitude: 42, longitude: -71 })
+    })
+    await source.refreshAll()
+    assert.ok(events.includes(`list:${USCG_LIGHT_LIST_SOURCE_ID}:0`),
+      'a pass where every page answered 304 ingested nothing')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})

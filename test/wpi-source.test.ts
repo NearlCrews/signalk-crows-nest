@@ -392,3 +392,20 @@ test('hydrated ports stay listed during the failure cool-down', async () => {
     source.close()
   })
 })
+
+test('a detail miss inside the freshness window records no unearned success', async () => {
+  let t = 1_000_000
+  const client: FakeClient = { fetchAllPorts: async () => [brooklyn] }
+  const { events, status } = createStubStatus()
+  const source = createWpiSource({
+    client: client as never, refreshHours: 24, status: status as never, now: () => t
+  })
+  await source.listPointsOfInterest(NY_BBOX, '')
+  events.length = 0
+  t += 60_000
+  // The dataset is fresh, so the miss must not run (or record) a refresh:
+  // ensureFresh would resolve without upstream work, and a no-op must not
+  // repaint the pill green during an outage.
+  await assert.rejects(() => source.getDetails('99999'), /99999/)
+  assert.deepEqual(events, [])
+})

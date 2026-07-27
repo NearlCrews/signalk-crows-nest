@@ -277,13 +277,16 @@ export function createWpiSource (config: WpiSourceConfig): PoiSource {
     pending === undefined &&
     lastFailedAt !== undefined && now() - lastFailedAt < FAILED_REFRESH_RETRY_MS
 
+  // Whether the dataset was fetched within the freshness window this session.
+  const datasetIsFresh = (): boolean =>
+    lastFetchedAt !== undefined && now() - lastFetchedAt < refreshIntervalMs
+
   // Refresh the full set unless it was fetched within the window. A set never
   // fetched this session (including a hydrated-only cache) is always refreshed,
   // except during the failure cool-down, where the caller serves what it has
   // and the recorded failure stands.
   const ensureFresh = async (): Promise<boolean> => {
-    const fresh = lastFetchedAt !== undefined && now() - lastFetchedAt < refreshIntervalMs
-    if (fresh) return false
+    if (datasetIsFresh()) return false
     if (inFailureCoolDown()) return false
     await refreshDataset()
     return true
@@ -329,10 +332,12 @@ export function createWpiSource (config: WpiSourceConfig): PoiSource {
       // Miss: the set may not be loaded yet (a detail click before any list),
       // or the port is genuinely absent. Refresh once through the shared
       // wrapper, which records a detail success when the fetch answers normally
-      // and an error only on a transport failure, then retry the lookup. The
-      // failure cool-down skips the attempt entirely: a quiet no-op there must
-      // not record a detail success the failing upstream has not earned.
-      if (!inFailureCoolDown()) {
+      // and an error only on a transport failure, then retry the lookup. Both
+      // quiet branches skip the attempt entirely: during the failure cool-down
+      // AND inside the freshness window, ensureFresh would resolve without any
+      // upstream work, and a no-op must not record a detail success the
+      // upstream has not earned.
+      if (!inFailureCoolDown() && !datasetIsFresh()) {
         await fetchDetailRecorded(status, WPI_SOURCE_ID, () => ensureFresh())
         const refreshed = cache.get(id)
         if (refreshed !== undefined) {

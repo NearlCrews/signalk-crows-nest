@@ -57,7 +57,12 @@ function contextWith (overrides: Partial<OutputContext>): OutputContext {
   return {
     app: app as never,
     config: { ...allTypesOn } as never,
-    status: { recordListFetch: () => {}, recordError: () => {}, recordDetailSuccess: () => {} } as never,
+    status: {
+      recordListFetch: () => {},
+      recordError: () => {},
+      recordDetailSuccess: () => {},
+      unreachableSources: () => []
+    } as never,
     pois: {
       id: 'activecaptain',
       listPointsOfInterest: async () => [
@@ -147,6 +152,25 @@ test('listResources reports the result count via setPluginStatus', async () => {
   await listResources({ bbox: '0,0,1,1' })
   assert.equal(statusMessages.length, 1)
   assert.match(statusMessages[0], /1 point/)
+  assert.doesNotMatch(statusMessages[0], /offline/, 'no offline note while every source is reachable')
+})
+
+test('listResources notes offline sources in the plugin status line', async () => {
+  // A stale offline serve fulfills the list, so without this note the
+  // server-wide plugin line would read as a normal green status through an
+  // outage; the panel is honest but nobody opens it underway.
+  const { methods, statusMessages } = startCapturing({
+    status: {
+      recordListFetch: () => {},
+      recordError: () => {},
+      recordDetailSuccess: () => {},
+      unreachableSources: () => ['wpi', 'openseamap']
+    } as never
+  })
+  const listResources = methods.listResources as (q: object) => Promise<Record<string, unknown>>
+  await listResources({ bbox: '0,0,1,1' })
+  assert.equal(statusMessages.length, 1)
+  assert.match(statusMessages[0], /2 sources offline, showing cached data/)
 })
 
 test('listResources surfaces the error and rethrows on a list failure', async () => {

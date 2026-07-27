@@ -157,17 +157,29 @@ export function createInputRegistry (
                   })
                 ])
                 if (outcome.kind === 'timeout') {
-                  // Diagnostic observer attached only on the timeout branch:
-                  // the underlying fetch is still running and its eventual
-                  // outcome is now interesting only for plugin debug
-                  // output, since the registry has already returned a
-                  // partial result. Optional-chained so a stub test context
+                  // Late-settlement observer, attached only on the timeout
+                  // branch. A fresh result landing after the race still
+                  // proves upstream reachability and IS consumable (the
+                  // bbox-debounce cache serves it to the next poll, and with
+                  // the cache off the in-flight collapse lets the next poll
+                  // join it), so it records the list fetch that the timeout
+                  // outcome could not; without this the row stayed on the
+                  // transient skip for a whole debounce window while the
+                  // source's markers were on the chart. A late rejection is
+                  // debug-only. Optional-chained so a stub test context
                   // without `app.debug` does not throw.
-                  fetchPromise.catch((error) => {
-                    context.app.debug?.(
-                      `Source "${sourceIds[i]}" list rejected after timeout was already returned: ${String(error)}`
-                    )
-                  })
+                  fetchPromise.then(
+                    (pois) => {
+                      if (getListProvenance(pois) === 'fresh') {
+                        context.status.recordListFetch(sourceIds[i], pois.length)
+                      }
+                    },
+                    (error) => {
+                      context.app.debug?.(
+                        `Source "${sourceIds[i]}" list rejected after timeout was already returned: ${String(error)}`
+                      )
+                    }
+                  )
                 }
                 return outcome
               } finally {

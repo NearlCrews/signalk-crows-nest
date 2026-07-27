@@ -209,6 +209,7 @@ export function createStubStatus (): StubStatus {
     recordError: (source, message) => { events.push(`error:${source}:${message}`) },
     recordSkipped: (source, reason) => { events.push(`skipped:${source}:${reason}`) },
     recordStaleServe: (source, reason) => { events.push(`stale:${source}:${reason}`) },
+    unreachableSources: () => [],
     snapshot: (): StatusSnapshot => ({ sources: [], cachedPoiCount: 0, recentErrors: [], startedAt: '' })
   }
   return { events, status }
