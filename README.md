@@ -22,22 +22,23 @@ route-corridor, and bridge air-draft alarms.
 > safety-of-life navigation: always cross-check against official charts and
 > your primary instruments.
 
-## What's new in 0.15.1
+## What's new in 0.15.2
 
-- **Safer bridge and route warnings.** Bridge detail lookups now have a
-  30-second deadline and ignore late results after a retry. Route ETAs under
-  one minute render as `<1 min`, and invalid negative ETAs are omitted.
-- **More reliable source state.** NOAA CO-OPS conditional-request validators
-  stay aligned with the latest response, including empty initial datasets and
-  omitted validators. Output enablement failures are isolated, logged, and
-  reported as failed startup instead of allowing a misleading healthy status.
-- **Stronger configuration handling.** Positive earliest-year values below
-  1900 normalize to 1900, while `0` continues to disable the filter. The panel
-  also catches rendering failures and shows a styled fallback with a reload
-  action.
-- **Shared ArcGIS machinery and stricter CI.** NOAA ENC Direct and USACE now
-  use one tested ArcGIS POI source factory, and every push and pull request
-  audits runtime dependencies for moderate or higher vulnerabilities.
+- **Select all with one click.** The ActiveCaptain POI types and the
+  OpenSeaMap seamark groups now carry a tri-state select-all checkbox
+  (checked, partially selected, or unchecked) in place of the All and None
+  buttons. Clicking completes a partial selection and clears a full one.
+- **Panel fixes.** After the first save of a never-configured plugin, the
+  Save button now disables and the setup hint no longer reappears. Discarding
+  edits clears a half-typed number even in Safari, and the Saved confirmation
+  is announced reliably by screen readers.
+- **Refreshed shared UI.** The panel ships `signalk-nearlcrews-ui` 0.4.1,
+  which brightens the Night theme's hover, border, and muted-text colors and
+  supplies the new checkbox indeterminate state.
+- **Hardened panel plumbing.** The panel type-check now actually covers the
+  panel sources, injected styles carry the host page's CSP nonce when one is
+  discoverable, and the build toolchain moves to Babel 8 with react and
+  webpack refreshed.
 
 ## What it does
 

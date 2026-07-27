@@ -11,6 +11,14 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+<a id="v0152"></a>
+
+## [0.15.2] - 2026-07-27
+
+This patch release updates the shared panel UI to `signalk-nearlcrews-ui`
+0.4.1, adds a tri-state select-all to the grouped toggles, refreshes the
+build toolchain, and fixes a batch of configuration-panel bugs.
+
 ### Added
 
 - The ActiveCaptain POI-type selector and the OpenSeaMap seamark groups now

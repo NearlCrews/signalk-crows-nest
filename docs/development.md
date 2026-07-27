@@ -177,13 +177,17 @@ src/                      # TypeScript source
     ├── relative-time.ts   # ISO timestamp to a localized "N minutes ago" phrase
     ├── styles.ts          # Plugin layout styles and shared-theme token aliases
     ├── unit-system.ts     # The display-units resolver keyed off the server unit preset
+    ├── select-all-state.ts# Pure tri-state select-all derivation
+    ├── csp-nonce.ts       # Best-effort discovery of the host page's CSP nonce
     ├── hooks/             # use-config, use-status, use-unit-system,
-    │                      #   use-number-draft, use-collapse-focus-restore
+    │                      #   use-number-draft, draft-reset-context,
+    │                      #   use-collapse-focus-restore
     └── components/        # ErrorBoundary, StatusBar, FooterBar, DataSourcesSection (per-source
                            #   accordion shell), DataSourceCard (one collapsible card),
                            #   ActiveCaptainSource, OpenSeaMapSource, UscgLightListSource,
                            #   NoaaEncSource, NoaaCoopsSource, UscgLnmSource, WpiSource,
-                           #   UsaceSource (card bodies), AlertsSection (the proximity,
+                           #   UsaceSource (card bodies), SelectAllCheckbox (the
+                           #   tri-state select-all control), AlertsSection (the proximity,
                            #   route-hazard, and bridge air-draft controls),
                            #   and the per-field input adapters, including NumberField,
                            #   LengthField (the meters-backed,

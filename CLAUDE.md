@@ -429,6 +429,10 @@ self-contained module registered on one line in `src/index.ts`.
     `signalk-nearlcrews-ui` theme tokens), `relative-time.ts`,
     `source-status-pill.ts` (the pure `pillVariant` + `pillContent` helpers
     used by the per-source live-status pill on each card header),
+    `footer-bar-state.ts` (the pure Save-button disabled logic),
+    `select-all-state.ts` (the pure tri-state select-all derivation),
+    `csp-nonce.ts` (best-effort discovery of the host page's CSP nonce for
+    the injected styles),
     `request-timeout.ts` (the panel-wide per-request timeout the status
     poller and the unit-preferences fetch share), and `unit-system.ts` (the
     React-free display-units module keyed off the server unit-preset's
@@ -436,8 +440,10 @@ self-contained module registered on one line in `src/index.ts`.
     `use-status` (which also exposes `lastUpdatedMs`), `use-unit-system` (resolves
     the display system from the server's unit preferences), `use-number-draft`
     (the raw-text draft state for clearable numeric inputs),
-    and `use-collapse-focus-restore` (the shared focus-restore-on-collapse
-    hook).
+    `draft-reset-context` (the Discard epoch each number draft watches so a
+    stale draft clears even when the restored value is unchanged),
+    and `use-collapse-focus-restore` (the focus-restore-on-collapse hook
+    DataSourceCard uses).
     `components/` holds the layout pieces: `ErrorBoundary` (a class-component
     error boundary inside the shared panel shell that catches hook and render
     errors and shows a styled fallback so a single rendering failure does not
@@ -449,7 +455,9 @@ self-contained module registered on one line in `src/index.ts`.
     `UscgLightListSource`, `NoaaEncSource`, `NoaaCoopsSource`,
     `UscgLnmSource`, `WpiSource`, and `UsaceSource` (the per-source card
     bodies), `IncludeToggles` (the shared import-layers checkbox grid with
-    its empty-selection warning),
+    its empty-selection warning), `SelectAllCheckbox` (the tri-state
+    select-all control the ActiveCaptain POI types and the seamark groups
+    render beside their legends),
     `AlertsSection` (the proximity, route-hazard, and bridge air-draft
     controls); plus the per-field input components `LabeledField`,
     `NumberField`, `LengthField`, `CacheDurationField`, `EndpointUrlField`,
@@ -478,6 +486,9 @@ self-contained module registered on one line in `src/index.ts`.
 ## Toolchain
 
 - TypeScript 6. The Node plugin is compiled with `tsc` (`tsconfig.json`).
+  TypeScript caps at 6 for now: the lint chain's `ts-api-utils` (via
+  typescript-eslint) is not yet compatible with the TypeScript 7 native
+  compiler.
 - The React panel under `src/panel/` is bundled to `public/` by webpack as a
   Module Federation remote (`webpack.config.cjs`, `tsconfig.panel.json`).
 - `signalk-nearlcrews-ui` 0.4.1 supplies the panel shell, theme system, and
