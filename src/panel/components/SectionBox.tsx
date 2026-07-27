@@ -17,7 +17,11 @@ import type * as React from 'react'
 import { CollapsibleSection } from 'signalk-nearlcrews-ui'
 
 interface Props {
-  /** Stable id used as the body region id for aria-controls / aria-labelledby. */
+  /**
+   * Stable suffix for the section's outer DOM id (`ac-section-<cardId>`).
+   * The shared CollapsibleSection generates its own internal ids for the
+   * aria-controls and aria-labelledby wiring.
+   */
   cardId: string
   /** Visible title shown in the header (e.g. "Data sources"). */
   title: string

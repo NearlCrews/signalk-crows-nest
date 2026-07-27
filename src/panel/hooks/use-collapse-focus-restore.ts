@@ -7,8 +7,8 @@
  * returns refs for the body region and the disclosure button plus
  * `restoreFocusBeforeCollapse`, which the caller invokes right before collapsing:
  * when focus is currently inside the body it moves focus back to the button.
- * Shared by SectionBox and DataSourceCard so the two collapsible patterns behave
- * identically rather than only SectionBox restoring focus.
+ * DataSourceCard is the only consumer: SectionBox is built on the shared
+ * CollapsibleSection, which handles its own focus restore.
  */
 
 import { useCallback, useRef, type RefObject } from 'react'
