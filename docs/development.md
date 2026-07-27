@@ -65,7 +65,11 @@ The plugin ships its own configuration panel: a federated React app, loaded by
 the Signal K admin UI through Module Federation, that replaces the generated
 settings form with a live status section and grouped POI-type toggles. The
 panel uses the exact `signalk-nearlcrews-ui` 0.4.1 package for its shell,
-themes, and shared controls, while the Signal K host supplies React.
+themes, and shared controls, while the Signal K host supplies React. The
+panel build transpiles with Babel 8, whose React preset must keep
+`development: false` pinned (see the comment in `webpack.config.cjs` and the
+`test/panel-babel-config.test.ts` contract test): the default would emit
+development-runtime JSX that the bundled production React does not implement.
 
 
 ## Project structure

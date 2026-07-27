@@ -490,7 +490,12 @@ self-contained module registered on one line in `src/index.ts`.
   typescript-eslint) is not yet compatible with the TypeScript 7 native
   compiler.
 - The React panel under `src/panel/` is bundled to `public/` by webpack as a
-  Module Federation remote (`webpack.config.cjs`, `tsconfig.panel.json`).
+  Module Federation remote (`webpack.config.cjs`, `tsconfig.panel.json`),
+  transpiled by `babel-loader` with Babel 8. The React preset pins
+  `development: false`: Babel 8 otherwise reads the unset `NODE_ENV` as
+  development and emits `jsxDEV` calls that the bundled production
+  `react/jsx-dev-runtime` does not implement, which breaks the panel at first
+  render. The `test/panel-babel-config.test.ts` contract test locks this in.
 - `signalk-nearlcrews-ui` 0.4.1 supplies the panel shell, theme system, and
   shared controls. It is pinned exactly, and the host supplies the React 19
   singleton without a bundled fallback.
