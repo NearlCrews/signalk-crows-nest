@@ -11,7 +11,8 @@
  * to a whole number.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useContext, useEffect, useRef, useState } from 'react'
+import { DraftResetContext } from './draft-reset-context.js'
 
 /** Options that shape how a draft string is parsed and clamped on commit. */
 export interface NumberDraftOptions {
@@ -72,6 +73,17 @@ export function useNumberDraft (
   options: NumberDraftOptions
 ): NumberDraft {
   const [draft, setDraft] = useState<string | null>(null)
+
+  // Drop the draft on every Discard, keyed by the panel root's reset epoch.
+  // The value-change detector below misses a Discard that restores a value
+  // identical to the committed one (a typed "0" that clamped to the committed
+  // minimum), and WebKit does not blur the input on a button click, so
+  // without this the stale draft text would survive the Discard there. The
+  // mount run is a no-op: the draft starts null.
+  const resetEpoch = useContext(DraftResetContext)
+  useEffect(() => {
+    setDraft(null)
+  }, [resetEpoch])
 
   // Drop the draft when the committed value changes externally (e.g. a
   // Discard action restores the saved snapshot). Without this, the input

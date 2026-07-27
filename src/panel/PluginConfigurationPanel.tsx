@@ -26,6 +26,7 @@ import { sourceCardDomId } from './components/DataSourceCard.js'
 import ErrorBoundary from './components/ErrorBoundary.js'
 import FooterBar from './components/FooterBar.js'
 import StatusBar from './components/StatusBar.js'
+import { DraftResetContext } from './hooks/draft-reset-context.js'
 import { useConfig } from './hooks/use-config.js'
 import { useStatus } from './hooks/use-status.js'
 import { UnitSystemContext, useUnitSystem } from './hooks/use-unit-system.js'
@@ -140,40 +141,47 @@ function SupportedPluginConfigurationPanel ({ configuration, save }: Props): Rea
     setJustSavedAt(Date.now())
   }, [save, markSaved])
 
+  // Bumped on every Discard so each useNumberDraft drops its raw-text draft
+  // even when the restored value is identical to the committed one (see
+  // draft-reset-context.ts for why the value-change detector misses that).
+  const [discardEpoch, setDiscardEpoch] = useState(0)
   const handleDiscard = useCallback((): void => {
     dispatch({ type: 'discard', config: savedState })
+    setDiscardEpoch((epoch) => epoch + 1)
   }, [dispatch, savedState])
 
   return (
     <UnitSystemContext.Provider value={unitSystem}>
-      <Stack gap={4}>
-        <Cluster justify='end'>
-          <ThemeToggle />
-        </Cluster>
-        <StatusBar status={status} lastUpdatedMs={lastUpdatedMs} onJumpToSource={jumpToSource} />
-        {error !== null
-          ? (
-            <Banner live='polite' tone='danger' title='Status unavailable'>
-              {error}. The next poll will retry automatically.
-            </Banner>
-            )
-          : null}
-        <DataSourcesSection
-          state={state}
-          dispatch={dispatch}
-          status={status}
-          expanded={expandedCards}
-          onToggleExpanded={toggleCard}
-        />
-        <AlertsSection state={state} dispatch={dispatch} />
-        <FooterBar
-          dirty={dirty}
-          unconfigured={unconfigured}
-          justSavedAt={justSavedAt}
-          onSave={handleSave}
-          onDiscard={handleDiscard}
-        />
-      </Stack>
+      <DraftResetContext.Provider value={discardEpoch}>
+        <Stack gap={4}>
+          <Cluster justify='end'>
+            <ThemeToggle />
+          </Cluster>
+          <StatusBar status={status} lastUpdatedMs={lastUpdatedMs} onJumpToSource={jumpToSource} />
+          {error !== null
+            ? (
+              <Banner live='polite' tone='danger' title='Status unavailable'>
+                {error}. The next poll will retry automatically.
+              </Banner>
+              )
+            : null}
+          <DataSourcesSection
+            state={state}
+            dispatch={dispatch}
+            status={status}
+            expanded={expandedCards}
+            onToggleExpanded={toggleCard}
+          />
+          <AlertsSection state={state} dispatch={dispatch} />
+          <FooterBar
+            dirty={dirty}
+            unconfigured={unconfigured}
+            justSavedAt={justSavedAt}
+            onSave={handleSave}
+            onDiscard={handleDiscard}
+          />
+        </Stack>
+      </DraftResetContext.Provider>
     </UnitSystemContext.Provider>
   )
 }
