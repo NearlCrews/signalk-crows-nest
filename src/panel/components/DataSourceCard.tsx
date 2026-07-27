@@ -32,6 +32,7 @@ import { Badge, type StatusTone } from 'signalk-nearlcrews-ui'
 import { useCollapseFocusRestore } from '../hooks/use-collapse-focus-restore.js'
 import { S } from '../styles.js'
 import { pillContent, pillVariant } from '../source-status-pill.js'
+import type { SourceSlug } from '../../shared/source-ids.js'
 import type { SourceStatus } from '../../status/status-types.js'
 
 interface Props {
@@ -40,7 +41,7 @@ interface Props {
    * Mirrors the source's PoiSource.id so the same string keys the panel's
    * expandedCards map AND looks up the source's StatusSnapshot entry.
    */
-  cardId: string
+  cardId: SourceSlug
   /** Source name shown in the header, e.g. `ActiveCaptain`. */
   name: string
   /** Whether the source is enabled. */
@@ -50,7 +51,7 @@ interface Props {
   /** Whether the card is currently expanded. */
   expanded: boolean
   /** Toggle the expanded state on a header click; receives the cardId. */
-  onToggleExpanded: (cardId: string) => void
+  onToggleExpanded: (cardId: SourceSlug) => void
   /**
    * Called when the enable checkbox is toggled. Omitted for an always-on
    * source; the header then shows an "Always on" badge in place of the

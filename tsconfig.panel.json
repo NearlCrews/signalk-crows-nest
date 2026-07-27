@@ -8,6 +8,11 @@
     "moduleResolution": "Bundler",
     "noEmit": true
   },
+  // The base config excludes src/panel (the Node build must not compile it),
+  // and exclude does not merge across extends: without this override the
+  // inherited exclude would empty the include below and this config would
+  // type-check zero panel files.
+  "exclude": ["node_modules", "dist"],
   "include": [
     "src/panel/**/*",
     "src/shared/types.ts",

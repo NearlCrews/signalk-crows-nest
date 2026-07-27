@@ -27,11 +27,11 @@ export default class ErrorBoundary extends React.Component<Props, State> {
     return { error }
   }
 
-  componentDidCatch (error: Error, info: React.ErrorInfo): void {
+  override componentDidCatch (error: Error, info: React.ErrorInfo): void {
     console.error('Panel render error caught by ErrorBoundary:', error, info.componentStack)
   }
 
-  render (): React.ReactNode {
+  override render (): React.ReactNode {
     if (this.state.error !== null) {
       return (
         <Stack gap={4}>
