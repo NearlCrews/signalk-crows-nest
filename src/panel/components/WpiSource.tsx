@@ -40,7 +40,6 @@ export default function WpiSource ({ state, dispatch }: Props): React.ReactEleme
       <Disclosure>
         <Fieldset title='Refresh and freshness'>
           <NumberField
-            id='ac-wpi-refresh-hours'
             label='Refresh period (hours)'
             hint={'How often the plugin re-downloads the whole World Port Index ' +
               'in the background. NGA publishes it quarterly, so the daily ' +
@@ -60,7 +59,6 @@ export default function WpiSource ({ state, dispatch }: Props): React.ReactEleme
           onToggleEnabled={(enabled) => dispatch({ type: 'setWpiDedupe', enabled })}
           radiusMeters={state.wpiDedupeRadiusMeters}
           onChangeRadius={(meters) => dispatch({ type: 'setWpiDedupeRadius', meters })}
-          radiusInputId='ac-wpi-dedupe-radius'
         />
       </Disclosure>
     </>

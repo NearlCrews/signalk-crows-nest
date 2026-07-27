@@ -34,7 +34,6 @@ export default function RouteHazardScanFields ({
       onToggleEnabled={onToggleEnabled}
     >
       <LengthField
-        id='ac-route-corridor-width'
         label='Corridor width'
         hint='A point of interest within this distance either side of the route line is treated as on the route.'
         valueMeters={corridorWidthMeters}

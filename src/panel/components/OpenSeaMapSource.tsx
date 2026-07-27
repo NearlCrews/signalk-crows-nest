@@ -60,7 +60,6 @@ export default function OpenSeaMapSource ({ state, dispatch }: Props): React.Rea
         </Fieldset>
         <Fieldset title='Refresh and freshness'>
           <RefreshSecondsField
-            id='ac-openseamap-refresh-seconds'
             label='Refresh period (seconds)'
             upstreamHint={'OSM seamark edits trickle in slowly, and the Overpass ' +
               'mirrors are shared community infrastructure, so the 10 minute ' +
@@ -69,7 +68,6 @@ export default function OpenSeaMapSource ({ state, dispatch }: Props): React.Rea
             onChange={(seconds) => dispatch({ type: 'setOpenSeaMapRefreshSeconds', seconds })}
           />
           <MinimumYearField
-            id='ac-openseamap-minimum-year'
             label='Earliest update year'
             hint={'Hide OSM elements whose last-edit timestamp is older than ' +
               'this year. Leave at 0 to import every element. The timestamp is ' +
@@ -86,7 +84,6 @@ export default function OpenSeaMapSource ({ state, dispatch }: Props): React.Rea
           onToggleEnabled={(enabled) => dispatch({ type: 'setOpenSeaMapDedupe', enabled })}
           radiusMeters={state.openSeaMapDedupeRadiusMeters}
           onChangeRadius={(meters) => dispatch({ type: 'setOpenSeaMapDedupeRadius', meters })}
-          radiusInputId='ac-openseamap-dedupe-radius'
         />
       </Disclosure>
     </>

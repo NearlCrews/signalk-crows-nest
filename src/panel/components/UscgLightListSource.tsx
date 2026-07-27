@@ -43,7 +43,6 @@ export default function UscgLightListSource ({ state, dispatch }: Props): React.
       <Disclosure>
         <Fieldset title='Refresh and freshness'>
           <NumberField
-            id='ac-uscg-light-list-refresh-hours'
             label='Refresh period (hours)'
             hint='How often the plugin re-downloads the NAVCEN district files in the background. Longer periods reduce traffic; shorter periods pick up new aids sooner.'
             value={state.uscgLightListRefreshHours ?? DEFAULT_REFRESH_HOURS}
@@ -54,7 +53,6 @@ export default function UscgLightListSource ({ state, dispatch }: Props): React.
             integer
           />
           <MinimumYearField
-            id='ac-uscg-light-list-minimum-update-year'
             label='Earliest update year'
             hint={'Hide records whose last USCG modification date is older than ' +
               'this year. Leave at 0 to import every record. Records with no ' +
@@ -69,7 +67,6 @@ export default function UscgLightListSource ({ state, dispatch }: Props): React.
           onToggleEnabled={(enabled) => dispatch({ type: 'setUscgLightListDedupe', enabled })}
           radiusMeters={state.uscgLightListDedupeRadiusMeters}
           onChangeRadius={(meters) => dispatch({ type: 'setUscgLightListDedupeRadius', meters })}
-          radiusInputId='ac-uscg-light-list-dedupe-radius'
         />
       </Disclosure>
     </>

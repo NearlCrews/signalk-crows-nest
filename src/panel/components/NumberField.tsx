@@ -15,8 +15,6 @@ import type { NumberDraftOptions } from '../hooks/use-number-draft.js'
 import LabeledField from './LabeledField.js'
 
 interface Props extends NumberDraftOptions {
-  /** Stable id linking the visible label to the input. */
-  id: string
   /** Visible field label. */
   label: string
   /** Hint paragraph rendered next to the input. */
@@ -35,7 +33,6 @@ interface Props extends NumberDraftOptions {
 
 /** A label + number input + hint row, with a draft-while-editing buffer. */
 export default function NumberField ({
-  id,
   label,
   hint,
   value,
@@ -51,7 +48,7 @@ export default function NumberField ({
   const draft = useNumberDraft(value, onChange, { min, max, integer, fallback })
 
   return (
-    <LabeledField id={id} label={label} hint={hint} dense={dense}>
+    <LabeledField label={label} hint={hint} dense={dense}>
       {(controlProps) => (
         <NumberInput
           {...controlProps}

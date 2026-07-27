@@ -8,9 +8,6 @@ import type * as React from 'react'
 import { TextInput } from 'signalk-nearlcrews-ui'
 import LabeledField from './LabeledField.js'
 
-/** Stable id linking the visible label to its input. */
-const FIELD_ID = 'ac-openseamap-endpoint'
-
 interface Props {
   value: string
   onChange: (url: string) => void
@@ -20,7 +17,6 @@ interface Props {
 export default function EndpointUrlField ({ value, onChange }: Props): React.ReactElement {
   return (
     <LabeledField
-      id={FIELD_ID}
       label='Overpass API endpoint URL'
       hint={
         <>

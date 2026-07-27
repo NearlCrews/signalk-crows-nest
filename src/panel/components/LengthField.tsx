@@ -19,8 +19,6 @@ import {
 } from '../unit-system.js'
 
 interface Props {
-  /** Stable id linking the visible label to the input. */
-  id: string
   /** Field label without a unit suffix; the display unit is appended. */
   label: string
   /** Hint paragraph rendered next to the input. */
@@ -45,7 +43,6 @@ interface Props {
 
 /** A meters-backed numeric field rendered in the preferred display unit. */
 export default function LengthField ({
-  id,
   label,
   hint,
   valueMeters,
@@ -61,7 +58,6 @@ export default function LengthField ({
 
   return (
     <NumberField
-      id={id}
       label={`${label} (${lengthUnitLabel(system)})`}
       hint={hint}
       value={lengthDisplayFromMeters(valueMeters, system)}

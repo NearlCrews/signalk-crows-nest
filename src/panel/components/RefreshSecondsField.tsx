@@ -15,8 +15,6 @@ import {
 import NumberField from './NumberField.js'
 
 interface Props {
-  /** Stable id linking the visible label to the input. */
-  id: string
   /** Visible field label, e.g. `Refresh period (seconds)`. */
   label: string
   /**
@@ -33,7 +31,6 @@ interface Props {
 
 /** The shared per-bbox refresh-period field used by the at-runtime cards. */
 export default function RefreshSecondsField ({
-  id,
   label,
   upstreamHint,
   value,
@@ -41,7 +38,6 @@ export default function RefreshSecondsField ({
 }: Props): React.ReactElement {
   return (
     <NumberField
-      id={id}
       label={label}
       hint={
         <>

@@ -11,9 +11,6 @@ import { Textarea } from 'signalk-nearlcrews-ui'
 import LabeledField from './LabeledField.js'
 import { RECOMMENDED_OVERPASS_FALLBACK_ENDPOINTS } from '../../shared/overpass-endpoints.js'
 
-/** Stable id linking the visible label to its input. */
-const FIELD_ID = 'ac-openseamap-fallback-endpoints'
-
 /** Hoisted so the textarea style object is not rebuilt on every render. */
 const TEXTAREA_STYLE: React.CSSProperties = { minHeight: 56, fontFamily: 'monospace' }
 
@@ -29,7 +26,6 @@ interface Props {
 export default function FallbackEndpointsField ({ value, onChange }: Props): React.ReactElement {
   return (
     <LabeledField
-      id={FIELD_ID}
       label='Fallback endpoints'
       hint={
         <>

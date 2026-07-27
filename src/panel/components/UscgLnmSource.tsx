@@ -43,7 +43,6 @@ export default function UscgLnmSource ({ state, dispatch }: Props): React.ReactE
       <Disclosure>
         <Fieldset title='Refresh and freshness'>
           <NumberField
-            id='ac-uscg-lnm-refresh-seconds'
             label='Refresh period (seconds)'
             hint={'How often the plugin re-downloads the NAVCEN notice files in ' +
               'the background. NAVCEN republishes the notices about every 15 ' +
@@ -63,7 +62,6 @@ export default function UscgLnmSource ({ state, dispatch }: Props): React.ReactE
           onToggleEnabled={(enabled) => dispatch({ type: 'setUscgLnmDedupe', enabled })}
           radiusMeters={state.uscgLnmDedupeRadiusMeters}
           onChangeRadius={(meters) => dispatch({ type: 'setUscgLnmDedupeRadius', meters })}
-          radiusInputId='ac-uscg-lnm-dedupe-radius'
         />
       </Disclosure>
     </>

@@ -56,7 +56,6 @@ export default function NoaaCoopsSource ({ state, dispatch }: Props): React.Reac
       <Disclosure>
         <Fieldset title='Refresh'>
           <NumberField
-            id='ac-noaa-coops-refresh-hours'
             label='Refresh period (hours)'
             hint='How often the plugin re-downloads the CO-OPS station lists in the background. The lists change rarely, so a long period costs almost nothing.'
             value={state.noaaCoopsRefreshHours ?? DEFAULT_REFRESH_HOURS}
@@ -73,7 +72,6 @@ export default function NoaaCoopsSource ({ state, dispatch }: Props): React.Reac
           onToggleEnabled={(enabled) => dispatch({ type: 'setNoaaCoopsDedupe', enabled })}
           radiusMeters={state.noaaCoopsDedupeRadiusMeters}
           onChangeRadius={(meters) => dispatch({ type: 'setNoaaCoopsDedupeRadius', meters })}
-          radiusInputId='ac-noaa-coops-dedupe-radius'
         />
       </Disclosure>
     </>

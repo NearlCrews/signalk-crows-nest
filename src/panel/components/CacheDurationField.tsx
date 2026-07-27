@@ -17,7 +17,6 @@ interface Props {
 export default function CacheDurationField ({ value, onChange }: Props): React.ReactElement {
   return (
     <NumberField
-      id='ac-cache-duration'
       label='Cache duration (minutes)'
       hint='How long imported ActiveCaptain data is cached. Longer means less data traffic, shorter means fresher data.'
       value={value}

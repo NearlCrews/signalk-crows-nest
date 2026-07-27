@@ -30,8 +30,6 @@ interface Props {
   radiusMeters: number | undefined
   /** Fired on every keystroke of the radius input. */
   onChangeRadius: (meters: number) => void
-  /** Stable id linking the radius input to its visible label. */
-  radiusInputId: string
 }
 
 /** A dedupe toggle plus merge-radius pair for one non-base source. */
@@ -40,8 +38,7 @@ export default function MergeWithActiveCaptain ({
   enabled,
   onToggleEnabled,
   radiusMeters,
-  onChangeRadius,
-  radiusInputId
+  onChangeRadius
 }: Props): React.ReactElement {
   return (
     <ToggleFieldset
@@ -59,7 +56,6 @@ export default function MergeWithActiveCaptain ({
       onToggleEnabled={onToggleEnabled}
     >
       <LengthField
-        id={radiusInputId}
         label='Merge radius'
         hint='How far apart two markers can be and still count as the same point.'
         valueMeters={radiusMeters ?? DEFAULT_DEDUPE_RADIUS_METERS}

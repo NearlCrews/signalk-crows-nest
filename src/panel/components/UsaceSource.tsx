@@ -60,7 +60,6 @@ export default function UsaceSource ({ state, dispatch }: Props): React.ReactEle
       <Disclosure>
         <Fieldset title='Refresh and freshness'>
           <RefreshSecondsField
-            id='ac-usace-refresh-seconds'
             label='Refresh period (seconds)'
             upstreamHint={'USACE locks and dams change on an infrastructure ' +
               'timescale, so the 30 minute default only spares the ArcGIS ' +
@@ -75,7 +74,6 @@ export default function UsaceSource ({ state, dispatch }: Props): React.ReactEle
           onToggleEnabled={(enabled) => dispatch({ type: 'setUsaceDedupe', enabled })}
           radiusMeters={state.usaceDedupeRadiusMeters}
           onChangeRadius={(meters) => dispatch({ type: 'setUsaceDedupeRadius', meters })}
-          radiusInputId='ac-usace-dedupe-radius'
         />
       </Disclosure>
     </>

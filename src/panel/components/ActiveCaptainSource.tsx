@@ -38,7 +38,6 @@ export default function ActiveCaptainSource ({ state, dispatch }: Props): React.
       <Disclosure>
         <Fieldset title='Refresh and freshness'>
           <RefreshSecondsField
-            id='ac-activecaptain-refresh-seconds'
             label='Refresh period (seconds)'
             upstreamHint={'ActiveCaptain is the most dynamic source (reviews and ' +
               'hazard reports arrive continuously), so its default stays short.'}

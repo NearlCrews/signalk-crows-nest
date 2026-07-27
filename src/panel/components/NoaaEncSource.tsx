@@ -23,9 +23,6 @@ import MergeWithActiveCaptain from './MergeWithActiveCaptain.js'
 import MinimumYearField from './MinimumYearField.js'
 import RefreshSecondsField from './RefreshSecondsField.js'
 
-/** Stable id linking the band selector's visible label to its `<select>`. */
-const BAND_FIELD_ID = 'ac-noaa-enc-scale-band'
-
 interface Props {
   state: PluginConfig
   dispatch: Dispatch<ConfigAction>
@@ -76,7 +73,6 @@ export default function NoaaEncSource ({ state, dispatch }: Props): React.ReactE
         }
       >
         <LabeledField
-          id={BAND_FIELD_ID}
           label='Chart scale band'
           hint={'Which ENC chart scale to query. Overview returns large-area ' +
             'features only; berthing returns the densest, finest detail. ' +
@@ -98,7 +94,6 @@ export default function NoaaEncSource ({ state, dispatch }: Props): React.ReactE
       <Disclosure>
         <Fieldset title='Refresh and freshness'>
           <RefreshSecondsField
-            id='ac-noaa-enc-refresh-seconds'
             label='Refresh period (seconds)'
             upstreamHint={'NOAA refreshes ENC data weekly, so the 30 minute ' +
               'default only spares the ArcGIS service from re-serving identical ' +
@@ -107,7 +102,6 @@ export default function NoaaEncSource ({ state, dispatch }: Props): React.ReactE
             onChange={(seconds) => dispatch({ type: 'setNoaaEncRefreshSeconds', seconds })}
           />
           <MinimumYearField
-            id='ac-noaa-enc-minimum-survey-year'
             label='Earliest survey year'
             hint={'Hide features whose hydrographic survey was conducted before ' +
               'this year. Leave at 0 to import every survey. SORDAT is the ' +
@@ -124,7 +118,6 @@ export default function NoaaEncSource ({ state, dispatch }: Props): React.ReactE
           onToggleEnabled={(enabled) => dispatch({ type: 'setNoaaEncDedupe', enabled })}
           radiusMeters={state.noaaEncDedupeRadiusMeters}
           onChangeRadius={(meters) => dispatch({ type: 'setNoaaEncDedupeRadius', meters })}
-          radiusInputId='ac-noaa-enc-dedupe-radius'
         />
       </Disclosure>
     </>

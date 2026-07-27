@@ -33,7 +33,6 @@ export default function ProximityAlarmFields ({
       onToggleEnabled={onToggleEnabled}
     >
       <LengthField
-        id='ac-proximity-alarm-radius'
         label='Alarm radius'
         hint='A hazard closer than this distance to the vessel raises a proximity alarm.'
         valueMeters={radiusMeters}

@@ -18,7 +18,6 @@ interface Props {
 export default function RatingFilterField ({ value, onChange }: Props): React.ReactElement {
   return (
     <NumberField
-      id='ac-minimum-rating'
       label='Minimum rating'
       hint={`Hide points of interest whose average review rating is below this value (${MIN_RATING} to ${MAX_RATING}). Leave it at ${MIN_RATING} to show every rating.`}
       value={value}

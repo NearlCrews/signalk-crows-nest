@@ -11,8 +11,6 @@ import { clampMinimumYear, MAX_YEAR } from '../../shared/year-filter.js'
 import NumberField from './NumberField.js'
 
 interface Props {
-  /** Stable id linking the visible label to the input. */
-  id: string
   /** Visible field label, e.g. `Earliest survey year`. */
   label: string
   /** Hint paragraph: should name the source's date semantic and the off value. */
@@ -25,7 +23,6 @@ interface Props {
 
 /** The shared minimum-year filter field used by the per-source cards. */
 export default function MinimumYearField ({
-  id,
   label,
   hint,
   value,
@@ -33,7 +30,6 @@ export default function MinimumYearField ({
 }: Props): React.ReactElement {
   return (
     <NumberField
-      id={id}
       label={label}
       hint={hint}
       value={value}

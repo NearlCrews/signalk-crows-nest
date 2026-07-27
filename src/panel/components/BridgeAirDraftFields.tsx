@@ -53,7 +53,6 @@ export default function BridgeAirDraftFields ({
       onToggleEnabled={onToggleEnabled}
     >
       <LengthField
-        id='ac-bridge-air-draft'
         label='Vessel air draft'
         hint="0 = use the vessel's design.airHeight from the Signal K data model. Set a value here only as a fallback for a vessel that does not report design.airHeight."
         valueMeters={airDraftMeters}
@@ -64,7 +63,6 @@ export default function BridgeAirDraftFields ({
         dense
       />
       <LengthField
-        id='ac-bridge-clearance-margin'
         label='Clearance margin'
         hint='Headroom added to the air draft before the comparison, covering tide, datum, and loading. A bridge warns when its charted clearance is at or below the air draft plus this margin.'
         valueMeters={marginMeters}
