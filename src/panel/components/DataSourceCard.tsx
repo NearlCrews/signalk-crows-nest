@@ -30,7 +30,7 @@
 import type * as React from 'react'
 import { Badge, type StatusTone } from 'signalk-nearlcrews-ui'
 import { useCollapseFocusRestore } from '../hooks/use-collapse-focus-restore.js'
-import { S } from '../styles.js'
+import { PLAIN_BUTTON_CLASS, S } from '../styles.js'
 import { pillContent, pillVariant } from '../source-status-pill.js'
 import type { SourceSlug } from '../../shared/source-ids.js'
 import type { SourceStatus } from '../../status/status-types.js'
@@ -112,6 +112,7 @@ export default function DataSourceCard ({
         <button
           ref={buttonRef}
           type='button'
+          className={PLAIN_BUTTON_CLASS}
           style={S.sourceCardToggle}
           aria-expanded={expanded}
           aria-controls={bodyId(cardId)}

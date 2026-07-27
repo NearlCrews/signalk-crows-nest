@@ -15,7 +15,7 @@ import type * as React from 'react'
 import { memo } from 'react'
 import type { SourceStatus, StatusSnapshot } from '../../status/status-types.js'
 import { relativeTime } from '../relative-time.js'
-import { S } from '../styles.js'
+import { PLAIN_BUTTON_CLASS, S } from '../styles.js'
 
 // The dot base merged with each state variant once at module load, rather than
 // rebuilding the merged object on every row of every 5 s poll render.
@@ -134,6 +134,7 @@ export default memo(function StatusBar ({ status, lastUpdatedMs, onJumpToSource 
                   ? (
                     <button
                       type='button'
+                      className={PLAIN_BUTTON_CLASS}
                       style={S.statusErrorJump}
                       title='Show the source this error belongs to'
                       onClick={() => onJumpToSource(source)}

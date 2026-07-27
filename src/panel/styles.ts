@@ -6,10 +6,8 @@ import type { CSSProperties } from 'react'
 const SCALE_TOKENS = `
   --ac-radius: var(--snui-radius-md);
   --ac-radius-sm: var(--snui-radius-sm);
-  --ac-radius-pill: 999px;
   --ac-font-body: var(--snui-font-size);
   --ac-font-small: 0.8125rem;
-  --ac-font-xsmall: 0.75rem;
   --ac-font-title: 1rem;
   --ac-space-1: var(--snui-space-2);
   --ac-space-2: var(--snui-space-3);
@@ -17,23 +15,27 @@ const SCALE_TOKENS = `
 `
 
 const COLOR_TOKENS = `
-  --ac-bg: var(--snui-color-background);
   --ac-surface: var(--snui-color-surface);
   --ac-surface-muted: var(--snui-color-interactive-hover);
-  --ac-surface-raised: var(--snui-color-surface-raised);
   --ac-border: var(--snui-color-border);
   --ac-text: var(--snui-color-text);
   --ac-text-muted: var(--snui-color-text-muted);
   --ac-text-faint: var(--snui-color-text-muted);
   --ac-accent: var(--snui-color-accent-fill);
-  --ac-accent-text: var(--snui-color-on-accent);
   --ac-ok: var(--snui-color-success);
-  --ac-wait: var(--snui-color-warning);
   --ac-off: var(--snui-color-text-muted);
   --ac-danger-bg: color-mix(in srgb, var(--snui-color-danger) 12%, var(--snui-color-surface));
   --ac-danger-fg: var(--snui-color-danger);
   --ac-danger-border: color-mix(in srgb, var(--snui-color-danger) 60%, var(--snui-color-border));
 `
+
+/**
+ * Class the panel's own raw `<button>` elements opt into for the pointer
+ * feedback below. Targeting an opt-in class keeps the rules off the shared
+ * library's buttons without referencing its private class names (internal
+ * classes and DOM nesting are private API per its design contract).
+ */
+export const PLAIN_BUTTON_CLASS = 'ac-plain-button'
 
 /**
  * Maps the remaining local layout styles to PanelRoot's active theme and
@@ -49,16 +51,16 @@ ${SCALE_TOKENS}${COLOR_TOKENS}}
   outline: 2px solid var(--ac-accent);
   outline-offset: 1px;
 }
-.ac-config-panel button:not(.snui-button) {
+.ac-config-panel .${PLAIN_BUTTON_CLASS} {
   transition:
     background-color var(--snui-transition-fast),
     border-color var(--snui-transition-fast),
     filter var(--snui-transition-fast);
 }
-.ac-config-panel button:not(.snui-button):hover:not(:disabled) {
+.ac-config-panel .${PLAIN_BUTTON_CLASS}:hover:not(:disabled) {
   filter: brightness(0.96);
 }
-.ac-config-panel button:not(.snui-button):active:not(:disabled) {
+.ac-config-panel .${PLAIN_BUTTON_CLASS}:active:not(:disabled) {
   filter: brightness(0.9);
 }
 `
