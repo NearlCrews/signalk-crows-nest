@@ -15,10 +15,24 @@ async function startServer (
 ): Promise<StubServer> {
   let page = 0
   return await startStubServer((req, res) => {
-    page++
     res.setHeader('Content-Type', 'application/json')
+    const url = new URL(req.url ?? '/', 'http://stub')
+    if (!url.pathname.endsWith('/query')) {
+      // The once-per-session layer identity check fetches the layer metadata
+      // before the first query; answer with a name matching every layer kind
+      // so it passes without consuming the page counter.
+      res.end(JSON.stringify({ name: 'Stub.Wreck_Obstruction_Rock_point' }))
+      return
+    }
+    page++
     res.end(JSON.stringify(handler(req, page)))
   })
+}
+
+/** The recorded requests that hit the /query endpoint (identity checks excluded). */
+function queryRequests (server: StubServer): StubServer['requests'] {
+  return server.requests.filter((request) =>
+    new URL(request.url, 'http://stub').pathname.endsWith('/query'))
 }
 
 test('queryLayer issues a bbox query and parses the GeoJSON response', async () => {
@@ -79,8 +93,8 @@ test('queryLayer splits an antimeridian bbox and removes duplicate features', as
       bbox: { south: 51, west: 170, north: 53, east: -170 }
     })
     assert.deepEqual(result.features.map(feature => feature.id), [1, 2, 3])
-    assert.equal(server.requests.length, 2)
-    const geometries = server.requests.map(request =>
+    assert.equal(queryRequests(server).length, 2)
+    const geometries = queryRequests(server).map(request =>
       new URL(request.url, 'http://stub').searchParams.get('geometry'))
     assert.deepEqual(geometries, ['170,51,180,53', '-180,51,-170,53'])
   } finally {
@@ -121,7 +135,7 @@ test('queryLayer pages through exceededTransferLimit responses', async () => {
     assert.equal(result.features.length, 2)
     assert.equal(result.features[0].id, 1)
     assert.equal(result.features[1].id, 2)
-    assert.equal(server.requests.length, 2)
+    assert.equal(queryRequests(server).length, 2)
   } finally {
     await server.close()
   }
@@ -139,7 +153,7 @@ test('queryLayer always includes a geometry filter, never an unbounded where=1=1
       layerKey: 'wreck',
       bbox: { south: 40, west: -75, north: 42, east: -73 }
     })
-    const url = server.requests[0]?.url ?? ''
+    const url = queryRequests(server)[0]?.url ?? ''
     assert.ok(url.includes('geometry='), 'expected the geometry filter in the URL')
     assert.ok(
       !url.includes('where=1%3D1') && !url.includes('where=1=1'),
@@ -162,7 +176,7 @@ test('queryLayer resolves the layer id from band + layerKey', async () => {
       layerKey: 'rock',
       bbox: { south: 40, west: -75, north: 42, east: -73 }
     })
-    const url = server.requests[0]?.url ?? ''
+    const url = queryRequests(server)[0]?.url ?? ''
     // harbour/rock is layer 34 (from LAYER_IDS_BY_BAND).
     assert.ok(
       url.includes('/enc_harbour/MapServer/34/query'),
@@ -185,7 +199,7 @@ test('queryLayer sends the descriptive User-Agent header', async () => {
       layerKey: 'wreck',
       bbox: { south: 40, west: -75, north: 42, east: -73 }
     })
-    const ua = String(server.requests[0]?.headers['user-agent'] ?? '')
+    const ua = String(queryRequests(server)[0]?.headers['user-agent'] ?? '')
     assert.match(ua, /signalk-crows-nest/)
   } finally {
     await server.close()
@@ -212,7 +226,7 @@ test('queryById fetches one feature by object id', async () => {
     })
     assert.ok(result !== undefined)
     assert.equal(result?.id, 42)
-    const url = server.requests[0]?.url ?? ''
+    const url = queryRequests(server)[0]?.url ?? ''
     assert.ok(url.includes('objectIds=42'))
   } finally {
     await server.close()
@@ -232,6 +246,79 @@ test('queryById resolves to undefined when no feature matches the id', async () 
       objectId: 999999
     })
     assert.equal(result, undefined)
+  } finally {
+    await server.close()
+  }
+})
+
+test('a renumbered layer id fails the identity check loudly and stays failed', async () => {
+  let metadataRequests = 0
+  const server = await startStubServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json')
+    const url = new URL(req.url ?? '/', 'http://stub')
+    if (!url.pathname.endsWith('/query')) {
+      metadataRequests++
+      // A republish renumbered the ids: the pinned wreck id now points at a
+      // different layer, which still answers 200.
+      res.end(JSON.stringify({ name: 'Coastal.Buoy_point' }))
+      return
+    }
+    res.end(JSON.stringify({ type: 'FeatureCollection', features: [] }))
+  })
+  try {
+    const client = createEncDirectClient({ baseUrl: server.url })
+    const bbox = { south: 40.0, west: -74.5, north: 41.5, east: -73.0 }
+    await assert.rejects(
+      () => client.queryLayer({ band: 'coastal', layerKey: 'wreck', bbox }),
+      /identity check failed/)
+    await assert.rejects(
+      () => client.queryById({ band: 'coastal', layerKey: 'wreck', objectId: 1 }),
+      /identity check failed/)
+    assert.equal(metadataRequests, 1, 'the failed check is cached, not re-fetched')
+  } finally {
+    await server.close()
+  }
+})
+
+test('an unreachable metadata endpoint does not block queries (fail open)', async () => {
+  const server = await startStubServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json')
+    const url = new URL(req.url ?? '/', 'http://stub')
+    if (!url.pathname.endsWith('/query')) {
+      res.statusCode = 503
+      res.end(JSON.stringify({ error: 'down' }))
+      return
+    }
+    res.end(JSON.stringify({ type: 'FeatureCollection', features: [] }))
+  })
+  try {
+    const client = createEncDirectClient({ baseUrl: server.url })
+    const bbox = { south: 40.0, west: -74.5, north: 41.5, east: -73.0 }
+    const result = await client.queryLayer({ band: 'coastal', layerKey: 'wreck', bbox })
+    assert.deepEqual(result.features, [], 'the query proceeded despite the unverifiable check')
+  } finally {
+    await server.close()
+  }
+})
+
+test('the identity check runs once per session per (band, layer)', async () => {
+  let metadataRequests = 0
+  const server = await startStubServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json')
+    const url = new URL(req.url ?? '/', 'http://stub')
+    if (!url.pathname.endsWith('/query')) {
+      metadataRequests++
+      res.end(JSON.stringify({ name: 'Coastal.Wreck_point' }))
+      return
+    }
+    res.end(JSON.stringify({ type: 'FeatureCollection', features: [] }))
+  })
+  try {
+    const client = createEncDirectClient({ baseUrl: server.url })
+    const bbox = { south: 40.0, west: -74.5, north: 41.5, east: -73.0 }
+    await client.queryLayer({ band: 'coastal', layerKey: 'wreck', bbox })
+    await client.queryLayer({ band: 'coastal', layerKey: 'wreck', bbox })
+    assert.equal(metadataRequests, 1, 'the second query reused the verified check')
   } finally {
     await server.close()
   }

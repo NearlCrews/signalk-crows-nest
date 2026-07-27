@@ -147,6 +147,41 @@ async function fetchJson (
   return await requestJson(url, ARCGIS_HEADERS, REQUEST_TIMEOUT_MS, label, signal)
 }
 
+/**
+ * Verify that an ArcGIS layer endpoint still IS the layer its pinned id
+ * claims. Layer ids are pinned per service, and a service republish can
+ * renumber them; a renumbered id still answers 200, so without this check
+ * another layer's features would be silently mislabeled as wrecks, rocks, or
+ * locks and fed to the alarms. The layer metadata (`<layer url>?f=json`)
+ * carries the layer name; a name that does not match the expected pattern
+ * REJECTS, which fails that layer's queries loudly and lands in the status
+ * panel. A metadata fetch failure resolves instead (fail open): an
+ * unreachable service already fails the query itself, and the identity check
+ * must not add a second way to be offline.
+ */
+export async function verifyArcGisLayerName (
+  metadataUrl: string,
+  expectedName: RegExp,
+  label: string,
+  context: string,
+  signal?: AbortSignal
+): Promise<void> {
+  let name: unknown
+  try {
+    const metadata = await fetchJson(metadataUrl, label, signal)
+    name = (metadata as { name?: unknown }).name
+  } catch {
+    return
+  }
+  if (typeof name !== 'string' || !expectedName.test(name)) {
+    throw new Error(
+      `${label} layer identity check failed for ${context}: the upstream layer is named ` +
+      `"${typeof name === 'string' ? name : 'unknown'}" but a name matching ${String(expectedName)} ` +
+      'was expected. The pinned layer id may have been renumbered by an upstream republish.'
+    )
+  }
+}
+
 /** Inputs to {@link arcgisPagedQuery}. */
 export interface ArcgisPagedQuery {
   /** Tags error messages and the timeout/abort reason, e.g. `ENC Direct`. */

@@ -22,7 +22,8 @@ import {
   mergeArcgisFeatureSets,
   arcgisPagedQuery,
   arcgisQueryById,
-  splitArcgisEnvelope
+  splitArcgisEnvelope,
+  verifyArcGisLayerName
 } from '../arcgis-query.js'
 import type { Bbox } from '../../shared/types.js'
 import type { UsaceFeature, UsaceLayerKey } from './usace-types.js'
@@ -41,6 +42,18 @@ const DEFAULT_QUERY_URLS: Readonly<Record<UsaceLayerKey, string>> = {
 
 /** Tags this feed's error messages and its timeout/abort reason. */
 const UPSTREAM_LABEL = 'USACE'
+
+/**
+ * Layer-kind name patterns for the once-per-session identity check. The
+ * pinned query URLs point at hosted services whose layer indexes (and, for
+ * the ArcGIS Online locks service, the org item id) can change on a
+ * republish while still answering 200; the live layer names are "Lock" and
+ * "National Inventory of Dams", so the kind substring identifies each.
+ */
+const LAYER_NAME_PATTERNS: Readonly<Record<UsaceLayerKey, RegExp>> = {
+  lock: /lock/i,
+  dam: /dam/i
+}
 
 export interface UsaceClient {
   /** Bbox query against one layer. Pages internally to completion. */
@@ -70,9 +83,24 @@ export interface UsaceClientConfig {
 
 export function createUsaceClient (config: UsaceClientConfig = {}): UsaceClient {
   const queryUrls = { ...DEFAULT_QUERY_URLS, ...config.queryUrls }
+  // Once-per-session layer identity checks; see the ENC Direct client for the
+  // fail-open and fail-closed semantics, which are identical here.
+  const identityChecks = new Map<UsaceLayerKey, Promise<void>>()
+  function ensureLayerIdentity (layerKey: UsaceLayerKey, signal?: AbortSignal): Promise<void> {
+    let check = identityChecks.get(layerKey)
+    if (check === undefined) {
+      const metadataUrl = `${queryUrls[layerKey].replace(/\/query$/, '')}?f=json`
+      check = verifyArcGisLayerName(
+        metadataUrl, LAYER_NAME_PATTERNS[layerKey], UPSTREAM_LABEL, layerKey, signal
+      )
+      identityChecks.set(layerKey, check)
+    }
+    return check
+  }
   return {
     async queryLayer ({ layerKey, bbox, signal }) {
       const base = queryUrls[layerKey]
+      await ensureLayerIdentity(layerKey, signal)
       const boxes = splitArcgisEnvelope(bbox)
       const featureSets = await Promise.all(boxes.map(async (queryBbox, index) =>
         await arcgisPagedQuery<UsaceFeature>({
@@ -85,6 +113,7 @@ export function createUsaceClient (config: UsaceClientConfig = {}): UsaceClient 
       return { features: mergeArcgisFeatureSets(featureSets) }
     },
     async queryById ({ layerKey, objectId, signal }) {
+      await ensureLayerIdentity(layerKey, signal)
       const url = `${queryUrls[layerKey]}?${arcgisByIdParams(objectId).toString()}`
       return arcgisQueryById<UsaceFeature>(url, UPSTREAM_LABEL, signal)
     }

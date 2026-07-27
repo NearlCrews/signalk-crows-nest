@@ -30,7 +30,8 @@ import {
   mergeArcgisFeatureSets,
   arcgisPagedQuery,
   arcgisQueryById,
-  splitArcgisEnvelope
+  splitArcgisEnvelope,
+  verifyArcGisLayerName
 } from '../arcgis-query.js'
 import type { Bbox } from '../../shared/types.js'
 
@@ -46,6 +47,20 @@ const DEFAULT_BASE_URL = 'https://encdirect.noaa.gov'
 
 /** Tags this feed's error messages and its timeout/abort reason. */
 const UPSTREAM_LABEL = 'ENC Direct'
+
+/**
+ * Layer-kind name patterns for the once-per-session identity check. The
+ * pinned numeric layer ids can be renumbered by an ENC Direct republish
+ * while still answering 200, and the layer NAME always carries the kind
+ * (`Coastal.Wreck_point`, `Harbor.Underwater_Awash_Rock_point`), so matching
+ * the kind substring catches a renumbering without pinning eighteen exact
+ * band-prefixed strings.
+ */
+const LAYER_NAME_PATTERNS: Readonly<Record<EncLayerKey, RegExp>> = {
+  wreck: /wreck/i,
+  obstruction: /obstruct/i,
+  rock: /rock/i
+}
 
 export interface EncDirectClient {
   /** Bbox query against one (band, layerKey). Pages internally to completion. */
@@ -84,13 +99,41 @@ function layerQueryUrl (
   return `${base}/arcgis/rest/services/encdirect/enc_${band}/MapServer/${layerId}/query?${params.toString()}`
 }
 
+/** The layer metadata endpoint for a (band, layerId), for the identity check. */
+function layerMetadataUrl (base: string, band: ScaleBand, layerId: number): string {
+  return `${base}/arcgis/rest/services/encdirect/enc_${band}/MapServer/${layerId}?f=json`
+}
+
 export function createEncDirectClient (
   config: EncDirectClientConfig = {}
 ): EncDirectClient {
   const baseUrl = config.baseUrl ?? DEFAULT_BASE_URL
+  // Once-per-session layer identity checks, keyed by (band, layerKey). A
+  // definite name mismatch stays rejected so every later query of that layer
+  // fails fast and loudly; an unverifiable metadata fetch resolves (fail
+  // open) and is not retried this session.
+  const identityChecks = new Map<string, Promise<void>>()
+  function ensureLayerIdentity (
+    band: ScaleBand, layerKey: EncLayerKey, layerId: number, signal?: AbortSignal
+  ): Promise<void> {
+    const key = `${band}/${layerKey}`
+    let check = identityChecks.get(key)
+    if (check === undefined) {
+      check = verifyArcGisLayerName(
+        layerMetadataUrl(baseUrl, band, layerId),
+        LAYER_NAME_PATTERNS[layerKey],
+        UPSTREAM_LABEL,
+        key,
+        signal
+      )
+      identityChecks.set(key, check)
+    }
+    return check
+  }
   return {
     async queryLayer ({ band, layerKey, bbox, signal }) {
       const layerId = LAYER_IDS_BY_BAND[band][layerKey]
+      await ensureLayerIdentity(band, layerKey, layerId, signal)
       const boxes = splitArcgisEnvelope(bbox)
       const featureSets = await Promise.all(boxes.map(async (queryBbox, index) =>
         await arcgisPagedQuery<EncFeature>({
@@ -106,6 +149,7 @@ export function createEncDirectClient (
     },
     async queryById ({ band, layerKey, objectId, signal }) {
       const layerId = LAYER_IDS_BY_BAND[band][layerKey]
+      await ensureLayerIdentity(band, layerKey, layerId, signal)
       const url = layerQueryUrl(baseUrl, band, layerId, arcgisByIdParams(objectId))
       return arcgisQueryById<EncFeature>(url, UPSTREAM_LABEL, signal)
     }
