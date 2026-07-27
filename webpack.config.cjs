@@ -33,7 +33,9 @@ module.exports = {
         exclude: /node_modules/,
         options: {
           presets: [
-            ['@babel/preset-typescript', { isTSX: true, allExtensions: true }],
+            // Babel 8 removed isTSX/allExtensions; JSX parsing now keys off
+            // the .tsx extension, which matches this rule's file set.
+            '@babel/preset-typescript',
             ['@babel/preset-react', { runtime: 'automatic' }]
           ]
         }

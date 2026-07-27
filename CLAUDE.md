@@ -480,7 +480,7 @@ self-contained module registered on one line in `src/index.ts`.
 - TypeScript 6. The Node plugin is compiled with `tsc` (`tsconfig.json`).
 - The React panel under `src/panel/` is bundled to `public/` by webpack as a
   Module Federation remote (`webpack.config.cjs`, `tsconfig.panel.json`).
-- `signalk-nearlcrews-ui` 0.3.0 supplies the panel shell, theme system, and
+- `signalk-nearlcrews-ui` 0.4.1 supplies the panel shell, theme system, and
   shared controls. It is pinned exactly, and the host supplies the React 19
   singleton without a bundled fallback.
 - The test suite is type-checked separately (`tsconfig.test.json`); all three

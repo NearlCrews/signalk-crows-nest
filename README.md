@@ -303,7 +303,7 @@ caches while retaining the on-disk data used for offline operation.
 
 This project targets Node 20.3 or newer and develops against
 `@signalk/server-api` 2.30.0 or newer, with TypeScript 6 and the exact shared
-UI package `signalk-nearlcrews-ui` 0.3.0 (development only).
+UI package `signalk-nearlcrews-ui` 0.4.1 (development only).
 
 ```bash
 git clone https://github.com/NearlCrews/signalk-crows-nest.git
