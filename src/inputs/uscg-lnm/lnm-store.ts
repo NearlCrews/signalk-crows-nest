@@ -12,11 +12,16 @@
  *
  * The store keeps a per-file record list and derives a UNION view keyed by
  * record id. The union is the mechanism that tolerates the NAVCEN pager's
- * duplicate pages: a category's page `_2` is byte-identical to `_1`, so both
- * files supply the same record ids, and the union collapses them to one entry.
- * A record that upstream drops disappears from the union once the file that
- * carries it is refetched (its content change forces an HTTP 200, replacing
- * that file's list), so the union never permanently retains a deleted record.
+ * overlapping pages: a category's page `_2` overlaps `_1` heavily (the files
+ * are generated seconds apart and are NOT byte-identical: a 2026-07-27 probe
+ * found distinct sizes and validators), so both files supply mostly the same
+ * record ids and the union collapses each id to one entry. Both snapshots are
+ * current, and the union iterates file keys in sorted order so the winner for
+ * a shared id is deterministic. A record that upstream drops disappears from
+ * the union once the file that carries it is refetched (its content change
+ * forces an HTTP 200, replacing that file's list), so the union never
+ * permanently retains a deleted record, and `pruneFiles` drops whole files
+ * whose key leaves the pinned catalog.
  *
  * Every disk write is atomic: data is written to a `.tmp` sibling and renamed
  * over the target, so a power loss mid-write cannot corrupt the store. A
@@ -46,6 +51,12 @@ export interface LnmStore {
    * invalidated and the store marked dirty so the next {@link flush} writes it.
    */
   upsertFile: (key: string, records: readonly LnmRecord[], headers: LnmFileHeaders) => void
+  /**
+   * Remove every file whose key is not in `validKeys`. Called by the refresh
+   * pass with the pinned catalog, so a page NAVCEN retires does not leave its
+   * records serving (and, for the danger layers, arming the alarms) forever.
+   */
+  pruneFiles: (validKeys: ReadonlySet<string>) => void
   /** The conditional-GET headers last stored for a file key, when known. */
   headersFor: (key: string) => LnmFileHeaders | undefined
   /** Write the index to disk atomically, only when something changed. */
@@ -116,10 +127,12 @@ export function createLnmStore (dataDir: string): LnmStore {
   function ensureUnion (): Map<string, LnmRecord> {
     if (union !== null) return union
     const built = new Map<string, LnmRecord>()
-    for (const entry of files.values()) {
-      for (const record of entry.records) {
-        // A later file overwrites an earlier one for the same id; duplicate
-        // pages carry identical records, so the winner is immaterial.
+    // Sorted key order, not Map insertion order: in-session insertion order is
+    // the fan-out's completion order, which varies run to run. Overlapping
+    // pages are generated seconds apart so either copy of a shared id is
+    // current; sorting just makes the winner deterministic.
+    for (const key of [...files.keys()].sort()) {
+      for (const record of files.get(key)?.records ?? []) {
         built.set(record.id, record)
       }
     }
@@ -156,6 +169,16 @@ export function createLnmStore (dataDir: string): LnmStore {
       union = null
       generated = new Date().toISOString()
       dirty = true
+    },
+
+    pruneFiles (validKeys) {
+      for (const key of files.keys()) {
+        if (validKeys.has(key)) continue
+        files.delete(key)
+        union = null
+        generated = new Date().toISOString()
+        dirty = true
+      }
     },
 
     headersFor (key) {

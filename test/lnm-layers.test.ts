@@ -62,11 +62,26 @@ test('the notice and discrepancy layers are covered, and the corrected files are
 })
 
 test('LNM_LAYER_PAGES flattens every pinned (layer, page) file exactly once', () => {
-  const expectedTotal = LNM_LAYERS.reduce((sum, layer) => sum + layer.pages.length, 0)
+  // The exact per-layer page arrays, probed against live NAVCEN on
+  // 2026-07-27: all eleven pinned files answer 200 and every
+  // one-past-the-end page answers 404. Asserting the arrays per layer, not
+  // just the flattened total, catches an edit that shortens one layer while
+  // lengthening another and keeps the total constant.
+  const expectedPages: Record<string, number[]> = {
+    haznav: [1],
+    discfedaid: [1, 2, 3],
+    discpriaid: [1, 2, 3],
+    tmpchange: [1],
+    marcon: [1],
+    bridge: [1],
+    misc: [1]
+  }
+  const pagesBySlug = Object.fromEntries(
+    LNM_LAYERS.map((layer) => [layer.slug, [...layer.pages]])
+  )
+  assert.deepEqual(pagesBySlug, expectedPages)
+  const expectedTotal = Object.values(expectedPages).reduce((sum, pages) => sum + pages.length, 0)
   assert.equal(LNM_LAYER_PAGES.length, expectedTotal)
-  // discFedAid and discPriAid each pin three pages (NAVCEN duplicates page _2
-  // and continues on _3); every other layer pins one page.
-  assert.equal(expectedTotal, 11)
   const keys = LNM_LAYER_PAGES.map(({ layer, page }) => lnmFileKey(layer.slug, page))
   assert.equal(new Set(keys).size, keys.length, 'no (layer, page) file is pinned twice')
 })

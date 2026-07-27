@@ -32,6 +32,11 @@ import { USCG_LNM_SOURCE_ID } from '../../shared/source-ids.js'
 /** Human-readable attribution credit for USCG NAVCEN LNM data. */
 const ATTRIBUTION = '© USCG NAVCEN (US Government public domain)'
 
+/** The pinned catalog as store keys, for pruning files that leave the table. */
+const PINNED_FILE_KEYS: ReadonlySet<string> = new Set(
+  LNM_LAYER_PAGES.map(({ layer, page }) => lnmFileKey(layer.slug, page))
+)
+
 /**
  * Concurrency cap for the parallel NAVCEN refresh: four in-flight conditional
  * GETs at once is well-mannered against a CDN-fronted static-file feed and
@@ -98,6 +103,11 @@ export function createUscgLnmSource (config: UscgLnmSourceConfig): UscgLnmSource
   }
 
   async function refreshAll (signal?: AbortSignal): Promise<void> {
+    // Drop store files that left the pinned catalog (a NAVCEN contraction),
+    // so a retired page's notices, including the Hazard-typed danger layers
+    // that arm the alarms, stop serving. Runs before the US-waters gate: it
+    // is a local operation with no outbound HTTP.
+    store.pruneFiles(PINNED_FILE_KEYS)
     if (shouldSkipOutsideUsWaters(getCurrentPosition, status, USCG_LNM_SOURCE_ID)) {
       return
     }

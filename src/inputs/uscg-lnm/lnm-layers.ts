@@ -3,19 +3,22 @@
  * wire shape each follows, and the PoiType and Freeboard icon each maps onto.
  *
  * NAVCEN publishes each LNM category as one or more paged GeoJSON files named
- * `<fileBase>_<page>.geojson` under `/sites/default/files/msi/`. The catalog is
- * pinned here (rather than probed) for the same reason the USCG Light List pins
- * its (district, page) pairs: the MSI host returns HTTP 200 for an
- * out-of-range page number instead of 404, so "fetch until 404" cannot
- * discover the real page count. The exact file set is published in the MSI
- * index at navcen.uscg.gov/msi, so this catalog is a deliberate edit when
- * NAVCEN's paging grows, not silent drift; a test locks the shape.
+ * `<fileBase>_<page>.geojson` under `/sites/default/files/msi/`. The catalog
+ * is pinned here (rather than discovered at runtime) for the same reason the
+ * USCG Light List pins its (district, page) pairs: a page-count change should
+ * be a deliberate, reviewable table edit rather than silent drift, and a test
+ * locks the shape. The MSI host answers 404 one page past each category's
+ * end (probed 2026-07-27, for example
+ * `curl -I .../msi/discFedAid_4.geojson`), so the pinned counts are directly
+ * probe-verifiable; the refresh also prunes store files whose key leaves this
+ * catalog, so tracking a NAVCEN contraction cannot leave stale notices
+ * serving.
  *
- * The NAVCEN pager has a known quirk: for a multi-page category, page `_2`
- * is byte-identical to `_1` and the real second page is `_3`. Because the
- * store unions records by their stable business id, a duplicated page merely
- * re-supplies ids already seen, so pinning every listed page and letting the
- * union collapse duplicates is correct regardless of the quirk.
+ * The NAVCEN pager overlaps its pages: for a multi-page category, page `_2`
+ * repeats most of `_1` (the files are generated seconds apart and are not
+ * byte-identical). Because the store unions records by their stable business
+ * id, an overlapping page merely re-supplies ids already seen, so pinning
+ * every listed page and letting the union collapse shared ids is correct.
  *
  * Mapping rationale (per the task's safety contract): a layer whose features
  * mark a danger (reported hazards and obstructions, discrepant or off-station

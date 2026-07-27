@@ -274,6 +274,7 @@ test('a refresh in flight when close() runs does not flush after stop', async ()
   const fakeStore: LnmStore = {
     load: async () => {},
     upsertFile: () => {},
+    pruneFiles: () => {},
     headersFor: () => undefined,
     flush: async () => { if (!closed) flushes += 1 },
     queryBbox: () => [],
@@ -292,4 +293,25 @@ test('a refresh in flight when close() runs does not flush after stop', async ()
   source.close()
   await pass
   assert.equal(flushes, 0, 'a refresh completing after close must not flush')
+})
+
+test('refreshAll prunes a store file that left the pinned catalog', async () => {
+  await withStore(async (store) => {
+    // Seed a record under a key the pinned catalog does not carry, as if a
+    // NAVCEN contraction had retired the page after it was persisted.
+    store.upsertFile('discfedaid_9', [discrepancyRecord(900, 42.4, -70.9)], {})
+    assert.ok(store.getById('discfedaid_900') !== undefined)
+    const { client } = stubClient(() => ({ status: 'not-modified' }))
+    const source = createUscgLnmSource({
+      client,
+      store,
+      status: createStubStatus().status,
+      getCurrentPosition: () => BOSTON
+    })
+    await source.refreshAll()
+    assert.equal(store.getById('discfedaid_900'), undefined,
+      'the retired file record no longer serves')
+    assert.equal(store.headersFor('discfedaid_9'), undefined,
+      'the retired file entry is gone from the store')
+  })
 })
