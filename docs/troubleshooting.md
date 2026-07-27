@@ -109,11 +109,15 @@ Each source card condenses that state into one of four pills:
   failure details, and a source-attributed message opens the matching card.
 
 Common failures include a lost internet connection, Cloudflare throttling the
-ActiveCaptain community API, or an overloaded Overpass endpoint. The queued
+ActiveCaptain community API, an overloaded Overpass endpoint, or an NGA
+maintenance window answering the World Port Index with `503`. The queued
 ActiveCaptain and OpenSeaMap clients retry `429` and `5xx` responses with
 exponential backoff and honor `Retry-After`. The lower-volume one-shot clients
 use a bounded request instead and try again on the next chart or scheduled
-refresh. One source failing does not stop the other enabled sources.
+refresh, and a failed World Port Index full download waits ten minutes before
+the next attempt, serving the last known ports in the meantime, so a repeated
+upstream outage produces one recorded error per attempt rather than one per
+chart poll. One source failing does not stop the other enabled sources.
 
 If the primary Overpass endpoint is down for a sustained period, add one or more
 fallback mirrors in the OpenSeaMap card's "Fallback endpoints" field (one per

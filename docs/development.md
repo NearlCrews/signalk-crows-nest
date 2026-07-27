@@ -277,7 +277,10 @@ the matching transport, cache, lifecycle, and status machinery:
   conditional validators. `src/inputs/wpi/` downloads the complete worldwide
   set through `http-one-shot.ts` on the first request and after its configured
   freshness period, replaces the prior snapshot atomically, and filters the
-  in-memory rows by bbox. Its hydrated store is the offline fallback.
+  in-memory rows by bbox. Its hydrated store is the offline fallback. A failed
+  download starts a ten-minute cool-down (`FAILED_REFRESH_RETRY_MS` in
+  `wpi-source.ts`) during which list polls serve the last known ports instead
+  of re-launching the multi-megabyte fetch against a failing upstream.
 
 Every list result carries request-scoped provenance: `fresh`, `local`,
 `skipped`, or `stale`. The aggregate marks a source reachable only for a fresh
