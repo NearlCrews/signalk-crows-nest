@@ -26,6 +26,7 @@ import { sourceCardDomId } from './components/DataSourceCard.js'
 import ErrorBoundary from './components/ErrorBoundary.js'
 import FooterBar from './components/FooterBar.js'
 import StatusBar from './components/StatusBar.js'
+import { discoverStyleNonce } from './csp-nonce.js'
 import { DraftResetContext } from './hooks/draft-reset-context.js'
 import { useConfig } from './hooks/use-config.js'
 import { useStatus } from './hooks/use-status.js'
@@ -60,12 +61,18 @@ export default function PluginConfigurationPanel (props: Props): React.ReactElem
     )
   }
 
+  // Under a strict style-src policy the host's nonce (when discoverable) must
+  // ride on both the shared library's injected stylesheet and the panel's own
+  // alias block below, or the --ac-* custom properties silently vanish.
+  const nonce = discoverStyleNonce(window.document)
+
   return (
     <PanelRoot
       className='ac-config-panel'
       legacyThemeStorageKeys={['ac-theme']}
+      styleNonce={nonce}
     >
-      <style>{THEME_STYLE}</style>
+      <style nonce={nonce}>{THEME_STYLE}</style>
       <ErrorBoundary>
         <SupportedPluginConfigurationPanel {...props} />
       </ErrorBoundary>
