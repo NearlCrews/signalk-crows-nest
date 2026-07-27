@@ -235,20 +235,10 @@ export const S = {
     margin: '0 0 var(--ac-space-2)'
   },
 
-  // Grouped-options sections: a header with bulk actions, and one fieldset
-  // per group. Used by both the ActiveCaptain POI-type selector and the
-  // OpenSeaMap seamark-group checklist.
+  // Grouped-options sections: a header with a select-all control, and one
+  // fieldset per group. Used by both the ActiveCaptain POI-type selector and
+  // the OpenSeaMap seamark-group checklist.
   groupsSection: { marginBottom: 'var(--ac-space-3)' },
-  /**
-   * Inline cluster of bulk-action pill buttons (All / None), placed
-   * inside the outer fieldset's legend so they sit next to the title.
-   */
-  bulkButtons: {
-    display: 'inline-flex',
-    gap: 6,
-    marginLeft: 10,
-    verticalAlign: 'middle'
-  },
   checkboxGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',

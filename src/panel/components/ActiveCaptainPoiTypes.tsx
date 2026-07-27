@@ -1,16 +1,17 @@
 /**
  * The ActiveCaptain POI-type selector: the 13 toggles laid out in four labeled
- * groups, with All and None bulk buttons. A note appears when nothing is
+ * groups, with a tri-state select-all checkbox. A note appears when nothing is
  * selected because chart notes stop while enabled safety alerts continue to
  * request the types they require.
  */
 
 import type * as React from 'react'
-import { Button, Checkbox, FieldGroup } from 'signalk-nearlcrews-ui'
+import { Checkbox, FieldGroup } from 'signalk-nearlcrews-ui'
 import { ACTIVE_CAPTAIN_POI_TYPE_GROUPS } from '../active-captain-poi-types.js'
 import type { PluginConfig, PoiTypeFlag } from '../../shared/types.js'
 import { S } from '../styles.js'
 import Fieldset from './Fieldset.js'
+import SelectAllCheckbox from './SelectAllCheckbox.js'
 
 interface Props {
   config: PluginConfig
@@ -20,9 +21,15 @@ interface Props {
 
 /** The grouped ActiveCaptain POI-type checkboxes shown in the configuration panel. */
 export default function ActiveCaptainPoiTypes ({ config, onToggle, onSetAll }: Props): React.ReactElement {
-  const anySelected = ACTIVE_CAPTAIN_POI_TYPE_GROUPS.some(
-    (group) => group.options.some((option) => config[option.flag] === true)
+  const totalCount = ACTIVE_CAPTAIN_POI_TYPE_GROUPS.reduce(
+    (count, group) => count + group.options.length, 0
   )
+  const selectedCount = ACTIVE_CAPTAIN_POI_TYPE_GROUPS.reduce(
+    (count, group) =>
+      count + group.options.filter((option) => config[option.flag] === true).length,
+    0
+  )
+  const anySelected = selectedCount > 0
 
   // The whole selector lives inside one outer `Import layers` fieldset so
   // the ActiveCaptain card carries the same bordered "layers" container
@@ -32,10 +39,12 @@ export default function ActiveCaptainPoiTypes ({ config, onToggle, onSetAll }: P
     <Fieldset
       title='Import layers'
       actions={
-        <span style={S.bulkButtons}>
-          <Button size='compact' shape='pill' onClick={() => onSetAll(true)}>All</Button>
-          <Button size='compact' shape='pill' onClick={() => onSetAll(false)}>None</Button>
-        </span>
+        <SelectAllCheckbox
+          label='All types'
+          checkedCount={selectedCount}
+          total={totalCount}
+          onSetAll={onSetAll}
+        />
       }
     >
       {ACTIVE_CAPTAIN_POI_TYPE_GROUPS.map((group) => (

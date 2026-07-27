@@ -46,6 +46,10 @@ export default function OpenSeaMapSource ({ state, dispatch }: Props): React.Rea
           groups: SEAMARK_GROUP_IDS.filter(
             (groupId) => groupId === id ? enabled : selected.includes(groupId))
         })}
+        onSetAll={(enabled) => dispatch({
+          type: 'setOpenSeaMapSeamarkGroups',
+          groups: enabled ? [...SEAMARK_GROUP_IDS] : []
+        })}
       />
       <Disclosure>
         <Fieldset title='Connection'>
