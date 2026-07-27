@@ -11,6 +11,41 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- The ActiveCaptain POI-type selector and the OpenSeaMap seamark groups now
+  carry a tri-state select-all checkbox (checked, partially selected, or
+  unchecked), replacing the All and None buttons. Clicking completes a partial
+  selection and clears a full one.
+
+### Changed
+
+- The shared UI package is updated to `signalk-nearlcrews-ui` 0.4.1, which
+  brightens the Night theme's hover, border, and muted-text colors and adds
+  the checkbox indeterminate support the new select-all control uses.
+- The Babel toolchain moves to 8.x, and react, react-dom, and webpack are
+  refreshed. ESLint stays at 9 (neostandard still requires it) and TypeScript
+  stays at 6 (the lint toolchain is not yet compatible with TypeScript 7).
+
+### Fixed
+
+- The panel type-check now actually covers the panel sources: the panel
+  tsconfig inherited an exclude that emptied it, which had been hiding a
+  handful of real type errors, all fixed.
+- After the first save of a never-configured plugin, the Save button now
+  disables and the "Save to enable the plugin" hint no longer reappears when
+  the Saved confirmation expires.
+- Discarding edits now clears a half-typed number that had clamped to the
+  committed value, which previously survived the Discard in Safari.
+- The Saved confirmation is announced reliably by screen readers: its live
+  region now stays mounted instead of appearing together with the text.
+- The panel's injected styles carry the host page's CSP nonce when one is
+  discoverable, so a strict style-src policy no longer strips the panel's
+  theme aliases.
+- The panel's pointer-feedback rules no longer reference the shared UI
+  library's private class names; the panel's own buttons opt in through a
+  local class instead.
+
 <a id="v0151"></a>
 
 ## [0.15.1] - 2026-07-26
