@@ -37,6 +37,34 @@ build toolchain, and fixes a batch of configuration-panel bugs.
 
 ### Fixed
 
+- Every map-viewport source now remembers a failed tile fetch and waits a
+  minute before retrying it, cached data keeps serving in the meantime, and
+  a NOAA ENC layer that fails while its siblings answer is retried through
+  a quick background refresh instead of re-querying every layer on every
+  chart poll. Disabling a source's refresh window no longer discards slow
+  list results, so such a source can deliver markers again.
+- Route-hazard scans are forced only when the active route actually
+  changes: an NMEA autopilot re-publishing an unchanged destination no
+  longer bypasses the scan throttles on every delta.
+- The Overpass mirror failover now runs under a ninety-second overall
+  budget, and the shared request queue caps its backlog instead of growing
+  without bound behind a slow upstream.
+- The USCG Local Notice to Mariners store now prunes files that leave the
+  pinned catalog, so tracking a NAVCEN page contraction cannot leave stale
+  hazard notices arming the alarms forever.
+- The NOAA ENC Direct and USACE clients verify their pinned ArcGIS layer
+  ids against the upstream layer names once per session, so a service
+  republish that renumbers layers fails loudly instead of silently
+  mislabeling another layer's features as wrecks, rocks, locks, or dams.
+- Status reporting is more honest around outages: bulk-source refreshes
+  record one aggregated error per pass instead of flooding the recent-error
+  list, fetch counts report what a pass actually ingested rather than the
+  whole on-disk index, a list result arriving just after the per-source
+  time window is recorded instead of leaving the source stuck on
+  "waiting", the server-wide plugin status line notes offline sources
+  while cached data is shown, a CO-OPS install with both station families
+  off explains why it is idle, and station families the user turned off no
+  longer inflate the cached-record counts.
 - The pinned USCG Light List page table tracks NAVCEN's July 2026
   contraction of District 8 from eleven pages to ten, so the periodic
   refresh no longer logs an HTTP 404 for the retired page. The refresh now

@@ -249,7 +249,9 @@ the matching transport, cache, lifecycle, and status machinery:
   queue limits concurrency, throttles each upstream, retries selected transient
   statuses with `Retry-After`, and aborts queued and in-flight work on close.
   Their geographic stale-while-revalidate caches suppress duplicate viewport
-  bursts while keeping the chart responsive.
+  bursts while keeping the chart responsive, remember a failed tile fetch for
+  a one-minute cool-down so a dead upstream is not re-queried per poll, and
+  keep the single-flight collapse even when a user disables the cache.
 - **One-shot ArcGIS bounding-box query.** NOAA ENC Direct and USACE fan a list
   request across the configured layers, page each result through
   `src/inputs/arcgis-query.ts`, and keep raw features in a hydrated detail

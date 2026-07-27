@@ -28,10 +28,14 @@ route-corridor, and bridge air-draft alarms.
   OpenSeaMap seamark groups now carry a tri-state select-all checkbox
   (checked, partially selected, or unchecked) in place of the All and None
   buttons. Clicking completes a partial selection and clears a full one.
-- **Gentler on a failing upstream.** A failed World Port Index download now
-  waits ten minutes before the next attempt, serving the last known ports in
-  the meantime, instead of retrying the full download on every chart poll and
-  flooding the status panel during an NGA outage.
+- **Gentler on failing upstreams.** A failed World Port Index download now
+  waits ten minutes before the next attempt, and every map-viewport source
+  waits a minute per failed chart tile, serving cached data in the meantime,
+  instead of retrying on every chart poll and flooding the status panel
+  during an outage. Layer identity is verified against NOAA and USACE
+  services so renumbered layers fail loudly instead of mislabeling features,
+  and the plugin status line now notes when sources are offline and cached
+  data is shown.
 - **Panel fixes.** After the first save of a never-configured plugin, the
   Save button now disables and the setup hint no longer reappears. Discarding
   edits clears a half-typed number even in Safari, and the Saved confirmation

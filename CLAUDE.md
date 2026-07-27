@@ -66,9 +66,10 @@ self-contained module registered on one line in `src/index.ts`.
       for a source whose request-scoped list provenance is local, skipped, or
       stale, so none is laundered into a reachable fetch.
     - `http-client.ts` - shared HTTP client plumbing for the queued clients
-      (ActiveCaptain and Overpass): a concurrency-limited and throttled
-      request queue, retry with exponential backoff that honors HTTP 429/503
-      `Retry-After`, and a `close()` that aborts in-flight work.
+      (ActiveCaptain and Overpass): a concurrency-limited, depth-capped, and
+      throttled request queue (overflow rejects the oldest waiter), retry
+      with exponential backoff that honors HTTP 429/503 `Retry-After`, and a
+      `close()` that aborts in-flight work.
     - `http-one-shot.ts` - the `requestText` one-shot GET the raw-client
       sources build on: it selects the `http`/`https` transport, buffers the
       body up to a fixed ceiling, enforces a wall-clock deadline, and honors an
@@ -95,9 +96,14 @@ self-contained module registered on one line in `src/index.ts`.
       the source-specific bits (layer keys, feature mappers, the client
       closures) so each source file is a thin config wrapper. A layer-query
       request fans out across every enabled layer in parallel via
-      `Promise.allSettled`; a partial failure is served but not cached so the
-      failed layer is retried on the next call, and an all-layers failure
-      rejects so the aggregate registry's reachability check trips correctly.
+      `Promise.allSettled`; a partial failure is served AND retained as a
+      degraded result whose freshness is shortened to a minute, so the failed
+      layer retries through background revalidation instead of the whole
+      fan-out re-running per poll, and an all-layers failure rejects so the
+      aggregate registry's reachability check trips correctly. Each client
+      also verifies its pinned layer ids once per session against the layer
+      metadata name, so a service republish that renumbers layers fails
+      loudly instead of silently mislabeling another layer's features.
     - `refresh-scheduler.ts` - `startRefreshScheduler`, the periodic-refresh
       installer the USCG Light List, USCG LNM, and NOAA CO-OPS input modules
       share: the in-flight guard, the initial and periodic timers, and the
@@ -148,7 +154,9 @@ self-contained module registered on one line in `src/index.ts`.
       `http-client.ts`, with the required `User-Agent`; it takes an ordered
       endpoint list, a primary plus any configured fallback mirrors, and fails
       over to the next on a failure so a single instance outage does not take
-      the source offline. Its list query conditionally includes plain
+      the source offline, under a ninety-second wall-clock budget for the
+      whole chain so the per-endpoint retry bounds cannot compound across
+      mirrors. Its list query conditionally includes plain
       `leisure=marina` features only when the Harbours and moorings group is
       enabled, clamps oversized viewports, and threads an optional
       `AbortSignal` so an abandoned check cancels its in-flight requests),
@@ -221,9 +229,10 @@ self-contained module registered on one line in `src/index.ts`.
       `lnm-client.ts` (the NAVCEN per-category GeoJSON client on
       `http-one-shot.ts` with conditional GET), `lnm-layers.ts` (the pinned
       file list and layer-to-`PoiType` mapping; danger layers map to `Hazard`
-      so the alarms fire, and NAVCEN's duplicate-page quirk is neutralized by
-      unioning records by business id), `lnm-store.ts` (the single-file
-      on-disk store), `lnm-detail.ts`, `lnm-sections.ts`, and `lnm-types.ts`
+      so the alarms fire, and NAVCEN's overlapping-page quirk is neutralized
+      by unioning records by business id), `lnm-store.ts` (the single-file
+      on-disk store, pruned against the pinned catalog on each refresh so a
+      retired page's notices stop serving), `lnm-detail.ts`, `lnm-sections.ts`, and `lnm-types.ts`
       (the notice and discrepancy wire shapes normalized into one
       kind-discriminated record).
     - `wpi/` - the NGA World Port Index input (worldwide ports, defaults
@@ -270,7 +279,9 @@ self-contained module registered on one line in `src/index.ts`.
       route notifications, raised once and cleared once, with a
       clearance-specific message for a too-low bridge), `route-corridor.ts` (pure
       corridor geometry), and `course-reader.ts` (reads the active route from
-      the SignalK Course API).
+      the SignalK Course API and forces a scan only when the resolved route
+      actually changed, since external NMEA course sources re-publish an
+      unchanged destination continuously).
     - `bridge-air-draft/` - the bridge air-draft check (US and worldwide,
       defaults off): warns when a bridge's vertical clearance is at or below the
       vessel air draft plus a configurable margin. `bridge-air-draft-output.ts`
@@ -295,7 +306,9 @@ self-contained module registered on one line in `src/index.ts`.
   - `status/` - `plugin-status.ts` (records request outcomes, produces a
     `StatusSnapshot`; besides list, detail, error, and skip outcomes it exposes
     `recordStaleServe` so a source that serves cached markers while its
-    upstream is unreachable reads as in error. Request-scoped list provenance
+    upstream is unreachable reads as in error, and `unreachableSources`, the
+    cheap reader the notes output uses to append an offline note to the
+    server-wide plugin status line. Request-scoped list provenance
     tells the aggregate registry whether a fulfilled list proves upstream
     reachability),
     `status-router.ts` (Express router that serves the
@@ -344,7 +357,11 @@ self-contained module registered on one line in `src/index.ts`.
     collapses a concurrent same-tile burst into one upstream request, and
     prefetches the neighbor tile in the background when a small viewport
     approaches a tile edge, so a vessel underway crosses the grid cliff onto
-    a warm tile; it depends on the node-only `lru-cache`), `bbox-debounce-bounds.ts`
+    a warm tile. A failed fetch is remembered on its tile and not retried for
+    a one-minute cool-down (the per-poll retry storm guard), a vetoed partial
+    result is retained as degraded with shortened freshness, and the
+    cache-disabled mode still collapses concurrent identical requests onto
+    one in-flight fetch; it depends on the node-only `lru-cache`), `bbox-debounce-bounds.ts`
     (the dependency-free, browser-safe companion holding the canonical
     `MIN_BBOX_DEBOUNCE_SECONDS` / `MAX_BBOX_DEBOUNCE_SECONDS` bounds, the
     per-source defaults, the `clampBboxDebounceSeconds` helper, and the

@@ -117,7 +117,11 @@ use a bounded request instead and try again on the next chart or scheduled
 refresh, and a failed World Port Index full download waits ten minutes before
 the next attempt, serving the last known ports in the meantime, so a repeated
 upstream outage produces one recorded error per attempt rather than one per
-chart poll. One source failing does not stop the other enabled sources.
+chart poll. The map-viewport sources apply the same idea per chart tile: a
+failed tile fetch waits a minute before the next attempt while cached markers
+keep serving. During an outage the server's plugin status line appends how
+many sources are offline and that cached data is being shown. One source
+failing does not stop the other enabled sources.
 
 If the primary Overpass endpoint is down for a sustained period, add one or more
 fallback mirrors in the OpenSeaMap card's "Fallback endpoints" field (one per
