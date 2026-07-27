@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createOverpassClient, type RateLimitOptions } from '../src/inputs/openseamap/overpass-client.js'
+import { createOverpassClient, FAILOVER_DEADLINE_MS, type RateLimitOptions } from '../src/inputs/openseamap/overpass-client.js'
+import { MAX_QUEUE_WAITING } from '../src/inputs/http-client.js'
 import type { Bbox } from '../src/shared/types.js'
 import { jsonResponse, silentLog, withMockFetch } from './helpers.js'
 
@@ -330,6 +331,76 @@ test('the query rejects when every endpoint fails', async () => {
       const client = createOverpassClient(failoverEndpoints, silentLog, fastLimits)
       await assert.rejects(() => client.listPointsOfInterest(sampleBbox, '^(rock)$'))
       assert.equal(calls.count, 2, 'both endpoints are tried before giving up')
+    }
+  )
+})
+
+test('the failover chain stops trying mirrors once its wall-clock budget is spent', async () => {
+  // Each endpoint attempt is internally bounded, but the bounds compose
+  // multiplicatively across mirrors while a queue slot is held. Once the
+  // chain's budget is spent, the last error propagates instead of starting
+  // another mirror.
+  let clock = 1_000_000
+  await withMockFetch(
+    () => {
+      // Every attempt fails, and each one costs more than the whole budget.
+      clock += FAILOVER_DEADLINE_MS + 1
+      return jsonResponse({ error: 'down' }, 500)
+    },
+    async (calls) => {
+      const client = createOverpassClient(
+        [endpoint, 'https://mirror.test/api/interpreter'],
+        silentLog,
+        { ...fastLimits, maxRetries: 0, now: () => clock }
+      )
+      await assert.rejects(() => client.listPointsOfInterest(sampleBbox, '^(rock)$'), /500/)
+      assert.equal(calls.count, 1, 'the mirror was not tried after the budget was spent')
+      client.close()
+    }
+  )
+})
+
+test('a queue overflow rejects the oldest waiter, not the newest', async () => {
+  // The waiting list is the one queue resource without its own bound; the cap
+  // drops the OLDEST waiter because the newest request reflects the current
+  // viewport while the oldest has likely been abandoned by the registry.
+  await withMockFetch(
+    async (_callIndex, init) => {
+      // A start fired by close() arrives with an already-aborted signal, and
+      // an abort listener on an already-aborted signal never fires, so the
+      // aborted-at-call-time check must come first.
+      if (init?.signal?.aborted === true) {
+        throw new DOMException('The operation was aborted', 'AbortError')
+      }
+      // Hold the single concurrency slot until the client closes.
+      return await new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          reject(new DOMException('The operation was aborted', 'AbortError'))
+        }, { once: true })
+      })
+    },
+    async () => {
+      const client = createOverpassClient(endpoint, silentLog, {
+        ...fastLimits,
+        maxRetries: 0,
+        maxConcurrency: 1,
+        minDelayMs: 0
+      })
+      const outcomes: Array<Promise<string>> = []
+      // One request occupies the slot; MAX_QUEUE_WAITING more fill the list;
+      // the final one overflows it, evicting the oldest waiter.
+      for (let i = 0; i < MAX_QUEUE_WAITING + 2; i++) {
+        outcomes.push(
+          client.listPointsOfInterest(sampleBbox, '^(rock)$')
+            .then(() => 'resolved', (error: unknown) => String(error))
+        )
+      }
+      const oldestWaiter = await outcomes[1]
+      assert.match(oldestWaiter, /queue overflowed/, 'the oldest waiter was dropped')
+      client.close()
+      const results = await Promise.all(outcomes)
+      const overflowed = results.filter((r) => /queue overflowed/.test(r)).length
+      assert.equal(overflowed, 1, 'exactly one waiter overflowed')
     }
   )
 })

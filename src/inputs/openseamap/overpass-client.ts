@@ -295,22 +295,43 @@ function normalizeEndpoints (endpoints: string | readonly string[]): string[] {
 }
 
 /**
+ * Wall-clock budget for one logical query's whole failover chain. Each
+ * endpoint attempt is internally bounded (retries, backoff, Retry-After), but
+ * those bounds compose multiplicatively across mirrors: three endpoints at a
+ * full retry budget each could hold a queue slot for minutes. Once the budget
+ * is spent, no further mirror is tried and the last error propagates; the
+ * bound is therefore roughly this deadline plus one endpoint's own budget.
+ * Exported for tests.
+ */
+export const FAILOVER_DEADLINE_MS = 90_000
+
+/** Options for {@link createOverpassClient}: rate limits plus failover knobs. */
+export interface OverpassClientOptions extends Partial<RateLimitOptions> {
+  /** Override the failover wall-clock budget. Mainly for tests. */
+  failoverDeadlineMs?: number
+  /** Clock source, injectable for tests. Defaults to `Date.now`. */
+  now?: () => number
+}
+
+/**
  * Create an Overpass client.
  *
  * @param endpoints The Overpass interpreter URL, or an ordered list of them:
  *                  the primary first, then any fallback mirrors. Each query is
  *                  tried against the endpoints in order until one answers.
  * @param log       Logging surface used for diagnostics.
- * @param options   Optional rate-limit overrides. Mainly used by tests to keep
- *                  them fast; production callers can pass just the endpoints and
- *                  the logger.
+ * @param options   Optional rate-limit and failover overrides. Mainly used by
+ *                  tests to keep them fast; production callers can pass just
+ *                  the endpoints and the logger.
  */
 export function createOverpassClient (
   endpoints: string | readonly string[],
   log: Logger,
-  options: Partial<RateLimitOptions> = {}
+  options: OverpassClientOptions = {}
 ): OverpassClient {
   const endpointList = normalizeEndpoints(endpoints)
+  const failoverDeadlineMs = options.failoverDeadlineMs ?? FAILOVER_DEADLINE_MS
+  const now = options.now ?? Date.now
   const http = createHttpClient(log, {
     label: 'Overpass',
     requestTimeoutMs: REQUEST_TIMEOUT_MS,
@@ -355,6 +376,7 @@ export function createOverpassClient (
     query: string, errorPrefix: string, signal?: AbortSignal
   ): Promise<OverpassResponse> {
     let lastError: unknown
+    const startedAt = now()
     for (let i = 0; i < endpointList.length; i++) {
       const endpoint = endpointList[i]
       try {
@@ -364,6 +386,17 @@ export function createOverpassClient (
         // A caller abort must stop failover at once: trying the next mirror would issue fresh
         // upstream requests for a query that has already been abandoned.
         if (signal?.aborted === true) throw error
+        // Per-endpoint bounds compose multiplicatively across mirrors, so the
+        // chain as a whole carries a wall-clock budget; once spent, the last
+        // error propagates rather than starting another bounded-but-long
+        // attempt while holding a queue slot.
+        if (now() - startedAt >= failoverDeadlineMs) {
+          log.debug(
+            `Overpass failover budget spent after ${endpoint} failed; ` +
+            'not trying further mirrors'
+          )
+          throw error
+        }
         if (i < endpointList.length - 1) {
           log.debug(
             `Overpass endpoint ${endpoint} failed (${String(error)}); ` +

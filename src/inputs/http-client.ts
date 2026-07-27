@@ -79,8 +79,20 @@ const delay = (ms: number, signal?: AbortSignal): Promise<void> =>
   })
 
 /**
+ * Depth cap for the queue's waiting list. Every other resource in this client
+ * is bounded (concurrency, retries, backoff, Retry-After, response bytes);
+ * without this cap a caller polling faster than `minDelayMs` drains could
+ * grow the backlog without bound. Overflow rejects the OLDEST waiter: the
+ * newest request reflects the current viewport, while the oldest has likely
+ * already been abandoned by the registry's per-source window. Exported for
+ * tests.
+ */
+export const MAX_QUEUE_WAITING = 64
+
+/**
  * A concurrency-limited, throttled task queue. It caps the number of in-flight
- * tasks and enforces a minimum spacing between task starts.
+ * tasks, the depth of the waiting list, and enforces a minimum spacing between
+ * task starts.
  */
 class RequestQueue {
   private active = 0
@@ -132,6 +144,12 @@ class RequestQueue {
       return Promise.reject(this.closedError())
     }
     return new Promise((resolve, reject) => {
+      if (this.waiting.length >= MAX_QUEUE_WAITING) {
+        const oldest = this.waiting.shift()
+        oldest?.abandon(new Error(
+          `${this.label} request queue overflowed; dropped the oldest queued request`
+        ))
+      }
       this.waiting.push({ start: resolve, abandon: reject })
       this.pump()
     })
