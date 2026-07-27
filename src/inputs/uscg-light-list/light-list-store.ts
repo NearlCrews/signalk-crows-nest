@@ -26,7 +26,7 @@
  * overlap the box rather than scanning the full ~57,700-record map.
  */
 
-import { mkdir, readFile, rm } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rm } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { bboxContainsPoint } from '../../geo/position-utilities.js'
@@ -304,6 +304,21 @@ export function createLightListStore (dataDir: string): LightListStore {
         return index
       }
       index.districts = metadata.districts
+      // Sweep page files no metadata key references: a crash between a page
+      // write and the metadata write orphans the page file, and
+      // pruneDistricts (which walks metadata keys) can never reach it. Never
+      // read (this load also walks metadata keys), so disk residue only;
+      // best-effort deletion, one readdir per cold start.
+      try {
+        const known = new Set(Object.keys(metadata.districts).map((key) => `${key}.json`))
+        await Promise.all((await readdir(pagesDir)).map(async (file) => {
+          if (file.endsWith('.json') && !known.has(file)) {
+            await rm(join(pagesDir, file), { force: true })
+          }
+        }))
+      } catch {
+        // A missing pages directory or an unreadable entry costs nothing.
+      }
       // Read each page file in parallel, then hydrate the in-memory records
       // and the spatial tile index from the union.
       const keys = Object.keys(metadata.districts)

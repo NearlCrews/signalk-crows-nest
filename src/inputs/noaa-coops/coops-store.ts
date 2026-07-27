@@ -56,6 +56,14 @@ export interface CoopsStore {
     records: readonly CoopsStationRecord[],
     headers: CoopsStationHeaders
   ) => void
+  /**
+   * Remove every record (and type metadata) whose station type is not in
+   * `validTypes`. Called by the refresh pass with the enabled types, so a
+   * family the user turned off stops inflating the record count (which feeds
+   * both the recorded fetch size and the panel's cache size) and stops being
+   * rewritten to disk forever.
+   */
+  pruneTypes: (validTypes: ReadonlySet<CoopsStationType>) => void
   /** Write the index to disk atomically when it has changed since the last flush. */
   flush: () => Promise<void>
   /** Return the current in-memory index without reading disk. */
@@ -256,6 +264,18 @@ export function createCoopsStore (dataDir: string): CoopsStore {
       index.types[stationType] = meta
       index.generated = new Date().toISOString()
       dirty = true
+    },
+
+    pruneTypes (validTypes) {
+      for (const type of Object.keys(index.types) as CoopsStationType[]) {
+        if (validTypes.has(type)) continue
+        for (const record of recordsOfType(type)) {
+          delete index.records[coopsInternalId(record)]
+        }
+        delete index.types[type]
+        index.generated = new Date().toISOString()
+        dirty = true
+      }
     },
 
     async flush () {

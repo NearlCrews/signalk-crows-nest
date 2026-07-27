@@ -204,6 +204,7 @@ test('a refresh in flight when close() runs does not flush after stop', async ()
   const fakeStore: CoopsStore = {
     load: async () => ({ generated: '', types: {}, records: {} }),
     upsertType: () => {},
+    pruneTypes: () => {},
     flush: async () => { if (!closed) flushes += 1 },
     snapshot: () => ({ generated: '', types: {}, records: {} }),
     recordCount: () => 0,
@@ -222,4 +223,29 @@ test('a refresh in flight when close() runs does not flush after stop', async ()
   source.close()
   await pass
   assert.equal(flushes, 0, 'a refresh completing after close must not flush')
+})
+
+test('refreshAll prunes records of a station family the user turned off', async () => {
+  await withTempDir('coops-prune-', async (dir) => {
+    const seeded = createCoopsStore(dir)
+    await seeded.load()
+    seeded.upsertType('tide', [station('t1', 'tide')], {})
+    seeded.upsertType('current', [station('c1', 'current')], {})
+    await seeded.flush()
+    seeded.close()
+
+    const store = createCoopsStore(dir)
+    await store.load()
+    assert.equal(store.recordCount(), 2)
+    const source = createNoaaCoopsSource({
+      client: idleClient(),
+      store,
+      stationTypes: ['tide'],
+      status: createStubStatus().status,
+      getCurrentPosition: () => BOSTON
+    })
+    await source.refreshAll()
+    assert.equal(store.recordCount(), 1, 'the disabled family left the index')
+    assert.equal(store.snapshot().types.current, undefined)
+  })
 })

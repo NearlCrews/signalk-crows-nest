@@ -108,10 +108,18 @@ export function createNoaaCoopsSource (config: NoaaCoopsSourceConfig): NoaaCoops
   }
 
   async function refreshAll (signal?: AbortSignal): Promise<void> {
+    // Drop records of a station family the user turned off: they never serve
+    // (the list filter excludes them) but they inflated the record count and
+    // were rewritten to disk forever. A local operation with no outbound
+    // HTTP, so it runs before every gate.
+    store.pruneTypes(enabledTypes)
     if (stationTypes.length === 0) {
       // Enabled source with both station families off: record why it stays
       // quiet, matching OpenSeaMap's "no feature groups enabled" and the
-      // ArcGIS factory's no-layers skip, instead of a bare idle pill.
+      // ArcGIS factory's no-layers skip, instead of a bare idle pill. This
+      // branch returns before the pass's flush, so the prune above persists
+      // here (a closed store no-ops it).
+      await store.flush()
       status.recordSkipped(NOAA_COOPS_SOURCE_ID, 'no station types enabled', false)
       return
     }
