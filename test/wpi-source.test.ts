@@ -12,7 +12,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { createWpiSource } from '../src/inputs/wpi/wpi-source.js'
+import { createWpiSource, FAILED_REFRESH_RETRY_MS } from '../src/inputs/wpi/wpi-source.js'
 import type { WpiPort } from '../src/inputs/wpi/wpi-types.js'
 import type { Bbox } from '../src/shared/types.js'
 import { WPI_SOURCE_ID } from '../src/shared/source-ids.js'
@@ -319,4 +319,76 @@ test('close aborts an in-flight full-set download', async () => {
   assert.equal(capturedSignal?.aborted, true, 'close() aborts the in-flight download signal')
   // The aborted fetch rejects with nothing cached to fall back on, so the list rejects.
   await assert.rejects(listing, /download aborted/)
+})
+
+test('a failed refresh is not retried on every list call within the cool-down', async () => {
+  let t = 1_000_000
+  let fetches = 0
+  const client: FakeClient = { fetchAllPorts: async () => { fetches++; throw new Error('HTTP 503') } }
+  const { status } = createStubStatus()
+  const source = createWpiSource({
+    client: client as never, refreshHours: 24, status: status as never, now: () => t
+  })
+  await assert.rejects(() => source.listPointsOfInterest(NY_BBOX, ''), /503/)
+  assert.equal(fetches, 1)
+  t += 2_000
+  assert.deepEqual(await source.listPointsOfInterest(NY_BBOX, ''), [])
+  t += 2_000
+  assert.deepEqual(await source.listPointsOfInterest(NY_BBOX, ''), [])
+  assert.equal(fetches, 1, 'polls within the cool-down issue no new download')
+})
+
+test('the upstream is retried after the failure cool-down and a success recovers', async () => {
+  let t = 1_000_000
+  let fetches = 0
+  let fail = true
+  const client: FakeClient = {
+    fetchAllPorts: async () => {
+      fetches++
+      if (fail) throw new Error('HTTP 503')
+      return [brooklyn]
+    }
+  }
+  const { status } = createStubStatus()
+  const source = createWpiSource({
+    client: client as never, refreshHours: 24, status: status as never, now: () => t
+  })
+  await assert.rejects(() => source.listPointsOfInterest(NY_BBOX, ''), /503/)
+  fail = false
+  t += FAILED_REFRESH_RETRY_MS + 1
+  const summaries = await source.listPointsOfInterest(NY_BBOX, '')
+  assert.equal(fetches, 2, 'the first list after the cool-down retries the download')
+  assert.equal(summaries.length, 1)
+  assert.equal(summaries[0].name, 'Brooklyn')
+})
+
+test('hydrated ports stay listed during the failure cool-down', async () => {
+  await withTempDir('wpi-source-', async (dir) => {
+    const seeded = createWpiSource({
+      client: { fetchAllPorts: async () => [brooklyn] } as never,
+      refreshHours: 24,
+      status: createStubStatus().status as never,
+      dataDir: dir
+    })
+    await seeded.listPointsOfInterest(NY_BBOX, '')
+    seeded.close()
+
+    let t = 1_000_000
+    let fetches = 0
+    const offline: FakeClient = { fetchAllPorts: async () => { fetches++; throw new Error('offline') } }
+    const source = createWpiSource({
+      client: offline as never,
+      refreshHours: 24,
+      status: createStubStatus().status as never,
+      dataDir: dir,
+      now: () => t
+    })
+    const first = await source.listPointsOfInterest(NY_BBOX, '')
+    assert.equal(first.length, 1, 'the failed attempt serves the hydrated port')
+    t += 2_000
+    const second = await source.listPointsOfInterest(NY_BBOX, '')
+    assert.equal(second.length, 1, 'the cool-down serve keeps the hydrated port visible')
+    assert.equal(fetches, 1, 'the cool-down poll issues no new download')
+    source.close()
+  })
 })

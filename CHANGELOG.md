@@ -37,6 +37,11 @@ build toolchain, and fixes a batch of configuration-panel bugs.
 
 ### Fixed
 
+- A failed World Port Index download now starts a ten-minute cool-down
+  during which list requests serve the last known ports instead of
+  re-launching the full multi-megabyte download on every chartplotter poll.
+  During a live NGA outage the source previously hammered the failing
+  endpoint every second or two and flooded the status panel with errors.
 - The panel type-check now actually covers the panel sources: the panel
   tsconfig inherited an exclude that emptied it, which had been hiding a
   handful of real type errors, all fixed.

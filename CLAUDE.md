@@ -232,7 +232,9 @@ self-contained module registered on one line in `src/index.ts`.
       the source single-flight fetches the full near-static dataset on the
       `wpiRefreshHours` cadence, holds it complete in the hydrated detail
       cache with a WPI-specific entry cap, and bbox-filters in memory per
-      list call), `wpi-client.ts` (the msi.nga.mil publications client on
+      list call; a failed download starts a ten-minute cool-down during which
+      list polls serve the last known ports instead of re-launching the
+      multi-megabyte fetch), `wpi-client.ts` (the msi.nga.mil publications client on
       `http-one-shot.ts`), `wpi-mapping.ts` (Pub 150 coded-value decoding;
       ports map to `Marina` so they dedupe against ActiveCaptain markers),
       `wpi-detail.ts`, `wpi-sections.ts`, and `wpi-types.ts`.

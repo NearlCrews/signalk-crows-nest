@@ -13,7 +13,9 @@
  * after the window has elapsed triggers one re-fetch, and concurrent calls
  * share it (single-flight). When a re-fetch fails, the shared offline-fallback
  * policy serves the last known ports (fresh or hydrated) as a stale serve
- * rather than an error.
+ * rather than an error, and a failure cool-down
+ * ({@link FAILED_REFRESH_RETRY_MS}) keeps the next list polls from
+ * re-launching the multi-megabyte download against a failing upstream.
  *
  * There is no US-waters gate: the World Port Index is worldwide.
  *
@@ -26,7 +28,7 @@ import { createHydratedDetailCache } from '../../shared/hydrated-detail-cache.js
 import { bboxContainsPoint } from '../../geo/position-utilities.js'
 import { isValidLatitude, isValidLongitude } from '../../shared/numbers.js'
 import { openSeaMapMarkerUrl } from '../../shared/map-link.js'
-import { MS_PER_HOUR } from '../../shared/time.js'
+import { MS_PER_HOUR, MS_PER_MINUTE } from '../../shared/time.js'
 import { WPI_SOURCE_ID } from '../../shared/source-ids.js'
 import type { Bbox, PoiDetailView, PoiSummary } from '../../shared/types.js'
 import type { PluginStatus } from '../../status/plugin-status.js'
@@ -59,6 +61,16 @@ const STORE_FILE_NAME = 'wpi-cache.json'
  * store.
  */
 const WPI_MAX_PORT_ENTRIES = 8192
+
+/**
+ * How long after a failed full-set download before another attempt. Without
+ * this cool-down every chartplotter list poll (arriving every second or two)
+ * launches a fresh multi-megabyte download against an upstream that is
+ * already failing; a live NGA outage was observed serving 503s that Akamai
+ * caches for ten minutes, so retrying faster than that cannot succeed anyway.
+ * Exported so the tests stay in step with the implementation.
+ */
+export const FAILED_REFRESH_RETRY_MS = 10 * MS_PER_MINUTE
 
 /** Dependencies for {@link createWpiSource}. */
 export interface WpiSourceConfig {
@@ -177,6 +189,10 @@ export function createWpiSource (config: WpiSourceConfig): PoiSource {
   // happened this session. A hydrated-only cache reads as undefined, so the
   // first list call still tries to refresh.
   let lastFetchedAt: number | undefined
+  // The time of the last FAILED full fetch, or undefined after a success.
+  // Gates the failure cool-down so a failing upstream is not re-downloaded on
+  // every list poll.
+  let lastFailedAt: number | undefined
   // The in-flight full fetch, so concurrent list and detail calls share one
   // download rather than each pulling the multi-megabyte set.
   let pending: Promise<void> | undefined
@@ -243,6 +259,10 @@ export function createWpiSource (config: WpiSourceConfig): PoiSource {
     pending = (async () => {
       try {
         await fetchAllIntoCache()
+        lastFailedAt = undefined
+      } catch (error) {
+        lastFailedAt = now()
+        throw error
       } finally {
         pending = undefined
       }
@@ -250,11 +270,21 @@ export function createWpiSource (config: WpiSourceConfig): PoiSource {
     return pending
   }
 
+  // Whether the last download attempt failed recently enough that another
+  // should not be launched yet. An in-flight attempt is never "cooling down":
+  // callers join it instead.
+  const inFailureCoolDown = (): boolean =>
+    pending === undefined &&
+    lastFailedAt !== undefined && now() - lastFailedAt < FAILED_REFRESH_RETRY_MS
+
   // Refresh the full set unless it was fetched within the window. A set never
-  // fetched this session (including a hydrated-only cache) is always refreshed.
+  // fetched this session (including a hydrated-only cache) is always refreshed,
+  // except during the failure cool-down, where the caller serves what it has
+  // and the recorded failure stands.
   const ensureFresh = async (): Promise<boolean> => {
     const fresh = lastFetchedAt !== undefined && now() - lastFetchedAt < refreshIntervalMs
     if (fresh) return false
+    if (inFailureCoolDown()) return false
     await refreshDataset()
     return true
   }
@@ -276,6 +306,13 @@ export function createWpiSource (config: WpiSourceConfig): PoiSource {
       if (outcome.kind === 'stale') {
         return withListProvenance(outcome.summaries, 'stale')
       }
+      // Empty rows with a populated cache only happens during the failure
+      // cool-down of a session with no successful fetch yet: serve the
+      // hydrated ports as stale rather than blanking markers the failed
+      // attempt's fallback had just listed.
+      if (summaryRows.length === 0 && cache.size > 0) {
+        return withListProvenance(buildStaleSummaries(bbox), 'stale')
+      }
       return withListProvenance(
         summariesWithinBbox(bbox),
         outcome.value ? 'fresh' : 'local'
@@ -292,12 +329,16 @@ export function createWpiSource (config: WpiSourceConfig): PoiSource {
       // Miss: the set may not be loaded yet (a detail click before any list),
       // or the port is genuinely absent. Refresh once through the shared
       // wrapper, which records a detail success when the fetch answers normally
-      // and an error only on a transport failure, then retry the lookup.
-      await fetchDetailRecorded(status, WPI_SOURCE_ID, () => ensureFresh())
-      const refreshed = cache.get(id)
-      if (refreshed !== undefined) {
-        const view = toDetailView(refreshed)
-        if (view !== null) return view
+      // and an error only on a transport failure, then retry the lookup. The
+      // failure cool-down skips the attempt entirely: a quiet no-op there must
+      // not record a detail success the failing upstream has not earned.
+      if (!inFailureCoolDown()) {
+        await fetchDetailRecorded(status, WPI_SOURCE_ID, () => ensureFresh())
+        const refreshed = cache.get(id)
+        if (refreshed !== undefined) {
+          const view = toDetailView(refreshed)
+          if (view !== null) return view
+        }
       }
       throw new Error(`No World Port Index port for "${id}"`)
     },
