@@ -16,9 +16,10 @@ import { join } from 'node:path'
 import { createNoaaEncSource } from '../src/inputs/noaa-enc/noaa-enc-source.js'
 import type { EncFeature, EncLayerKey, ScaleBand } from '../src/inputs/noaa-enc/enc-direct-types.js'
 import { getListProvenance } from '../src/inputs/poi-source.js'
+import { DEGRADED_RESULT_TTL_MS } from '../src/shared/bbox-debounce.js'
 import type { Bbox } from '../src/shared/types.js'
 import { NOAA_ENC_SOURCE_ID } from '../src/shared/source-ids.js'
-import { createStubStatus, withTempDir } from './helpers.js'
+import { createStubStatus, flush, withTempDir } from './helpers.js'
 
 const namedWreck: EncFeature = {
   type: 'Feature',
@@ -94,11 +95,14 @@ test('listPointsOfInterest fans out across enabled layers and tags summaries', a
   assert.equal(wreck.position.longitude, -71.0)
 })
 
-test('a partial layer failure is not cached, so the failed layer is retried on the next call', async () => {
-  // One layer transiently fails while another succeeds. The source returns the
-  // partial result for THIS call but must NOT cache it: caching would hide the
-  // failed layer's POIs for the whole bbox-debounce window. The next call must
-  // re-query so a recovered layer reappears promptly rather than after the TTL.
+test('a partial layer failure is served as degraded and retried after the shortened window', async () => {
+  // One layer transiently fails while another succeeds. The source serves the
+  // partial result AND retains it as degraded: an immediate next poll reuses
+  // it (no per-poll re-fan-out against a failing upstream), and once the
+  // shortened degraded window elapses the failed layer is retried through
+  // background revalidation, so a recovered layer reappears within a minute
+  // rather than after the full debounce window.
+  let clock = 1_000_000
   let wreckCalls = 0
   let wreckFails = true
   const client: FakeClient = {
@@ -120,9 +124,10 @@ test('a partial layer failure is not cached, so the failed layer is retried on t
     includeObstructions: true,
     includeRocks: false,
     minimumYear: 0,
-    refreshSeconds: 60, // caching ON: only the no-cache-on-partial rule lets the retry through
+    refreshSeconds: 1800,
     status,
-    getCurrentPosition: () => undefined
+    getCurrentPosition: () => undefined,
+    now: () => clock
   })
   const bbox = { south: 41, west: -72, north: 43, east: -70 }
   const first = await source.listPointsOfInterest(bbox, '')
@@ -130,8 +135,15 @@ test('a partial layer failure is not cached, so the failed layer is retried on t
   assert.equal(wreckCalls, 1)
   wreckFails = false
   const second = await source.listPointsOfInterest(bbox, '')
-  assert.equal(wreckCalls, 2, 'the partial result was not cached, so the failed layer is retried')
-  assert.equal(second.length, 2, 'the recovered wreck appears alongside the obstruction')
+  assert.equal(wreckCalls, 1, 'an immediate poll reuses the degraded result, no re-fan-out')
+  assert.equal(second.length, 1)
+  clock += DEGRADED_RESULT_TTL_MS + 1
+  const third = await source.listPointsOfInterest(bbox, '')
+  assert.equal(third.length, 1, 'the degraded value serves while the retry runs in background')
+  await flush()
+  assert.equal(wreckCalls, 2, 'the failed layer was retried after the degraded window')
+  const fourth = await source.listPointsOfInterest(bbox, '')
+  assert.equal(fourth.length, 2, 'the recovered wreck appears alongside the obstruction')
 })
 
 test('listPointsOfInterest only queries layers that are enabled', async () => {

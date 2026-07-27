@@ -84,6 +84,8 @@ export interface NoaaEncSourceConfig {
    * runs in memory only.
    */
   dataDir?: string
+  /** Clock source for the bbox-debounce cache, injectable for tests. */
+  now?: () => number
 }
 
 /** Resolve the set of enabled hazard layers from the per-layer config flags. */
@@ -219,6 +221,7 @@ export function createNoaaEncSource (config: NoaaEncSourceConfig): PoiSource {
     status,
     getCurrentPosition,
     dataDir,
+    now: config.now,
     fetchLayerFeatures: async (layerKey, bbox, signal) => {
       const response = await client.queryLayer({ band, layerKey, bbox, signal })
       return response.features

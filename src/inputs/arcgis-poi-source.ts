@@ -9,11 +9,14 @@
  *
  * A layer-query request fans out across every enabled layer in parallel via
  * `Promise.allSettled`, collecting results and recording per-layer errors. If
- * every enabled layer rejects, the source itself fails (the rejection is not
- * cached so the next tick retries). A partial failure (some layers returned
- * data) is served for this call but not cached, so the failed layer is
- * retried on the next call rather than its POIs staying absent for the whole
- * debounce window.
+ * every enabled layer rejects, the source itself fails; the shared cache
+ * remembers the failure and holds retries for its cool-down, so a dead
+ * upstream is not re-queried on every chartplotter poll. A partial failure
+ * (some layers returned data) is served AND retained as a degraded result:
+ * the cache shortens its freshness so the failed layer is retried through
+ * background revalidation within a minute, rather than its POIs staying
+ * absent for the whole debounce window or, worse, the whole fan-out being
+ * re-launched on every poll.
  */
 
 import {
@@ -106,6 +109,9 @@ export interface ArcGisSourceConfig<L extends string, F> {
    * keep the summary, `false` to drop it. Defaults to identity (keep all).
    */
   summaryFilter?: (summary: PoiSummary) => boolean
+
+  /** Clock source for the bbox-debounce cache, injectable for tests. */
+  now?: () => number
 }
 
 /**
@@ -134,7 +140,24 @@ export function createArcGisPoiSource<L extends string, F> (
   // the raw layer features for `refreshSeconds` before re-querying upstream.
   // The cache holds raw per-layer features (not summaries) so the per-call
   // tagging, detail-LRU repopulation, and any filter run outside the cache.
-  const bboxCache = createBboxDebounceCache<LayerFeatures<L, F>>(refreshSeconds, MAX_BBOX_CACHE_ENTRIES)
+  // The revalidation-error hook mirrors the OpenSeaMap and ActiveCaptain
+  // wiring: without it a warm tile over a dead upstream would keep serving
+  // 'local' forever with nothing recorded and the pill stuck on ok.
+  const bboxCache = createBboxDebounceCache<LayerFeatures<L, F>>(
+    refreshSeconds,
+    MAX_BBOX_CACHE_ENTRIES,
+    {
+      now: cfg.now,
+      onRevalidationError: (error) => {
+        if (!lifecycle.signal.aborted) {
+          status.recordError(
+            sourceId,
+            `Background ${cfg.sourceLabel} list refresh failed: ${String(error)}`
+          )
+        }
+      }
+    }
+  )
 
   /** Parse a summary id back into `(layerKey, objectId)` for a getById call. */
   function parseSummaryId (id: string): { layerKey: L, objectId: number } | undefined {

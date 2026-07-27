@@ -22,10 +22,28 @@
  *   for a tick is harmless. There is no max-stale ceiling: a tile whose
  *   refresh keeps failing is served indefinitely, which is the intended trade
  *   for slow-changing POI data.
+ * - Failure cool-down: a failed fetch (cold, revalidation, or prefetch) is
+ *   remembered on the entry, and no new attempt for that tile starts until
+ *   `FETCH_FAILURE_COOLDOWN_MS` has passed. Without this, every chartplotter
+ *   list poll (arriving every second or two) would re-launch an upstream
+ *   request against an already-failing upstream, the same storm the WPI
+ *   source's `FAILED_REFRESH_RETRY_MS` guards against. A cold read during the
+ *   cool-down replays the remembered rejection without touching the network,
+ *   so the caller's offline fallback still engages.
+ * - Degraded results: a value the `shouldCache` predicate vetoes (a partial
+ *   multi-layer response) is retained and served, but its freshness is
+ *   shortened to `DEGRADED_RESULT_TTL_MS`, so the failed portion is retried
+ *   through background revalidation within a minute rather than on every poll
+ *   (and rather than deleting a warm entry, which would turn the next read
+ *   into a blocking cold miss).
  *
  * Off-sentinel matches the rest of the codebase: `ttlSeconds <= 0` disables the
- * cache, and the raw viewport (no snap) is fetched on every call. The freshness
- * window is in seconds because the typical chartplotter cadence is sub-minute.
+ * cache, and the raw viewport (no snap) is fetched on every call, but concurrent
+ * identical requests still collapse onto one in-flight fetch: without that, a
+ * request slower than the aggregate registry's per-source window would be
+ * re-launched and discarded on every poll, and the source would never deliver a
+ * list at all. The freshness window is in seconds because the typical
+ * chartplotter cadence is sub-minute.
  *
  * The cache is per-source: ActiveCaptain, NOAA ENC, OpenSeaMap, and USACE each
  * instantiate their own. They share the `MAX_BBOX_CACHE_ENTRIES` ceiling from
@@ -68,9 +86,10 @@ export interface BboxDebounceCache<T> {
    * one caller's narrower request poison a later caller's wider one.
    *
    * `shouldCache`, when given, is consulted with the resolved value: if it
-   * returns false the value is returned to the caller but not retained, so the
-   * next call re-fetches. A source uses it to avoid caching a degraded result
-   * (a partial multi-layer response, say).
+   * returns false the value is still returned and retained, but marked
+   * degraded, so it goes stale after `DEGRADED_RESULT_TTL_MS` instead of the
+   * full freshness window. A source uses it for a degraded result (a partial
+   * multi-layer response, say) that should be served now and retried soon.
    */
   get: (
     bbox: Bbox,
@@ -187,6 +206,22 @@ function translateBbox (bbox: Bbox, eastCells: number, northCells: number): Bbox
   }
 }
 
+/**
+ * How long after a failed tile fetch before another attempt for that tile may
+ * start. Proportionate to a bounded per-tile query (the WPI full-dataset
+ * download uses ten minutes); one minute keeps a recovering upstream
+ * responsive while capping the poll-driven retry rate. Exported for tests.
+ */
+export const FETCH_FAILURE_COOLDOWN_MS = 60_000
+
+/**
+ * Freshness granted to a value the `shouldCache` predicate marks degraded (a
+ * partial multi-layer response): long enough that the failed portion is not
+ * re-queried on every poll, short enough that it is retried through the
+ * background revalidation path within a minute. Exported for tests.
+ */
+export const DEGRADED_RESULT_TTL_MS = 60_000
+
 /** A cached tile: the in-flight or settled fetch plus its freshness state. */
 interface GeoEntry<T> {
   /** The fetch promise; awaited by concurrent callers during a cold miss. */
@@ -201,6 +236,8 @@ interface GeoEntry<T> {
   revalidating: boolean
   /** True when a completed background fetch has not yet been observed. */
   freshResultPending: boolean
+  /** Clock time of the last failed fetch for this tile, 0 when none. */
+  failedAt: number
 }
 
 /** Optional knobs for {@link createBboxDebounceCache}. */
@@ -239,11 +276,31 @@ export function createBboxDebounceCache<T extends NonNullable<unknown>> (
   const cache = ttlMs > 0
     ? new LRUCache<string, GeoEntry<T>>({ max: maxEntries })
     : null
+  // Single-flight registry for the cache-disabled mode: concurrent identical
+  // requests share one in-flight fetch, dropped the instant it settles so no
+  // settled result is ever reused.
+  const uncachedInFlight = new Map<string, Promise<T>>()
+  // A degraded (vetoed) value keeps at most this much freshness; a window
+  // already shorter than the degraded allowance just keeps its own length.
+  const degradedTtlMs = Math.min(ttlMs, DEGRADED_RESULT_TTL_MS)
+
+  /** Whether this tile's last fetch failed recently enough to hold retries. */
+  function inFailureCoolDown (entry: GeoEntry<T>): boolean {
+    return entry.failedAt !== 0 && now() - entry.failedAt < FETCH_FAILURE_COOLDOWN_MS
+  }
+
+  /** Stamp a resolved value onto its entry, shortening freshness when degraded. */
+  function stampResolved (entry: GeoEntry<T>, value: T, degraded: boolean): void {
+    entry.value = value
+    entry.freshAt = degraded ? now() - (ttlMs - degradedTtlMs) : now()
+    entry.failedAt = 0
+  }
 
   // Start a fetch, store it as the tile's entry, and wire up resolve/reject: a
-  // resolved value stamps the entry fresh (and is dropped when vetoed); a
-  // rejection evicts the entry so the next call retries rather than replaying
-  // the failure.
+  // resolved value stamps the entry fresh (with shortened freshness when the
+  // shouldCache predicate marks it degraded); a rejection RETAINS the entry
+  // with a failure stamp, so reads during the cool-down replay the rejection
+  // instead of re-launching an upstream request on every poll.
   function fetchInto (
     key: string,
     fetchBbox: Bbox,
@@ -260,21 +317,19 @@ export function createBboxDebounceCache<T extends NonNullable<unknown>> (
       freshAt: 0,
       ok: false,
       revalidating: false,
-      freshResultPending: false
+      freshResultPending: false,
+      failedAt: 0
     }
     entry.promise = fetch(fetchBbox)
       .then((value) => {
-        entry.value = value
-        entry.freshAt = now()
+        const degraded = shouldCache !== undefined && !shouldCache(value)
+        stampResolved(entry, value, degraded)
         entry.ok = true
         entry.freshResultPending = background
-        if (shouldCache !== undefined && !shouldCache(value) && cache?.get(key) === entry) {
-          cache.delete(key)
-        }
         return value
       })
       .catch((error: unknown) => {
-        if (cache?.get(key) === entry) cache.delete(key)
+        entry.failedAt = now()
         throw error
       })
     cache?.set(key, entry)
@@ -283,7 +338,10 @@ export function createBboxDebounceCache<T extends NonNullable<unknown>> (
 
   // Refresh a stale tile in the background, updating the live entry in place so
   // concurrent stale reads keep serving the old value until the refresh lands.
-  // A transient failure leaves the stale entry to be retried on a later read.
+  // A degraded (vetoed) result still replaces the value, with shortened
+  // freshness so it is retried soon; deleting the warm entry instead would turn
+  // the next read into a blocking cold miss. A failure stamps the cool-down and
+  // leaves the stale entry serving.
   function revalidate (
     key: string,
     fetchBbox: Bbox,
@@ -295,16 +353,15 @@ export function createBboxDebounceCache<T extends NonNullable<unknown>> (
     fetch(fetchBbox)
       .then((value) => {
         if (cache?.get(key) !== entry) return
-        if (shouldCache !== undefined && !shouldCache(value)) {
-          cache.delete(key)
-          return
-        }
-        entry.value = value
-        entry.freshAt = now()
+        const degraded = shouldCache !== undefined && !shouldCache(value)
+        stampResolved(entry, value, degraded)
         entry.freshResultPending = true
       })
       .catch((error: unknown) => {
-        if (cache?.get(key) === entry) onRevalidationError?.(error)
+        if (cache?.get(key) === entry) {
+          entry.failedAt = now()
+          onRevalidationError?.(error)
+        }
       })
       .finally(() => { entry.revalidating = false })
   }
@@ -360,8 +417,11 @@ export function createBboxDebounceCache<T extends NonNullable<unknown>> (
       // `peek` rather than `get`: a mere proximity check must not bump the
       // neighbor's LRU recency and shield an idle tile from eviction.
       if (cache?.peek(key) !== undefined) continue
-      // Fire and forget; fetchInto already evicts the entry on rejection so
-      // a failed prefetch costs nothing and the real crossing just fetches.
+      // Fire and forget. A failed prefetch is retained with a failure stamp,
+      // so this peek guard suppresses re-prefetching the same broken tile on
+      // every warm read; the real crossing retries once the cool-down ends.
+      // Deliberately unrecorded: a speculative fetch of a tile nobody asked
+      // for must not paint a source unreachable.
       fetchInto(key, neighbor, fetch, shouldCache, true).promise.catch(() => {})
     }
   }
@@ -369,14 +429,37 @@ export function createBboxDebounceCache<T extends NonNullable<unknown>> (
   return {
     get: async (bbox, fetch, extraKey, shouldCache) => {
       if (cache === null) {
-        return { value: await fetch(bbox), provenance: 'fresh' }
+        // No caching, but concurrent identical requests still collapse onto
+        // one in-flight fetch, dropped the moment it settles. Without this a
+        // request slower than the registry's per-source window would be
+        // re-launched and its result discarded on every poll.
+        const key = bboxKey(bbox, extraKey)
+        let pending = uncachedInFlight.get(key)
+        if (pending === undefined) {
+          pending = fetch(bbox)
+          uncachedInFlight.set(key, pending)
+        }
+        try {
+          return { value: await pending, provenance: 'fresh' }
+        } finally {
+          if (uncachedInFlight.get(key) === pending) uncachedInFlight.delete(key)
+        }
       }
       const fetchBbox = snapBbox(bbox)
       const key = bboxKey(fetchBbox, extraKey)
       const existing = cache.get(key)
       if (existing !== undefined) {
         if (!existing.ok) {
-          // A cold fetch is still in flight: share it (collapse the burst).
+          // A failed entry whose cool-down has ended: start the retry.
+          if (existing.failedAt !== 0 && !inFailureCoolDown(existing)) {
+            return {
+              value: await fetchInto(key, fetchBbox, fetch, shouldCache).promise,
+              provenance: 'fresh'
+            }
+          }
+          // A cold fetch still in flight is shared (collapse the burst); a
+          // failed entry inside its cool-down replays the rejection without
+          // touching the network, so the caller's fallback still engages.
           const value = await existing.promise
           existing.freshResultPending = false
           return { value, provenance: 'fresh' }
@@ -389,8 +472,10 @@ export function createBboxDebounceCache<T extends NonNullable<unknown>> (
           existing.freshResultPending = false
           return { value: existing.value as T, provenance }
         }
-        // Stale: serve the last-known value now, revalidate once in background.
-        if (!existing.revalidating) {
+        // Stale: serve the last-known value now, revalidate once in the
+        // background, unless the last revalidation failed recently (the
+        // cool-down keeps a dead upstream from being re-queried per poll).
+        if (!existing.revalidating && !inFailureCoolDown(existing)) {
           revalidate(key, fetchBbox, fetch, existing, shouldCache)
         }
         return { value: existing.value as T, provenance: 'local' }
@@ -400,6 +485,9 @@ export function createBboxDebounceCache<T extends NonNullable<unknown>> (
         provenance: 'fresh'
       }
     },
-    clear: () => { cache?.clear() }
+    clear: () => {
+      cache?.clear()
+      uncachedInFlight.clear()
+    }
   }
 }

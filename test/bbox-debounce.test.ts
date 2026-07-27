@@ -6,12 +6,16 @@
  * background, and keys on the snapped tile plus an optional extraKey. The LRU
  * bounds size only; freshness is tracked against an injectable clock. These
  * tests cover snapping/reuse, the stale-while-revalidate path, the off
- * sentinel, the shouldCache veto, and clear().
+ * sentinel, the degraded-result handling, the failure cool-down, and clear().
  */
 
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createBboxDebounceCache } from '../src/shared/bbox-debounce.js'
+import {
+  createBboxDebounceCache,
+  DEGRADED_RESULT_TTL_MS,
+  FETCH_FAILURE_COOLDOWN_MS
+} from '../src/shared/bbox-debounce.js'
 import {
   clampBboxDebounceSeconds,
   DEFAULT_ACTIVE_CAPTAIN_DEBOUNCE_SECONDS,
@@ -152,14 +156,42 @@ test('a failed background revalidation is reported while the stale value remains
   assert.match(String(errors[0]), /offline/)
 })
 
-test('a non-cacheable (vetoed) result is returned but not cached, so the next call refetches', async () => {
+test('a degraded (vetoed) result is retained and retried after its shortened window', async () => {
+  // A partial multi-layer response serves immediately from cache instead of
+  // re-fanning-out on every poll, but goes stale after DEGRADED_RESULT_TTL_MS
+  // so the failed portion is retried through background revalidation.
+  let clock = 1000
   let calls = 0
-  const cache = createBboxDebounceCache<{ ok: boolean }>(30, 16)
+  const cache = createBboxDebounceCache<{ ok: boolean }>(1800, 16, { now: () => clock })
   const first = await cache.get(SAMPLE, async () => { calls++; return { ok: false } }, undefined, (v) => v.ok)
-  const second = await cache.get(SAMPLE, async () => { calls++; return { ok: true } }, undefined, (v) => v.ok)
   assert.equal(first.value.ok, false)
-  assert.equal(second.value.ok, true)
-  assert.equal(calls, 2, 'the vetoed result was not cached')
+  const second = await cache.get(SAMPLE, async () => { calls++; return { ok: true } }, undefined, (v) => v.ok)
+  assert.equal(second.value.ok, false, 'the degraded value serves from cache, no per-poll refetch')
+  assert.equal(calls, 1)
+  clock += DEGRADED_RESULT_TTL_MS + 1
+  const third = await cache.get(SAMPLE, async () => { calls++; return { ok: true } }, undefined, (v) => v.ok)
+  assert.equal(third.value.ok, false, 'the stale degraded value serves while the retry runs')
+  await flush()
+  assert.equal(calls, 2, 'the degraded tile was retried after its shortened window')
+  const fourth = await cache.get(SAMPLE, async () => { calls++; return { ok: true } }, undefined, (v) => v.ok)
+  assert.equal(fourth.value.ok, true, 'the complete result replaced the degraded one')
+})
+
+test('a degraded revalidation result replaces the warm value instead of evicting it', async () => {
+  // The second veto site: a partial result arriving through background
+  // revalidation must keep the entry warm (an eviction would turn the next
+  // read into a blocking cold miss) while still shortening its freshness.
+  let clock = 1000
+  let calls = 0
+  const cache = createBboxDebounceCache<{ ok: boolean, n: number }>(1800, 16, { now: () => clock })
+  await cache.get(SAMPLE, async () => { calls++; return { ok: true, n: 1 } }, undefined, (v) => v.ok)
+  clock += 1801_000
+  await cache.get(SAMPLE, async () => { calls++; return { ok: false, n: 2 } }, undefined, (v) => v.ok)
+  await flush()
+  assert.equal(calls, 2)
+  const read = await cache.get(SAMPLE, async () => { calls++; return { ok: true, n: 3 } }, undefined, (v) => v.ok)
+  assert.equal(read.value.n, 2, 'the degraded revalidation result serves warm')
+  assert.equal(calls, 2, 'no blocking cold miss after the degraded revalidation')
 })
 
 test('the off sentinel passes the raw viewport to the fetcher; on snaps to a superset', async () => {
@@ -189,19 +221,74 @@ test('clear() drops every entry, forcing the next get to re-fetch', async () => 
   assert.equal(calls, 2, 'the cleared entry was re-fetched')
 })
 
-test('the fetcher\'s rejection propagates without caching', async () => {
+test('a failed fetch replays its rejection within the cool-down and retries after it', async () => {
+  let clock = 1000
   let calls = 0
-  const cache = createBboxDebounceCache<number>(30, 16)
+  const cache = createBboxDebounceCache<number>(30, 16, { now: () => clock })
   await assert.rejects(() => cache.get(SAMPLE, async () => {
     calls++
     throw new Error('upstream down')
   }), /upstream down/)
-  // A retry calls the fetcher again because the first failure was not cached.
+  // Within the cool-down the ORIGINAL rejection replays with no new attempt,
+  // so the caller's offline fallback still engages without a per-poll storm.
+  clock += 2000
+  await assert.rejects(() => cache.get(SAMPLE, async () => {
+    calls++
+    throw new Error('still down')
+  }), /upstream down/)
+  assert.equal(calls, 1, 'no second attempt within the cool-down')
+  clock += FETCH_FAILURE_COOLDOWN_MS
   await assert.rejects(() => cache.get(SAMPLE, async () => {
     calls++
     throw new Error('still down')
   }), /still down/)
+  assert.equal(calls, 2, 'the cool-down expiry allows one retry')
+})
+
+test('a failed revalidation starts a cool-down before the next background attempt', async () => {
+  let clock = 1000
+  let calls = 0
+  const errors: unknown[] = []
+  const cache = createBboxDebounceCache<number>(30, 16, {
+    now: () => clock,
+    onRevalidationError: (error) => errors.push(error)
+  })
+  await cache.get(SAMPLE, async () => { calls++; return 7 })
+  clock += 31_000
+  await cache.get(SAMPLE, async () => { calls++; throw new Error('offline') })
+  await flush()
   assert.equal(calls, 2)
+  clock += 1000
+  const read = await cache.get(SAMPLE, async () => { calls++; throw new Error('offline') })
+  assert.deepEqual(read, { value: 7, provenance: 'local' }, 'the stale value keeps serving')
+  await flush()
+  assert.equal(calls, 2, 'no new attempt within the cool-down')
+  assert.equal(errors.length, 1, 'one reported failure per real attempt')
+  clock += FETCH_FAILURE_COOLDOWN_MS
+  await cache.get(SAMPLE, async () => { calls++; throw new Error('offline') })
+  await flush()
+  assert.equal(calls, 3, 'the cool-down expiry allows the next revalidation')
+})
+
+test('the off sentinel still collapses concurrent identical requests', async () => {
+  // No caching, but a request slower than the registry's per-source window
+  // must be joinable by later polls rather than re-launched and discarded.
+  let calls = 0
+  let release: (value: number) => void = () => {}
+  const cache = createBboxDebounceCache<number>(0, 16)
+  const slow = async (): Promise<number> => {
+    calls++
+    return await new Promise((resolve) => { release = resolve })
+  }
+  const a = cache.get(SAMPLE, slow)
+  const b = cache.get(SAMPLE, slow)
+  release(9)
+  assert.deepEqual(await a, { value: 9, provenance: 'fresh' })
+  assert.deepEqual(await b, { value: 9, provenance: 'fresh' })
+  assert.equal(calls, 1, 'both polls shared one in-flight fetch')
+  const c = await cache.get(SAMPLE, async () => { calls++; return 10 })
+  assert.deepEqual(c, { value: 10, provenance: 'fresh' })
+  assert.equal(calls, 2, 'a settled result is never reused')
 })
 
 test('an extraKey discriminates cache entries for the same bbox', async () => {
