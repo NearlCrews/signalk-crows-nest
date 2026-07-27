@@ -37,6 +37,11 @@ build toolchain, and fixes a batch of configuration-panel bugs.
 
 ### Fixed
 
+- The pinned USCG Light List page table tracks NAVCEN's July 2026
+  contraction of District 8 from eleven pages to ten, so the periodic
+  refresh no longer logs an HTTP 404 for the retired page. The refresh now
+  also prunes store pages that leave the pinned table, removing a retired
+  page's aids from memory and disk instead of serving them forever.
 - A failed World Port Index download now starts a ten-minute cool-down
   during which list requests serve the last known ports instead of
   re-launching the full multi-megabyte download on every chartplotter poll.

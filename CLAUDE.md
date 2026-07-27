@@ -166,7 +166,7 @@ self-contained module registered on one line in `src/index.ts`.
       US-only, defaults off): `uscg-light-list-input.ts` (the `InputModule`
       with the periodic refresh scheduler), `uscg-light-list-source.ts` (the
       `PoiSource` adapter over the client and store, with a position-gated
-      `refreshAll` that iterates the pinned 62 (district, page) pairs and
+      `refreshAll` that iterates the pinned 61 (district, page) pairs and
       skips outbound HTTP when the vessel is outside US waters),
       `light-list-client.ts` (the NAVCEN HTTP client built on
       `http-one-shot.ts`, with conditional-GET via `If-Modified-Since` and

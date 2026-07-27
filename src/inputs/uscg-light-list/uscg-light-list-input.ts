@@ -75,7 +75,7 @@ export const uscgLightListInput: InputModule = {
     })
     const intervalMs = clampRefreshHours(config.uscgLightListRefreshHours) * MS_PER_HOUR
     // The scheduler owns the in-flight guard: a refresh pass that takes longer
-    // than the configured window (62 conditional GETs against a slow NAVCEN,
+    // than the configured window (61 conditional GETs against a slow NAVCEN,
     // fanned out four at a time) never lets the next tick start a concurrent
     // refreshAll that would race on store.upsertDistrict.
     return startRefreshScheduler({ source, app, name: 'USCG Light List', intervalMs })

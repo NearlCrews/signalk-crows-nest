@@ -26,7 +26,7 @@
  * overlap the box rather than scanning the full ~57,700-record map.
  */
 
-import { mkdir, readFile } from 'node:fs/promises'
+import { mkdir, readFile, rm } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { bboxContainsPoint } from '../../geo/position-utilities.js'
@@ -82,6 +82,14 @@ export interface LightListStore {
     records: readonly LightListRecord[],
     headers: DistrictHeaders
   ) => void
+  /**
+   * Remove every (district, page) whose key is not in `validKeys`: its
+   * records leave the in-memory index immediately, and the next {@link flush}
+   * drops its metadata and deletes its page file. Called by the refresh pass
+   * with the pinned page table, so a page NAVCEN retires (a district
+   * contraction) does not leave stale aids serving forever.
+   */
+  pruneDistricts: (validKeys: ReadonlySet<string>) => void
   /**
    * Write any dirty pages and the metadata file to disk atomically. A page
    * with no changes since the previous flush is not rewritten.
@@ -196,6 +204,9 @@ export function createLightListStore (dataDir: string): LightListStore {
   // next flush rewrites just these; an untouched district 304-Not-Modified'd
   // by NAVCEN never produces a write.
   const dirtyPages = new Set<string>()
+  // Pages pruned since the last flush; the next flush deletes their files
+  // after the metadata that stops referencing them has been committed.
+  const removedPages = new Set<string>()
   // Set to true when the in-memory metadata diverges from the on-disk
   // metadata file: a page upsert always counts, since it bumps the
   // `generated` timestamp and the per-district fetchedAt.
@@ -269,6 +280,7 @@ export function createLightListStore (dataDir: string): LightListStore {
       tiles.clear()
       recordTile.clear()
       dirtyPages.clear()
+      removedPages.clear()
       metadataDirty = false
 
       if (!existsSync(indexPath)) {
@@ -357,7 +369,22 @@ export function createLightListStore (dataDir: string): LightListStore {
       index.districts[key] = meta
       index.generated = new Date().toISOString()
       dirtyPages.add(key)
+      removedPages.delete(key)
       metadataDirty = true
+    },
+
+    pruneDistricts (validKeys) {
+      for (const key of Object.keys(index.districts)) {
+        if (validKeys.has(key)) continue
+        for (const llnr of index.districts[key]?.llnrs ?? []) {
+          removeRecordFromIndex(llnr)
+        }
+        delete index.districts[key]
+        index.generated = new Date().toISOString()
+        dirtyPages.delete(key)
+        removedPages.add(key)
+        metadataDirty = true
+      }
     },
 
     async flush () {
@@ -396,6 +423,18 @@ export function createLightListStore (dataDir: string): LightListStore {
       if (!indexCommitted) return
       dirtyPages.clear()
       metadataDirty = false
+      // Delete pruned page files only after the metadata that stopped
+      // referencing them has been committed: a crash in between leaves an
+      // orphan file that load (which walks metadata keys) never reads. A
+      // deletion failure is likewise harmless for the same reason.
+      await Promise.all([...removedPages].map(async (key) => {
+        try {
+          await rm(join(pagesDir, `${key}.json`), { force: true })
+        } catch {
+          // Unreferenced file; the next flush retries nothing and loses nothing.
+        }
+      }))
+      removedPages.clear()
     },
 
     snapshot () {

@@ -32,13 +32,17 @@ import { USCG_LIGHT_LIST_SOURCE_ID } from '../../shared/source-ids.js'
 const ATTRIBUTION = '© USCG (US Government public domain)'
 
 /**
- * The 62 (district, page) pairs the NAVCEN MSI feed publishes, pinned from a
+ * The 61 (district, page) pairs the NAVCEN MSI feed publishes, pinned from a
  * direct probe of every district (each publishes pages 1..max as contiguous
  * `lightListD{NN}_{n}.geojson` files). A district can publish up to fifteen
- * pages of light-list records. The set is fixed for the life of the upstream
- * catalog, so the pairs are pinned here rather than discovered at runtime; the
- * coverage is locked by a test in `test/uscg-light-list-source.test.ts`, so a
- * future NAVCEN expansion is a deliberate table edit, not silent drift.
+ * pages of light-list records. The set is near-static but does drift with
+ * NAVCEN's publication cycle (District 8 contracted from eleven pages to ten
+ * in July 2026), so the pairs are pinned here rather than discovered at
+ * runtime; the coverage is locked by a test in
+ * `test/uscg-light-list-source.test.ts`, so tracking a NAVCEN expansion or
+ * contraction is a deliberate table edit, not silent drift. `refreshAll`
+ * prunes store pages that leave this table, so a retired page's records do
+ * not linger in the index.
  */
 export const DISTRICT_PAGES: ReadonlyArray<readonly [string, number]> = [
   ['D01', 1], ['D01', 2], ['D01', 3], ['D01', 4], ['D01', 5],
@@ -50,13 +54,18 @@ export const DISTRICT_PAGES: ReadonlyArray<readonly [string, number]> = [
   ['D07', 6], ['D07', 7], ['D07', 8], ['D07', 9], ['D07', 10],
   ['D07', 11], ['D07', 12], ['D07', 13], ['D07', 14], ['D07', 15],
   ['D08', 1], ['D08', 2], ['D08', 3], ['D08', 4], ['D08', 5],
-  ['D08', 6], ['D08', 7], ['D08', 8], ['D08', 9], ['D08', 10], ['D08', 11],
+  ['D08', 6], ['D08', 7], ['D08', 8], ['D08', 9], ['D08', 10],
   ['D09', 1], ['D09', 2], ['D09', 3], ['D09', 4], ['D09', 5],
   ['D11', 1], ['D11', 2],
   ['D13', 1], ['D13', 2], ['D13', 3],
   ['D14', 1],
   ['D17', 1], ['D17', 2]
 ]
+
+/** The pinned pairs as store keys, for pruning pages that leave the table. */
+const PINNED_KEYS: ReadonlySet<string> = new Set(
+  DISTRICT_PAGES.map(([district, page]) => `${district}_${page}`)
+)
 
 /** Dependencies for {@link createUscgLightListSource}. */
 export interface UscgLightListSourceConfig {
@@ -90,7 +99,7 @@ export interface UscgLightListSource extends PoiSource {
 /**
  * Concurrency cap for the parallel NAVCEN refresh: four in-flight conditional
  * GETs at once is well-mannered against a CDN-fronted static-file feed and
- * collapses the 62-page refresh into a few concurrent waves rather than one
+ * collapses the 61-page refresh into a few concurrent waves rather than one
  * long sequential walk.
  */
 const REFRESH_CONCURRENCY = 4
@@ -121,6 +130,11 @@ export function createUscgLightListSource (
   }
 
   async function refreshAll (signal?: AbortSignal): Promise<void> {
+    // Drop store pages that left the pinned table (a NAVCEN contraction), so
+    // a retired page's records stop serving. Runs before the US-waters gate:
+    // it is a local operation with no outbound HTTP, and stale aids should
+    // disappear regardless of where the vessel is.
+    store.pruneDistricts(PINNED_KEYS)
     if (shouldSkipOutsideUsWaters(getCurrentPosition, status, USCG_LIGHT_LIST_SOURCE_ID)) {
       return
     }

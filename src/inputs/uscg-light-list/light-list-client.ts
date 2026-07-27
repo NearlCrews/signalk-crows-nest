@@ -4,7 +4,7 @@
  * Issues GET requests against the NAVCEN MSI GeoJSON files and parses each
  * feature into a LightListRecord. Supports conditional GET via
  * If-Modified-Since and If-None-Match so a daily refresh tick that finds no
- * upstream change does no work. The 62 file URLs follow the pattern
+ * upstream change does no work. The 61 file URLs follow the pattern
  * `<baseUrl>/sites/default/files/msi/lightList{district}_{page}.geojson`.
  */
 

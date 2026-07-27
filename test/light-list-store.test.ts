@@ -318,3 +318,29 @@ test('load repairs same-size page and metadata disagreement', async () => {
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+test('pruneDistricts drops a retired page from memory, metadata, and disk', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'll-store-'))
+  try {
+    const store1 = createLightListStore(dir)
+    await store1.load()
+    store1.upsertDistrict('D01', 1, [sampleRecord(100)], {})
+    store1.upsertDistrict('D08', 11, [sampleRecord(900, 'D08')], {})
+    await store1.flush()
+    const retiredPage = join(dir, 'uscg-light-list', 'pages', 'D08_11.json')
+    assert.ok(existsSync(retiredPage), 'the page file exists before the prune')
+
+    store1.pruneDistricts(new Set(['D01_1']))
+    assert.equal(store1.snapshot().districts.D08_11, undefined)
+    assert.equal(store1.recordCount(), 1, 'the retired record leaves memory immediately')
+    await store1.flush()
+    assert.ok(!existsSync(retiredPage), 'the flush deletes the retired page file')
+
+    const store2 = createLightListStore(dir)
+    const reloaded = await store2.load()
+    assert.equal(reloaded.districts.D08_11, undefined)
+    assert.equal(store2.recordCount(), 1, 'the retired page does not resurrect on reload')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})

@@ -61,6 +61,7 @@ test('a refresh in flight when close() runs does not flush after stop', async ()
   const fakeStore: LightListStore = {
     load: async () => ({ generated: '', districts: {}, records: {} }),
     upsertDistrict: () => {},
+    pruneDistricts: () => {},
     flush: async () => { if (!closed) flushes += 1 },
     snapshot: () => ({ generated: '', districts: {}, records: {} }),
     recordCount: () => 0,
@@ -94,6 +95,7 @@ test('an aborted refresh cancels active downloads and stops dequeuing pages', as
   const store: LightListStore = {
     load: async () => ({ generated: '', districts: {}, records: {} }),
     upsertDistrict: () => {},
+    pruneDistricts: () => {},
     flush: async () => {},
     snapshot: () => ({ generated: '', districts: {}, records: {} }),
     recordCount: () => 0,
@@ -395,8 +397,9 @@ test('DISTRICT_PAGES matches the live NAVCEN per-district page coverage', () => 
   // files. Locking the exact coverage here guards against the table silently
   // drifting behind NAVCEN (which previously dropped whole pages of aids) or
   // overreaching past the last published page (which would log 404s).
+  // District 8 contracted from eleven pages to ten in July 2026.
   const expectedMaxPage: Record<string, number> = {
-    D01: 10, D02: 4, D05: 9, D07: 15, D08: 11, D09: 5, D11: 2, D13: 3, D14: 1, D17: 2
+    D01: 10, D02: 4, D05: 9, D07: 15, D08: 10, D09: 5, D11: 2, D13: 3, D14: 1, D17: 2
   }
 
   const expectedTotal = Object.values(expectedMaxPage).reduce((sum, max) => sum + max, 0)
@@ -418,5 +421,34 @@ test('DISTRICT_PAGES matches the live NAVCEN per-district page coverage', () => 
     const contiguous = Array.from({ length: max }, (_unused, index) => index + 1)
     assert.deepEqual(pages, contiguous,
       `district ${district} should pin pages 1..${max} with no gaps or duplicates`)
+  }
+})
+
+test('refreshAll prunes a store page that left the pinned table', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'll-prune-'))
+  try {
+    const store = createLightListStore(dir)
+    await store.load()
+    // Seed a record under a key the pinned table no longer carries (District 8
+    // published eleven pages until July 2026) plus one under a live key.
+    store.upsertDistrict('D08', 11, [sampleRecord({ llnr: 900, district: 'D08' })], {})
+    loadOne(store)
+    const { status } = createStubStatus()
+    const source = createUscgLightListSource({
+      client: fakeClient(),
+      store,
+      minimumYear: 0,
+      status,
+      getCurrentPosition: () => ({ latitude: 42, longitude: -71 })
+    })
+    await source.refreshAll()
+    assert.equal(store.snapshot().districts.D08_11, undefined,
+      'the retired page metadata is gone')
+    const llnrs = store
+      .queryBbox({ south: 41, west: -72, north: 43, east: -70 })
+      .map((record) => record.llnr)
+    assert.deepEqual(llnrs, [12345], 'the retired page record no longer serves')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
   }
 })
