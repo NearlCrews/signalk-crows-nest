@@ -510,14 +510,14 @@ self-contained module registered on one line in `src/index.ts`.
   compiler.
 - The React panel under `src/panel/` is bundled to `public/` by webpack as a
   Module Federation remote (`webpack.config.cjs`, `tsconfig.panel.json`),
-  transpiled by `babel-loader` with Babel 8. The React preset pins
-  `development: false`: Babel 8 otherwise reads the unset `NODE_ENV` as
-  development and emits `jsxDEV` calls that the bundled production
+  transpiled by `babel-loader` with Babel 7. The React preset pins
+  `development: false` so an unset `NODE_ENV` cannot select a development
+  transform and emit `jsxDEV` calls that the bundled production
   `react/jsx-dev-runtime` does not implement, which breaks the panel at first
   render. The `test/panel-babel-config.test.ts` contract test locks this in.
-- `signalk-nearlcrews-ui` 0.4.1 supplies the panel shell, theme system, and
-  shared controls. It is pinned exactly, and the host supplies the React 19
-  singleton without a bundled fallback.
+- `signalk-nearlcrews-ui` 0.6.1 supplies the panel shell, theme system, and
+  shared controls. It is pinned exactly, fresh profiles use Auto, and the host
+  supplies the React 19 singleton without a bundled fallback.
 - The test suite is type-checked separately (`tsconfig.test.json`); all three
   configs run under `npm run typecheck`.
 - ESLint 9 with [neostandard](https://github.com/neostandard/neostandard)
@@ -534,8 +534,10 @@ self-contained module registered on one line in `src/index.ts`.
 - `npm run build:panel` - bundle the React panel to `public/` with webpack.
 - `npm test` - run the test suite under `test/`.
 - `npm run typecheck` - type-check the plugin, the panel, and the tests without emitting.
-- `npm run lint` - lint with ESLint 9 + neostandard.
+- `npm run lint` - run code, Markdown, and spelling checks.
 - `npm run lint:fix` - lint and auto-fix.
+- `npm run verify` - run the complete local verification gate.
+- `npm run verify:release` - add cross-browser tests and the full audit.
 - `npm run clean` - remove `dist/` and the panel build artifacts.
 - `npm run prepack` - clean and rebuild before packaging or publishing (runs
   automatically on `npm pack` and `npm publish`).
@@ -545,4 +547,4 @@ self-contained module registered on one line in `src/index.ts`.
 - All new code is TypeScript under `src/`.
 - Keep modules focused and small. Shared types belong in `src/shared/types.ts`.
 - Do not edit `dist/` or `public/`; they are generated.
-- Run `npm run lint`, `npm run typecheck`, and `npm test` before committing.
+- Run `npm run verify` before committing.

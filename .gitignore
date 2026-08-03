@@ -5,6 +5,11 @@ node_modules/
 dist/
 public/
 
+# Verification output
+coverage/
+playwright-report/
+test-results/
+
 # Logs
 *.log
 npm-debug.log*

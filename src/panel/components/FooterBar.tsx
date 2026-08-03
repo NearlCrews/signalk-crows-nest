@@ -35,7 +35,7 @@ export default memo(function FooterBar ({ dirty, unconfigured, justSavedAt, onSa
   const saveDisabled = saveButtonDisabled(dirty, unconfigured)
   return (
     <ActionBar
-      sticky
+      sticky='bottom'
       status={
         <>
           <SaveStatus dirty={dirty} justSavedAt={justSavedAt} />

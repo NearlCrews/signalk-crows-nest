@@ -1,0 +1,10 @@
+assets/
+coverage/
+dist/
+docs/superpowers/
+node_modules/
+package-lock.json
+playwright-report/
+public/
+test-results/
+THIRD_PARTY_NOTICES.md

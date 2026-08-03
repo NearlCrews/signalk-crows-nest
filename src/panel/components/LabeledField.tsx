@@ -14,6 +14,8 @@ import type * as React from 'react'
 import { LabeledField as SharedLabeledField } from 'signalk-nearlcrews-ui'
 import type { LabeledFieldControlProps } from 'signalk-nearlcrews-ui'
 
+type NativeControlProps = Omit<LabeledFieldControlProps, 'descriptionId' | 'errorId'>
+
 interface Props {
   /** Visible field label. */
   label: string
@@ -22,7 +24,7 @@ interface Props {
   /** Use the shared compact field density used below an alarm toggle. */
   dense?: boolean
   /** Render the control, spreading the given props onto it. */
-  children: (controlProps: LabeledFieldControlProps) => React.ReactElement
+  children: (controlProps: NativeControlProps) => React.ReactElement
 }
 
 /** A labeled shared UI field whose control comes from the render prop. */
@@ -34,7 +36,8 @@ export default function LabeledField ({ label, hint, dense, children }: Props): 
       layout='inline'
       density={dense === true ? 'compact' : 'comfortable'}
     >
-      {children}
+      {({ descriptionId: _descriptionId, errorId: _errorId, ...controlProps }) =>
+        children(controlProps)}
     </SharedLabeledField>
   )
 }

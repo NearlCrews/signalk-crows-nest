@@ -51,9 +51,9 @@ The response is an object keyed by note id:
       "attribution": "© USCG (US Government public domain)",
       "plugin": "signalk-crows-nest",
       "pluginRepo": "https://github.com/NearlCrews/signalk-crows-nest",
-      "crowsNest": { "schemaVersion": 1, "type": "Navigational" }
-    }
-  }
+      "crowsNest": { "schemaVersion": 1, "type": "Navigational" },
+    },
+  },
   // ...more notes
 }
 ```
@@ -96,17 +96,41 @@ Returns the single note with its rendered HTML `description` and the normalized
       "schemaVersion": 1,
       "type": "Navigational",
       "sections": [
-        { "id": "light", "title": "Light", "items": [
-          { "label": "Character",     "value": "flashing, white, 4 s period", "kind": "text" },
-          { "label": "Nominal range", "value": 14, "kind": "measure", "unit": "NM" },
-          { "label": "Focal plane",   "value": 67, "kind": "measure", "unit": "ft" } ] },
-        { "id": "source", "title": "Source", "items": [
-          { "label": "LLNR",     "value": 40100, "kind": "text" },
-          { "label": "Volume",   "value": 1,     "kind": "text" },
-          { "label": "District", "value": "D01", "kind": "text" } ] }
-      ]
-    }
-  }
+        {
+          "id": "light",
+          "title": "Light",
+          "items": [
+            {
+              "label": "Character",
+              "value": "flashing, white, 4 s period",
+              "kind": "text",
+            },
+            {
+              "label": "Nominal range",
+              "value": 14,
+              "kind": "measure",
+              "unit": "NM",
+            },
+            {
+              "label": "Focal plane",
+              "value": 67,
+              "kind": "measure",
+              "unit": "ft",
+            },
+          ],
+        },
+        {
+          "id": "source",
+          "title": "Source",
+          "items": [
+            { "label": "LLNR", "value": 40100, "kind": "text" },
+            { "label": "Volume", "value": 1, "kind": "text" },
+            { "label": "District", "value": "D01", "kind": "text" },
+          ],
+        },
+      ],
+    },
+  },
 }
 ```
 
@@ -115,47 +139,58 @@ Returns the single note with its rendered HTML `description` and the normalized
 ```ts
 interface CrowsNest {
   /** Schema version. Currently 1. Fall back to the HTML on an unknown version. */
-  schemaVersion: number
+  schemaVersion: number;
   /** The POI type (see PoiType below). Present on both list and detail. */
-  type: PoiType
+  type: PoiType;
   /** Normalized detail. Present on detail responses; absent on list entries. */
-  sections?: NormalizedSection[]
+  sections?: NormalizedSection[];
 }
 
 interface NormalizedSection {
   /** Stable machine id, e.g. "light", "fuel", "remarks". */
-  id: string
+  id: string;
   /** Human-readable heading, e.g. "Light" or "Fuel". */
-  title: string
+  title: string;
   /** Items in this section. A section with no items is never emitted. */
-  items: NormalizedItem[]
+  items: NormalizedItem[];
 }
 
 interface NormalizedItem {
   /** Human-readable label, e.g. "Nominal range" or "Diesel". */
-  label: string
+  label: string;
   /** The value. For a "measure", the number is here and the unit in `unit`. */
-  value: string | number | boolean
+  value: string | number | boolean;
   /** Presentation hint; absent means render as text. */
-  kind?: NormalizedItemKind
+  kind?: NormalizedItemKind;
   /** Unit for a "measure" value, e.g. "NM", "ft", "m". */
-  unit?: string
+  unit?: string;
 }
 
 type NormalizedItemKind =
-  | 'text'         // a plain string
-  | 'measure'      // a number with a `unit` (e.g. 14 NM, 67 ft, 10 m)
-  | 'count'        // a whole-number tally (berths, reviews)
+  | 'text' // a plain string
+  | 'measure' // a number with a `unit` (e.g. 14 NM, 67 ft, 10 m)
+  | 'count' // a whole-number tally (berths, reviews)
   | 'availability' // a capability; value is "Yes" | "No" | "Nearby"
-  | 'flag'         // a boolean property (free vs paid, active vs inactive, dangerous vs not)
-  | 'rating'       // a 0-to-5 review score (number)
-  | 'link'         // a URL the client may render as an anchor
-  | 'note'         // free-text prose, possibly multi-line
+  | 'flag' // a boolean property (free vs paid, active vs inactive, dangerous vs not)
+  | 'rating' // a 0-to-5 review score (number)
+  | 'link' // a URL the client may render as an anchor
+  | 'note'; // free-text prose, possibly multi-line
 
 type PoiType =
-  | 'Marina' | 'Anchorage' | 'Hazard' | 'Business' | 'BoatRamp' | 'Bridge'
-  | 'Dam' | 'Ferry' | 'Inlet' | 'Lock' | 'LocalKnowledge' | 'Navigational'
-  | 'Airport' | 'Unknown'
+  | 'Marina'
+  | 'Anchorage'
+  | 'Hazard'
+  | 'Business'
+  | 'BoatRamp'
+  | 'Bridge'
+  | 'Dam'
+  | 'Ferry'
+  | 'Inlet'
+  | 'Lock'
+  | 'LocalKnowledge'
+  | 'Navigational'
+  | 'Airport'
+  | 'Unknown';
 ```
 
 The `sections` content mirrors exactly what the HTML `description` shows for
@@ -169,27 +204,41 @@ section/item shape is uniform, so you render one shape across all sources.
 
 ```ts
 function renderNoteDetail(note) {
-  const cn = note.properties?.crowsNest
+  const cn = note.properties?.crowsNest;
   if (cn && cn.schemaVersion === 1 && Array.isArray(cn.sections)) {
-    return renderSections(cn.sections)   // native rendering
+    return renderSections(cn.sections); // native rendering
   }
-  return renderHtml(note.description)    // fallback for any other client/version
+  return renderHtml(note.description); // fallback for any other client/version
 }
 
 function renderSections(sections) {
   for (const section of sections) {
-    heading(section.title)
+    heading(section.title);
     for (const item of section.items) {
       switch (item.kind) {
-        case 'measure':      line(item.label, `${item.value} ${item.unit ?? ''}`.trim()); break
-        case 'availability': badge(item.label, item.value /* "Yes" | "No" | "Nearby" */); break
-        case 'flag':         toggle(item.label, item.value === true); break
-        case 'rating':       stars(item.label, Number(item.value)); break
-        case 'link':         anchor(item.label, String(item.value)); break
-        case 'note':         prose(item.label, String(item.value)); break
+        case 'measure':
+          line(item.label, `${item.value} ${item.unit ?? ''}`.trim());
+          break;
+        case 'availability':
+          badge(item.label, item.value /* "Yes" | "No" | "Nearby" */);
+          break;
+        case 'flag':
+          toggle(item.label, item.value === true);
+          break;
+        case 'rating':
+          stars(item.label, Number(item.value));
+          break;
+        case 'link':
+          anchor(item.label, String(item.value));
+          break;
+        case 'note':
+          prose(item.label, String(item.value));
+          break;
         case 'count':
         case 'text':
-        default:             line(item.label, String(item.value)); break
+        default:
+          line(item.label, String(item.value));
+          break;
       }
     }
   }
@@ -209,7 +258,7 @@ Rendering notes:
   omits unknown or absent capabilities entirely rather than emitting `"Unknown"`.
 - `flag` value is a boolean. A safety-relevant flag leads its section: a NOAA ENC
   wreck or obstruction emits a `{ "label": "Dangerous", "value": true|false,
-  "kind": "flag" }` first item when it is classified dangerous or non-dangerous,
+"kind": "flag" }` first item when it is classified dangerous or non-dangerous,
   so a consumer can surface the danger status prominently.
 - The note's `name` is the popup title; do not repeat it inside the sections.
 - The attribution credit is `properties.attribution` (and `properties.sources`

@@ -13,7 +13,7 @@ name: SignalK Plugin CI
 on:
   push:
     branches: [main]
-    tags: ["v*"]
+    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -23,6 +23,6 @@ permissions:
 
 jobs:
   plugin-ci:
-    uses: SignalK/signalk-server/.github/workflows/plugin-ci.yml@master
+    uses: SignalK/signalk-server/.github/workflows/plugin-ci.yml@5d9639abc03bc3387d4b1469c8b0c7fda8aa7130
     with:
       build-command: npm run build

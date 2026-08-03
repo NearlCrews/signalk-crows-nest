@@ -5,6 +5,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 10
     groups:
       dev-dependencies:
@@ -18,7 +20,7 @@ updates:
           - minor
           - patch
     ignore:
-      - dependency-name: "*"
+      - dependency-name: '*'
         update-types:
           - version-update:semver-major
     labels:
@@ -30,11 +32,13 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       actions:
         patterns:
-          - "*"
+          - '*'
     labels:
       - dependencies
       - github-actions

@@ -11,6 +11,47 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+<a id="v0153"></a>
+
+## [0.15.3] - 2026-08-02
+
+This patch release updates the configuration panel to
+`signalk-nearlcrews-ui` 0.6.1, refreshes the compatible dependency set, fixes
+the upgraded field and theme contracts, and expands the release verification
+toolchain.
+
+### Added
+
+- Production-remote browser tests now cover Chromium, Firefox, WebKit, a
+  coarse-pointer mobile profile, accessibility, 320-pixel layouts, theme
+  selection, save behavior, and the unsupported-browser fallback.
+- Release verification now includes coverage, package contents, publint,
+  bundle size, spelling, Markdown, dead-code, runtime audit, full audit, and
+  pinned-workflow checks. A separate workflow runs actionlint and zizmor.
+- Check-mode formatting now covers documentation and configuration files with
+  Prettier, while ESLint and neostandard continue to format source code.
+
+### Changed
+
+- The panel now bundles `signalk-nearlcrews-ui` 0.6.1. Fresh profiles use
+  Auto so the panel follows the host or operating-system color scheme, while
+  explicit Light, Dark, and Night choices remain persistent.
+- Shared disclosures use `CollapsibleSection`, and the footer uses the current
+  explicit bottom-sticky action-bar contract.
+- Development dependencies are refreshed to their latest compatible versions.
+  TypeScript remains on 6.x for neostandard compatibility, and Babel remains
+  on 7.x so the supported Node 20 build lane stays valid.
+- Release publishing now hands the exact tarball that passed the full release
+  gate to the publish job instead of rebuilding a separate artifact.
+
+### Fixed
+
+- Shared field metadata is no longer spread onto native form controls. React
+  previously warned about an invalid `descriptionId` DOM property after the
+  shared UI upgrade.
+- The full development audit no longer reports the fixed
+  `brace-expansion` denial-of-service advisory.
+
 <a id="v0152"></a>
 
 ## [0.15.2] - 2026-07-27
@@ -847,7 +888,7 @@ resilience option, plus a full-codebase cleanup. All 733 tests pass.
 - A BoatRamp now obeys the minimum-rating filter, matching the fact that it
   already shows a star rating; the review-bearing set and the ratable set are
   now one source of truth.
-- A USCG aid with a colour but no light character no longer renders an empty
+- A USCG aid with a color but no light character no longer renders an empty
   "Light:" line.
 - The course reader's synchronous route-clear fast path now fires on a cleared
   active-route delta: it was testing the delta object instead of its value, so a
@@ -1703,7 +1744,7 @@ own health and settings.**
 - The duplicated test stubs (a stub SignalK app and a POI-summary builder)
   are lifted into `test/helpers.ts` and reused across the suite. New
   coverage was added for previously untested branches of the panel
-  reducer, the config normaliser, and the relative-time formatter.
+  reducer, the config normalizer, and the relative-time formatter.
 
 ### Fixed
 

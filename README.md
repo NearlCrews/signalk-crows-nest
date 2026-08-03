@@ -22,31 +22,21 @@ route-corridor, and bridge air-draft alarms.
 > safety-of-life navigation: always cross-check against official charts and
 > your primary instruments.
 
-## What's new in 0.15.2
+## What's new in 0.15.3
 
-- **Select all with one click.** The ActiveCaptain POI types and the
-  OpenSeaMap seamark groups now carry a tri-state select-all checkbox
-  (checked, partially selected, or unchecked) in place of the All and None
-  buttons. Clicking completes a partial selection and clears a full one.
-- **Gentler on failing upstreams.** A failed World Port Index download now
-  waits ten minutes before the next attempt, and every map-viewport source
-  waits a minute per failed chart tile, serving cached data in the meantime,
-  instead of retrying on every chart poll and flooding the status panel
-  during an outage. Layer identity is verified against NOAA and USACE
-  services so renumbered layers fail loudly instead of mislabeling features,
-  and the plugin status line now notes when sources are offline and cached
-  data is shown.
-- **Panel fixes.** After the first save of a never-configured plugin, the
-  Save button now disables and the setup hint no longer reappears. Discarding
-  edits clears a half-typed number even in Safari, and the Saved confirmation
-  is announced reliably by screen readers.
-- **Refreshed shared UI.** The panel ships `signalk-nearlcrews-ui` 0.4.1,
-  which brightens the Night theme's hover, border, and muted-text colors and
-  supplies the new checkbox indeterminate state.
-- **Hardened panel plumbing.** The panel type-check now actually covers the
-  panel sources, injected styles carry the host page's CSP nonce when one is
-  discoverable, and the build toolchain moves to Babel 8 with react and
-  webpack refreshed.
+- **Current shared panel UI.** The panel now ships
+  `signalk-nearlcrews-ui` 0.6.1 and follows its current disclosure, field,
+  action-bar, and theme contracts.
+- **Auto by default.** A fresh profile follows the host or operating-system
+  color scheme. Light, Dark, and red-preserving Night remain explicit,
+  persistent choices.
+- **Cleaner form controls.** Shared description and error metadata is kept
+  out of native input properties, eliminating a React console warning while
+  preserving the fields' accessible descriptions.
+- **Stronger release checks.** Coverage, cross-browser and accessibility
+  tests, package-content validation, size limits, documentation checks,
+  audits, dead-code reporting, and workflow security now run through the
+  documented verification commands.
 
 ## What it does
 
@@ -119,9 +109,9 @@ air-draft check).
   has not been confirmed in over two years.
 - **A React configuration panel** with a per-source status bar, an
   accordion of cards each with a live-status pill, an Alerts section, and
-  shared `signalk-nearlcrews-ui` controls and themes. Fresh profiles start in
-  Light mode, with Dark, red-preserving Night, and Auto available from the
-  theme toggle.
+  shared `signalk-nearlcrews-ui` controls and themes. Fresh profiles use Auto
+  to follow the host or operating-system color scheme, with Light, Dark, and
+  red-preserving Night available from the theme toggle.
 
 ## Screenshots
 
@@ -129,8 +119,8 @@ Points of interest from every source land on the chart as Signal K notes,
 each with a plain-English popup, and the whole plugin is configured from
 one panel.
 
-| ActiveCaptain hazard | USCG Light List aid | Configuration panel |
-| --- | --- | --- |
+| ActiveCaptain hazard                                                                                                                                                                                                               | USCG Light List aid                                                                                                                                                                                                 | Configuration panel                                                                                                                                                                     |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [![An ActiveCaptain hazard note open in Freeboard-SK, showing the rating, the review text, and a staleness warning](assets/screenshots/freeboard-activecaptain-hazard.png)](assets/screenshots/freeboard-activecaptain-hazard.png) | [![A USCG Light List buoy note open in Freeboard-SK, showing the light characteristic and the source citation](assets/screenshots/freeboard-uscg-light-list.png)](assets/screenshots/freeboard-uscg-light-list.png) | [![The light-themed Crow's Nest configuration panel, showing per-source live status and the data-source cards](assets/screenshots/admin-panel.png)](assets/screenshots/admin-panel.png) |
 
 ## Architecture
@@ -236,11 +226,11 @@ In the Signal K admin UI, open **Server, then Plugin Config**, find
 ActiveCaptain-only setup; opt in to the other sources from their cards.
 The panel has these areas:
 
-1. **Theme toggle** in the top corner: Light, Dark, a red-preserving Night
-   mode for night vision at the helm, or Auto. Light is the default for a
-   fresh profile, and an explicit choice persists across visits.
+1. **Theme toggle** in the top corner: Auto, Light, Dark, or a red-preserving
+   Night mode for night vision at the helm. Auto is the default for a fresh
+   profile, and an explicit choice persists across visits.
 2. **Per-source status bar**: `reachable`, `unreachable`, or `not yet
-   contacted` for each enabled source, the last successful upstream list-fetch
+contacted` for each enabled source, the last successful upstream list-fetch
    time, a "checked Ns ago" freshness note, and recent errors. A
    source-attributed error is clickable and opens the matching source card.
    Local cache and index reads do not count as proof that an upstream is
@@ -280,6 +270,7 @@ The panel has these areas:
    toggle (on by default) and its per-source merge radius. For every
    earliest-year filter, `0` means off; positive values below 1900 normalize
    to 1900.
+
 4. **Alerts section** (collapsed by default, opens automatically when an
    alarm is enabled): the proximity-alarm, route-corridor scan, and
    bridge air-draft check controls, each in its own fieldset with an
@@ -312,7 +303,9 @@ caches while retaining the on-disk data used for offline operation.
 
 This project targets Node 20.3 or newer and develops against
 `@signalk/server-api` 2.30.0 or newer, with TypeScript 6 and the exact shared
-UI package `signalk-nearlcrews-ui` 0.4.1 (development only).
+UI package `signalk-nearlcrews-ui` 0.6.1 (development only). The full local
+toolchain uses Node 22.22.2 or newer while the published plugin runtime keeps
+its Node 20.3 compatibility floor.
 
 ```bash
 git clone https://github.com/NearlCrews/signalk-crows-nest.git
@@ -321,12 +314,15 @@ npm install          # install dependencies
 npm run build        # compile the plugin and bundle the panel
 npm test             # node:test suite via tsx
 npm run typecheck    # type-check the plugin, the panel, and the tests
-npm run lint         # ESLint 9 with neostandard
+npm run lint         # code, Markdown, and spelling checks
 npm run lint:fix     # lint and auto-fix
+npm run verify       # full local verification without cross-browser tests
+npm run verify:release # full verification and the cross-browser matrix
 npm run clean        # remove dist/ and the panel build artifacts
 ```
 
-Run `npm run lint`, `npm run typecheck`, and `npm test` before committing.
+Run `npm run verify` before committing and `npm run verify:release` before a
+release.
 See the [development guide](docs/development.md) for the full workflow.
 
 ## License

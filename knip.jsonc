@@ -1,0 +1,29 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/panel/index.tsx",
+    "scripts/*.mjs",
+    "fixtures/browser/main.tsx",
+    "fixtures/browser/vite.config.ts",
+    "test/*.test.ts",
+    "tests/browser/*.spec.ts",
+  ],
+  "project": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "scripts/**/*.mjs",
+    "fixtures/**/*.ts",
+    "fixtures/**/*.tsx",
+    "test/**/*.ts",
+    "tests/**/*.ts",
+    "*.ts",
+    "*.js",
+    "*.cjs",
+  ],
+  "ignoreDependencies": [
+    "@microsoft/eslint-formatter-sarif",
+    "eslint-formatter-",
+  ],
+  "includeEntryExports": true,
+  "treatConfigHintsAsErrors": true,
+}

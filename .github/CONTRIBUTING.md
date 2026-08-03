@@ -29,8 +29,7 @@ serves, and any implementation ideas you have.
    test commands.
 3. Make focused commits with clear messages (see below).
 4. Add tests for any new functionality and keep the existing suite green.
-5. Run `npm run lint`, `npm run typecheck`, `npm test`, and `npm run build`
-   before pushing.
+5. Run `npm run verify` before pushing.
 6. Update documentation (`README.md`, `CHANGELOG.md`, `docs/`) as needed.
 7. Open a pull request with a clear description of the change.
 
@@ -40,8 +39,10 @@ serves, and any implementation ideas you have.
   `dist/` by `tsc`; the React panel under `src/panel/` is bundled to `public/`
   by webpack.
 - Keep modules focused and small. Shared types belong in `src/shared/types.ts`.
-- Lint with ESLint 9 and [neostandard](https://github.com/neostandard/neostandard)
-  (`npm run lint`, or `npm run lint:fix` to auto-fix).
+- Run code, Markdown, and spelling checks with `npm run lint`, or apply safe
+  code fixes with `npm run lint:fix`.
+- Run `npm run format:check` to verify source, documentation, and configuration
+  formatting. `npm run format` applies the corresponding fixes.
 - Do not edit `dist/` or `public/`; they are generated build output.
 - Default to no comments. Add one only when the WHY is non-obvious (a hidden
   constraint, a subtle invariant, or a workaround).

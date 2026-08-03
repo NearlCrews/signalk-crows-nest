@@ -1,9 +1,9 @@
 /**
  * Contract test for the panel's Babel JSX transform.
  *
- * The regression this locks out: Babel 8's preset-react defaults its
- * `development` option to the Babel env, which falls back to "development"
- * when NODE_ENV is unset, as it is during `npm run build:panel`. That emits
+ * The regression this locks out: preset-react can derive its `development`
+ * option from the Babel environment, which falls back to "development" when
+ * NODE_ENV is unset, as it is during `npm run build:panel`. That emits
  * `jsxDEV` imports from react/jsx-dev-runtime, the remote bundles React's
  * PRODUCTION copy of that module (only `react` itself is federation-shared),
  * and production React deliberately leaves `jsxDEV` unimplemented, so the

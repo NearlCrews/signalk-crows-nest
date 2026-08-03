@@ -33,14 +33,11 @@ module.exports = {
         exclude: /node_modules/,
         options: {
           presets: [
-            // Babel 8 removed isTSX/allExtensions; JSX parsing now keys off
-            // the .tsx extension, which matches this rule's file set.
+            // JSX parsing keys off the .tsx extension, which matches this
+            // rule's file set without applying TypeScript JSX parsing to .ts.
             '@babel/preset-typescript',
-            // development must stay pinned false: Babel 8 defaults it to the
-            // Babel env, which reads "development" whenever NODE_ENV is unset
-            // (as in this build), emitting jsxDEV calls that the bundled
-            // production react/jsx-dev-runtime does not implement, so the
-            // panel would throw at first render.
+            // Keep development false even when NODE_ENV is unset so the
+            // production build never emits jsxDEV calls.
             ['@babel/preset-react', { runtime: 'automatic', development: false }]
           ]
         }

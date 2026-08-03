@@ -101,7 +101,7 @@ Each source card condenses that state into one of four pills:
 - `✓ ok`: the last upstream list request succeeded.
 - `… idle`: the source is awaiting its first request or deliberately skipped
   one. The visible label includes a reason when known, such as `outside US
-  waters`.
+waters`.
 - `… waiting`: the source exceeded the aggregate's five-second response window,
   but its request is still filling the viewport cache. Refresh the chart to use
   the result after it finishes.

@@ -36,20 +36,23 @@ Accept: application/json
 
 Request body:
 
-| Field       | Type    | Required | Notes |
-|-------------|---------|----------|-------|
-| `north`     | number  | yes      | Latitude of the north edge (decimal degrees) |
-| `south`     | number  | yes      | Latitude of the south edge |
-| `east`      | number  | yes      | Longitude of the east edge |
-| `west`      | number  | yes      | Longitude of the west edge |
-| `zoomLevel` | integer | yes      | Map zoom level. The plugin uses `17`. Lower zoom clusters nearby POIs (see `poiCount`); higher zoom returns individual POIs. |
+| Field       | Type    | Required | Notes                                                                                                                                      |
+| ----------- | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `north`     | number  | yes      | Latitude of the north edge (decimal degrees)                                                                                               |
+| `south`     | number  | yes      | Latitude of the south edge                                                                                                                 |
+| `east`      | number  | yes      | Longitude of the east edge                                                                                                                 |
+| `west`      | number  | yes      | Longitude of the west edge                                                                                                                 |
+| `zoomLevel` | integer | yes      | Map zoom level. The plugin uses `17`. Lower zoom clusters nearby POIs (see `poiCount`); higher zoom returns individual POIs.               |
 | `poiTypes`  | string  | no       | Comma-separated list of POI types to include. If omitted, all types are returned (confirmed: a body with no `poiTypes` still returns 200). |
 
 Example:
 
 ```json
 {
-  "north": 38.99, "west": -76.52, "south": 38.95, "east": -76.46,
+  "north": 38.99,
+  "west": -76.52,
+  "south": 38.95,
+  "east": -76.46,
   "zoomLevel": 17,
   "poiTypes": "Marina,Anchorage,Hazard,Business,BoatRamp,Bridge,Dam,Ferry,Inlet,Lock"
 }
@@ -97,21 +100,21 @@ Returns the full detail record for one POI. A non-existent id returns **HTTP 404
 The response is an object whose keys are **optional sections**. Only sections that
 have data for that POI are present. Observed sections:
 
-| Section          | Present for | Contents |
-|------------------|-------------|----------|
-| `pointOfInterest`| always      | `id` (number here), `name`, `poiType`, `mapLocation`, `dateLastModified`, optional `notes[]` |
-| `contact`        | most        | address fields, `phone`, `email`, `website`, `vhfChannel`, `afterHourContact` |
-| `reviewSummary`  | most        | `averageRating`, `numberOfReviews` |
-| `featuredReview` | some        | `createdBy`, `rating`, `title`, `text`, `dateVisited`, `votes`, `photos[]`, `status` |
-| `dockage`        | marinas     | berth counts (`total`, `transient`), `price`, `pricingOption`, `currency`, AC power options (`acPower30`, `acPower50`, ...), dock types, `loaMax`, `beamMax`, `liveaboard`, `secureAccess`, `securityPatrol`, `isFree`, `notes[]` |
-| `fuel`           | marinas     | `diesel`, `gas`, `ethanolFree`, `propane`, `electric`, `depthFuel`, `currency`, `volumeUnits`, `notes[]` |
-| `amenity`        | marinas     | `bar`, `boatRamp`, `cellReception`, `courtesyCar`, `laundry`, `lodging`, `pets`, `restaurant`, `restroom`, `shower`, `transportation`, `trash`, `water`, `wifi`, `notes[]` |
-| `business`       | marinas/biz | `cash`, `check`, `credit`, `public`, `seasonal`, `notes[]` |
-| `businessProgram`| sponsored   | `programTier`, `callToActionEnabled`, `competitorAdEnabled`, `communityEditsEnabled` |
-| `retail`         | marinas/biz | `fishingSupplies`, `grocery`, `hardware`, `ice`, `marineRetail`, `notes[]` |
-| `services`       | marinas     | repair/haul-out/storage/charter flags, `pumpOut`, `notes[]` (large boolean-ish set) |
-| `mooring`        | marinas     | `dinghy`, `launch`, `total`, `transient`, `isFree`, `hasMoorings`, `notes[]` |
-| `navigation`     | marinas     | `current`, `tide`, `depthApproach`, `fixedBridge`, `notes[]` |
+| Section           | Present for | Contents                                                                                                                                                                                                                          |
+| ----------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pointOfInterest` | always      | `id` (number here), `name`, `poiType`, `mapLocation`, `dateLastModified`, optional `notes[]`                                                                                                                                      |
+| `contact`         | most        | address fields, `phone`, `email`, `website`, `vhfChannel`, `afterHourContact`                                                                                                                                                     |
+| `reviewSummary`   | most        | `averageRating`, `numberOfReviews`                                                                                                                                                                                                |
+| `featuredReview`  | some        | `createdBy`, `rating`, `title`, `text`, `dateVisited`, `votes`, `photos[]`, `status`                                                                                                                                              |
+| `dockage`         | marinas     | berth counts (`total`, `transient`), `price`, `pricingOption`, `currency`, AC power options (`acPower30`, `acPower50`, ...), dock types, `loaMax`, `beamMax`, `liveaboard`, `secureAccess`, `securityPatrol`, `isFree`, `notes[]` |
+| `fuel`            | marinas     | `diesel`, `gas`, `ethanolFree`, `propane`, `electric`, `depthFuel`, `currency`, `volumeUnits`, `notes[]`                                                                                                                          |
+| `amenity`         | marinas     | `bar`, `boatRamp`, `cellReception`, `courtesyCar`, `laundry`, `lodging`, `pets`, `restaurant`, `restroom`, `shower`, `transportation`, `trash`, `water`, `wifi`, `notes[]`                                                        |
+| `business`        | marinas/biz | `cash`, `check`, `credit`, `public`, `seasonal`, `notes[]`                                                                                                                                                                        |
+| `businessProgram` | sponsored   | `programTier`, `callToActionEnabled`, `competitorAdEnabled`, `communityEditsEnabled`                                                                                                                                              |
+| `retail`          | marinas/biz | `fishingSupplies`, `grocery`, `hardware`, `ice`, `marineRetail`, `notes[]`                                                                                                                                                        |
+| `services`        | marinas     | repair/haul-out/storage/charter flags, `pumpOut`, `notes[]` (large boolean-ish set)                                                                                                                                               |
+| `mooring`         | marinas     | `dinghy`, `launch`, `total`, `transient`, `isFree`, `hasMoorings`, `notes[]`                                                                                                                                                      |
+| `navigation`      | marinas     | `current`, `tide`, `depthApproach`, `fixedBridge`, `notes[]`                                                                                                                                                                      |
 
 Conventions inside sections:
 
@@ -258,16 +261,16 @@ not a license to hammer the service.
 
 Treat the plugin as a good citizen. Concrete values for the API client:
 
-| Setting | Recommended value |
-|---------|-------------------|
-| Max concurrency (in-flight requests) | **5** (hard ceiling 6) |
-| Steady-state request rate | **~5 requests/second**, token-bucket limited, short bursts up to the concurrency cap |
-| Per-request timeout | 10 s connect + read (responses normally land well under 0.5 s) |
-| Retry on | `429`, `502`, `503`, `504`, and network errors only |
-| Do not retry on | other `4xx` (notably `404` = POI does not exist, permanent) |
-| Backoff | exponential with full jitter: base 1 s, factor 2, cap 30 s, max 4 retries |
-| `Retry-After` | if present on a `429`/`503`, honor it instead of the computed backoff, but cap the wait at the maximum backoff (30 s) so a huge header value cannot stall a request indefinitely |
-| User-Agent | keep the shared `PLUGIN_USER_AGENT` (`signalk-crows-nest (+https://github.com/NearlCrews/signalk-crows-nest)`) |
+| Setting                              | Recommended value                                                                                                                                                                |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Max concurrency (in-flight requests) | **5** (hard ceiling 6)                                                                                                                                                           |
+| Steady-state request rate            | **~5 requests/second**, token-bucket limited, short bursts up to the concurrency cap                                                                                             |
+| Per-request timeout                  | 10 s connect + read (responses normally land well under 0.5 s)                                                                                                                   |
+| Retry on                             | `429`, `502`, `503`, `504`, and network errors only                                                                                                                              |
+| Do not retry on                      | other `4xx` (notably `404` = POI does not exist, permanent)                                                                                                                      |
+| Backoff                              | exponential with full jitter: base 1 s, factor 2, cap 30 s, max 4 retries                                                                                                        |
+| `Retry-After`                        | if present on a `429`/`503`, honor it instead of the computed backoff, but cap the wait at the maximum backoff (30 s) so a huge header value cannot stall a request indefinitely |
+| User-Agent                           | keep the shared `PLUGIN_USER_AGENT` (`signalk-crows-nest (+https://github.com/NearlCrews/signalk-crows-nest)`)                                                                   |
 
 The single most effective limiter is **caching**, which the plugin already does:
 summaries are cached (default 60 minutes via `cachingDurationMinutes`). Keep

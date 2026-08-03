@@ -67,11 +67,7 @@ export default function PluginConfigurationPanel (props: Props): React.ReactElem
   const nonce = discoverStyleNonce(window.document)
 
   return (
-    <PanelRoot
-      className='ac-config-panel'
-      legacyThemeStorageKeys={['ac-theme']}
-      styleNonce={nonce}
-    >
+    <PanelRoot className='ac-config-panel' styleNonce={nonce}>
       <style nonce={nonce}>{THEME_STYLE}</style>
       <ErrorBoundary>
         <SupportedPluginConfigurationPanel {...props} />

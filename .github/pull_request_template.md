@@ -15,10 +15,8 @@
 
 ## Verification
 
-- [ ] `npm test` passes
-- [ ] `npm run typecheck` passes
-- [ ] `npm run lint` passes
-- [ ] `npm run build` passes
+- [ ] `npm run verify` passes
+- [ ] Browser-facing changes pass `npm run test:browser`
 
 ## Data sources, POI types, and resources affected
 

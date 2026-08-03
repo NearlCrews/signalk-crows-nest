@@ -3,8 +3,9 @@
 ## Prerequisites
 
 - Node.js 20.3 or newer
-- TypeScript 6+ (installed as a dev dependency)
-- npm
+- Node.js 22.22.2 or newer for the complete development toolchain
+- TypeScript 6 (installed as a dev dependency)
+- npm 10.9.3 or newer; `packageManager` pins npm 11.18.0 for repository commands
 
 ## Setup
 
@@ -25,6 +26,14 @@ npm test              # Run the test suite under test/
 npm run typecheck     # Type-check the plugin, panel, and tests (no emit)
 npm run lint          # Lint with ESLint 9 and neostandard
 npm run lint:fix      # Lint and auto-fix
+npm run format        # Format source, documentation, and configuration files
+npm run format:check  # Check formatting without writing files
+npm run test:coverage # Run unit tests with coverage reporting
+npm run test:browser  # Build and test the panel in Chromium
+npm run deadcode      # Report high-signal Knip findings
+npm run package:check # Validate package metadata and packed contents
+npm run verify        # Run the complete local verification gate
+npm run verify:release # Add the full browser matrix and full dependency audit
 npm run clean         # Remove dist/ and the panel build artifacts
 ```
 
@@ -64,13 +73,13 @@ across restarts.
 The plugin ships its own configuration panel: a federated React app, loaded by
 the Signal K admin UI through Module Federation, that replaces the generated
 settings form with a live status section and grouped POI-type toggles. The
-panel uses the exact `signalk-nearlcrews-ui` 0.4.1 package for its shell,
-themes, and shared controls, while the Signal K host supplies React. The
-panel build transpiles with Babel 8, whose React preset must keep
+panel uses the exact `signalk-nearlcrews-ui` 0.6.1 package for its shell,
+themes, and shared controls, while the Signal K host supplies React. Fresh
+profiles use Auto and follow the host or operating-system color scheme. The
+panel build transpiles with Babel 7, whose React preset keeps
 `development: false` pinned (see the comment in `webpack.config.cjs` and the
-`test/panel-babel-config.test.ts` contract test): the default would emit
-development-runtime JSX that the bundled production React does not implement.
-
+`test/panel-babel-config.test.ts` contract test): a development transform would
+emit runtime JSX that the bundled production React does not implement.
 
 ## Project structure
 
@@ -224,8 +233,10 @@ per module, named for the module it covers (for example,
 (`tsconfig.json`, which excludes `test/` and `src/panel/`), the React panel
 (`tsconfig.panel.json`), and the test suite (`tsconfig.test.json`).
 
-Run `npm run lint`, `npm run typecheck`, `npm test`, and `npm run build` before
-committing.
+Run `npm run verify` before committing. It combines code and documentation
+checks, type checking, coverage, builds, size limits, package validation, and
+the runtime audit. Run `npm run verify:release` before a release to add the
+full browser matrix and development-dependency audit.
 
 ## Adding functionality
 

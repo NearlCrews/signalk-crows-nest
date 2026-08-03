@@ -7,12 +7,12 @@ Maintainer reference for cutting a release of `signalk-crows-nest`.
 Publishing is driven by GitHub Releases. The `Node.js Package` workflow
 (`.github/workflows/npm-publish.yml`) fires on the `release: created` event. It
 runs in two jobs. The first verifies that the release tag matches the
-`package.json` version, then installs dependencies and runs `build`,
-`typecheck`, `test`, and `lint`. The second reinstalls and runs
-`npm publish --provenance` (the job grants the `id-token: write` and
-`contents: read` permissions provenance requires). The `prepack` script
-cleans and rebuilds `dist/` and `public/` before the package is published, so
-the npm tarball always reflects a fresh build.
+`package.json` version, installs the browser engines, runs
+`npm run verify:release`, and packs the verified package. The second downloads
+that exact tarball and publishes it with provenance. This handoff ensures the
+registry artifact is the one that passed the complete release gate. The
+publish job grants the `id-token: write` and `contents: read` permissions
+provenance requires.
 
 The workflow reads the `NPM_TOKEN` repository secret (an npm Automation
 token, or a Granular token with publish and read access to this package).
@@ -46,20 +46,17 @@ Before creating the GitHub release:
    directly above the heading (digits only, no dots: `0.5.0` -> `v050`). Group
    the changes under `### Added`, `### Changed`, `### Fixed`, and the other Keep
    a Changelog subsections.
-3. Run the full local check, and confirm each command passes:
+3. Run the full local release check:
+
    ```bash
-   npm run lint
-   npm run typecheck
-   npm test
-   npm run build
-   npm audit --omit=dev
-   npm pack --dry-run --json
+   npm run verify:release
    ```
-   Inspect the dry-run manifest, not only its exit code. Confirm the package
-   version, `dist/`, the panel under `public/`, icons, every declared
-   screenshot, `CHANGELOG.md`, `README.md`, `LICENSE`, and
-   `THIRD_PARTY_NOTICES.md`; confirm source and tests are absent. The runtime
-   audit must report no known vulnerabilities.
+
+   This gate includes code and documentation checks, type checking, coverage,
+   production builds, the cross-browser panel matrix, accessibility checks,
+   size limits, packed-package validation, and both dependency audits. Inspect
+   the package-check output, not only its exit code.
+
 4. Update `README.md`, `CHANGELOG.md`, and the `docs/` tree if the release
    changes documented behavior, commands, or configuration options.
 5. Review the package metadata and plugin-registry inputs: description,
@@ -85,7 +82,7 @@ Before creating the GitHub release:
 ## Supported Node.js versions
 
 CI (`.github/workflows/ci.yml`) builds, type-checks, tests, and lints on
-Node.js 20 and 22. The official Signal K plugin CI
+Node.js 20 for runtime compatibility and runs the full gate on Node.js 22. The official Signal K plugin CI
 (`.github/workflows/plugin-ci.yml`) also exercises Node.js 22 and 24 across
 Linux, macOS, and Windows, plus its Node.js 20 armv7 lane. The publish workflow
 runs on Node.js 22. The `engines` field in `package.json` is `>=20.3.0` (the
