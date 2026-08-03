@@ -49,6 +49,8 @@ toolchain.
 - Shared field metadata is no longer spread onto native form controls. React
   previously warned about an invalid `descriptionId` DOM property after the
   shared UI upgrade.
+- Corrected the immutable upload and download action pins used by the npm
+  publication workflow.
 - The full development audit no longer reports the fixed
   `brace-expansion` denial-of-service advisory.
 

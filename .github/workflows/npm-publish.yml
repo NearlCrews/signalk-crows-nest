@@ -41,7 +41,7 @@ jobs:
       - name: Pack the verified package
         run: npm pack --json --ignore-scripts
       - name: Upload the verified package
-        uses: actions/upload-artifact@043fb46e6fdd29d98e28f50e4e1eafdd665896dc # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: npm-package
           path: signalk-crows-nest-*.tgz
@@ -61,7 +61,7 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org/
           package-manager-cache: false
-      - uses: actions/download-artifact@3e5f45bce8c1d61861729d9749c869f45c2338d2 # v8.0.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: npm-package
           path: artifacts
