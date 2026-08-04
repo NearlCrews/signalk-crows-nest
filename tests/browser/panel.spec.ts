@@ -15,7 +15,7 @@ test.beforeEach(async ({ page }) => {
 
 test('loads the production remote with the current shared UI and saves defaults', async ({ page }) => {
   const root = page.locator('[data-snui-root]')
-  await expect(root).toHaveAttribute('data-snui-version', '0.6.1')
+  await expect(root).toHaveAttribute('data-snui-version', '0.6.2')
   await expect(root).not.toHaveAttribute('data-snui-theme')
   await expect(page.getByRole('radio', { name: 'Auto' })).toBeChecked()
 

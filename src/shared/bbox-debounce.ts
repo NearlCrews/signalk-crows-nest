@@ -102,10 +102,10 @@ export interface BboxDebounceCache<T> {
 }
 
 /** Whether this read observed an upstream result or reused local memory. */
-export type BboxDebounceProvenance = 'fresh' | 'local'
+type BboxDebounceProvenance = 'fresh' | 'local'
 
 /** One cache read with the provenance needed for honest source status. */
-export interface BboxDebounceRead<T> {
+interface BboxDebounceRead<T> {
   value: T
   provenance: BboxDebounceProvenance
 }

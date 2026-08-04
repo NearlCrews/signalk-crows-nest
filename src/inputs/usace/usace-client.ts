@@ -62,14 +62,14 @@ export interface UsaceClient {
   queryById: (request: QueryByIdRequest) => Promise<UsaceFeature | undefined>
 }
 
-export interface QueryRequest {
+interface QueryRequest {
   layerKey: UsaceLayerKey
   bbox: Bbox
   /** Optional deadline signal; cancels the in-flight request and stops paging. */
   signal?: AbortSignal
 }
 
-export interface QueryByIdRequest {
+interface QueryByIdRequest {
   layerKey: UsaceLayerKey
   objectId: number
   /** Optional deadline signal; cancels the in-flight request. */

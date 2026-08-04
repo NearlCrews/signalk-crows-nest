@@ -39,6 +39,7 @@ import { PLUGIN_ID, PLUGIN_REPO_URL } from '../../shared/plugin-id.js'
 import { NORMALIZED_DETAIL_SCHEMA_VERSION } from '../../shared/normalized-detail.js'
 import type { NormalizedSection } from '../../shared/normalized-detail.js'
 import type { PoiType, Position } from '../../shared/types.js'
+import { safeLinkUrl } from '../../shared/url-safety.js'
 
 /** Inputs for {@link buildNoteResource}. */
 export interface NoteResourceInput {
@@ -137,9 +138,8 @@ export function buildNoteResource (input: NoteResourceInput): Record<string, unk
   // `url: ""`, and a chartplotter rendering a "more info" link from it lands
   // nowhere. Every current source supplies a real URL, so this only matters
   // defensively. `url` is optional on the SignalK `Note` interface.
-  if (url.length > 0) {
-    note.url = url
-  }
+  const safeUrl = safeLinkUrl(url)
+  if (safeUrl !== undefined) note.url = safeUrl
   if (timestamp !== undefined) {
     note.timestamp = timestamp
   }

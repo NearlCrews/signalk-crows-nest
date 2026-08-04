@@ -37,7 +37,7 @@ const OFF_SENTINEL_YEAR = 0
  * below this floor are not useful as practical freshness thresholds, so they
  * are raised to the floor.
  */
-export const YEAR_VALIDATION_FLOOR = 1900
+const YEAR_VALIDATION_FLOOR = 1900
 
 /** Lower bound on every minimum-year filter. */
 export const MIN_YEAR = YEAR_VALIDATION_FLOOR

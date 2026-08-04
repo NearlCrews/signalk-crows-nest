@@ -12,6 +12,7 @@
 import type { Logger } from '../shared/types.js'
 import { parseRetryAfterMs } from '../shared/retry-after.js'
 import { combineAbortSignals } from '../shared/abort.js'
+import { DEFAULT_MAX_RESPONSE_BYTES } from './http-one-shot.js'
 
 /** Tunable rate-limit knobs. All optional at the call site; defaults fill gaps. */
 export interface RateLimitOptions {
@@ -227,6 +228,8 @@ export interface HttpClientConfig {
    * before the request fails.
    */
   requestTimeoutMs: number
+  /** Maximum response body size accepted from this upstream. */
+  maxResponseBytes?: number
   /** Default rate-limit knobs; per-call options override individual fields. */
   defaults: RateLimitOptions
 }
@@ -256,6 +259,68 @@ export interface HttpClient {
  */
 export type Sleep = (ms: number, signal?: AbortSignal) => Promise<void>
 
+class ResponseTooLargeError extends Error {
+  constructor (label: string, url: string, maxResponseBytes: number) {
+    super(`${label} response exceeds ${maxResponseBytes} bytes: ${url}`)
+    this.name = 'ResponseTooLargeError'
+  }
+}
+
+/**
+ * Wrap a fetch response in a byte-counting stream. This preserves streaming
+ * JSON parsing while ensuring a missing or dishonest Content-Length cannot
+ * make the caller buffer an unbounded body.
+ */
+function capResponseBody (
+  response: Response,
+  label: string,
+  url: string,
+  maxResponseBytes: number
+): Response {
+  const declaredLength = response.headers.get('content-length')
+  if (
+    declaredLength !== null &&
+    Number.isFinite(Number(declaredLength)) &&
+    Number(declaredLength) > maxResponseBytes
+  ) {
+    response.body?.cancel().catch(() => {})
+    throw new ResponseTooLargeError(label, url, maxResponseBytes)
+  }
+
+  if (response.body === null) return response
+
+  const reader = response.body.getReader()
+  let receivedBytes = 0
+  const body = new ReadableStream<Uint8Array>({
+    async pull (controller) {
+      try {
+        const { done, value } = await reader.read()
+        if (done) {
+          controller.close()
+          return
+        }
+        receivedBytes += value.byteLength
+        if (receivedBytes > maxResponseBytes) {
+          const error = new ResponseTooLargeError(label, url, maxResponseBytes)
+          await reader.cancel(error)
+          controller.error(error)
+          return
+        }
+        controller.enqueue(value)
+      } catch (error) {
+        controller.error(error)
+      }
+    },
+    cancel: (reason) => reader.cancel(reason)
+  })
+
+  return new Response(body, {
+    headers: response.headers,
+    status: response.status,
+    statusText: response.statusText
+  })
+}
+
 /**
  * Build a rate-limited HTTP client.
  *
@@ -274,6 +339,10 @@ export function createHttpClient (
   options: Partial<RateLimitOptions> = {},
   sleep: Sleep = delay
 ): HttpClient {
+  const maxResponseBytes = config.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES
+  if (!Number.isSafeInteger(maxResponseBytes) || maxResponseBytes <= 0) {
+    throw new RangeError('maxResponseBytes must be a positive safe integer')
+  }
   const limits: RateLimitOptions = {
     maxConcurrency: options.maxConcurrency ?? config.defaults.maxConcurrency,
     minDelayMs: options.minDelayMs ?? config.defaults.minDelayMs,
@@ -334,7 +403,7 @@ export function createHttpClient (
         })
 
         if (!RETRYABLE_STATUSES.has(response.status) || attempt >= limits.maxRetries) {
-          return response
+          return capResponseBody(response, config.label, url, maxResponseBytes)
         }
 
         const honorsRetryAfter =
@@ -367,6 +436,7 @@ export function createHttpClient (
         // the whole retry budget with backoff first), or past the configured
         // limit.
         if (
+          error instanceof ResponseTooLargeError ||
           closeController.signal.aborted ||
           init.signal?.aborted === true ||
           attempt >= limits.maxRetries

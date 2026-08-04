@@ -40,7 +40,7 @@ import type { Bbox, Logger, Position } from '../../shared/types.js'
 export type { RateLimitOptions } from '../http-client.js'
 
 /** OSM element types the Overpass API addresses. */
-export type OsmElementType = 'node' | 'way' | 'relation'
+type OsmElementType = 'node' | 'way' | 'relation'
 
 /**
  * One Overpass element, normalized for the OpenSeaMap source. The Overpass

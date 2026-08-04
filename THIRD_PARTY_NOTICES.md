@@ -3,7 +3,7 @@
 The published configuration panel bundle contains code from the following
 packages:
 
-- `signalk-nearlcrews-ui` 0.6.1, Apache License 2.0, Nearl Crews
+- `signalk-nearlcrews-ui` 0.6.2, Apache License 2.0, Nearl Crews
 - `react` 19.2.8, MIT License, Copyright (c) Meta Platforms, Inc. and affiliates
 
 ## React MIT License

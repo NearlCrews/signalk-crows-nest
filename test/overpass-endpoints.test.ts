@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import {
   DEFAULT_OVERPASS_ENDPOINT,
   RECOMMENDED_OVERPASS_FALLBACK_ENDPOINTS,
-  normalizeFallbackEndpoints
+  normalizeFallbackEndpoints,
+  resolvePrimaryEndpoint
 } from '../src/shared/overpass-endpoints.js'
 
 test('the default endpoint is the FOSSGIS main instance', () => {
@@ -30,4 +31,23 @@ test('normalizeFallbackEndpoints returns an empty list for a non-array value', (
   assert.deepEqual(normalizeFallbackEndpoints(undefined), [])
   assert.deepEqual(normalizeFallbackEndpoints('https://a.test/api'), [])
   assert.deepEqual(normalizeFallbackEndpoints(null), [])
+})
+
+test('Overpass endpoint normalization accepts only absolute HTTP and HTTPS URLs', () => {
+  assert.equal(resolvePrimaryEndpoint(' http://localhost:8080/api '), 'http://localhost:8080/api')
+  assert.equal(resolvePrimaryEndpoint('https://10.0.0.2/api'), 'https://10.0.0.2/api')
+  for (const endpoint of ['file:///tmp/query', 'data:text/plain,query', 'relative/api', 'https://user:secret@example.test/api']) {
+    assert.equal(resolvePrimaryEndpoint(endpoint), DEFAULT_OVERPASS_ENDPOINT, endpoint)
+  }
+
+  assert.deepEqual(
+    normalizeFallbackEndpoints([
+      'https://mirror.example.test/api',
+      'file:///tmp/query',
+      'relative/api',
+      'http://localhost:8080/api',
+      'https://mirror.example.test/api'
+    ]),
+    ['https://mirror.example.test/api', 'http://localhost:8080/api']
+  )
 })

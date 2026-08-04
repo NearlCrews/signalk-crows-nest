@@ -22,21 +22,17 @@ route-corridor, and bridge air-draft alarms.
 > safety-of-life navigation: always cross-check against official charts and
 > your primary instruments.
 
-## What's new in 0.15.3
+## What's new in 0.15.4
 
-- **Current shared panel UI.** The panel now ships
-  `signalk-nearlcrews-ui` 0.6.1 and follows its current disclosure, field,
-  action-bar, and theme contracts.
-- **Auto by default.** A fresh profile follows the host or operating-system
-  color scheme. Light, Dark, and red-preserving Night remain explicit,
-  persistent choices.
-- **Cleaner form controls.** Shared description and error metadata is kept
-  out of native input properties, eliminating a React console warning while
-  preserving the fields' accessible descriptions.
-- **Stronger release checks.** Coverage, cross-browser and accessibility
-  tests, package-content validation, size limits, documentation checks,
-  audits, dead-code reporting, and workflow security now run through the
-  documented verification commands.
+- **Bounded upstream responses.** Queued ActiveCaptain and Overpass responses
+  now enforce the same 64 MiB limit as one-shot downloads, including streamed
+  bodies without a trustworthy `Content-Length`.
+- **Safer configured endpoints and note links.** Overpass configuration accepts
+  only absolute HTTP(S) URLs, and note resources omit unsafe link schemes.
+- **Current shared panel UI.** The panel now bundles
+  `signalk-nearlcrews-ui` 0.6.2.
+- **Enforced quality floors.** Coverage thresholds and complete Knip reporting
+  now fail the gate on regressions.
 
 ## What it does
 
@@ -88,7 +84,7 @@ air-draft check).
 - **A normalized detail schema for structured clients**: every note also
   carries a presentation-neutral `properties.crowsNest` view of the same
   detail alongside the HTML, documented in the
-  [notes-resource integration guide](docs/notes-resource-format.md), so a
+  [notes-resource integration guide](https://github.com/NearlCrews/signalk-crows-nest/blob/main/docs/notes-resource-format.md), so a
   richer chartplotter can render the sections natively and skip the HTML.
 - **Persistent, offline caching.** ActiveCaptain details and OpenSeaMap, NOAA
   ENC, and USACE features live in 30-day on-disk stores. OpenSeaMap, NOAA ENC,
@@ -149,7 +145,7 @@ Crow's Nest is one plugin built from focused modules:
   US-only feeds when the vessel is elsewhere.
 - **Tested on `node:test`** via `tsx`, with ESLint 9 and neostandard.
 
-See the [architecture notes](CLAUDE.md) for the full module map.
+See `CLAUDE.md` for the full module map.
 
 ## Signal K paths
 
@@ -290,20 +286,20 @@ caches while retaining the on-disk data used for offline operation.
 
 ## Documentation
 
-- [Troubleshooting](docs/troubleshooting.md)
-- [Development guide](docs/development.md)
-- [Notes-resource integration guide](docs/notes-resource-format.md): the
+- [Troubleshooting](https://github.com/NearlCrews/signalk-crows-nest/blob/main/docs/troubleshooting.md)
+- [Development guide](https://github.com/NearlCrews/signalk-crows-nest/blob/main/docs/development.md)
+- [Notes-resource integration guide](https://github.com/NearlCrews/signalk-crows-nest/blob/main/docs/notes-resource-format.md): the
   wire format and the normalized detail schema for client developers
-- [Architecture notes](CLAUDE.md): project layout and module map
-- [Changelog](CHANGELOG.md)
-- [Contributing](.github/CONTRIBUTING.md)
-- [Security policy](.github/SECURITY.md)
+- Architecture notes in `CLAUDE.md`: project layout and module map
+- The changelog in `CHANGELOG.md`
+- [Contributing](https://github.com/NearlCrews/signalk-crows-nest/blob/main/.github/CONTRIBUTING.md)
+- [Security policy](https://github.com/NearlCrews/signalk-crows-nest/blob/main/.github/SECURITY.md)
 
 ## Development
 
 This project targets Node 20.3 or newer and develops against
 `@signalk/server-api` 2.30.0 or newer, with TypeScript 6 and the exact shared
-UI package `signalk-nearlcrews-ui` 0.6.1 (development only). The full local
+UI package `signalk-nearlcrews-ui` 0.6.2 (development only). The full local
 toolchain uses Node 22.22.2 or newer while the published plugin runtime keeps
 its Node 20.3 compatibility floor.
 
@@ -323,15 +319,17 @@ npm run clean        # remove dist/ and the panel build artifacts
 
 Run `npm run verify` before committing and `npm run verify:release` before a
 release.
-See the [development guide](docs/development.md) for the full workflow.
+See the
+[development guide](https://github.com/NearlCrews/signalk-crows-nest/blob/main/docs/development.md)
+for the full workflow.
 
 ## License
 
-MIT: see [LICENSE](LICENSE) for the full text. The software is provided
+MIT: see the `LICENSE` file for the full text. The software is provided
 "AS IS", without warranty of any kind. Treat the imported data and the
 alarms as advisory, and always carry independent means of navigation.
 Bundled dependency licenses are listed in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+the `THIRD_PARTY_NOTICES.md` file.
 
 ## Acknowledgments
 
@@ -375,4 +373,4 @@ Find this plugin useful? You can support its continued development by
 
 - [Report a bug](https://github.com/NearlCrews/signalk-crows-nest/issues/new?template=bug_report.yml)
 - [Request a feature](https://github.com/NearlCrews/signalk-crows-nest/issues/new?template=feature_request.yml)
-- [Security issues](.github/SECURITY.md)
+- [Security issues](https://github.com/NearlCrews/signalk-crows-nest/blob/main/.github/SECURITY.md)

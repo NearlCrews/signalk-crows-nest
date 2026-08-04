@@ -58,7 +58,7 @@ export interface PoiNote {
 }
 
 /** Aggregate review score for a point of interest. */
-export interface ReviewSummary {
+interface ReviewSummary {
   averageRating: number
   numberOfReviews: number
 }
@@ -71,7 +71,7 @@ export interface ReviewSummary {
  * it to a string in the list-mapping step for use as a SignalK resource id,
  * so the rest of the plugin sees a uniform string.
  */
-export interface PoiListItem {
+interface PoiListItem {
   id: number
   poiType: PoiType
   mapLocation: Position
@@ -86,7 +86,7 @@ export interface PoiListResponse {
 }
 
 /** Identity and location block present in every summary response. */
-export interface PointOfInterest {
+interface PointOfInterest {
   id: number
   name: string
   poiType: PoiType
@@ -95,7 +95,7 @@ export interface PointOfInterest {
   notes?: PoiNote[]
 }
 
-export interface AmenitySection {
+interface AmenitySection {
   bar?: Availability
   boatRamp?: Availability
   cellReception?: Availability
@@ -113,7 +113,7 @@ export interface AmenitySection {
   notes?: PoiNote[]
 }
 
-export interface BusinessSection {
+interface BusinessSection {
   cash?: Availability
   check?: Availability
   credit?: Availability
@@ -122,7 +122,7 @@ export interface BusinessSection {
   notes?: PoiNote[]
 }
 
-export interface ContactSection {
+interface ContactSection {
   vhfChannel?: string
   phone?: string
   afterHourContact?: string
@@ -135,7 +135,7 @@ export interface ContactSection {
   addressCountry?: string
 }
 
-export interface DockageSection {
+interface DockageSection {
   liveaboard?: Availability
   secureAccess?: Availability
   securityPatrol?: Availability
@@ -153,7 +153,7 @@ export interface DockageSection {
   notes?: PoiNote[]
 }
 
-export interface FuelSection {
+interface FuelSection {
   diesel?: Availability
   ethanolFree?: Availability
   gas?: Availability
@@ -167,7 +167,7 @@ export interface FuelSection {
 }
 
 /** Repair and marine-service trades available at a point of interest. */
-export interface ServicesSection {
+interface ServicesSection {
   boatBrokers?: Availability
   bottomPainting?: Availability
   canvasAndUpholstery?: Availability
@@ -197,7 +197,7 @@ export interface ServicesSection {
 }
 
 /** Shops and supplies available at a point of interest. */
-export interface RetailSection {
+interface RetailSection {
   fishingSupplies?: Availability
   grocery?: Availability
   hardware?: Availability
@@ -207,7 +207,7 @@ export interface RetailSection {
 }
 
 /** Mooring-field details, present mainly on anchorages. */
-export interface MooringSection {
+interface MooringSection {
   hasMoorings?: Availability
   dinghy?: Availability
   launch?: Availability
@@ -219,7 +219,7 @@ export interface MooringSection {
 }
 
 /** Navigation hazards and constraints, present mainly on anchorages. */
-export interface NavigationSection {
+interface NavigationSection {
   /**
    * Current strength. This is NOT a tri-state availability flag: the API
    * returns a strength word such as 'Weak', 'Moderate', or 'Strong'.
@@ -237,7 +237,7 @@ export interface NavigationSection {
 }
 
 /** A single highlighted user review returned with a summary response. */
-export interface FeaturedReview {
+interface FeaturedReview {
   title?: string
   text?: string
   rating?: number

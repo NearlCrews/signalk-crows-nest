@@ -29,7 +29,7 @@ export interface LayerIds {
  * A GeoJSON Point geometry: a single `[longitude, latitude]` position. The
  * point hazard layers (wreck, obstruction, rock) return this shape.
  */
-export interface EncPointGeometry {
+interface EncPointGeometry {
   type: 'Point'
   coordinates: [number, number]
 }

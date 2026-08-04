@@ -25,5 +25,11 @@
     "eslint-formatter-",
   ],
   "includeEntryExports": true,
+  "ignoreIssues": {
+    "fixtures/browser/vite.config.ts": ["exports"],
+    "src/panel/PluginConfigurationPanel.tsx": ["exports"],
+    "src/panel/index.tsx": ["exports"],
+    "src/shared/rating.ts": ["duplicates"],
+  },
   "treatConfigHintsAsErrors": true,
 }

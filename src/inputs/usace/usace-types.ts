@@ -37,7 +37,7 @@ export type UsaceLayerKey = 'lock' | 'dam'
  * geometry under a projection failure, so the source treats a missing or
  * malformed geometry as an unusable feature.
  */
-export interface UsacePointGeometry {
+interface UsacePointGeometry {
   type: 'Point'
   coordinates: [number, number]
 }

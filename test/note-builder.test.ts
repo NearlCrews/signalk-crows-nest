@@ -77,6 +77,11 @@ test('buildNoteResource omits timestamp and description when not supplied', () =
   })
 })
 
+test('buildNoteResource omits unsafe URLs while retaining safe web URLs', () => {
+  assert.equal(buildNoteResource(input({ url: 'javascript:alert(1)' })).url, undefined)
+  assert.equal(buildNoteResource(input({ url: SAMPLE_URL })).url, SAMPLE_URL)
+})
+
 test('buildNoteResource includes html description and mimeType when supplied', () => {
   const note = buildNoteResource(input({
     timestamp: '2020-01-01T00:00:00.000Z',

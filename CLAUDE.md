@@ -515,7 +515,7 @@ self-contained module registered on one line in `src/index.ts`.
   transform and emit `jsxDEV` calls that the bundled production
   `react/jsx-dev-runtime` does not implement, which breaks the panel at first
   render. The `test/panel-babel-config.test.ts` contract test locks this in.
-- `signalk-nearlcrews-ui` 0.6.1 supplies the panel shell, theme system, and
+- `signalk-nearlcrews-ui` 0.6.2 supplies the panel shell, theme system, and
   shared controls. It is pinned exactly, fresh profiles use Auto, and the host
   supplies the React 19 singleton without a bundled fallback.
 - The test suite is type-checked separately (`tsconfig.test.json`); all three

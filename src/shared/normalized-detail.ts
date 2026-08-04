@@ -34,7 +34,7 @@
  * - `link`    a URL the client may render as an anchor.
  * - `note`    free-text prose, possibly multi-line.
  */
-export type NormalizedItemKind =
+type NormalizedItemKind =
   | 'text'
   | 'measure'
   | 'count'

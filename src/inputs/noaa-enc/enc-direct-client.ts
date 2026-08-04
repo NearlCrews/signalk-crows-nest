@@ -69,7 +69,7 @@ export interface EncDirectClient {
   queryById: (request: QueryByIdRequest) => Promise<EncFeature | undefined>
 }
 
-export interface QueryRequest {
+interface QueryRequest {
   band: ScaleBand
   layerKey: EncLayerKey
   bbox: Bbox
@@ -77,7 +77,7 @@ export interface QueryRequest {
   signal?: AbortSignal
 }
 
-export interface QueryByIdRequest {
+interface QueryByIdRequest {
   band: ScaleBand
   layerKey: EncLayerKey
   objectId: number

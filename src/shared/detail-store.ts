@@ -54,7 +54,7 @@ const WRITE_DEBOUNCE_MS = 1000
 const DEFAULT_STORE_VERSION = 1
 
 /** One stored detail entry with its age. */
-export interface StoredEntry<V> {
+interface StoredEntry<V> {
   /** Epoch milliseconds at which the entry was persisted. */
   timestamp: number
   /** The cached detail value. */

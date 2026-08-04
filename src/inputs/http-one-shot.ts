@@ -19,7 +19,7 @@ import { request as httpRequest } from 'node:http'
 import type { IncomingHttpHeaders } from 'node:http'
 
 /** Upper bound for a buffered one-shot response body. */
-const DEFAULT_MAX_RESPONSE_BYTES = 64 * 1024 * 1024
+export const DEFAULT_MAX_RESPONSE_BYTES = 64 * 1024 * 1024
 
 /** Raw response captured by {@link requestText}. */
 export interface OneShotResponse {

@@ -11,6 +11,32 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+<a id="v0154"></a>
+
+## [0.15.4] - 2026-08-04
+
+### Fixed
+
+- Queued ActiveCaptain and Overpass responses now enforce a 64 MiB limit from
+  both `Content-Length` and the streamed byte count, preventing an unbounded
+  response from exhausting memory.
+- Overpass configuration now accepts only absolute HTTP(S) URLs without
+  embedded credentials, while retaining local and private HTTP endpoints for
+  self-hosted instances.
+- Note resources now omit URLs with unsafe link schemes.
+- README links to repository-only files now resolve from the Signal K App Store
+  and npm package pages.
+
+### Changed
+
+- The panel now bundles `signalk-nearlcrews-ui` 0.6.2.
+- Coverage now enforces 90 percent lines, 80 percent branches, and 90 percent
+  functions.
+- Internal-only types no longer expand the declaration surface, and Knip now
+  records the known configuration-entry and semantic-alias exceptions with its
+  supported issue suppression format.
+- Refreshed compatible development dependencies.
+
 <a id="v0153"></a>
 
 ## [0.15.3] - 2026-08-02

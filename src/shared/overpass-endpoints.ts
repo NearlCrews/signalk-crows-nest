@@ -36,6 +36,21 @@ export const RECOMMENDED_OVERPASS_FALLBACK_ENDPOINTS: readonly string[] = [
   'https://overpass.private.coffee/api/interpreter'
 ]
 
+/** Return a trimmed absolute HTTP(S) endpoint, or undefined when unsafe. */
+function httpEndpoint (raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined
+  const trimmed = raw.trim()
+  if (trimmed.length === 0) return undefined
+  try {
+    const url = new URL(trimmed)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined
+    if (url.username !== '' || url.password !== '') return undefined
+    return trimmed
+  } catch {
+    return undefined
+  }
+}
+
 /**
  * Resolve the primary Overpass endpoint from a raw config value: a non-blank
  * string is trimmed and used, anything else (blank, whitespace, or non-string)
@@ -44,11 +59,7 @@ export const RECOMMENDED_OVERPASS_FALLBACK_ENDPOINTS: readonly string[] = [
  * one place alongside the default constant and the fallback cleaner.
  */
 export function resolvePrimaryEndpoint (raw: unknown): string {
-  if (typeof raw !== 'string') {
-    return DEFAULT_OVERPASS_ENDPOINT
-  }
-  const trimmed = raw.trim()
-  return trimmed.length > 0 ? trimmed : DEFAULT_OVERPASS_ENDPOINT
+  return httpEndpoint(raw) ?? DEFAULT_OVERPASS_ENDPOINT
 }
 
 /**
@@ -66,15 +77,12 @@ export function normalizeFallbackEndpoints (raw: unknown): string[] {
   const seen = new Set<string>()
   const endpoints: string[] = []
   for (const value of raw) {
-    if (typeof value !== 'string') {
+    const endpoint = httpEndpoint(value)
+    if (endpoint === undefined || seen.has(endpoint)) {
       continue
     }
-    const trimmed = value.trim()
-    if (trimmed.length === 0 || seen.has(trimmed)) {
-      continue
-    }
-    seen.add(trimmed)
-    endpoints.push(trimmed)
+    seen.add(endpoint)
+    endpoints.push(endpoint)
   }
   return endpoints
 }
