@@ -302,7 +302,7 @@ caches while retaining the on-disk data used for offline operation.
 
 This project targets Node 20.3 or newer and develops against
 `@signalk/server-api` 2.31.0 or newer, with TypeScript 6 and the exact shared
-UI package `signalk-nearlcrews-ui` 0.7.0 (development only). The full local
+UI package `signalk-nearlcrews-ui` 0.7.1 (development only). The full local
 toolchain supports Node 22 from 22.22.2, Node 24 from 24.15.0, and Node 26,
 while the published plugin runtime keeps its Node 20.3 compatibility floor.
 

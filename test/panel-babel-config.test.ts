@@ -59,12 +59,12 @@ test('React and React DOM are host-provided singletons while the UI stays bundle
   const federation = webpackConfig.plugins.find((plugin) => plugin.options?.shared !== undefined)
   assert.ok(federation?.options?.shared !== undefined)
   const shared = federation.options.shared
+  assert.deepEqual(Object.keys(shared).sort(), ['react', 'react-dom'])
   for (const packageName of ['react', 'react-dom']) {
     assert.deepEqual(shared[packageName], {
       singleton: true,
-      requiredVersion: '>=19.2.0 <20.0.0',
+      requiredVersion: '^19.2.0',
       import: false
     })
   }
-  assert.equal(shared['signalk-nearlcrews-ui'], undefined)
 })

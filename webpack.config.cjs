@@ -72,12 +72,12 @@ module.exports = {
       shared: {
         react: {
           singleton: true,
-          requiredVersion: '>=19.2.0 <20.0.0',
+          requiredVersion: '^19.2.0',
           import: false
         },
         'react-dom': {
           singleton: true,
-          requiredVersion: '>=19.2.0 <20.0.0',
+          requiredVersion: '^19.2.0',
           import: false
         }
       }

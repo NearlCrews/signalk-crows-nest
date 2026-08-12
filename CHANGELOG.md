@@ -18,9 +18,9 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- The panel targets `signalk-nearlcrews-ui` 0.7.0, adds the System theme,
+- The panel targets `signalk-nearlcrews-ui` 0.7.1, adds the System theme,
   docks save actions to the viewport when needed, and consumes React and
-  React DOM as host-provided Module Federation singletons.
+  React DOM at `^19.2.0` as host-provided Module Federation singletons.
 - Save and discard actions now report that the host request was issued and
   move focus to the stable completion message.
 - Compatible development dependencies, workflow security checks, and release
