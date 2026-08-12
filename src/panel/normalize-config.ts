@@ -47,6 +47,10 @@ export function normalizeConfig (configuration: unknown): PluginConfig {
     : {}
 
   const config: PluginConfig = {
+    // Signal K may preserve configuration keys introduced by a newer plugin
+    // version. Keep them through an edit and save instead of silently erasing
+    // data this panel does not yet understand.
+    ...raw,
     cachingDurationMinutes: clampCacheDurationMinutes(raw.cachingDurationMinutes)
   }
   for (const [flag] of POI_TYPE_FLAGS) {

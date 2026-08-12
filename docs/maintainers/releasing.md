@@ -12,7 +12,9 @@ runs in two jobs. The first verifies that the release tag matches the
 that exact tarball and publishes it with provenance. This handoff ensures the
 registry artifact is the one that passed the complete release gate. The
 publish job grants the `id-token: write` and `contents: read` permissions
-provenance requires.
+provenance requires. `pack:release` also records the tagged commit as
+`gitHead` inside the tarball. After publication, the workflow reads that field
+back from npm and fails unless it matches the release checkout.
 
 The workflow reads the `NPM_TOKEN` repository secret (an npm Automation
 token, or a Granular token with publish and read access to this package).
@@ -76,8 +78,8 @@ Before creating the GitHub release:
    `package.json` version (for example, tag `v0.6.0`). The build job fails fast
    if the tag and version disagree. Watch the `Node.js Package` workflow to
    completion, confirm Signal K Plugin CI ran on the tagged commit, and verify
-   the GitHub release, npm version, npm `latest` tag, and provenance statement
-   before calling the release complete.
+   the GitHub release, npm version, npm `latest` tag, registry `gitHead`, and
+   provenance statement before calling the release complete.
 
 ## Supported Node.js versions
 

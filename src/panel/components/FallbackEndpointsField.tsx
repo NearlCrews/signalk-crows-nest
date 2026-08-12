@@ -12,7 +12,10 @@ import LabeledField from './LabeledField.js'
 import { RECOMMENDED_OVERPASS_FALLBACK_ENDPOINTS } from '../../shared/overpass-endpoints.js'
 
 /** Hoisted so the textarea style object is not rebuilt on every render. */
-const TEXTAREA_STYLE: React.CSSProperties = { minHeight: 56, fontFamily: 'monospace' }
+const TEXTAREA_STYLE: React.CSSProperties = {
+  minHeight: 56,
+  fontFamily: 'var(--snui-font-family-mono)'
+}
 
 /** Hoisted so the placeholder string is not re-joined on every render. */
 const PLACEHOLDER = RECOMMENDED_OVERPASS_FALLBACK_ENDPOINTS.join('\n')

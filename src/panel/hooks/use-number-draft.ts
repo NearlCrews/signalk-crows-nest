@@ -86,7 +86,7 @@ export function useNumberDraft (
   }, [resetEpoch])
 
   // Drop the draft when the committed value changes externally (e.g. a
-  // Discard action restores the saved snapshot). Without this, the input
+  // Discard action restores the requested snapshot). Without this, the input
   // would keep rendering the user's stale typed text until they
   // focus-and-blur the field. lastCommittedFromHere tracks the value the
   // hook itself last produced, so a self-driven update (handleChange

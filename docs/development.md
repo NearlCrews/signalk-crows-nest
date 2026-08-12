@@ -3,9 +3,10 @@
 ## Prerequisites
 
 - Node.js 20.3 or newer
-- Node.js 22.22.2 or newer for the complete development toolchain
+- Node.js `^22.22.2 || ^24.15.0 || ^26.0.0` for the complete development
+  toolchain
 - TypeScript 6 (installed as a dev dependency)
-- npm 10.9.3 or newer; `packageManager` pins npm 11.18.0 for repository commands
+- npm 12.0.2; `packageManager` pins that version for repository commands
 
 ## Setup
 
@@ -73,13 +74,23 @@ across restarts.
 The plugin ships its own configuration panel: a federated React app, loaded by
 the Signal K admin UI through Module Federation, that replaces the generated
 settings form with a live status section and grouped POI-type toggles. The
-panel uses the exact `signalk-nearlcrews-ui` 0.6.2 package for its shell,
-themes, and shared controls, while the Signal K host supplies React. Fresh
-profiles use Auto and follow the host or operating-system color scheme. The
+panel uses the exact `signalk-nearlcrews-ui` 0.7.0 package for its shell,
+themes, and shared controls, while the Signal K host supplies React and React
+DOM. Fresh
+profiles use Auto, which follows an explicit host theme and otherwise uses
+Light. System follows the operating-system color scheme. The
 panel build transpiles with Babel 7, whose React preset keeps
 `development: false` pinned (see the comment in `webpack.config.cjs` and the
 `test/panel-babel-config.test.ts` contract test): a development transform would
 emit runtime JSX that the bundled production React does not implement.
+
+Signal K Admin currently disables Content Security Policy and does not expose
+a documented style-nonce API to federated panels. Crow's Nest therefore does
+not scan arbitrary host `script` or `style` elements for a nonce, because that
+cannot establish a trusted value. An independently hardened host that enforces
+a strict nonce-based `style-src` policy is unsupported for the embedded panel
+until Signal K provides a trusted nonce contract. If that contract is added,
+pass the host-provided value to `PanelRoot` through its `styleNonce` prop.
 
 ## Project structure
 
@@ -149,9 +160,9 @@ src/                      # TypeScript source
 │   └── bridge-air-draft/  # The bridge air-draft check (proximity + route-ahead warning)
 ├── monitoring/           # position-monitor.ts: drives the per-tick scan
 ├── geo/                  # position-utilities.ts: bounding-box and great-circle helpers
-├── status/               # plugin-status.ts (per-source recorder), status-router.ts,
-│                         #   admin-gate.ts (the shared admin gate the status route
-│                         #   mounts behind), status-types.ts
+├── status/               # plugin-status.ts (per-source recorder), status-router.ts
+│                         #   (admin-only through the host PluginRouter contract),
+│                         #   status-types.ts
 ├── shared/               # Source-agnostic helpers: types.ts (cross-module contracts;
 │                         #   skIcon is required on PoiSummary and PoiDetailView),
 │                         #   plugin-id.ts (id, repo URL, and shared User-Agent),
@@ -191,7 +202,6 @@ src/                      # TypeScript source
     ├── styles.ts          # Plugin layout styles and shared-theme token aliases
     ├── unit-system.ts     # The display-units resolver keyed off the server unit preset
     ├── select-all-state.ts# Pure tri-state select-all derivation
-    ├── csp-nonce.ts       # Best-effort discovery of the host page's CSP nonce
     ├── hooks/             # use-config, use-status, use-unit-system,
     │                      #   use-number-draft, draft-reset-context,
     │                      #   use-collapse-focus-restore

@@ -105,9 +105,10 @@ air-draft check).
   has not been confirmed in over two years.
 - **A React configuration panel** with a per-source status bar, an
   accordion of cards each with a live-status pill, an Alerts section, and
-  shared `signalk-nearlcrews-ui` controls and themes. Fresh profiles use Auto
-  to follow the host or operating-system color scheme, with Light, Dark, and
-  red-preserving Night available from the theme toggle.
+  shared `signalk-nearlcrews-ui` controls and themes. Fresh profiles use Auto,
+  which follows an explicit host theme and otherwise uses Light. System follows
+  the operating-system color scheme, while Light, Dark, and red-preserving Night
+  are also available from the theme toggle.
 
 ## Screenshots
 
@@ -222,9 +223,11 @@ In the Signal K admin UI, open **Server, then Plugin Config**, find
 ActiveCaptain-only setup; opt in to the other sources from their cards.
 The panel has these areas:
 
-1. **Theme toggle** in the top corner: Auto, Light, Dark, or a red-preserving
-   Night mode for night vision at the helm. Auto is the default for a fresh
-   profile, and an explicit choice persists across visits.
+1. **Theme toggle** in the top corner: Auto, System, Light, Dark, or a
+   red-preserving Night mode for night vision at the helm. Auto is the default
+   for a fresh profile and follows an explicit host theme, falling back to Light.
+   System follows the operating-system color scheme, and an explicit choice
+   persists across visits.
 2. **Per-source status bar**: `reachable`, `unreachable`, or `not yet
 contacted` for each enabled source, the last successful upstream list-fetch
    time, a "checked Ns ago" freshness note, and recent errors. A
@@ -298,10 +301,10 @@ caches while retaining the on-disk data used for offline operation.
 ## Development
 
 This project targets Node 20.3 or newer and develops against
-`@signalk/server-api` 2.30.0 or newer, with TypeScript 6 and the exact shared
-UI package `signalk-nearlcrews-ui` 0.6.2 (development only). The full local
-toolchain uses Node 22.22.2 or newer while the published plugin runtime keeps
-its Node 20.3 compatibility floor.
+`@signalk/server-api` 2.31.0 or newer, with TypeScript 6 and the exact shared
+UI package `signalk-nearlcrews-ui` 0.7.0 (development only). The full local
+toolchain supports Node 22 from 22.22.2, Node 24 from 24.15.0, and Node 26,
+while the published plugin runtime keeps its Node 20.3 compatibility floor.
 
 ```bash
 git clone https://github.com/NearlCrews/signalk-crows-nest.git

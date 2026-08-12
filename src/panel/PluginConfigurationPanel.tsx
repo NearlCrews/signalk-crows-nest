@@ -18,7 +18,8 @@ import {
   PanelRoot,
   Stack,
   supportsNativeCssScope,
-  ThemeToggle
+  ThemeToggle,
+  UnsupportedBrowserNotice
 } from 'signalk-nearlcrews-ui'
 import AlertsSection from './components/AlertsSection.js'
 import DataSourcesSection from './components/DataSourcesSection.js'
@@ -26,16 +27,15 @@ import { sourceCardDomId } from './components/DataSourceCard.js'
 import ErrorBoundary from './components/ErrorBoundary.js'
 import FooterBar from './components/FooterBar.js'
 import StatusBar from './components/StatusBar.js'
-import { discoverStyleNonce } from './csp-nonce.js'
 import { DraftResetContext } from './hooks/draft-reset-context.js'
 import { useConfig } from './hooks/use-config.js'
 import { useStatus } from './hooks/use-status.js'
 import { UnitSystemContext, useUnitSystem } from './hooks/use-unit-system.js'
 import { SOURCE_SLUGS, type SourceSlug } from '../shared/source-ids.js'
-import { THEME_STYLE } from './styles.js'
+import { PANEL_STYLE } from './styles.js'
 
-/** How long, in milliseconds, the "Saved" confirmation pill stays visible. */
-const SAVED_PILL_MS = 2500
+/** How long, in milliseconds, the save-request confirmation stays visible. */
+const SAVE_REQUEST_PILL_MS = 2500
 
 /** The card slugs the jump-to-error shortcut may expand; anything else is ignored. */
 const KNOWN_SLUGS: ReadonlySet<string> = new Set(SOURCE_SLUGS)
@@ -43,7 +43,7 @@ const KNOWN_SLUGS: ReadonlySet<string> = new Set(SOURCE_SLUGS)
 interface Props {
   /** The plugin configuration supplied by the admin UI. Untyped at the federation boundary. */
   configuration: unknown
-  /** Persists the configuration. Fire-and-forget: it returns void and must not be awaited. */
+  /** Requests a configuration save. Fire-and-forget: it returns void and must not be awaited. */
   save: (configuration: unknown) => void
 }
 
@@ -51,24 +51,15 @@ interface Props {
 export default function PluginConfigurationPanel (props: Props): React.ReactElement {
   if (typeof window === 'undefined' || !supportsNativeCssScope(window)) {
     return (
-      <div data-browser-compatibility-message='' role='alert'>
-        <h2>Browser update required</h2>
-        <p>
-          This panel requires native CSS @scope. Update the browser or embedded WebView before
-          reopening Signal K Admin.
-        </p>
-      </div>
+      <UnsupportedBrowserNotice>
+        This panel requires native CSS @scope. Update the browser or embedded WebView before
+        reopening Signal K Admin.
+      </UnsupportedBrowserNotice>
     )
   }
 
-  // Under a strict style-src policy the host's nonce (when discoverable) must
-  // ride on both the shared library's injected stylesheet and the panel's own
-  // alias block below, or the --ac-* custom properties silently vanish.
-  const nonce = discoverStyleNonce(window.document)
-
   return (
-    <PanelRoot className='ac-config-panel' styleNonce={nonce}>
-      <style nonce={nonce}>{THEME_STYLE}</style>
+    <PanelRoot className='ac-config-panel' style={PANEL_STYLE}>
       <ErrorBoundary>
         <SupportedPluginConfigurationPanel {...props} />
       </ErrorBoundary>
@@ -78,12 +69,12 @@ export default function PluginConfigurationPanel (props: Props): React.ReactElem
 
 function SupportedPluginConfigurationPanel ({ configuration, save }: Props): React.ReactElement {
   const { status, error, lastUpdatedMs } = useStatus()
-  const { state, savedState, dispatch, markSaved, unconfigured } = useConfig(configuration)
+  const { state, requestedState, dispatch, markSaveRequested, unconfigured } = useConfig(configuration)
   // The display system the server's unit preferences select; the LengthFields
   // read it through context so the meters-backed config renders in feet when
   // the active preset is imperial.
   const unitSystem = useUnitSystem()
-  const [justSavedAt, setJustSavedAt] = useState<number | null>(null)
+  const [saveRequestedAt, setSaveRequestedAt] = useState<number | null>(null)
   // Per-source disclosure state lives at the panel root so it survives
   // saves, so the DataSourceCards can iterate it with a stable map,
   // and so it can later be persisted to the URL or to local storage
@@ -108,16 +99,16 @@ function SupportedPluginConfigurationPanel ({ configuration, save }: Props): Rea
     })
   }, [])
 
-  // Clear the "Saved" pill a short while after a save.
+  // Clear the save-request confirmation a short while after a request.
   useEffect(() => {
-    if (justSavedAt === null) return
-    const timeoutId = setTimeout(() => setJustSavedAt(null), SAVED_PILL_MS)
+    if (saveRequestedAt === null) return
+    const timeoutId = setTimeout(() => setSaveRequestedAt(null), SAVE_REQUEST_PILL_MS)
     return () => clearTimeout(timeoutId)
-  }, [justSavedAt])
+  }, [saveRequestedAt])
 
   // Every reducer case returns a new object only on a real change, so identity
-  // inequality against the last-saved snapshot is a sound dirty check.
-  const dirty = state !== savedState
+  // inequality against the last requested snapshot is a sound dirty check.
+  const dirty = state !== requestedState
 
   // Warn before a tab close or reload while edits are unsaved, so a
   // fat-fingered close cannot silently lose in-progress configuration.
@@ -140,18 +131,18 @@ function SupportedPluginConfigurationPanel ({ configuration, save }: Props): Rea
   stateRef.current = state
   const handleSave = useCallback((): void => {
     save(stateRef.current)
-    markSaved()
-    setJustSavedAt(Date.now())
-  }, [save, markSaved])
+    markSaveRequested()
+    setSaveRequestedAt(Date.now())
+  }, [save, markSaveRequested])
 
   // Bumped on every Discard so each useNumberDraft drops its raw-text draft
   // even when the restored value is identical to the committed one (see
   // draft-reset-context.ts for why the value-change detector misses that).
   const [discardEpoch, setDiscardEpoch] = useState(0)
   const handleDiscard = useCallback((): void => {
-    dispatch({ type: 'discard', config: savedState })
+    dispatch({ type: 'discard', config: requestedState })
     setDiscardEpoch((epoch) => epoch + 1)
-  }, [dispatch, savedState])
+  }, [dispatch, requestedState])
 
   return (
     <UnitSystemContext.Provider value={unitSystem}>
@@ -179,7 +170,7 @@ function SupportedPluginConfigurationPanel ({ configuration, save }: Props): Rea
           <FooterBar
             dirty={dirty}
             unconfigured={unconfigured}
-            justSavedAt={justSavedAt}
+            saveRequestedAt={saveRequestedAt}
             onSave={handleSave}
             onDiscard={handleDiscard}
           />

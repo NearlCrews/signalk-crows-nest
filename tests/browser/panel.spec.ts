@@ -1,5 +1,28 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
+const EXPECTED_SHARED_UI_VERSION = '0.7.0'
+const packageManifest: unknown = JSON.parse(readFileSync(resolve('package.json'), 'utf8'))
+const uiPackage: unknown = JSON.parse(
+  readFileSync(resolve('node_modules/signalk-nearlcrews-ui/package.json'), 'utf8')
+)
+if (typeof packageManifest !== 'object' || packageManifest === null ||
+    !('devDependencies' in packageManifest) ||
+    typeof packageManifest.devDependencies !== 'object' || packageManifest.devDependencies === null ||
+    !('signalk-nearlcrews-ui' in packageManifest.devDependencies) ||
+    packageManifest.devDependencies['signalk-nearlcrews-ui'] !== EXPECTED_SHARED_UI_VERSION) {
+  throw new Error(`package.json must pin signalk-nearlcrews-ui ${EXPECTED_SHARED_UI_VERSION}`)
+}
+if (typeof uiPackage !== 'object' || uiPackage === null ||
+    !('version' in uiPackage) || typeof uiPackage.version !== 'string') {
+  throw new Error('signalk-nearlcrews-ui package.json carries no version string')
+}
+const uiVersion = uiPackage.version
+if (uiVersion !== EXPECTED_SHARED_UI_VERSION) {
+  throw new Error(`installed signalk-nearlcrews-ui must be ${EXPECTED_SHARED_UI_VERSION}`)
+}
 
 test.beforeEach(async ({ page }) => {
   page.on('console', (message) => {
@@ -15,7 +38,7 @@ test.beforeEach(async ({ page }) => {
 
 test('loads the production remote with the current shared UI and saves defaults', async ({ page }) => {
   const root = page.locator('[data-snui-root]')
-  await expect(root).toHaveAttribute('data-snui-version', '0.6.2')
+  await expect(root).toHaveAttribute('data-snui-version', uiVersion)
   await expect(root).not.toHaveAttribute('data-snui-theme')
   await expect(page.getByRole('radio', { name: 'Auto' })).toBeChecked()
 
@@ -24,13 +47,30 @@ test('loads the production remote with the current shared UI and saves defaults'
 
   await page.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(page.locator('body')).toHaveAttribute('data-save-count', '1')
+  await expect(page.getByRole('status')).toContainText('Save requested')
+  await expect(page.getByRole('status')).toBeFocused()
   await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled()
+})
+
+test('preserves unknown configuration keys through an edit and save request', async ({ page }) => {
+  await page.goto('/?future-config')
+  await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true')
+
+  await page.getByRole('checkbox', { name: 'Enable OpenSeaMap' }).check()
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.locator('body')).toHaveAttribute('data-save-count', '1')
+
+  const saved = JSON.parse(await page.locator('body').getAttribute('data-saved-configuration') ?? '{}')
+  expect(saved.futureFeature).toEqual({ enabled: true, strategy: 'coastal' })
+  expect(saved.futureFlag).toBe('keep-me')
+  expect(saved.openSeaMapEnabled).toBe(true)
 })
 
 test('supports every explicit theme and returns to Auto', async ({ page }) => {
   const root = page.locator('[data-snui-root]')
   const themeGroup = page.getByRole('radiogroup', { name: 'Panel theme' })
   for (const [label, value] of [
+    ['System', 'system'],
     ['Light', 'light'],
     ['Dark', 'dark'],
     ['Night', 'night']

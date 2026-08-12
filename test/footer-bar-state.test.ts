@@ -1,7 +1,7 @@
 /**
  * Tests for the Save button's disabled-state logic.
  *
- * The bug: with a fresh unconfigured plugin, `state` and `savedState` both
+ * The bug: with a fresh unconfigured plugin, `state` and `requestedState` both
  * seed from the same default object, so `dirty` is false at mount and the
  * Save button stayed permanently disabled until the user made a throwaway
  * edit. A user who wanted to enable the plugin with default settings could not.
@@ -32,8 +32,8 @@ test('saveButtonDisabled is false (Save enabled) when configured and dirty', () 
 
 test('saveButtonDisabled is true (Save disabled) when configured and not dirty', () => {
   // Previously saved plugin with no pending edits: nothing to save. This is
-  // also the state right after the FIRST save of the session: useConfig's
-  // markSaved clears the unconfigured flag, so Save disables and the "Save
-  // to enable the plugin" hint does not reappear when the Saved pill expires.
+  // also the state right after the first save request of the session:
+  // useConfig's markSaveRequested clears the unconfigured flag, so Save
+  // disables and the "Save to enable the plugin" hint does not reappear.
   assert.equal(saveButtonDisabled(false, false), true)
 })

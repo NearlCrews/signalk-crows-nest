@@ -1,7 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import type { ServerAPI } from '@signalk/server-api'
-import type { IRouter } from 'express'
+import type { PluginRouter, RouteAccessLevel, ServerAPI } from '@signalk/server-api'
 import { createPlugin } from '../src/plugin/plugin.js'
 import { createInputRegistry } from '../src/inputs/input-registry.js'
 import { createOutputRegistry } from '../src/outputs/output-registry.js'
@@ -22,7 +21,6 @@ interface StubApp {
   errorMessages: string[]
   pluginErrors: string[]
   getSelfBusCalls: () => number
-  adminGatedPaths: string[]
   /** Feed a value through the position stream the monitor subscribed to. */
   emitPosition: (value: unknown) => void
 }
@@ -35,7 +33,6 @@ function createStubApp (options: { monitorThrows?: boolean } = {}): StubApp {
   const statusMessages: string[] = []
   const errorMessages: string[] = []
   const pluginErrors: string[] = []
-  const adminGatedPaths: string[] = []
   let getSelfBusCount = 0
   let positionHandler: ((delta: { value: unknown }) => void) | undefined
   const app = {
@@ -57,9 +54,6 @@ function createStubApp (options: { monitorThrows?: boolean } = {}): StubApp {
           }
         }
       }
-    },
-    securityStrategy: {
-      addAdminMiddleware: (path: string) => { adminGatedPaths.push(path) }
     }
   }
   return {
@@ -68,7 +62,6 @@ function createStubApp (options: { monitorThrows?: boolean } = {}): StubApp {
     errorMessages,
     pluginErrors,
     getSelfBusCalls: () => getSelfBusCount,
-    adminGatedPaths,
     emitPosition: (value: unknown) => { positionHandler?.({ value }) }
   }
 }
@@ -420,15 +413,20 @@ test('the status router serves the snapshot', () => {
   plugin.start(CONFIG, noopRestart)
 
   let statusHandler: ((req: unknown, res: unknown) => void) | undefined
+  const accessLevels: RouteAccessLevel[] = []
   const router = {
     get: (path: string, handler: (req: unknown, res: unknown) => void) => {
       if (path === '/api/status') {
         statusHandler = handler
       }
+    },
+    access: (level: RouteAccessLevel): never => {
+      accessLevels.push(level)
+      throw new Error('the status endpoint must remain admin-only')
     }
   }
-  plugin.registerWithRouter?.(router as unknown as IRouter)
-  assert.equal(stub.adminGatedPaths.length, 1, 'the api subtree is admin-gated exactly once')
+  plugin.registerWithRouter?.(router as unknown as PluginRouter)
+  assert.deepEqual(accessLevels, [], 'the route is not opened to a lower access level')
   assert.ok(statusHandler !== undefined, 'the status route is registered')
 
   let body: unknown
@@ -439,13 +437,10 @@ test('the status router serves the snapshot', () => {
   plugin.stop()
 })
 
-test('the status API route fails closed when the admin gate cannot be installed', () => {
+test('the status API uses the current host router without private security APIs', () => {
   const input = createStubInput()
   const out = createStubOutput({ id: 'out' })
   const stub = createStubApp()
-  // A server with no admin middleware: the gate cannot be installed, so no
-  // route may mount.
-  delete (stub.app as unknown as { securityStrategy?: unknown }).securityStrategy
   const plugin = createPlugin(
     stub.app,
     createInputRegistry([input.module]),
@@ -455,10 +450,10 @@ test('the status API route fails closed when the admin gate cannot be installed'
 
   let statusRegistered = false
   const router = {
-    get: (path: string) => { if (path === '/api/status') statusRegistered = true }
+    get: (path: string) => { if (path === '/api/status') statusRegistered = true },
+    access: (): never => { throw new Error('the status endpoint must remain admin-only') }
   }
-  plugin.registerWithRouter?.(router as unknown as IRouter)
-  assert.equal(stub.adminGatedPaths.length, 0, 'no path is gated when the gate is unavailable')
-  assert.equal(statusRegistered, false, 'the status route fails closed')
+  plugin.registerWithRouter?.(router as unknown as PluginRouter)
+  assert.equal(statusRegistered, true, 'the status route is registered through the public host contract')
   plugin.stop()
 })

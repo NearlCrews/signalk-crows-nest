@@ -1,13 +1,13 @@
 /**
- * Panel footer: the Save and Discard controls plus a dirty / just-saved
+ * Panel footer: the Save and Discard controls plus a dirty or requested
  * indicator. Save is disabled when the configuration is unchanged AND the
- * plugin has already been configured at least once. When the plugin has never
- * been saved (unconfigured), Save stays enabled so the user can persist
- * defaults to enable the plugin without making a throwaway edit first.
+ * plugin has already been configured at least once. When the host supplies no
+ * configuration, Save stays enabled so the user can request the defaults
+ * without making a throwaway edit first.
  */
 
 import type * as React from 'react'
-import { memo } from 'react'
+import { memo, useCallback, useRef } from 'react'
 import { ActionBar, Button } from 'signalk-nearlcrews-ui'
 import SaveStatus from './SaveStatus.js'
 import { saveButtonDisabled } from '../footer-bar-state.js'
@@ -15,13 +15,13 @@ import { saveButtonDisabled } from '../footer-bar-state.js'
 interface Props {
   dirty: boolean
   /**
-   * True while the plugin has never been saved, counting a save made in this
-   * session. Save stays enabled in this state so the user can persist
-   * defaults to enable the plugin.
+   * True while the host has supplied no configuration and this session has
+   * issued no save request. Save stays enabled so the user can request the
+   * defaults.
    */
   unconfigured: boolean
-  /** Epoch milliseconds of the last successful save, or null. Drives the "Saved" pill. */
-  justSavedAt: number | null
+  /** Epoch milliseconds of the last save request, or null. */
+  saveRequestedAt: number | null
   onSave: () => void
   onDiscard: () => void
 }
@@ -31,21 +31,36 @@ interface Props {
  * two callbacks identity-stable, so a keystroke in a field re-renders the
  * footer only when the dirty flag or unconfigured state actually flips.
  */
-export default memo(function FooterBar ({ dirty, unconfigured, justSavedAt, onSave, onDiscard }: Props): React.ReactElement {
+export default memo(function FooterBar ({ dirty, unconfigured, saveRequestedAt, onSave, onDiscard }: Props): React.ReactElement {
   const saveDisabled = saveButtonDisabled(dirty, unconfigured)
+  const statusRef = useRef<HTMLDivElement>(null)
+  const runAndFocusStatus = useCallback((action: () => void): void => {
+    action()
+    requestAnimationFrame(() => statusRef.current?.focus())
+  }, [])
+
   return (
     <ActionBar
-      sticky='bottom'
+      sticky='viewport-bottom'
       status={
-        <>
-          <SaveStatus dirty={dirty} justSavedAt={justSavedAt} />
-          {unconfigured && !dirty ? <span>Save to enable the plugin.</span> : null}
-        </>
+        <div ref={statusRef} role='status' aria-live='polite' tabIndex={-1}>
+          <SaveStatus
+            dirty={dirty}
+            unconfigured={unconfigured}
+            saveRequestedAt={saveRequestedAt}
+          />
+        </div>
       }
       actions={
         <>
-          <Button variant='primary' onClick={onSave} disabled={saveDisabled}>Save</Button>
-          <Button onClick={onDiscard} disabled={!dirty}>Discard</Button>
+          <Button
+            variant='primary'
+            onClick={() => runAndFocusStatus(onSave)}
+            disabled={saveDisabled}
+          >
+            Save
+          </Button>
+          <Button onClick={() => runAndFocusStatus(onDiscard)} disabled={!dirty}>Discard</Button>
         </>
       }
     />

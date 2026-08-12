@@ -3,6 +3,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
+const EXPECTED_SHARED_UI_VERSION = '0.7.0'
 const packageJson = JSON.parse(await readFile('package.json', 'utf8'))
 const { stdout } = await execFileAsync(
   process.platform === 'win32' ? 'npm.cmd' : 'npm',
@@ -86,8 +87,9 @@ for (const file of files) {
 if (packageJson.dependencies?.['signalk-nearlcrews-ui']) {
   throw new Error('signalk-nearlcrews-ui must be a bundled development dependency.')
 }
-if (packageJson.devDependencies?.['signalk-nearlcrews-ui'] !== '0.6.2') {
-  throw new Error('The UI package must be pinned to exact version 0.6.2 during its 0.x series.')
+const sharedUiVersion = packageJson.devDependencies?.['signalk-nearlcrews-ui']
+if (sharedUiVersion !== EXPECTED_SHARED_UI_VERSION) {
+  throw new Error(`The UI package must be pinned to exact version ${EXPECTED_SHARED_UI_VERSION}.`)
 }
 
 console.log(`Packed package passed: ${files.size} files in ${packResult.filename}.`)

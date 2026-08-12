@@ -59,6 +59,19 @@ test('normalizeConfig treats a non-object configuration as empty', () => {
   }
 })
 
+test('normalizeConfig preserves unknown top-level keys for forward-compatible saves', () => {
+  const futureSettings = { enabled: true, strategy: 'coastal' }
+  const config = normalizeConfig({
+    cachingDurationMinutes: 15,
+    futureFeature: futureSettings,
+    futureFlag: 'keep-me'
+  }) as unknown as Record<string, unknown> & { cachingDurationMinutes: number }
+
+  assert.equal(config.futureFeature, futureSettings)
+  assert.equal(config.futureFlag, 'keep-me')
+  assert.equal(config.cachingDurationMinutes, 15)
+})
+
 test('normalizeConfig defaults the safety options for an empty config', () => {
   const config = normalizeConfig({})
   assert.equal(config.minimumRating, DEFAULT_MINIMUM_RATING)

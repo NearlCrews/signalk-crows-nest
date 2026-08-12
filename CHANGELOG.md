@@ -11,6 +11,29 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- The configuration panel now explains when its required native CSS scope
+  support is unavailable.
+
+### Changed
+
+- The panel targets `signalk-nearlcrews-ui` 0.7.0, adds the System theme,
+  docks save actions to the viewport when needed, and consumes React and
+  React DOM as host-provided Module Federation singletons.
+- Save and discard actions now report that the host request was issued and
+  move focus to the stable completion message.
+- Compatible development dependencies, workflow security checks, and release
+  packaging are refreshed. Release tarballs now verify their source commit
+  through npm `gitHead` metadata.
+
+### Fixed
+
+- Configuration saves preserve unknown top-level keys for forward-compatible
+  round trips.
+- The status endpoint now uses Signal K's public admin-only `PluginRouter`
+  contract instead of a private server security hook.
+
 <a id="v0154"></a>
 
 ## [0.15.4] - 2026-08-04

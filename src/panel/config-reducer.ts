@@ -68,7 +68,7 @@ export type ConfigAction =
 /**
  * Set one scalar config field, preserving identity on a no-op. Returning the
  * same `state` when the value is unchanged is what lets the panel use identity
- * equality against the last-saved snapshot as a sound dirty check, so every
+ * equality against the last-requested snapshot as a sound dirty check, so every
  * scalar case routes through this one helper rather than repeating the guard.
  */
 function setField<K extends keyof PluginConfig> (
@@ -85,7 +85,7 @@ function sameOrder (a: readonly string[], b: readonly string[]): boolean {
 /**
  * Apply an action to the configuration. Each case returns a new object only
  * when something actually changed and returns the input state otherwise, so
- * the panel can use identity equality against the last-saved snapshot as a
+ * the panel can use identity equality against the last-requested snapshot as a
  * sound dirty check.
  */
 export function configReducer (state: PluginConfig, action: ConfigAction): PluginConfig {

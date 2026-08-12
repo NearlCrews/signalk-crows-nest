@@ -22,6 +22,9 @@
   ],
   "ignoreDependencies": [
     "@microsoft/eslint-formatter-sarif",
+    // @signalk/server-api's public PluginRouter extends Express types without
+    // declaring their package, so consumers that use the contract need this.
+    "@types/express",
     "eslint-formatter-",
   ],
   "includeEntryExports": true,

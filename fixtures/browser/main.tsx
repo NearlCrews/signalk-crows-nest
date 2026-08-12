@@ -1,4 +1,5 @@
 import * as React from 'react'
+import * as ReactDOM from 'react-dom'
 import { createRoot } from 'react-dom/client'
 
 interface PanelProps {
@@ -12,15 +13,24 @@ interface RemoteContainer {
 }
 
 interface ShareScope {
-  readonly react: Record<string, {
-    readonly eager: boolean
-    readonly from: string
-    readonly get: () => Promise<() => typeof React>
-    readonly loaded: boolean
-  }>
+  readonly react: Record<string, ShareScopeEntry<typeof React>>
+  readonly 'react-dom': Record<string, ShareScopeEntry<typeof ReactDOM>>
 }
 
-if (new URLSearchParams(window.location.search).has('unsupported-css-scope')) {
+interface ShareScopeEntry<T> {
+  readonly eager: boolean
+  readonly from: string
+  readonly get: () => Promise<() => T>
+  readonly loaded: boolean
+  readonly shareConfig: {
+    readonly singleton: boolean
+    readonly requiredVersion: string
+  }
+}
+
+const fixtureParams = new URLSearchParams(window.location.search)
+
+if (fixtureParams.has('unsupported-css-scope')) {
   Object.defineProperty(window, 'CSSScopeRule', { configurable: true, value: undefined })
 }
 
@@ -67,7 +77,23 @@ const shareScope: ShareScope = {
       eager: true,
       from: 'crows-nest-browser-fixture',
       get: () => Promise.resolve(() => React),
-      loaded: true
+      loaded: true,
+      shareConfig: {
+        singleton: true,
+        requiredVersion: `^${React.version}`
+      }
+    }
+  },
+  'react-dom': {
+    [ReactDOM.version]: {
+      eager: true,
+      from: 'crows-nest-browser-fixture',
+      get: () => Promise.resolve(() => ReactDOM),
+      loaded: true,
+      shareConfig: {
+        singleton: true,
+        requiredVersion: `^${ReactDOM.version}`
+      }
     }
   }
 }
@@ -81,7 +107,15 @@ try {
   if (!(rootElement instanceof HTMLElement)) throw new Error('Fixture root is missing.')
 
   function HostFixture (): React.ReactElement {
-    const [configuration, setConfiguration] = React.useState<unknown>(null)
+    const [configuration, setConfiguration] = React.useState<unknown>(() =>
+      fixtureParams.has('future-config')
+        ? {
+            cachingDurationMinutes: 15,
+            futureFeature: { enabled: true, strategy: 'coastal' },
+            futureFlag: 'keep-me'
+          }
+        : null
+    )
     const save = (nextConfiguration: unknown): void => {
       document.body.dataset.saveCount = String(Number(document.body.dataset.saveCount ?? 0) + 1)
       document.body.dataset.savedConfiguration = JSON.stringify(nextConfiguration)

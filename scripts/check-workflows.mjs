@@ -26,6 +26,11 @@ if (!pluginCi.includes('SignalK/signalk-server/.github/workflows/plugin-ci.yml@'
   failures.push('plugin-ci.yml must retain the official Signal K reusable workflow.')
 }
 
+const publish = await readFile('.github/workflows/npm-publish.yml', 'utf8')
+for (const expected of ['npm@12.0.2', 'run pack:release', 'Verify registry source commit', 'gitHead']) {
+  if (!publish.includes(expected)) failures.push(`npm-publish.yml must retain ${expected}.`)
+}
+
 const workflowSecurity = await readFile('.github/workflows/workflow-security.yml', 'utf8')
 for (const expected of ['actionlint@v1.7.12', 'zizmor-action@']) {
   if (!workflowSecurity.includes(expected)) {

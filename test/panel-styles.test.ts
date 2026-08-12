@@ -2,36 +2,43 @@
  * Contract tests for the panel's style module.
  *
  * Two regressions these lock out:
- * - Depending on the shared UI library's private class names (the library's
- *   design contract declares internal classes and DOM nesting private API, so
- *   a selector like `button:not(.snui-button)` can silently start matching
- *   the wrong elements on any library release).
- * - Dead `--ac-*` aliases: every alias the theme block declares must be
+ * - Reintroducing a local runtime stylesheet and its host-nonce dependency.
+ * - Dead `--ac-*` aliases: every inline alias PanelRoot declares must be
  *   consumed somewhere in the style module, or it is unused surface that a
  *   future token rename has to be audited against for nothing.
  */
 
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { PLAIN_BUTTON_CLASS, S, THEME_STYLE } from '../src/panel/styles.js'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { PANEL_STYLE, S } from '../src/panel/styles.js'
 
-test('THEME_STYLE never references the shared library private class names', () => {
-  // `--snui-*` custom properties are the library's public token API and are
-  // fine; `.snui-` class selectors are private API and are not.
-  assert.ok(!THEME_STYLE.includes('.snui-'))
-})
-
-test('THEME_STYLE styles the panel-owned plain buttons through the opt-in class', () => {
-  assert.ok(THEME_STYLE.includes(`.${PLAIN_BUTTON_CLASS}`))
+test('panel aliases are inline custom properties backed by public UI tokens', () => {
+  for (const [name, value] of Object.entries(PANEL_STYLE)) {
+    assert.match(name, /^--ac-[a-z0-9-]+$/)
+    if (name !== '--ac-font-small' && name !== '--ac-font-title') {
+      assert.match(String(value), /var\(--snui-/)
+    }
+  }
 })
 
 test('every declared --ac-* alias is consumed by the style module', () => {
-  const declared = new Set(THEME_STYLE.match(/--ac-[a-z0-9-]+(?=:)/g))
+  const declared = new Set(Object.keys(PANEL_STYLE))
   assert.ok(declared.size > 0)
-  const usage = THEME_STYLE + JSON.stringify(S)
+  const usage = JSON.stringify(S)
   const consumed = new Set(
     [...usage.matchAll(/var\((--ac-[a-z0-9-]+)/g)].map((match) => match[1])
   )
   const dead = [...declared].filter((name) => !consumed.has(name))
   assert.deepEqual(dead, [])
+})
+
+test('the panel documents strict CSP without scraping a host nonce', () => {
+  const panelSource = readFileSync(resolve('src/panel/PluginConfigurationPanel.tsx'), 'utf8')
+  const developmentGuide = readFileSync(resolve('docs/development.md'), 'utf8')
+
+  assert.doesNotMatch(panelSource, /discoverStyleNonce|querySelectorAll\(['"]script, style/)
+  assert.match(developmentGuide, /does not expose\s+a documented style-nonce API/)
+  assert.match(developmentGuide, /`PanelRoot` through its `styleNonce` prop/)
 })

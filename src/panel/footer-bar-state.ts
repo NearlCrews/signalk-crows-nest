@@ -4,9 +4,9 @@
  * Extracted from FooterBar so it can be unit-tested without a React renderer.
  *
  * Rules:
- * - Enabled when the plugin is unconfigured (never saved, counting a save
- *   made in this session), so the user can save defaults to enable the plugin.
- * - Enabled when the working state differs from the last-saved snapshot
+ * - Enabled when the plugin is unconfigured (no initial configuration and no
+ *   save request in this session), so the user can request the defaults.
+ * - Enabled when the working state differs from the last-requested snapshot
  *   (dirty), so a pending edit can always be committed.
  * - Disabled otherwise: a configured plugin with no pending edits has
  *   nothing to save.
@@ -15,9 +15,9 @@
 /**
  * Returns true when the Save button should be disabled.
  *
- * @param dirty - Whether the working state differs from the last saved snapshot.
- * @param unconfigured - Whether the plugin has never been saved, counting a
- *   save made in this session.
+ * @param dirty - Whether the working state differs from the last requested snapshot.
+ * @param unconfigured - Whether the plugin had no initial configuration and
+ *   has not received a save request in this session.
  */
 export function saveButtonDisabled (dirty: boolean, unconfigured: boolean): boolean {
   return !dirty && !unconfigured

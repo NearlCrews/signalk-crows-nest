@@ -9,7 +9,7 @@
  * API, and the position monitor.
  */
 
-import type { Plugin, ServerAPI } from '@signalk/server-api'
+import type { Plugin, PluginRouter, ServerAPI } from '@signalk/server-api'
 import type { InputRegistry } from '../inputs/input-registry.js'
 import type { OutputRegistry } from '../outputs/output-registry.js'
 import type { OutputContext, OutputHandle, PositionScanContributor } from '../outputs/output.js'
@@ -23,7 +23,6 @@ import { createStatusRouter } from '../status/status-router.js'
 import { buildPoiTypesString, ensurePoiTypes } from '../shared/poi-type-selection.js'
 import { PLUGIN_ID } from '../shared/plugin-id.js'
 import type { PluginConfig } from '../shared/types.js'
-import type { IRouter } from 'express'
 
 const PLUGIN_NAME = "Crow's Nest"
 const PLUGIN_DESCRIPTION =
@@ -122,10 +121,9 @@ export function createPlugin (
   }
 
   const statusRegistrar = createStatusRouter(
-    app,
     () => status.snapshot(runtime?.source.cacheSize() ?? 0)
   )
-  const registerWithRouter = (router: IRouter): void => {
+  const registerWithRouter = (router: PluginRouter): void => {
     statusRegistrar(router)
   }
 

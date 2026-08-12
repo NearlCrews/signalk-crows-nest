@@ -311,11 +311,8 @@ self-contained module registered on one line in `src/index.ts`.
     server-wide plugin status line. Request-scoped list provenance
     tells the aggregate registry whether a fulfilled list proves upstream
     reachability),
-    `status-router.ts` (Express router that serves the
-    snapshot behind the shared admin gate), `admin-gate.ts` (the
-    `ensureApiAdminGate` helper that installs the server admin middleware on the
-    plugin's `/api` subtree once per app and reports whether it holds, so the
-    status route mounts only when gated and otherwise fails closed), and
+    `status-router.ts` (serves the snapshot as a directly registered,
+    admin-only route through the host's public `PluginRouter` contract), and
     `status-types.ts` (the `StatusSnapshot` type, shared by plugin and panel).
   - `shared/` - source-agnostic contracts and helpers shared across the
     plugin: `types.ts` (the cross-module type contracts; ActiveCaptain-only
@@ -450,8 +447,6 @@ self-contained module registered on one line in `src/index.ts`.
     used by the per-source live-status pill on each card header),
     `footer-bar-state.ts` (the pure Save-button disabled logic),
     `select-all-state.ts` (the pure tri-state select-all derivation),
-    `csp-nonce.ts` (best-effort discovery of the host page's CSP nonce for
-    the injected styles),
     `request-timeout.ts` (the panel-wide per-request timeout the status
     poller and the unit-preferences fetch share), and `unit-system.ts` (the
     React-free display-units module keyed off the server unit-preset's
@@ -515,9 +510,11 @@ self-contained module registered on one line in `src/index.ts`.
   transform and emit `jsxDEV` calls that the bundled production
   `react/jsx-dev-runtime` does not implement, which breaks the panel at first
   render. The `test/panel-babel-config.test.ts` contract test locks this in.
-- `signalk-nearlcrews-ui` 0.6.2 supplies the panel shell, theme system, and
-  shared controls. It is pinned exactly, fresh profiles use Auto, and the host
-  supplies the React 19 singleton without a bundled fallback.
+- `signalk-nearlcrews-ui` 0.7.0 supplies the panel shell, theme system, and
+  shared controls. It is pinned exactly. Fresh profiles use Auto, which follows
+  an explicit host theme and otherwise uses Light. System follows the operating
+  system preference. The host supplies React and React DOM 19 singletons without
+  bundled fallbacks.
 - The test suite is type-checked separately (`tsconfig.test.json`); all three
   configs run under `npm run typecheck`.
 - ESLint 9 with [neostandard](https://github.com/neostandard/neostandard)

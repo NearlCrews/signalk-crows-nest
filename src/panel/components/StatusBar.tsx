@@ -15,7 +15,7 @@ import type * as React from 'react'
 import { memo } from 'react'
 import type { SourceStatus, StatusSnapshot } from '../../status/status-types.js'
 import { relativeTime } from '../relative-time.js'
-import { PLAIN_BUTTON_CLASS, S } from '../styles.js'
+import { S } from '../styles.js'
 
 // The dot base merged with each state variant once at module load, rather than
 // rebuilding the merged object on every row of every 5 s poll render.
@@ -85,7 +85,7 @@ export default memo(function StatusBar ({ status, lastUpdatedMs, onJumpToSource 
   // The bar is a passive health readout, not a live region: it carries no
   // role='status'. The relative "N minutes ago" text re-renders on every 5 s
   // poll, so announcing the whole bar on each change would be pure noise. The
-  // transient "Saved" confirmation in FooterBar remains the one polite live
+  // transient save-request confirmation in FooterBar remains the one polite live
   // region, which is the right number for the panel.
   if (status === null) {
     return (
@@ -134,7 +134,6 @@ export default memo(function StatusBar ({ status, lastUpdatedMs, onJumpToSource 
                   ? (
                     <button
                       type='button'
-                      className={PLAIN_BUTTON_CLASS}
                       style={S.statusErrorJump}
                       title='Show the source this error belongs to'
                       onClick={() => onJumpToSource(source)}
