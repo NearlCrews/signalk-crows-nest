@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { normalizePackReport } from './package-report.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const packagePath = resolve(root, 'package.json')
@@ -27,7 +28,7 @@ try {
     '--pack-destination',
     artifactDirectory
   ], { cwd: root, encoding: 'utf8' })
-  report = JSON.parse(output)[0]
+  report = normalizePackReport(JSON.parse(output))
 } finally {
   writeFileSync(packagePath, originalPackage)
 }

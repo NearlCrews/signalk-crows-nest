@@ -40,8 +40,9 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   round trips.
 - The status endpoint now uses Signal K's public admin-only `PluginRouter`
   contract instead of a private server security hook.
-- Package verification accepts the documented npm 11 and npm 12 JSON report
-  shapes instead of failing on npm 12's keyed package report.
+- Package verification and release tarball creation accept the documented npm
+  11 and npm 12 JSON report shapes instead of failing on npm 12's keyed package
+  report.
 
 <a id="v0154"></a>
 
