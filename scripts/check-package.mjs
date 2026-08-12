@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process'
 import { readdir, readFile } from 'node:fs/promises'
 import { promisify } from 'node:util'
+import { normalizePackReport } from './package-report.mjs'
 
 const execFileAsync = promisify(execFile)
 const EXPECTED_SHARED_UI_VERSION = '0.7.1'
@@ -10,7 +11,7 @@ const { stdout } = await execFileAsync(
   ['pack', '--dry-run', '--json', '--ignore-scripts'],
   { maxBuffer: 10 * 1024 * 1024 }
 )
-const [packResult] = JSON.parse(stdout)
+const packResult = normalizePackReport(JSON.parse(stdout))
 const files = new Set(packResult.files.map((file) => file.path))
 const normalizeDeclaredPath = (declaredPath) => declaredPath.replace(/^\.\//, '')
 

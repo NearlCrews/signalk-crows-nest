@@ -42,7 +42,7 @@
     "deadcode": "knip --include files,dependencies,unlisted,binaries",
     "ci:workflows": "node scripts/check-workflows.mjs",
     "size": "size-limit",
-    "package:check": "publint --pack npm --strict && node scripts/check-package.mjs",
+    "package:check": "node scripts/test-package-report.mjs && publint --pack npm --strict && node scripts/check-package.mjs",
     "pack:release": "node scripts/create-release-tarball.mjs",
     "audit:runtime": "npm audit --omit=dev --audit-level=high",
     "audit:full": "npm audit --audit-level=high",
