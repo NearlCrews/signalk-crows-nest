@@ -66,6 +66,28 @@ test('preserves unknown configuration keys through an edit and save request', as
   expect(saved.openSeaMapEnabled).toBe(true)
 })
 
+test('provides deterministic populated state for the release screenshot', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-08-12T16:00:00.000Z'))
+  await page.goto('/?screenshot')
+  await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true')
+  await page.getByRole('radio', { name: 'Light' }).click()
+  await expect(page.getByRole('radio', { name: 'Light' })).toBeChecked()
+  await expect(page.getByText('reachable', { exact: true })).toHaveCount(8)
+  await expect(page.getByRole('checkbox', { checked: true })).toHaveCount(7)
+  for (const name of [
+    'Garmin ActiveCaptain',
+    'OpenSeaMap',
+    'USCG Light List',
+    'NOAA ENC Direct',
+    'NOAA CO-OPS',
+    'USCG Local Notice to Mariners',
+    'NGA World Port Index',
+    'USACE locks and dams'
+  ]) {
+    await expect(page.locator(`[title^="${name}: 1 POI in last fetch"]`)).toHaveCount(1)
+  }
+})
+
 test('supports every explicit theme and returns to Auto', async ({ page }) => {
   const root = page.locator('[data-snui-root]')
   const themeGroup = page.getByRole('radiogroup', { name: 'Panel theme' })

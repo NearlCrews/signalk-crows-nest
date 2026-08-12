@@ -22,17 +22,21 @@ route-corridor, and bridge air-draft alarms.
 > safety-of-life navigation: always cross-check against official charts and
 > your primary instruments.
 
-## What's new in 0.15.4
+## What's new in 0.15.5
 
-- **Bounded upstream responses.** Queued ActiveCaptain and Overpass responses
-  now enforce the same 64 MiB limit as one-shot downloads, including streamed
-  bodies without a trustworthy `Content-Length`.
-- **Safer configured endpoints and note links.** Overpass configuration accepts
-  only absolute HTTP(S) URLs, and note resources omit unsafe link schemes.
-- **Current shared panel UI.** The panel now bundles
-  `signalk-nearlcrews-ui` 0.6.2.
-- **Enforced quality floors.** Coverage thresholds and complete Knip reporting
-  now fail the gate on regressions.
+- **Forward-compatible configuration.** Configuration saves preserve unknown
+  top-level keys, and the status endpoint now uses Signal K's public
+  admin-only router contract.
+- **Current shared panel UI.** The panel bundles `signalk-nearlcrews-ui` 0.7.1,
+  adds the System theme, and docks save actions when the viewport requires it.
+- **Clear save feedback and fallback guidance.** Save and discard actions move
+  focus to a stable completion message, and unsupported browsers receive a
+  direct explanation of the missing native CSS capability.
+- **Verified release provenance.** Refreshed workflow checks and packaging now
+  verify the source commit recorded in each release tarball's npm metadata.
+
+See the [v0.15.5 changelog entry](https://github.com/NearlCrews/signalk-crows-nest/blob/main/CHANGELOG.md#v0155)
+and [full release history](https://github.com/NearlCrews/signalk-crows-nest/blob/main/CHANGELOG.md).
 
 ## What it does
 

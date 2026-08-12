@@ -1,6 +1,16 @@
 import * as React from 'react'
 import * as ReactDOM from 'react-dom'
 import { createRoot } from 'react-dom/client'
+import {
+  ACTIVE_CAPTAIN_SOURCE_ID,
+  NOAA_COOPS_SOURCE_ID,
+  NOAA_ENC_SOURCE_ID,
+  OPENSEAMAP_SOURCE_ID,
+  USACE_SOURCE_ID,
+  USCG_LIGHT_LIST_SOURCE_ID,
+  USCG_LNM_SOURCE_ID,
+  WPI_SOURCE_ID
+} from '../../src/shared/source-ids.js'
 
 interface PanelProps {
   configuration: unknown
@@ -29,16 +39,34 @@ interface ShareScopeEntry<T> {
 }
 
 const fixtureParams = new URLSearchParams(window.location.search)
+const screenshotTimestamp = '2026-08-12T16:00:00.000Z'
 
 if (fixtureParams.has('unsupported-css-scope')) {
   Object.defineProperty(window, 'CSSScopeRule', { configurable: true, value: undefined })
 }
 
 const statusPayload = {
-  sources: [],
-  cachedPoiCount: 0,
+  sources: fixtureParams.has('screenshot')
+    ? [
+        { source: ACTIVE_CAPTAIN_SOURCE_ID, name: 'Garmin ActiveCaptain' },
+        { source: OPENSEAMAP_SOURCE_ID, name: 'OpenSeaMap' },
+        { source: USCG_LIGHT_LIST_SOURCE_ID, name: 'USCG Light List' },
+        { source: NOAA_ENC_SOURCE_ID, name: 'NOAA ENC Direct' },
+        { source: NOAA_COOPS_SOURCE_ID, name: 'NOAA CO-OPS' },
+        { source: USCG_LNM_SOURCE_ID, name: 'USCG Local Notice to Mariners' },
+        { source: WPI_SOURCE_ID, name: 'NGA World Port Index' },
+        { source: USACE_SOURCE_ID, name: 'USACE locks and dams' }
+      ].map(({ source, name }) => ({
+        source,
+        name,
+        apiReachable: true,
+        lastListFetch: { at: screenshotTimestamp, poiCount: 1 },
+        lastSkip: null
+      }))
+    : [],
+  cachedPoiCount: fixtureParams.has('screenshot') ? 8 : 0,
   recentErrors: [],
-  startedAt: new Date().toISOString()
+  startedAt: fixtureParams.has('screenshot') ? screenshotTimestamp : new Date().toISOString()
 }
 
 window.fetch = async (input): Promise<Response> => {
@@ -114,7 +142,17 @@ try {
             futureFeature: { enabled: true, strategy: 'coastal' },
             futureFlag: 'keep-me'
           }
-        : null
+        : fixtureParams.has('screenshot')
+          ? {
+              openSeaMapEnabled: true,
+              uscgLightListEnabled: true,
+              noaaEncEnabled: true,
+              noaaCoopsEnabled: true,
+              uscgLnmEnabled: true,
+              wpiEnabled: true,
+              usaceEnabled: true
+            }
+          : null
     )
     const save = (nextConfiguration: unknown): void => {
       document.body.dataset.saveCount = String(Number(document.body.dataset.saveCount ?? 0) + 1)

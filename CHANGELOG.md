@@ -11,6 +11,10 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+<a id="v0155"></a>
+
+## [0.15.5] - 2026-08-12
+
 ### Added
 
 - The configuration panel now explains when its required native CSS scope
@@ -23,9 +27,12 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   React DOM at `^19.2.0` as host-provided Module Federation singletons.
 - Save and discard actions now report that the host request was issued and
   move focus to the stable completion message.
-- Compatible development dependencies, workflow security checks, and release
-  packaging are refreshed. Release tarballs now verify their source commit
+- Compatible development dependencies, repository metadata, workflow security
+  checks, and release packaging are refreshed. The security policy now tracks
+  the supported 0.15.x line, and release tarballs verify their source commit
   through npm `gitHead` metadata.
+- The App Store panel image is refreshed for the current interface, with a
+  reproducible Chromium capture command and browser-checked fixture state.
 
 ### Fixed
 
@@ -1948,3 +1955,6 @@ bridges, and locks along it.**
   are read as UTC; in-flight requests are aborted on stop; the plugin reports
   health through `setPluginStatus`, and documents its HTTP API with
   `getOpenApi`.
+
+[Unreleased]: https://github.com/NearlCrews/signalk-crows-nest/compare/v0.15.5...HEAD
+[0.15.5]: https://github.com/NearlCrews/signalk-crows-nest/compare/v0.15.4...v0.15.5

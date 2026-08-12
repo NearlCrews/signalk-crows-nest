@@ -1,6 +1,6 @@
 {
   "name": "signalk-crows-nest",
-  "version": "0.15.4",
+  "version": "0.15.5",
   "description": "Imports points of interest from Garmin ActiveCaptain, OpenSeaMap, the USCG Light List, USCG Local Notices to Mariners, NOAA ENC Direct, NOAA CO-OPS, the NGA World Port Index, and USACE as Signal K notes resources, with proximity, route-corridor, and bridge air-draft alarms.",
   "type": "commonjs",
   "main": "dist/index.js",
@@ -36,6 +36,7 @@
     "test:coverage": "c8 --reporter=text --reporter=lcov --check-coverage --lines 90 --branches 80 --functions 90 node --import tsx --test test/*.test.ts",
     "test:browser": "npm run build && playwright test --project=chromium",
     "test:browser:cross": "npm run build && playwright test",
+    "screenshot:panel": "npm run build && node scripts/capture-panel-screenshot.mjs",
     "format": "eslint . --fix && prettier --write \"*.{json,jsonc,md,yml,yaml}\" \".github/**/*.{md,yml,yaml}\" \"docs/**/*.{json,jsonc,md,yml,yaml}\"",
     "format:check": "prettier --check \"*.{json,jsonc,md,yml,yaml}\" \".github/**/*.{md,yml,yaml}\" \"docs/**/*.{json,jsonc,md,yml,yaml}\"",
     "deadcode": "knip --include files,dependencies,unlisted,binaries",

@@ -64,7 +64,8 @@ Before creating the GitHub release:
 5. Review the package metadata and plugin-registry inputs: description,
    categories, engine range, icon paths, screenshot paths, and alt text,
    recommendations, repository links, and funding link. Open every current
-   screenshot and confirm it matches the release UI.
+   screenshot and confirm it matches the release UI. Regenerate the panel image
+   reproducibly with `npm run screenshot:panel` when the panel changes.
 6. Commit the version bump, the regenerated `package-lock.json`, the changelog
    entry, and any new published assets (for example new `assets/screenshots/`
    images). Confirm with `git status` that nothing under `assets/` is left
