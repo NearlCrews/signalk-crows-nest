@@ -14,7 +14,7 @@ import { createCoopsClient } from './coops-client.js'
 import { createCoopsStore } from './coops-store.js'
 import type { CoopsStationType } from './noaa-coops-types.js'
 import type { InputContext, InputModule } from '../poi-source.js'
-import { startRefreshScheduler } from '../refresh-scheduler.js'
+import { loadStoreInBackground, startRefreshScheduler } from '../refresh-scheduler.js'
 import { cappedDedupeRadius } from '../../shared/dedupe-radius.js'
 import { clampRefreshHours, refreshHoursSchema } from '../../shared/refresh-hours.js'
 import { NOAA_COOPS_SOURCE_ID } from '../../shared/source-ids.js'
@@ -75,13 +75,7 @@ export const noaaCoopsInput: InputModule = {
     const { app, config, status, dataDir, getCurrentPosition } = context
     const client = createCoopsClient()
     const store = createCoopsStore(dataDir)
-    // The on-disk load is kicked off here so a refresh fired by the scheduler
-    // reads a hot index; failures are logged but do not block plugin start: the
-    // store falls back to an empty index, which the next successful refresh
-    // repopulates from upstream.
-    store.load().catch(error => {
-      app.debug(`NOAA CO-OPS index load failed: ${String(error)}`)
-    })
+    loadStoreInBackground(store, app, 'NOAA CO-OPS')
     const source: NoaaCoopsSource = createNoaaCoopsSource({
       client,
       store,

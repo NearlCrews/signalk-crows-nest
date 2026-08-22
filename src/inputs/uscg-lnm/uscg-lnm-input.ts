@@ -20,7 +20,7 @@ import { createLnmClient } from './lnm-client.js'
 import { createLnmStore } from './lnm-store.js'
 
 import type { InputContext, InputModule } from '../poi-source.js'
-import { startRefreshScheduler } from '../refresh-scheduler.js'
+import { loadStoreInBackground, startRefreshScheduler } from '../refresh-scheduler.js'
 import { cappedDedupeRadius } from '../../shared/dedupe-radius.js'
 import { DEFAULT_USCG_LNM_DEBOUNCE_SECONDS, effectivePeriodicRefreshSeconds, refreshSecondsSchema } from '../../shared/bbox-debounce-bounds.js'
 import { USCG_LNM_SOURCE_ID } from '../../shared/source-ids.js'
@@ -75,12 +75,7 @@ export const uscgLnmInput: InputModule = {
     const { app, config, status, dataDir, getCurrentPosition } = context
     const client = createLnmClient()
     const store = createLnmStore(dataDir)
-    // The on-disk load is kicked off here so a refresh fired by the scheduler
-    // reads a hot index; failures are logged but do not block plugin start:
-    // the store falls back to empty, which the next refresh repopulates.
-    store.load().catch((error) => {
-      app.debug(`USCG LNM index load failed: ${String(error)}`)
-    })
+    loadStoreInBackground(store, app, 'USCG LNM')
     const source: UscgLnmSource = createUscgLnmSource({
       client,
       store,

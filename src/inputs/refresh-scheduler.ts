@@ -17,6 +17,28 @@ import { MS_PER_SECOND } from '../shared/time.js'
 /** Delay before the first refresh fires after a plugin start, in seconds. */
 const INITIAL_REFRESH_DELAY_SECONDS = 30
 
+/** A store whose on-disk index is read asynchronously at input start. */
+export interface LoadableStore {
+  /** Read the persisted index. Rejects when the file is missing or unreadable. */
+  load: () => Promise<unknown>
+}
+
+/**
+ * Start a store's on-disk load without waiting for it, so a refresh fired by
+ * the scheduler reads a hot index.
+ *
+ * A failure is logged and swallowed rather than blocking plugin start: the
+ * store falls back to an empty index, which the next successful refresh
+ * repopulates from upstream. The three full-download inputs all want exactly
+ * this, so the pattern lives here beside the scheduler rather than in three
+ * copies that could drift on whether a load failure is fatal.
+ */
+export function loadStoreInBackground (store: LoadableStore, app: ServerAPI, name: string): void {
+  store.load().catch((error: unknown) => {
+    app.debug(`${name} index load failed: ${String(error)}`)
+  })
+}
+
 /** A source that can be periodically refreshed and closed. */
 export interface RefreshableSource {
   /** Run one full refresh pass. Rejects on failure. */
