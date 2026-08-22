@@ -523,11 +523,18 @@ self-contained module registered on one line in `src/index.ts`.
   transform and emit `jsxDEV` calls that the bundled production
   `react/jsx-dev-runtime` does not implement, which breaks the panel at first
   render. The `test/panel-babel-config.test.ts` contract test locks this in.
-- `signalk-nearlcrews-ui` 0.8.0 supplies the panel shell, theme system, and
+- `signalk-nearlcrews-ui` 0.8.1 supplies the panel shell, theme system, and
   shared controls. It is pinned exactly. Fresh profiles use Auto, which follows
   an explicit host theme and otherwise uses Light. System follows the operating
   system preference. The host supplies React and React DOM `^19.2.0` singletons
   without bundled fallbacks.
+- `CollapsibleSection` defaults to `mountStrategy="retain"`, which wraps its
+  children in React `Activity`. Collapsing runs every effect cleanup in the
+  subtree and reopening re-runs those effects, while component state and refs
+  survive. A mount effect is therefore NOT run-once. Any effect inside a
+  retained section that resets state, reports validity upward, or holds an
+  abortable request must be written to tolerate being replayed:
+  `use-number-draft.ts` compares against a ref for exactly this reason.
 - The shared UI package is ESM-only: every entry point in its export map
   declares an `import` condition and nothing else. Webpack resolves that
   condition, so panel `.tsx` components may import it freely. A plain `.ts`
@@ -547,6 +554,9 @@ self-contained module registered on one line in `src/index.ts`.
   project's old `eslint-config-standard` setup. The lint toolchain caps at
   ESLint 9 because neostandard peers to `eslint ^9`.
 - Node.js 20.3 or newer (the ActiveCaptain client uses `AbortSignal.any`).
+  `engines.node` is `^20.3.0 || >=22` rather than `>=20.3.0`: `lru-cache`
+  declares `20 || >=22` and deliberately excludes Node 21, so the plain
+  lower bound advertised a runtime the dependency closure does not support.
 - Tests run on `node:test` via `tsx`, so no separate test framework.
 
 ## Commands
@@ -560,6 +570,10 @@ self-contained module registered on one line in `src/index.ts`.
 - `npm run lint:fix` - lint and auto-fix.
 - `npm run verify` - run the complete local verification gate.
 - `npm run verify:release` - add cross-browser tests and the full audit.
+- `npm run licenses` - regenerate `THIRD_PARTY_NOTICES.md` from the packages
+  webpack bundles into the panel. `npm run licenses:check`, wired into
+  `package:check`, verifies the committed file still matches the installed
+  tree without paying for a webpack build.
 - `npm run clean` - remove `dist/` and the panel build artifacts.
 - `npm run prepack` - clean and rebuild before packaging or publishing (runs
   automatically on `npm pack` and `npm publish`).

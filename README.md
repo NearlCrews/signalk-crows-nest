@@ -22,20 +22,23 @@ route-corridor, and bridge air-draft alarms.
 > safety-of-life navigation: always cross-check against official charts and
 > your primary instruments.
 
-## What's new in 0.15.5
+## What's new in 0.15.6
 
-- **Forward-compatible configuration.** Configuration saves preserve unknown
-  top-level keys, and the status endpoint now uses Signal K's public
-  admin-only router contract.
-- **Current shared panel UI.** The panel bundles `signalk-nearlcrews-ui` 0.8.0,
-  adds the System theme, and docks save actions when the viewport requires it.
-- **Clear save feedback and fallback guidance.** Save and discard actions move
-  focus to a stable completion message, and unsupported browsers receive a
-  direct explanation of the missing native CSS capability.
-- **Verified release provenance.** Refreshed workflow checks and packaging now
-  verify the source commit recorded in each release tarball's npm metadata.
+- **Accurate third-party attribution.** The notices shipped with the package
+  are now generated from the packages webpack actually bundles, with each
+  license text embedded, and the packaging gate fails when they stop matching
+  the installed tree. The previous hand-maintained list omitted `react-aria`,
+  which the shared panel shell pulls in for its overlay portal.
+- **Current shared panel UI.** The panel bundles `signalk-nearlcrews-ui` 0.8.1
+  and shares React with the Signal K admin host under a strict version check.
+- **Precise runtime support.** `engines.node` reads `^20.3.0 || >=22`, which
+  states the supported runtimes exactly rather than admitting Node 21, which a
+  dependency excludes.
+- **Pairs with the NMEA 2000 emitter.** The App Store listing now points to
+  `signalk-nmea2000-emitter-cannon`, which converts the hazard, route, and
+  bridge notifications this plugin raises into NMEA 2000 alert messages.
 
-See the [v0.15.5 changelog entry](https://github.com/NearlCrews/signalk-crows-nest/blob/main/CHANGELOG.md#v0155)
+See the [v0.15.6 changelog entry](https://github.com/NearlCrews/signalk-crows-nest/blob/main/CHANGELOG.md#v0156)
 and [full release history](https://github.com/NearlCrews/signalk-crows-nest/blob/main/CHANGELOG.md).
 
 ## What it does
@@ -306,7 +309,7 @@ caches while retaining the on-disk data used for offline operation.
 
 This project targets Node 20.3 or newer and develops against
 `@signalk/server-api` 2.31.1 or newer, with TypeScript 6 and the exact shared
-UI package `signalk-nearlcrews-ui` 0.8.0 (development only). The full local
+UI package `signalk-nearlcrews-ui` 0.8.1 (development only). The full local
 toolchain supports Node 22 from 22.22.2, Node 24 from 24.15.0, and Node 26,
 while the published plugin runtime keeps its Node 20.3 compatibility floor.
 

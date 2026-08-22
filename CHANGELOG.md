@@ -11,6 +11,48 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+<a id="v0156"></a>
+
+## [0.15.6] - 2026-08-22
+
+### Added
+
+- Third-party notices are now generated from the packages webpack actually
+  bundles into the configuration panel, with each license text embedded, and
+  the packaging gate fails when the committed file stops describing the
+  installed tree. The previous hand-maintained list omitted `react-aria`,
+  which the shared panel shell pulls in for its overlay portal.
+- The plugin is listed as working well with
+  `signalk-nmea2000-emitter-cannon`, which converts the hazard, route, and
+  bridge notifications this plugin raises into NMEA 2000 alert messages.
+- CodeQL analysis runs on pushes, pull requests, and a weekly schedule.
+
+### Changed
+
+- The panel targets `signalk-nearlcrews-ui` 0.8.1.
+- React and React DOM are shared with the Signal K admin host under a strict
+  version check, so a host outside `^19.2.0` fails at the boundary instead of
+  warning and continuing.
+- `engines.node` reads `^20.3.0 || >=22`, which states the supported runtimes
+  exactly: a dependency excludes Node 21, which the previous `>=20.3.0`
+  admitted.
+- The Signal K plugin workflow declares its test, format, coverage, and Node
+  version inputs rather than inheriting them, and pins the armv7 Cerbo GX lane
+  on purpose.
+- The configuration panel size budget tightens from 50 kB to 44 kB against a
+  measured 40.15 kB.
+- The numeric draft buffer's reset effects now fire only when the value they
+  watch actually changed. A collapsed configuration section pauses and replays
+  its effects, so the previous unguarded resets could clear state they should
+  have left alone. No edit was reachable through the interface, because moving
+  focus out of a field already commits and normalizes it, so this is a guard
+  rather than a behavior change.
+
+### Fixed
+
+- The packaging gate now catches a partial build that leaves the panel icons
+  out of the published package, and requires the third-party notices to ship.
+
 <a id="v0155"></a>
 
 ## [0.15.5] - 2026-08-12
@@ -1959,5 +2001,6 @@ bridges, and locks along it.**
   health through `setPluginStatus`, and documents its HTTP API with
   `getOpenApi`.
 
-[Unreleased]: https://github.com/NearlCrews/signalk-crows-nest/compare/v0.15.5...HEAD
+[Unreleased]: https://github.com/NearlCrews/signalk-crows-nest/compare/v0.15.6...HEAD
+[0.15.6]: https://github.com/NearlCrews/signalk-crows-nest/compare/v0.15.5...v0.15.6
 [0.15.5]: https://github.com/NearlCrews/signalk-crows-nest/compare/v0.15.4...v0.15.5
