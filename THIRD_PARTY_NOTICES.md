@@ -3,8 +3,17 @@
 The published configuration panel bundle contains code from the following
 packages:
 
-- `signalk-nearlcrews-ui` 0.7.1, Apache License 2.0, Nearl Crews
+- `signalk-nearlcrews-ui` 0.8.0, Apache License 2.0, Copyright 2026 Nearl Crews
 - `react` 19.2.8, MIT License, Copyright (c) Meta Platforms, Inc. and affiliates
+
+Only the `react/jsx-runtime` subpath of `react` is bundled. The package root
+resolves from the Signal K admin host as a Module Federation singleton.
+
+The shared UI package depends on `react-aria`, but this panel ships none of it.
+React Aria reaches a bundle only through the focused entry points
+(`/overlays`, `/data-grid`, `/forms`, `/composites`), and this panel imports the
+package root only, so the one module webpack resolves is eliminated before
+output.
 
 ## React MIT License
 

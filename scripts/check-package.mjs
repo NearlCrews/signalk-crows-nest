@@ -49,6 +49,22 @@ for (const [field, declaredPath] of declaredEntrypoints) {
 if (![...files].some((file) => /^public\/.+\.js$/.test(file))) {
   throw new Error('Packed package is missing the panel JavaScript chunks.')
 }
+
+// The readdir sweep below only proves that whatever public/ happens to hold
+// got packed, so a partial build packs cleanly. webpack owns public/ and
+// wipes it, so running build:panel after a full build removes the icons
+// build:icons copied in, and nothing downstream notices. Name the expected
+// icons instead of trusting the directory to be complete.
+for (const iconName of await readdir('assets/icons')) {
+  if (iconName !== 'icon.svg' && !(iconName.startsWith('icon-') && iconName.endsWith('.png'))) {
+    continue
+  }
+  if (!files.has(`public/assets/icons/${iconName}`)) {
+    throw new Error(
+      `Packed package is missing panel icon public/assets/icons/${iconName}. Run the full build.`
+    )
+  }
+}
 for (const entry of await readdir('public', { withFileTypes: true })) {
   if (entry.isFile() && !files.has(`public/${entry.name}`)) {
     throw new Error(`Packed package is missing generated panel asset public/${entry.name}.`)
@@ -91,6 +107,26 @@ if (packageJson.dependencies?.['signalk-nearlcrews-ui']) {
 const sharedUiVersion = packageJson.devDependencies?.['signalk-nearlcrews-ui']
 if (sharedUiVersion !== EXPECTED_SHARED_UI_VERSION) {
   throw new Error(`The UI package must be pinned to exact version ${EXPECTED_SHARED_UI_VERSION}.`)
+}
+
+// THIRD_PARTY_NOTICES.md ships in the tarball, so it is a published
+// attribution record for the code inside the panel bundle. A dependency bump
+// that leaves it behind publishes a wrong one, silently: nothing else reads
+// the file. These two are what the emitted chunks actually contain, so the
+// notices drift fails the gate instead of the release. Membership was checked
+// against the emitted files and webpack's extracted license banner, not the
+// module graph: the graph also lists modules that are resolved and then
+// eliminated, which is why react-aria appears there but ships nothing.
+const notices = await readFile('THIRD_PARTY_NOTICES.md', 'utf8')
+for (const bundledPackage of ['signalk-nearlcrews-ui', 'react']) {
+  const { version } = JSON.parse(
+    await readFile(`node_modules/${bundledPackage}/package.json`, 'utf8')
+  )
+  if (!notices.includes(`\`${bundledPackage}\` ${version},`)) {
+    throw new Error(
+      `THIRD_PARTY_NOTICES.md does not attribute ${bundledPackage} ${version}, which the panel bundles.`
+    )
+  }
 }
 
 console.log(`Packed package passed: ${files.size} files in ${packResult.filename}.`)
