@@ -76,6 +76,13 @@ export interface BridgeClearanceResolver {
    * ActiveCaptain bridge whose clearance is not yet cached.
    */
   clearanceMeters: (poi: PoiSummary) => number | null
+  /**
+   * Release the resolver at the end of a plugin run. Starts no further
+   * fetches, drops the timeout timers still pending, discards whatever an
+   * in-flight fetch resolves to, and empties the cache. Idempotent, and safe
+   * to call while a fetch is outstanding.
+   */
+  close: () => void
 }
 
 /** A resolved ActiveCaptain clearance: a number, or `null` for "detail had none." */
@@ -101,6 +108,12 @@ export function createBridgeClearanceResolver (deps: ClearanceResolverDeps): Bri
   // Ids with a detail fetch in flight, so a burst of ticks cannot stack
   // duplicate fetches for the same bridge.
   const inFlight = new Set<string>()
+  // Pending per-fetch timeout timers, so close() can drop them rather than
+  // leave one holding the event loop for the rest of its window.
+  const timers = new Set<ReturnType<typeof setTimeout>>()
+  // Set by close(). Guards every post-close side effect: no new fetch starts,
+  // and a fetch still in flight resolves into nothing.
+  let closed = false
 
   function startFetch (id: string): void {
     inFlight.add(id)
@@ -120,9 +133,13 @@ export function createBridgeClearanceResolver (deps: ClearanceResolverDeps): Bri
       timer = setTimeout(() => {
         reject(new Error(`Bridge clearance fetch timed out after ${fetchTimeoutMs} ms`))
       }, fetchTimeoutMs)
+      timers.add(timer)
     })
     Promise.race([detailPromise, timeout])
       .then((detail) => {
+        // A run that has been torn down keeps no state: this value belongs to
+        // a configuration that is no longer live.
+        if (closed) return
         cache.set(id, {
           clearance: toFiniteNumber(detail.verticalClearanceMeters),
           resolvedAt: now()
@@ -138,8 +155,17 @@ export function createBridgeClearanceResolver (deps: ClearanceResolverDeps): Bri
       })
       .finally(() => {
         clearTimeout(timer)
+        timers.delete(timer)
         inFlight.delete(id)
       })
+  }
+
+  function close (): void {
+    closed = true
+    for (const timer of timers) clearTimeout(timer)
+    timers.clear()
+    inFlight.clear()
+    cache.clear()
   }
 
   function clearanceMeters (poi: PoiSummary): number | null {
@@ -155,8 +181,9 @@ export function createBridgeClearanceResolver (deps: ClearanceResolverDeps): Bri
     }
     const cached = cache.get(poi.id)
     const fresh = cached !== undefined && now() - cached.resolvedAt < ttlMs
-    // (Re-)fetch on a miss or a stale entry, unless one is already in flight.
-    if (!fresh && !inFlight.has(poi.id)) {
+    // (Re-)fetch on a miss or a stale entry, unless one is already in flight
+    // or the run has been torn down.
+    if (!closed && !fresh && !inFlight.has(poi.id)) {
       startFetch(poi.id)
     }
     // Serve a known clearance, even a stale one, while a refresh runs, so a
@@ -165,5 +192,5 @@ export function createBridgeClearanceResolver (deps: ClearanceResolverDeps): Bri
     return cached?.clearance ?? null
   }
 
-  return { clearanceMeters }
+  return { clearanceMeters, close }
 }

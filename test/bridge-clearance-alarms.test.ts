@@ -9,7 +9,7 @@ const ORIGIN: Position = { latitude: 0, longitude: 0 }
 
 /** A resolver stub returning a fixed clearance, in meters, for every bridge. */
 function fixedResolver (clearanceMeters: number | null): BridgeClearanceResolver {
-  return { clearanceMeters: () => clearanceMeters }
+  return { clearanceMeters: () => clearanceMeters, close: () => {} }
 }
 
 test('raises an alarm once for a too-low bridge within the radius', () => {

@@ -104,7 +104,7 @@ function startMultiSource (dataDir: string): {
     status,
     // The notes output never touches the resolver; an inert stub satisfies
     // the contract the plugin shell normally fills.
-    bridgeClearanceResolver: { clearanceMeters: () => null }
+    bridgeClearanceResolver: { clearanceMeters: () => null, close: () => {} }
   }
   notesResourceOutput.start(context)
 

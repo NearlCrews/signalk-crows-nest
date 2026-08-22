@@ -247,8 +247,16 @@ export const routeHazardOutput: OutputModule = {
     }
     return {
       stop: () => {
-        alarms.clearAll()
-        courseReader.stop()
+        // clearAll emits notification deltas, so it reaches app.handleMessage
+        // and any subscriber a delta fans out to. A subscriber throwing
+        // synchronously must not strand the Course API subscriptions: the
+        // server calls stop() before every start(), so a skipped teardown
+        // would stack a second course reader on each configuration save.
+        try {
+          alarms.clearAll()
+        } finally {
+          courseReader.stop()
+        }
       },
       positionScan
     }

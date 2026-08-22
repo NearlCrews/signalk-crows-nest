@@ -16,6 +16,7 @@ import type { OutputContext, OutputHandle, PositionScanContributor } from '../ou
 import type { PoiSource } from '../inputs/poi-source.js'
 import { assemblePluginSchema } from './plugin-config.js'
 import { createBridgeClearanceResolver } from '../outputs/bridge-air-draft/bridge-clearance-resolver.js'
+import type { BridgeClearanceResolver } from '../outputs/bridge-air-draft/bridge-clearance-resolver.js'
 import { createPositionMonitor } from '../monitoring/position-monitor.js'
 import type { PositionMonitor } from '../monitoring/position-monitor.js'
 import { createPluginStatus } from '../status/plugin-status.js'
@@ -61,6 +62,7 @@ const OPEN_API = {
 interface Runtime {
   source: PoiSource
   handles: OutputHandle[]
+  bridgeClearanceResolver: BridgeClearanceResolver
   monitor?: PositionMonitor
 }
 
@@ -91,7 +93,7 @@ export function createPlugin (
       status = createPluginStatus([])
       return
     }
-    const { source, handles, monitor } = runtime
+    const { source, handles, monitor, bridgeClearanceResolver } = runtime
     runtime = undefined
     // Reset the status recorder before the per-resource stop loop so a
     // snapshot read mid-teardown sees the gap state rather than the prior
@@ -112,6 +114,11 @@ export function createPlugin (
       } catch (error) {
         app.error(`Cannot stop an output: ${String(error)}`)
       }
+    }
+    try {
+      bridgeClearanceResolver.close()
+    } catch (error) {
+      app.error(`Cannot close the bridge clearance resolver: ${String(error)}`)
     }
     try {
       source.close()
@@ -187,22 +194,25 @@ export function createPlugin (
         }
       })
 
+      // One clearance resolver per run, shared by the bridge air-draft and
+      // route-hazard outputs so the same bridge resolves once. Cheap to build
+      // (an LRU plus two empty sets, nothing scheduled), so it is always
+      // supplied even when neither consumer is enabled. It is held on the
+      // runtime so teardown can close it: an in-flight detail fetch, and the
+      // timeout guarding it, outlive the run that asked for them.
+      const bridgeClearanceResolver = createBridgeClearanceResolver({
+        getDetails: (id) => source.getDetails(id),
+        debug: (message) => { app.debug(message) }
+      })
       const outputContext: OutputContext = {
         app: guardedApp,
         config,
         pois: source,
         status,
-        // One clearance resolver per run, shared by the bridge air-draft and
-        // route-hazard outputs so the same bridge resolves once. Cheap to
-        // build (an LRU and a Set, no timers), so it is always supplied even
-        // when neither consumer is enabled.
-        bridgeClearanceResolver: createBridgeClearanceResolver({
-          getDetails: (id) => source.getDetails(id),
-          debug: (message) => { app.debug(message) }
-        })
+        bridgeClearanceResolver
       }
       const { handles, startedIds, failedIds: failedOutputIds } = outputs.startEnabled(outputContext)
-      runtime = { source, handles }
+      runtime = { source, handles, bridgeClearanceResolver }
 
       // Log the outputs that actually started, not merely the enabled ones, so
       // an output whose start() threw and was isolated by the registry is not

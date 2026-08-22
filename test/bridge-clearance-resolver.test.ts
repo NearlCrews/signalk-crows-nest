@@ -207,3 +207,45 @@ test('a synchronous detail adapter failure stays fire-and-forget and can retry',
   assert.doesNotThrow(() => resolver.clearanceMeters(ac))
   assert.equal(calls, 2)
 })
+
+test('close starts no further fetches and drops the cached clearances', async () => {
+  let calls = 0
+  const resolver = createBridgeClearanceResolver({
+    getDetails: async () => { calls += 1; return detail(4.2) },
+    debug: () => {}
+  })
+  const ac = bridge({ id: 'ac-close' })
+  resolver.clearanceMeters(ac)
+  await flush()
+  assert.equal(resolver.clearanceMeters(ac), 4.2)
+  assert.equal(calls, 1)
+
+  resolver.close()
+  assert.equal(resolver.clearanceMeters(ac), null, 'the cache is dropped on close')
+  await flush()
+  assert.equal(calls, 1, 'a closed resolver starts no fetch')
+})
+
+test('close discards a fetch that resolves after the run was torn down', async () => {
+  let release: ((view: PoiDetailView) => void) | undefined
+  const resolver = createBridgeClearanceResolver({
+    getDetails: async () => await new Promise<PoiDetailView>((resolve) => { release = resolve }),
+    debug: () => {}
+  })
+  const ac = bridge({ id: 'ac-late' })
+  assert.equal(resolver.clearanceMeters(ac), null)
+
+  resolver.close()
+  release?.(detail(7))
+  await flush()
+  assert.equal(resolver.clearanceMeters(ac), null, 'a late result must not repopulate a closed cache')
+})
+
+test('close is idempotent and safe with nothing in flight', () => {
+  const resolver = createBridgeClearanceResolver({
+    getDetails: async () => detail(4),
+    debug: () => {}
+  })
+  assert.doesNotThrow(() => { resolver.close() })
+  assert.doesNotThrow(() => { resolver.close() })
+})

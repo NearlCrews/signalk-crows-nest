@@ -3,8 +3,7 @@ import assert from 'node:assert/strict'
 import type { CourseInfo, NormalizedDelta } from '@signalk/server-api'
 import { routeHazardOutput } from '../src/outputs/route-hazard/route-hazard-output.js'
 import type { OutputContext } from '../src/outputs/output.js'
-import type { PoiSummary } from '../src/shared/types.js'
-import { courseWithoutRoute, flush, routeResource } from './helpers.js'
+import { courseWithoutRoute, flush, poiSummary, routeResource } from './helpers.js'
 
 /** Build a course with an active route referencing the supplied href. */
 function courseWithRoute (href: string): CourseInfo {
@@ -31,6 +30,8 @@ interface MockContext {
   messages: unknown[]
   emitCourseDelta: () => void
   unsubscribedCount: () => number
+  /** Make the next handleMessage call throw, standing in for a subscriber that throws. */
+  failNextHandleMessage: () => void
 }
 
 /** Build an OutputContext whose app stub drives the course reader and alarms. */
@@ -38,6 +39,7 @@ function createContext (options: MockOptions): MockContext {
   const messages: unknown[] = []
   const handlers: Array<(delta: NormalizedDelta) => void> = []
   let unsubscribed = 0
+  let failNextMessage = false
 
   const app = {
     getCourse: async (): Promise<CourseInfo> => {
@@ -63,7 +65,13 @@ function createContext (options: MockOptions): MockContext {
         }
       })
     },
-    handleMessage: (_id: string, delta: unknown) => { messages.push(delta) },
+    handleMessage: (_id: string, delta: unknown) => {
+      messages.push(delta)
+      if (failNextMessage) {
+        failNextMessage = false
+        throw new Error('a delta subscriber threw')
+      }
+    },
     debug: () => {}
   }
 
@@ -82,7 +90,8 @@ function createContext (options: MockOptions): MockContext {
         handler({} as unknown as NormalizedDelta)
       }
     },
-    unsubscribedCount: () => unsubscribed
+    unsubscribedCount: () => unsubscribed,
+    failNextHandleMessage: () => { failNextMessage = true }
   }
 }
 
@@ -162,16 +171,7 @@ test('a tick with a route raises an alarm, a tick without a route clears it', as
   assert.ok(handle.positionScan)
 
   // A hazard close ahead on the route corridor raises one notification.
-  const hazard: PoiSummary = {
-    id: 'h1',
-    name: 'Rock',
-    type: 'Hazard',
-    position: { latitude: 0.1, longitude: 0 },
-    source: 'activecaptain',
-    url: 'https://activecaptain.garmin.com/en-US/pois/h1',
-    attribution: 'Data from Garmin ActiveCaptain',
-    skIcon: 'hazard'
-  }
+  const hazard = poiSummary('h1', 'Hazard', 'Rock', { latitude: 0.1, longitude: 0 })
   handle.positionScan.buildFetchBox({ latitude: 0, longitude: 0 })
   handle.positionScan.evaluate({ latitude: 0, longitude: 0 }, [hazard])
   assert.equal(messages.length, 1)
@@ -200,16 +200,7 @@ test('evaluate scans the corridor from the fresh fix, not the frozen one', async
   // flagged; measured from a fresh vessel fix further south, it sits on the
   // vessel-to-first-waypoint leg and must be flagged. evaluate must use the
   // fresh position the monitor passes, not the one buildFetchBox froze.
-  const hazard: PoiSummary = {
-    id: 'h1',
-    name: 'Rock',
-    type: 'Hazard',
-    position: { latitude: -0.05, longitude: 0 },
-    source: 'activecaptain',
-    url: 'https://activecaptain.garmin.com/en-US/pois/h1',
-    attribution: 'Data from Garmin ActiveCaptain',
-    skIcon: 'hazard'
-  }
+  const hazard = poiSummary('h1', 'Hazard', 'Rock', { latitude: -0.05, longitude: 0 })
   handle.positionScan.buildFetchBox({ latitude: 0, longitude: 0 })
   handle.positionScan.evaluate({ latitude: -0.1, longitude: 0 }, [hazard])
   assert.equal(messages.length, 1, 'the corridor scan measured from the fresh fix')
@@ -227,16 +218,7 @@ test('a POI well outside the corridor is not alarmed', async () => {
 
   // A hazard 0.1 deg of longitude east of the route (about 11 km) is far
   // outside the 500 m corridor half-width, so evaluate must not alarm it.
-  const hazard: PoiSummary = {
-    id: 'h1',
-    name: 'Distant rock',
-    type: 'Hazard',
-    position: { latitude: 0.5, longitude: 0.1 },
-    source: 'activecaptain',
-    url: 'https://activecaptain.garmin.com/en-US/pois/h1',
-    attribution: 'Data from Garmin ActiveCaptain',
-    skIcon: 'hazard'
-  }
+  const hazard = poiSummary('h1', 'Hazard', 'Distant rock', { latitude: 0.5, longitude: 0.1 })
   handle.positionScan.buildFetchBox({ latitude: 0, longitude: 0 })
   handle.positionScan.evaluate({ latitude: 0, longitude: 0 }, [hazard])
   assert.equal(messages.length, 0)
@@ -252,16 +234,7 @@ test('stop stops the course reader and clears active alarms', async () => {
   await flush()
   assert.ok(handle.positionScan)
 
-  const hazard: PoiSummary = {
-    id: 'h1',
-    name: 'Rock',
-    type: 'Hazard',
-    position: { latitude: 0.1, longitude: 0 },
-    source: 'activecaptain',
-    url: 'https://activecaptain.garmin.com/en-US/pois/h1',
-    attribution: 'Data from Garmin ActiveCaptain',
-    skIcon: 'hazard'
-  }
+  const hazard = poiSummary('h1', 'Hazard', 'Rock', { latitude: 0.1, longitude: 0 })
   handle.positionScan.buildFetchBox({ latitude: 0, longitude: 0 })
   handle.positionScan.evaluate({ latitude: 0, longitude: 0 }, [hazard])
   assert.equal(messages.length, 1)
@@ -270,4 +243,24 @@ test('stop stops the course reader and clears active alarms', async () => {
   // stop() clears the active alarm and unsubscribes both Course API streams.
   assert.equal(messages.length, 2)
   assert.equal(unsubscribedCount(), 2)
+})
+
+test('stop unsubscribes the course reader even when clearing an alarm throws', async () => {
+  // The server calls stop() before every start(), so a teardown that aborts
+  // partway would stack a second course reader on each configuration save.
+  const { context, unsubscribedCount, failNextHandleMessage } = createContext({
+    course: courseWithRoute('/resources/routes/route-1'),
+    resource: routeResource(NORTHBOUND_ROUTE)
+  })
+  const handle = routeHazardOutput.start(context)
+  await flush()
+  assert.ok(handle.positionScan)
+
+  const hazard = poiSummary('h1', 'Hazard', 'Rock', { latitude: 0.1, longitude: 0 })
+  handle.positionScan.buildFetchBox({ latitude: 0, longitude: 0 })
+  handle.positionScan.evaluate({ latitude: 0, longitude: 0 }, [hazard])
+
+  failNextHandleMessage()
+  assert.throws(() => { handle.stop() }, /a delta subscriber threw/)
+  assert.equal(unsubscribedCount(), 2, 'both Course API streams unsubscribe despite the throw')
 })
