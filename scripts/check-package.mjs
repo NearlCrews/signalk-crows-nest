@@ -119,4 +119,21 @@ if (!files.has('THIRD_PARTY_NOTICES.md')) {
   throw new Error('Packed package is missing THIRD_PARTY_NOTICES.md.')
 }
 
+// @types/node describes the runtime the plugin actually advertises, so it must
+// track the LOWEST major in engines.node. A newer major would let an API that
+// does not exist on the floor typecheck here and fail there, which is exactly
+// the failure a type checker exists to prevent. Derived rather than pinned to
+// a literal so raising the floor cannot leave the types behind.
+const engineMajors = [...(packageJson.engines?.node ?? '').matchAll(/(\d+)(?:\.\d+)*/g)]
+  .map((match) => Number(match[1]))
+if (engineMajors.length === 0) throw new Error('engines.node declares no version.')
+const floorMajor = Math.min(...engineMajors)
+const typesRange = packageJson.devDependencies?.['@types/node'] ?? ''
+const typesMajor = Number(/(\d+)/.exec(typesRange)?.[1])
+if (typesMajor !== floorMajor) {
+  throw new Error(
+    `@types/node is ${typesRange} but engines.node floors at Node ${floorMajor}; they must share a major.`
+  )
+}
+
 console.log(`Packed package passed: ${files.size} files in ${packResult.filename}.`)
