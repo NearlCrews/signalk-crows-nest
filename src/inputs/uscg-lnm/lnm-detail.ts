@@ -177,11 +177,18 @@ function renderNotice (record: LnmNoticeRecord): string {
   if (record.description !== undefined) {
     blocks.push(noticeBody(record.description))
   }
+  // Each date is gated on its own, matching the section builder. An ongoing
+  // notice routinely carries a begin date with no end date yet, and requiring
+  // both would drop the only date a live hazard notice has.
   if (record.beginDate !== undefined && record.endDate !== undefined) {
     blocks.push(labeledParagraph(
       'Effective',
       `${record.beginDate.slice(0, 10)} to ${record.endDate.slice(0, 10)}`
     ))
+  } else if (record.beginDate !== undefined) {
+    blocks.push(labeledParagraph('Effective from', record.beginDate.slice(0, 10)))
+  } else if (record.endDate !== undefined) {
+    blocks.push(labeledParagraph('Effective to', record.endDate.slice(0, 10)))
   }
   blocks.push(sourceLine(record))
   return blocks.join('')
