@@ -89,7 +89,8 @@
     ],
     "recommends": [
       "@signalk/freeboard-sk",
-      "signalk-binnacle"
+      "signalk-binnacle",
+      "signalk-nmea2000-emitter-cannon"
     ]
   },
   "engines": {

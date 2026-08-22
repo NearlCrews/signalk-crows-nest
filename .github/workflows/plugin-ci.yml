@@ -26,3 +26,11 @@ jobs:
     uses: SignalK/signalk-server/.github/workflows/plugin-ci.yml@5d9639abc03bc3387d4b1469c8b0c7fda8aa7130
     with:
       build-command: npm run build
+      test-command: npm test
+      format-check-command: npm run format:check
+      coverage-command: npm run test:coverage
+      node-versions: '["22", "24"]'
+      # Pinned true on purpose: engines.node still admits Node 20, so the
+      # Cerbo GX lane is meaningful here. It is continue-on-error upstream,
+      # so ci.yml carries the blocking Node 20 lane.
+      enable-armv7: true
