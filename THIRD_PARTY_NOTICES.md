@@ -1,6 +1,6 @@
 # Third-party notices
 
-<!-- generated-for-signalk-nearlcrews-ui:0.8.1 -->
+<!-- generated-for-signalk-nearlcrews-ui:0.8.2 -->
 
 The configuration panel is a Module Federation remote, so the packages below are bundled into `public/*.js` and redistributed with this plugin. Their licenses follow. Regenerate with `npm run licenses` after any change to the panel dependency tree.
 
@@ -248,7 +248,7 @@ Apache License
 
 ## signalk-nearlcrews-ui
 
-Version: 0.8.1
+Version: 0.8.2
 
 License: Apache-2.0
 

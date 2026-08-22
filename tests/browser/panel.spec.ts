@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-const EXPECTED_SHARED_UI_VERSION = '0.8.1'
+const EXPECTED_SHARED_UI_VERSION = '0.8.2'
 const packageManifest: unknown = JSON.parse(readFileSync(resolve('package.json'), 'utf8'))
 const uiPackage: unknown = JSON.parse(
   readFileSync(resolve('node_modules/signalk-nearlcrews-ui/package.json'), 'utf8')

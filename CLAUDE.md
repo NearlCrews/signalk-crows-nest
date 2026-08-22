@@ -523,7 +523,7 @@ self-contained module registered on one line in `src/index.ts`.
   transform and emit `jsxDEV` calls that the bundled production
   `react/jsx-dev-runtime` does not implement, which breaks the panel at first
   render. The `test/panel-babel-config.test.ts` contract test locks this in.
-- `signalk-nearlcrews-ui` 0.8.1 supplies the panel shell, theme system, and
+- `signalk-nearlcrews-ui` 0.8.2 supplies the panel shell, theme system, and
   shared controls. It is pinned exactly. Fresh profiles use Auto, which follows
   an explicit host theme and otherwise uses Light. System follows the operating
   system preference. The host supplies React and React DOM `^19.2.0` singletons

@@ -4,7 +4,7 @@ import { promisify } from 'node:util'
 import { normalizePackReport } from './package-report.mjs'
 
 const execFileAsync = promisify(execFile)
-const EXPECTED_SHARED_UI_VERSION = '0.8.1'
+const EXPECTED_SHARED_UI_VERSION = '0.8.2'
 const packageJson = JSON.parse(await readFile('package.json', 'utf8'))
 const { stdout } = await execFileAsync(
   process.platform === 'win32' ? 'npm.cmd' : 'npm',
