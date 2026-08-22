@@ -30,6 +30,13 @@ export const PANEL_STYLE: CSSProperties & Record<`--ac-${string}`, string> = {
   '--ac-danger-border': 'color-mix(in srgb, var(--snui-color-danger) 60%, var(--snui-color-border))'
 }
 
+/**
+ * Fixed-width face for a field holding a URL or another identifier, where a
+ * typo in a host name is easier to spot in a mono face. Shared by the Overpass
+ * endpoint field and the fallback-endpoints list so the two cannot drift.
+ */
+const MONO_TEXT: CSSProperties = { fontFamily: 'var(--snui-font-family-mono)' }
+
 /** Shared face of the hint paragraph; the two variants differ only in margin. */
 const HINT_BASE: CSSProperties = {
   fontSize: 'var(--ac-font-small)',
@@ -227,6 +234,10 @@ export const S = {
   // as it is painted, so the 22px box alone lands under both the shared UI
   // target-size contract and the WCAG minimum. Wrapping it in a label of at
   // least one control height makes the whole square activate the box.
+  // A single-line field holding a URL or another identifier.
+  monoInput: MONO_TEXT,
+  // The fallback-endpoints list: the same mono face over several lines.
+  monoTextarea: { ...MONO_TEXT, minHeight: 56 },
   checkboxTarget: {
     display: 'inline-flex',
     alignItems: 'center',

@@ -7,6 +7,7 @@
 import type * as React from 'react'
 import { TextInput } from 'signalk-nearlcrews-ui'
 import LabeledField from './LabeledField.js'
+import { S } from '../styles.js'
 
 interface Props {
   value: string
@@ -29,6 +30,7 @@ export default function EndpointUrlField ({ value, onChange }: Props): React.Rea
         <TextInput
           {...controlProps}
           type='url'
+          style={S.monoInput}
           value={value}
           onChange={(e) => onChange(e.target.value)}
         />

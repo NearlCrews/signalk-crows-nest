@@ -10,18 +10,14 @@ import type * as React from 'react'
 import type { Dispatch } from 'react'
 import type { ConfigAction } from '../config-reducer.js'
 import { DEFAULT_MINIMUM_YEAR } from '../../shared/year-filter.js'
-import {
-  DEFAULT_REFRESH_HOURS,
-  MAX_REFRESH_HOURS,
-  MIN_REFRESH_HOURS
-} from '../../shared/refresh-hours.js'
+import { DEFAULT_REFRESH_HOURS } from '../../shared/refresh-hours.js'
 import { S } from '../styles.js'
 import type { PluginConfig } from '../../shared/types.js'
 import Disclosure from './Disclosure.js'
 import Fieldset from './Fieldset.js'
 import MergeWithActiveCaptain from './MergeWithActiveCaptain.js'
 import MinimumYearField from './MinimumYearField.js'
-import NumberField from './NumberField.js'
+import RefreshHoursField from './RefreshHoursField.js'
 
 interface Props {
   state: PluginConfig
@@ -42,15 +38,11 @@ export default function UscgLightListSource ({ state, dispatch }: Props): React.
       </p>
       <Disclosure>
         <Fieldset title='Refresh and freshness'>
-          <NumberField
-            label='Refresh period (hours)'
-            hint='How often the plugin re-downloads the NAVCEN district files in the background. Longer periods reduce traffic; shorter periods pick up new aids sooner.'
+          <RefreshHoursField
+            upstreamHint={'The NAVCEN district files change as aids are established, ' +
+              'moved, or discontinued, so a shorter period picks up a new aid sooner.'}
             value={state.uscgLightListRefreshHours ?? DEFAULT_REFRESH_HOURS}
             onChange={(hours) => dispatch({ type: 'setUscgLightListRefreshHours', hours })}
-            min={MIN_REFRESH_HOURS}
-            max={MAX_REFRESH_HOURS}
-            step={1}
-            integer
           />
           <MinimumYearField
             label='Earliest update year'

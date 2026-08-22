@@ -8,17 +8,13 @@
 import type * as React from 'react'
 import type { Dispatch } from 'react'
 import type { ConfigAction } from '../config-reducer.js'
-import {
-  DEFAULT_REFRESH_HOURS,
-  MAX_REFRESH_HOURS,
-  MIN_REFRESH_HOURS
-} from '../../shared/refresh-hours.js'
+import { DEFAULT_REFRESH_HOURS } from '../../shared/refresh-hours.js'
 import type { PluginConfig } from '../../shared/types.js'
 import Disclosure from './Disclosure.js'
 import Fieldset from './Fieldset.js'
 import IncludeToggles from './IncludeToggles.js'
 import MergeWithActiveCaptain from './MergeWithActiveCaptain.js'
-import NumberField from './NumberField.js'
+import RefreshHoursField from './RefreshHoursField.js'
 
 interface Props {
   state: PluginConfig
@@ -54,16 +50,12 @@ export default function NoaaCoopsSource ({ state, dispatch }: Props): React.Reac
         ]}
       />
       <Disclosure>
-        <Fieldset title='Refresh'>
-          <NumberField
-            label='Refresh period (hours)'
-            hint='How often the plugin re-downloads the CO-OPS station lists in the background. The lists change rarely, so a long period costs almost nothing.'
+        <Fieldset title='Refresh and freshness'>
+          <RefreshHoursField
+            upstreamHint={'The CO-OPS station lists change rarely, so a long ' +
+              'period costs almost nothing.'}
             value={state.noaaCoopsRefreshHours ?? DEFAULT_REFRESH_HOURS}
             onChange={(hours) => dispatch({ type: 'setNoaaCoopsRefreshHours', hours })}
-            min={MIN_REFRESH_HOURS}
-            max={MAX_REFRESH_HOURS}
-            step={1}
-            integer
           />
         </Fieldset>
         <MergeWithActiveCaptain

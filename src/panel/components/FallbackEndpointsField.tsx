@@ -10,12 +10,7 @@ import type * as React from 'react'
 import { Textarea } from 'signalk-nearlcrews-ui'
 import LabeledField from './LabeledField.js'
 import { RECOMMENDED_OVERPASS_FALLBACK_ENDPOINTS } from '../../shared/overpass-endpoints.js'
-
-/** Hoisted so the textarea style object is not rebuilt on every render. */
-const TEXTAREA_STYLE: React.CSSProperties = {
-  minHeight: 56,
-  fontFamily: 'var(--snui-font-family-mono)'
-}
+import { S } from '../styles.js'
 
 /** Hoisted so the placeholder string is not re-joined on every render. */
 const PLACEHOLDER = RECOMMENDED_OVERPASS_FALLBACK_ENDPOINTS.join('\n')
@@ -42,7 +37,7 @@ export default function FallbackEndpointsField ({ value, onChange }: Props): Rea
       {(controlProps) => (
         <Textarea
           {...controlProps}
-          style={TEXTAREA_STYLE}
+          style={S.monoTextarea}
           value={value.join('\n')}
           placeholder={PLACEHOLDER}
           onChange={(e) => onChange(e.target.value.split('\n'))}

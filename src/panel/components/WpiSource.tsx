@@ -8,17 +8,13 @@
 import type * as React from 'react'
 import type { Dispatch } from 'react'
 import type { ConfigAction } from '../config-reducer.js'
-import {
-  DEFAULT_REFRESH_HOURS,
-  MAX_REFRESH_HOURS,
-  MIN_REFRESH_HOURS
-} from '../../shared/refresh-hours.js'
+import { DEFAULT_REFRESH_HOURS } from '../../shared/refresh-hours.js'
 import { S } from '../styles.js'
 import type { PluginConfig } from '../../shared/types.js'
 import Disclosure from './Disclosure.js'
 import Fieldset from './Fieldset.js'
 import MergeWithActiveCaptain from './MergeWithActiveCaptain.js'
-import NumberField from './NumberField.js'
+import RefreshHoursField from './RefreshHoursField.js'
 
 interface Props {
   state: PluginConfig
@@ -39,18 +35,11 @@ export default function WpiSource ({ state, dispatch }: Props): React.ReactEleme
       </p>
       <Disclosure>
         <Fieldset title='Refresh and freshness'>
-          <NumberField
-            label='Refresh period (hours)'
-            hint={'How often the plugin re-downloads the whole World Port Index ' +
-              'in the background. NGA publishes it quarterly, so the daily ' +
-              'default is already conservative; the downloaded index is kept ' +
-              'for offline use between refreshes.'}
+          <RefreshHoursField
+            upstreamHint={'NGA publishes the World Port Index quarterly, so the ' +
+              'daily default is already conservative.'}
             value={state.wpiRefreshHours ?? DEFAULT_REFRESH_HOURS}
             onChange={(hours) => dispatch({ type: 'setWpiRefreshHours', hours })}
-            min={MIN_REFRESH_HOURS}
-            max={MAX_REFRESH_HOURS}
-            step={1}
-            integer
           />
         </Fieldset>
         <MergeWithActiveCaptain

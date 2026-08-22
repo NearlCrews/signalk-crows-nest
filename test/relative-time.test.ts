@@ -49,7 +49,7 @@ test('relativeTime renders a multi-day delta in days', () => {
 test('relativeTime steps up to the next unit when rounding spills it (59m 30s -> 1 hour ago)', () => {
   // 59 minutes 30 seconds: rounded as minutes is 60, which equals one hour;
   // the spill-up step rewrites that as "1 hour ago" rather than "60 minutes
-  // ago". This is the spill-up branch of relativeTime under test.
+  // ago". Pinned here because the status bar's wording depends on it.
   assert.equal(relativeTime(isoSecondsBefore(3570)), '1 hour ago')
 })
 
@@ -59,4 +59,10 @@ test('relativeTime renders a future delta with the future preposition', () => {
 
 test('relativeTime returns the input verbatim when the timestamp is not parseable', () => {
   assert.equal(relativeTime('not-a-date'), 'not-a-date')
+})
+
+test('relativeTime returns a non-finite epoch value verbatim', () => {
+  // Infinity is not NaN, so a NaN-only guard would carry it into the delta
+  // arithmetic and phrase a garbage timestamp as a plausible age.
+  assert.equal(relativeTime(Number.POSITIVE_INFINITY), 'Infinity')
 })
