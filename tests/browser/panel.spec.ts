@@ -4,6 +4,10 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const EXPECTED_SHARED_UI_VERSION = '0.8.2'
+// Split for the same reason as scripts/check-package.mjs: the shape assertion
+// is never hand-edited, so pasting a failing range into the literal above
+// cannot quietly turn an exact pin into a range that still reports as exact.
+const EXACT_SHARED_UI_VERSION = /^0\.\d+\.\d+$/
 const packageManifest: unknown = JSON.parse(readFileSync(resolve('package.json'), 'utf8'))
 const uiPackage: unknown = JSON.parse(
   readFileSync(resolve('node_modules/signalk-nearlcrews-ui/package.json'), 'utf8')
@@ -11,9 +15,20 @@ const uiPackage: unknown = JSON.parse(
 if (typeof packageManifest !== 'object' || packageManifest === null ||
     !('devDependencies' in packageManifest) ||
     typeof packageManifest.devDependencies !== 'object' || packageManifest.devDependencies === null ||
-    !('signalk-nearlcrews-ui' in packageManifest.devDependencies) ||
-    packageManifest.devDependencies['signalk-nearlcrews-ui'] !== EXPECTED_SHARED_UI_VERSION) {
-  throw new Error(`package.json must pin signalk-nearlcrews-ui ${EXPECTED_SHARED_UI_VERSION}`)
+    !('signalk-nearlcrews-ui' in packageManifest.devDependencies)) {
+  throw new Error('package.json declares no signalk-nearlcrews-ui development dependency')
+}
+const pinnedVersion: unknown = packageManifest.devDependencies['signalk-nearlcrews-ui']
+if (typeof pinnedVersion !== 'string' || !EXACT_SHARED_UI_VERSION.test(pinnedVersion)) {
+  throw new Error(
+    'package.json must pin signalk-nearlcrews-ui to an exact version, not a range; it has ' +
+    JSON.stringify(pinnedVersion)
+  )
+}
+if (pinnedVersion !== EXPECTED_SHARED_UI_VERSION) {
+  throw new Error(
+    `package.json must pin signalk-nearlcrews-ui ${EXPECTED_SHARED_UI_VERSION}; it has ${pinnedVersion}`
+  )
 }
 if (typeof uiPackage !== 'object' || uiPackage === null ||
     !('version' in uiPackage) || typeof uiPackage.version !== 'string') {
@@ -21,7 +36,9 @@ if (typeof uiPackage !== 'object' || uiPackage === null ||
 }
 const uiVersion = uiPackage.version
 if (uiVersion !== EXPECTED_SHARED_UI_VERSION) {
-  throw new Error(`installed signalk-nearlcrews-ui must be ${EXPECTED_SHARED_UI_VERSION}`)
+  throw new Error(
+    `installed signalk-nearlcrews-ui must be ${EXPECTED_SHARED_UI_VERSION}; it is ${uiVersion}`
+  )
 }
 
 test.beforeEach(async ({ page }) => {

@@ -14,7 +14,12 @@ export default defineConfig({
   webServer: {
     command: 'node node_modules/vite/bin/vite.js --config fixtures/browser/vite.config.ts',
     url: 'http://127.0.0.1:4177',
-    reuseExistingServer: !process.env.CI,
+    // Never adopt a server this run did not start. Port 4177 is unique across
+    // the sibling panels and the fixture sets strictPort, so a stale server
+    // from an earlier run is the remaining way a suite could measure something
+    // other than the panel this build just produced. Failing to bind is the
+    // honest outcome; reusing is not.
+    reuseExistingServer: false,
     timeout: 30_000
   },
   projects: [
