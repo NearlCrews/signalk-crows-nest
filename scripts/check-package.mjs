@@ -110,23 +110,13 @@ if (sharedUiVersion !== EXPECTED_SHARED_UI_VERSION) {
 }
 
 // THIRD_PARTY_NOTICES.md ships in the tarball, so it is a published
-// attribution record for the code inside the panel bundle. A dependency bump
-// that leaves it behind publishes a wrong one, silently: nothing else reads
-// the file. These two are what the emitted chunks actually contain, so the
-// notices drift fails the gate instead of the release. Membership was checked
-// against the emitted files and webpack's extracted license banner, not the
-// module graph: the graph also lists modules that are resolved and then
-// eliminated, which is why react-aria appears there but ships nothing.
-const notices = await readFile('THIRD_PARTY_NOTICES.md', 'utf8')
-for (const bundledPackage of ['signalk-nearlcrews-ui', 'react']) {
-  const { version } = JSON.parse(
-    await readFile(`node_modules/${bundledPackage}/package.json`, 'utf8')
-  )
-  if (!notices.includes(`\`${bundledPackage}\` ${version},`)) {
-    throw new Error(
-      `THIRD_PARTY_NOTICES.md does not attribute ${bundledPackage} ${version}, which the panel bundles.`
-    )
-  }
+// attribution record for the code the panel bundle redistributes. It is
+// generated from webpack's own module graph rather than hand-maintained, and
+// `npm run licenses:check` (wired into package:check beside this script)
+// verifies the committed file still describes the installed tree. Only its
+// presence in the tarball is this script's business.
+if (!files.has('THIRD_PARTY_NOTICES.md')) {
+  throw new Error('Packed package is missing THIRD_PARTY_NOTICES.md.')
 }
 
 console.log(`Packed package passed: ${files.size} files in ${packResult.filename}.`)
