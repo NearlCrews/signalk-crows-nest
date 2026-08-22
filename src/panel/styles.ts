@@ -176,6 +176,13 @@ export const S = {
   // error-item palette, drops the button chrome, and keeps the row clickable
   // without reading as a primary control.
   statusErrorJump: {
+    // Sized from the shared target token like every other control the panel
+    // owns. It reads as inline text, but it is a real button that jumps to a
+    // failing source, and an operator reaches for it exactly when conditions
+    // are worst.
+    display: 'inline-flex',
+    alignItems: 'center',
+    minHeight: 'var(--snui-control-min-height)',
     background: 'none',
     border: 'none',
     padding: 0,

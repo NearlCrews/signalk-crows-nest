@@ -65,7 +65,18 @@ const statusPayload = {
       }))
     : [],
   cachedPoiCount: fixtureParams.has('screenshot') ? 8 : 0,
-  recentErrors: [],
+  // The recent-error list renders a jump-to-source button that exists in no
+  // other state, so it needs a fixture mode of its own to be measurable.
+  recentErrors: fixtureParams.has('errors')
+    ? [
+        {
+          at: new Date().toISOString(),
+          message: 'Overpass endpoint returned 504',
+          source: OPENSEAMAP_SOURCE_ID
+        },
+        { at: new Date().toISOString(), message: 'Status poll timed out' }
+      ]
+    : [],
   startedAt: fixtureParams.has('screenshot') ? screenshotTimestamp : new Date().toISOString()
 }
 

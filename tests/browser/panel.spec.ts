@@ -134,25 +134,61 @@ test('has no Axe findings or horizontal overflow at 320 pixels', async ({ page }
   expect(results.violations).toEqual([])
 })
 
-test('provides coarse-pointer controls with 44-pixel targets @coarse', async ({ page }) => {
-  for (const control of [
-    page.getByRole('radio', { name: 'Auto' }),
-    page.getByRole('button', { name: 'Data sources' }),
-    page.getByRole('button', { name: 'Save', exact: true }),
-    // The card header is the panel's own markup rather than a shared UI
-    // control, so it is the one place the package's target floor is not
-    // inherited for free. Both of its controls are covered here.
-    page.getByRole('button', { name: /OpenSeaMap/ }).first()
-  ]) {
-    const box = await control.boundingBox()
-    expect(box?.height).toBeGreaterThanOrEqual(44)
+test('gives every interactive control a 44-pixel coarse-pointer target @coarse', async ({ page }) => {
+  // A sweep rather than a list of suspects. The one target this panel got
+  // wrong was found by review, not by measurement, and a second one (the
+  // jump-to-source button in the recent-error list) then survived every check
+  // here because no fixture state rendered it. So this expands everything,
+  // renders the error state, and measures whatever the panel actually draws.
+  await page.goto('/?errors')
+  await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true')
+
+  for (let pass = 0; pass < 40; pass++) {
+    const collapsed = page.locator('[data-snui-root] button[aria-expanded="false"]')
+    if (await collapsed.count() === 0) break
+    const next = collapsed.first()
+    await next.scrollIntoViewIfNeeded()
+    await next.click()
   }
-  // The enable checkbox paints a 22-pixel box and takes its target from the
-  // label wrapped around it, so the label is what has to clear the floor, in
-  // both dimensions because the target is square.
+  expect(await page.locator('[data-snui-root] button[aria-expanded="false"]').count()).toBe(0)
+
+  // Enable every toggle so the fields they gate render as live controls.
+  const toggles = page.locator('[data-snui-root] input[type="checkbox"]')
+  for (let index = 0; index < await toggles.count(); index++) {
+    await toggles.nth(index).check({ force: true })
+  }
+
+  const measured = await page.evaluate(() => {
+    const root = document.querySelector('[data-snui-root]')
+    if (root === null) return { total: 0, undersized: ['panel root missing'] }
+    const undersized: string[] = []
+    let total = 0
+    for (const element of root.querySelectorAll('button, a[href], select, input, textarea')) {
+      const control = element as HTMLInputElement
+      if (control.type === 'hidden' || element.closest('[hidden]') !== null) continue
+      let box = element.getBoundingClientRect()
+      if (box.width === 0 && box.height === 0) continue
+      // Clicking anywhere in a label activates its control, so where a label
+      // wraps the input the label is the honest target, text or not.
+      const label = element.closest('label')
+      if (label !== null) box = label.getBoundingClientRect()
+      total++
+      if (box.height >= 44) continue
+      const name = element.getAttribute('aria-label') ?? element.id ??
+        (element.textContent ?? '').trim().slice(0, 30)
+      undersized.push(`${element.tagName.toLowerCase()}[${name}] ${box.height.toFixed(1)}px`)
+    }
+    return { total, undersized }
+  })
+  expect(measured.undersized).toEqual([])
+  // Guard the sweep itself: a selector or expansion regression that measured
+  // almost nothing would otherwise pass silently.
+  expect(measured.total).toBeGreaterThan(80)
+
+  // The enable checkbox is a square target taking its size from a text-free
+  // label, so its width has to clear the floor too.
   const enableTarget = page.locator('label:has(input[aria-label="Enable OpenSeaMap"])')
   const targetBox = await enableTarget.boundingBox()
-  expect(targetBox?.height).toBeGreaterThanOrEqual(44)
   expect(targetBox?.width).toBeGreaterThanOrEqual(44)
 })
 
