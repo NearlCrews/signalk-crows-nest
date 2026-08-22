@@ -108,7 +108,10 @@ self-contained module registered on one line in `src/index.ts`.
       installer the USCG Light List, USCG LNM, and NOAA CO-OPS input modules
       share: the in-flight guard, the initial and periodic timers, and the
       close-wrap that clears both timers before chaining the source's own
-      `close`.
+      `close`. It also holds `loadStoreInBackground`, the cold-start store
+      load those same three inputs kick off without awaiting: a load failure
+      is logged and swallowed so plugin start is never blocked, leaving an
+      empty index the next successful refresh repopulates.
     - `dedupe-pois.ts` - merges non-base POIs that duplicate an ActiveCaptain
       base POI, then runs a same-source pass that collapses internal
       duplicates within a configurable radius (default 150 feet, 45.72 m), so
@@ -292,6 +295,9 @@ self-contained module registered on one line in `src/index.ts`.
       synchronous OpenSeaMap summary hit, or a deduped, cached ActiveCaptain
       detail fetch with a per-fetch timeout that releases the in-flight slot
       if the detail hangs and ignores any late response after that timeout).
+      Built once per run and held on the plugin runtime, so `teardown` can
+      `close` it: that drops the pending timeout timers and discards whatever
+      a fetch outstanding at stop time eventually resolves to.
       The route-hazard output consumes this resolver too, for its route-ahead
       clearance warning.
   - `monitoring/` - `position-monitor.ts` subscribes to `navigation.position`,
@@ -477,6 +483,8 @@ self-contained module registered on one line in `src/index.ts`.
     `NumberField`, `LengthField`, `CacheDurationField`, `EndpointUrlField`,
     `FallbackEndpointsField`, `Fieldset`, `Disclosure`, `ToggleFieldset`,
     `RatingFilterField`, `MinimumYearField`, `RefreshSecondsField`,
+    `RefreshHoursField` (the bulk-download cadence field the USCG Light List,
+    NOAA CO-OPS, and World Port Index cards share),
     `MergeWithActiveCaptain`, `ProximityAlarmFields`, `RouteHazardScanFields`,
     `BridgeAirDraftFields`, `ActiveCaptainPoiTypes`, `SeamarkGroups`, and
     `SaveStatus`. The local field and layout adapters compose shared
@@ -500,21 +508,38 @@ self-contained module registered on one line in `src/index.ts`.
 ## Toolchain
 
 - TypeScript 6. The Node plugin is compiled with `tsc` (`tsconfig.json`).
-  TypeScript caps at 6 for now: the lint chain's `ts-api-utils` (via
-  typescript-eslint) is not yet compatible with the TypeScript 7 native
-  compiler.
+  TypeScript caps at 6 for now because the lint chain pins it there:
+  `@typescript-eslint/typescript-estree` and `@typescript-eslint/parser`
+  declare a `typescript >=4.8.4 <6.1.0` peer range, so TypeScript 7 cannot be
+  installed alongside the current typescript-eslint.
 - The React panel under `src/panel/` is bundled to `public/` by webpack as a
   Module Federation remote (`webpack.config.cjs`, `tsconfig.panel.json`),
-  transpiled by `babel-loader` with Babel 7. The React preset pins
+  transpiled by `babel-loader` with Babel 7. Babel caps at 7: Babel 8 declares
+  `node: ^22.18.0 || >=24.11.0`, which drops the Node 20 lanes this project
+  builds on, including the armv7 Cerbo GX lane. Raising Babel would mean
+  raising `engines.node` past the plugin's supported runtime floor to satisfy a
+  build-time transpiler. The React preset pins
   `development: false` so an unset `NODE_ENV` cannot select a development
   transform and emit `jsxDEV` calls that the bundled production
   `react/jsx-dev-runtime` does not implement, which breaks the panel at first
   render. The `test/panel-babel-config.test.ts` contract test locks this in.
-- `signalk-nearlcrews-ui` 0.7.1 supplies the panel shell, theme system, and
+- `signalk-nearlcrews-ui` 0.8.0 supplies the panel shell, theme system, and
   shared controls. It is pinned exactly. Fresh profiles use Auto, which follows
   an explicit host theme and otherwise uses Light. System follows the operating
   system preference. The host supplies React and React DOM `^19.2.0` singletons
   without bundled fallbacks.
+- The shared UI package is ESM-only: every entry point in its export map
+  declares an `import` condition and nothing else. Webpack resolves that
+  condition, so panel `.tsx` components may import it freely. A plain `.ts`
+  module that the `node:test` suite reaches may NOT: this package is CommonJS,
+  so `tsx` loads those modules through `require`, which fails on that export
+  map with `ERR_PACKAGE_PATH_NOT_EXPORTED` (and `tsc` reports TS1479 first).
+  Node's `require(esm)` does not help, because there is no `require` or
+  `default` condition to resolve, and the Node 20 CI lane has no `require(esm)`
+  at all. This is why `panel/relative-time.ts` keeps its own age formatting
+  instead of the package's `formatRelativeAge`: it and `source-status-pill.ts`
+  are both unit-tested under `node:test`. Put shared-UI usage in a component,
+  not in a node-tested helper.
 - The test suite is type-checked separately (`tsconfig.test.json`); all three
   configs run under `npm run typecheck`.
 - ESLint 9 with [neostandard](https://github.com/neostandard/neostandard)
