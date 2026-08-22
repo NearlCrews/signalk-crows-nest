@@ -135,6 +135,14 @@ test('has no Axe findings or horizontal overflow at 320 pixels', async ({ page }
 })
 
 test('gives every interactive control a 44-pixel coarse-pointer target @coarse', async ({ page }) => {
+  // The heaviest test in the repository by design: it drives roughly eighty
+  // interactions, expanding every section and then checking every toggle.
+  // That costs about 26 seconds on an idle host and over 40 on a busy one,
+  // which does not fit the 30-second project default, so it carries its own
+  // budget rather than holding every other test to a limit only this one
+  // needs. The budget applies to the body, not to the shared beforeEach.
+  test.setTimeout(120_000)
+
   // A sweep rather than a list of suspects. The one target this panel got
   // wrong was found by review, not by measurement, and a second one (the
   // jump-to-source button in the recent-error list) then survived every check
