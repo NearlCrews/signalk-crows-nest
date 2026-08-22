@@ -553,6 +553,14 @@ self-contained module registered on one line in `src/index.ts`.
   flat config (`eslint.config.js`). neostandard is the modern successor to the
   project's old `eslint-config-standard` setup. The lint toolchain caps at
   ESLint 9 because neostandard peers to `eslint ^9`.
+- `devEngines.runtime` keeps `onFail: "warn"`, and it must stay that way. The
+  toolchain range starts at Node 22.22.2, while ci.yml runs a Node 20 matrix
+  leg whose first step is `npm ci`. With `onFail: "error"` npm exits 1 with
+  EBADDEVENGINES on a runtime outside the range, which would abort that leg
+  before it tested anything. That leg is this repository's only BLOCKING
+  Node 20 defense, because the Signal K plugin-ci armv7 Cerbo GX job is
+  continue-on-error and stays green even when Node 20 is broken. Treat any
+  proposal to normalize this to "error" as refuted.
 - Node.js 20.3 or newer (the ActiveCaptain client uses `AbortSignal.any`).
   `engines.node` is `^20.3.0 || >=22` rather than `>=20.3.0`: `lru-cache`
   declares `20 || >=22` and deliberately excludes Node 21, so the plain

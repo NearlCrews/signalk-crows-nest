@@ -21,7 +21,9 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   bundles into the configuration panel, with each license text embedded, and
   the packaging gate fails when the committed file stops describing the
   installed tree. The previous hand-maintained list omitted `react-aria`,
-  which the shared panel shell pulls in for its overlay portal.
+  which the shared panel shell pulls in for its overlay portal, and `webpack`,
+  whose bootstrap and chunk-loading runtime is emitted into the panel without
+  appearing as a bundled module.
 - The plugin is listed as working well with
   `signalk-nmea2000-emitter-cannon`, which converts the hazard, route, and
   bridge notifications this plugin raises into NMEA 2000 alert messages.

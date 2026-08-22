@@ -48,20 +48,41 @@ function bundledPackageNames () {
     process.stderr.write(result.stderr ?? '')
     throw new Error('webpack did not produce a module list')
   }
+  const stats = JSON.parse(result.stdout)
   const names = new Set()
+  // Concatenation nests the real records under `modules`, and a child
+  // compilation would nest them under `children`, so both are followed. Chunk
+  // membership is deliberately NOT used as a filter: a concatenated module
+  // reports an empty chunk list while its code is emitted inside its parent.
   const walk = (module) => {
     const match = /node_modules\/((?:@[^/]+\/)?[^/]+)/.exec(module.name ?? '')
     if (match?.[1] !== undefined) names.add(match[1])
     for (const nested of module.modules ?? []) walk(nested)
+    for (const child of module.children ?? []) walk(child)
   }
-  for (const module of JSON.parse(result.stdout).modules ?? []) walk(module)
+  for (const module of stats.modules ?? []) walk(module)
+  for (const child of stats.children ?? []) {
+    for (const module of child.modules ?? []) walk(module)
+  }
+  // webpack's own bootstrap, chunk loader, and share-scope runtime are emitted
+  // into the chunks without ever appearing as node_modules entries, so the
+  // module walk cannot see them. Attribute webpack when that runtime ships.
+  const emitsRuntime = (stats.chunks ?? []).some((chunk) =>
+    (chunk.modules ?? []).some(
+      (module) => module.moduleType === 'runtime' ||
+        (module.identifier ?? '').includes('webpack/runtime')
+    )
+  )
+  if (emitsRuntime) names.add('webpack')
   return [...names].sort()
 }
 
 function licenseTextFor (name) {
   for (const candidate of ['LICENSE', 'license', 'LICENSE.md', 'LICENSE.txt']) {
     const url = new URL(`node_modules/${name}/${candidate}`, repositoryDir)
-    if (existsSync(url)) return readFileSync(url, 'utf8').trim()
+    // Normalize line endings: a package shipping CRLF would otherwise leave
+    // the generated file permanently dirty against the repository's LF rules.
+    if (existsSync(url)) return readFileSync(url, 'utf8').replace(/\r\n?/g, '\n').trim()
   }
   return null
 }

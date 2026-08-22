@@ -27,8 +27,8 @@ route-corridor, and bridge air-draft alarms.
 - **Accurate third-party attribution.** The notices shipped with the package
   are now generated from the packages webpack actually bundles, with each
   license text embedded, and the packaging gate fails when they stop matching
-  the installed tree. The previous hand-maintained list omitted `react-aria`,
-  which the shared panel shell pulls in for its overlay portal.
+  the installed tree. The previous hand-maintained list omitted `react-aria`
+  and `webpack`, both of which the panel carries.
 - **Current shared panel UI.** The panel bundles `signalk-nearlcrews-ui` 0.8.1
   and shares React with the Signal K admin host under a strict version check.
 - **Precise runtime support.** `engines.node` reads `^20.3.0 || >=22`, which
