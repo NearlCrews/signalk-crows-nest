@@ -92,22 +92,27 @@ export default function DataSourceCard ({
       <div style={S.sourceCardHeader}>
         {onToggleEnabled !== undefined
           ? (
-            <input
-              type='checkbox'
-              style={S.checkbox}
-              checked={enabled}
-              aria-label={`Enable ${name}`}
-              onChange={(e) => onToggleEnabled(e.target.checked)}
-            />
+            // The label supplies the tap target the painted 22px box does not
+            // reach on its own. It wraps no text, so the input's aria-label
+            // remains the control's accessible name.
+            <label style={S.checkboxTarget}>
+              <input
+                type='checkbox'
+                style={S.checkbox}
+                checked={enabled}
+                aria-label={`Enable ${name}`}
+                onChange={(e) => onToggleEnabled(e.target.checked)}
+              />
+            </label>
             )
           : (
             // An always-on source shows a non-interactive "Always on" badge
             // rather than a disabled checkbox: a disabled checkbox is
             // visually indistinguishable from an off-and-greyed-out toggle,
             // so an operator might think the source is unavailable.
-            <span style={S.alwaysOnBadge} aria-label={`${name} is always on`}>
+            <Badge tone='neutral' aria-label={`${name} is always on`}>
               Always on
-            </span>
+            </Badge>
             )}
         <button
           ref={buttonRef}

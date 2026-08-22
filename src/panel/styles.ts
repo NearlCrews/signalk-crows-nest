@@ -44,9 +44,13 @@ const HINT_BASE: CSSProperties = {
  * remains a TypeScript error, which a `Record<string, CSSProperties>`
  * annotation would have silently allowed.
  *
- * Touch sizing stays as literals rather than tokens (22px checkboxes,
- * 36px minimum control heights): the values are accessibility floors, not
- * theme decisions, so a theme must not be able to shrink them.
+ * Touch sizing reads `--snui-control-min-height`, the shared UI package's
+ * public target-size token. That token is a contract, not a theme decision:
+ * the package guarantees 40 CSS pixels, rising to 44 wherever the device
+ * reports any coarse pointer. Inline styles carry no media query, so a
+ * literal here could not make that coarse-pointer step at all, which is the
+ * step a panel operated at the helm actually depends on. The checkbox keeps
+ * its 22px painted box and gets the full target from the wrapper around it.
  */
 export const S = {
   // Status bar at the top of the panel: a vertical stack with the
@@ -209,14 +213,28 @@ export const S = {
     gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
     gap: 6
   },
-  // 22px boxes with the accent check fill: sized for wet fingers at the
-  // helm, and accentColor keeps the checked fill on-palette in every theme.
+  // 22px boxes with the accent check fill: accentColor keeps the checked
+  // fill on-palette in every theme. The painted box stays at 22px; where the
+  // box needs a helm-sized tap target, `checkboxTarget` supplies it.
   checkbox: {
     width: 22,
     height: 22,
     flexShrink: 0,
     cursor: 'pointer',
     accentColor: 'var(--ac-accent)'
+  },
+  // Tap target around a bare checkbox. A native checkbox is only as clickable
+  // as it is painted, so the 22px box alone lands under both the shared UI
+  // target-size contract and the WCAG minimum. Wrapping it in a label of at
+  // least one control height makes the whole square activate the box.
+  checkboxTarget: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 'var(--snui-control-min-height)',
+    minHeight: 'var(--snui-control-min-height)',
+    flexShrink: 0,
+    cursor: 'pointer'
   },
 
   // Data-source accordion cards.
@@ -233,25 +251,13 @@ export const S = {
     padding: '10px 14px',
     minWidth: 0
   },
-  alwaysOnBadge: {
-    fontSize: 10,
-    fontWeight: 600,
-    letterSpacing: 0.3,
-    textTransform: 'uppercase' as const,
-    color: 'var(--ac-text-muted)',
-    background: 'var(--ac-surface-muted)',
-    border: '1px solid var(--ac-border)',
-    borderRadius: 'var(--ac-radius-sm)',
-    padding: '2px 6px',
-    flexShrink: 0
-  },
   sourceCardToggle: {
     display: 'flex',
     alignItems: 'center',
     gap: 10,
     flex: 1,
     minWidth: 0,
-    minHeight: 36,
+    minHeight: 'var(--snui-control-min-height)',
     background: 'none',
     border: 'none',
     padding: 0,

@@ -116,11 +116,22 @@ test('provides coarse-pointer controls with 44-pixel targets @coarse', async ({ 
   for (const control of [
     page.getByRole('radio', { name: 'Auto' }),
     page.getByRole('button', { name: 'Data sources' }),
-    page.getByRole('button', { name: 'Save', exact: true })
+    page.getByRole('button', { name: 'Save', exact: true }),
+    // The card header is the panel's own markup rather than a shared UI
+    // control, so it is the one place the package's target floor is not
+    // inherited for free. Both of its controls are covered here.
+    page.getByRole('button', { name: /OpenSeaMap/ }).first()
   ]) {
     const box = await control.boundingBox()
     expect(box?.height).toBeGreaterThanOrEqual(44)
   }
+  // The enable checkbox paints a 22-pixel box and takes its target from the
+  // label wrapped around it, so the label is what has to clear the floor, in
+  // both dimensions because the target is square.
+  const enableTarget = page.locator('label:has(input[aria-label="Enable OpenSeaMap"])')
+  const targetBox = await enableTarget.boundingBox()
+  expect(targetBox?.height).toBeGreaterThanOrEqual(44)
+  expect(targetBox?.width).toBeGreaterThanOrEqual(44)
 })
 
 test('shows a compatibility message when native CSS scope is unavailable', async ({ page }) => {
