@@ -104,6 +104,28 @@ test('supports every explicit theme and returns to Auto', async ({ page }) => {
   await expect(root).not.toHaveAttribute('data-snui-theme')
 })
 
+test('holds a below-minimum numeric draft while editing and normalizes it on blur', async ({ page }) => {
+  // The draft buffer is what lets a field be cleared or part-typed without the
+  // clamp snapping it back on every keystroke, so it must survive while the
+  // field has focus and must give way to the committed value once focus
+  // leaves. Both halves are pinned here because they also bound the retained
+  // section behavior: every NumberField sits inside a CollapsibleSection whose
+  // default mountStrategy is 'retain', and collapsing one requires clicking
+  // its header, which blurs the field first. A draft therefore cannot outlive
+  // a collapse to be stranded by the effects React Activity re-runs on reopen.
+  await page.getByRole('button', { name: 'Alerts' }).click()
+  await page.getByRole('checkbox', { name: 'Emit an alarm when the vessel nears a hazard' }).check()
+
+  // A raw "0" is below the one metre floor, so the committed value clamps away
+  // from it. That is what makes this discriminating rather than tautological.
+  const radius = page.getByRole('spinbutton', { name: /Alarm radius/ })
+  await radius.fill('0')
+  await expect(radius).toHaveValue('0')
+
+  await page.getByRole('button', { name: 'Data sources' }).focus()
+  await expect(radius).not.toHaveValue('0')
+})
+
 test('has no Axe findings or horizontal overflow at 320 pixels', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 900 })
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)

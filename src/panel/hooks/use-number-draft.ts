@@ -78,10 +78,20 @@ export function useNumberDraft (
   // The value-change detector below misses a Discard that restores a value
   // identical to the committed one (a typed "0" that clamped to the committed
   // minimum), and WebKit does not blur the input on a button click, so
-  // without this the stale draft text would survive the Discard there. The
-  // mount run is a no-op: the draft starts null.
+  // without this the stale draft text would survive the Discard there.
+  //
+  // Both effects here compare against a ref rather than trusting the effect to
+  // run only when their dependency changed. Every NumberField renders inside a
+  // CollapsibleSection whose default mountStrategy is 'retain', which wraps
+  // children in React Activity: collapsing runs effect cleanups and reopening
+  // re-runs the effects, while component state survives. An unguarded
+  // setDraft(null) here would therefore wipe an in-progress edit every time
+  // the operator collapsed and reopened a card.
   const resetEpoch = useContext(DraftResetContext)
+  const seenEpoch = useRef(resetEpoch)
   useEffect(() => {
+    if (seenEpoch.current === resetEpoch) return
+    seenEpoch.current = resetEpoch
     setDraft(null)
   }, [resetEpoch])
 
@@ -92,8 +102,15 @@ export function useNumberDraft (
   // hook itself last produced, so a self-driven update (handleChange
   // calling onChange) is recognized as ours and leaves the draft alone;
   // any other transition is treated as external and clears the draft.
+  // The seenValue guard matters twice over: it keeps a retain reopen from
+  // clearing the draft, and it keeps that reopen from consuming the
+  // lastCommittedFromHere tag, which would otherwise leave the NEXT reopen
+  // looking like an external change and clear the draft through this path.
   const lastCommittedFromHere = useRef<number | null>(null)
+  const seenValue = useRef(value)
   useEffect(() => {
+    if (seenValue.current === value) return
+    seenValue.current = value
     if (lastCommittedFromHere.current === value) {
       lastCommittedFromHere.current = null
       return
