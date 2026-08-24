@@ -30,7 +30,7 @@ route-corridor, and bridge air-draft alarms.
   the installed tree. The previous hand-maintained list omitted `react-aria`
   and `webpack`, both of which the panel carries.
 - **Current shared panel UI.** The panel bundles `signalk-nearlcrews-ui` 0.8.2
-  and shares React with the Signal K admin host under a strict version check.
+  and consumes React and React DOM as singletons from the Signal K admin host.
 - **Precise runtime support.** `engines.node` reads `^20.3.0 || >=22`, which
   states the supported runtimes exactly rather than admitting Node 21, which a
   dependency excludes.

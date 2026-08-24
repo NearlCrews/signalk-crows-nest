@@ -37,9 +37,11 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   focus no longer scrolls the panel, so a press on a control the bar overlaps
   lands on that control rather than on whatever the scroll moved under the
   pointer. Keyboard and programmatic focus still clear a covered control.
-- React and React DOM are shared with the Signal K admin host under a strict
-  version check, so a host outside `^19.2.0` fails at the boundary instead of
-  warning and continuing.
+- React and React DOM resolve from the Signal K admin host as singletons
+  against a required `^19.2.0`, with a range mismatch left as a console
+  warning. The check is deliberately not strict: the Admin registers its React
+  share as 19.0.0 while actually shipping a compatible React, so a strict
+  check would reject a healthy host and the panel would never mount.
 - `engines.node` reads `^20.3.0 || >=22`, which states the supported runtimes
   exactly: a dependency excludes Node 21, which the previous `>=20.3.0`
   admitted.

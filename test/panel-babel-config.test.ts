@@ -63,9 +63,9 @@ test('React and React DOM are host-provided singletons while the UI stays bundle
   for (const packageName of ['react', 'react-dom']) {
     assert.deepEqual(shared[packageName], {
       singleton: true,
-      // strictVersion turns a host outside the required range into a load
-      // failure rather than a console warning nobody reads.
-      strictVersion: true,
+      // strictVersion must stay absent: the Signal K Admin registers its React
+      // share as 19.0.0 while shipping a ^19.2.0-compatible React, so a strict
+      // check would reject a healthy host and the panel would never mount.
       requiredVersion: '^19.2.0',
       import: false
     })
