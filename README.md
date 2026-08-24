@@ -37,6 +37,9 @@ route-corridor, and bridge air-draft alarms.
 - **Pairs with the NMEA 2000 emitter.** The App Store listing now points to
   `signalk-nmea2000-emitter-cannon`, which converts the hazard, route, and
   bridge notifications this plugin raises into NMEA 2000 alert messages.
+- **Touch targets at the helm.** Every control the panel renders now meets the
+  coarse-pointer target floor, including the data-source card header controls
+  and the recent-error jump button.
 
 See the [v0.15.6 changelog entry](https://github.com/NearlCrews/signalk-crows-nest/blob/main/CHANGELOG.md#v0156)
 and [full release history](https://github.com/NearlCrews/signalk-crows-nest/blob/main/CHANGELOG.md).

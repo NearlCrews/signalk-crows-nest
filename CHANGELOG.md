@@ -13,7 +13,7 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 <a id="v0156"></a>
 
-## [0.15.6] - 2026-08-22
+## [0.15.6] - 2026-08-23
 
 ### Added
 
@@ -59,6 +59,24 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - The packaging gate now catches a partial build that leaves the panel icons
   out of the published package, and requires the third-party notices to ship.
+- The data-source card header's enable checkbox and disclosure button now size
+  from the shared control token, so both meet the touch-target floor on a
+  coarse pointer, and a tap anywhere in the checkbox's wrapping label toggles
+  the source. The always-on badge also renders through the shared badge, so it
+  picks up the forced-colors handling the hand-styled span missed.
+- The button in the recent-error list that expands and scrolls to the failing
+  source now sizes from the shared control token instead of taking its height
+  from the surrounding text, which left it under the touch-target floor.
+- A USCG Local Notice to Mariners popup now shows a notice's effective date
+  when only one end is known. An ongoing notice routinely has a begin date and
+  no end date yet, and the popup previously required both, so a live notice
+  showed no effective line at all.
+- A configuration save no longer stacks leftovers from the previous run: the
+  route-hazard teardown unsubscribes its course reader even when clearing an
+  alarm throws, and the bridge clearance resolver now closes with the run,
+  dropping its pending timers and discarding a late detail response.
+- README screenshots no longer link to their own image files, which resolved
+  nowhere in the Signal K App Store README view.
 
 <a id="v0155"></a>
 

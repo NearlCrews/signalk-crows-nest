@@ -88,6 +88,7 @@ CI (`.github/workflows/ci.yml`) builds, type-checks, tests, and lints on
 Node.js 20 for runtime compatibility and runs the full gate on Node.js 22. The official Signal K plugin CI
 (`.github/workflows/plugin-ci.yml`) also exercises Node.js 22 and 24 across
 Linux, macOS, and Windows, plus its Node.js 20 armv7 lane. The publish workflow
-runs on Node.js 22. The `engines` field in `package.json` is `>=20.3.0` (the
-ActiveCaptain client uses `AbortSignal.any`, added in Node 20.3); keep it at or
-below the lowest Node.js version CI exercises.
+runs on Node.js 22. The `engines` field in `package.json` is
+`^20.3.0 || >=22` (the ActiveCaptain client uses `AbortSignal.any`, added in
+Node 20.3, and `lru-cache` excludes Node 21); keep its floor at or below the
+lowest Node.js version CI exercises.
