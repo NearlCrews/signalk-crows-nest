@@ -45,7 +45,9 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   admitted.
 - The Signal K plugin workflow declares its test, format, coverage, and Node
   version inputs rather than inheriting them, and pins the armv7 Cerbo GX lane
-  on purpose.
+  on purpose. A `.gitattributes` now pins LF line endings, so the declared
+  formatting check passes on the workflow's Windows checkouts instead of
+  flagging every file the runner's autocrlf rewrote.
 - The configuration panel size budget tightens from 50 kB to 44 kB against a
   measured 40.15 kB.
 - The numeric draft buffer's reset effects now fire only when the value they

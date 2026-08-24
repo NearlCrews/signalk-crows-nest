@@ -1,0 +1,6 @@
+# Check text files out with LF everywhere. The Windows plugin-ci lanes check
+# out with autocrlf otherwise, and the prettier format check (endOfLine "lf")
+# then flags every file in the repository.
+* text=auto eol=lf
+*.png binary
+*.mvt binary
