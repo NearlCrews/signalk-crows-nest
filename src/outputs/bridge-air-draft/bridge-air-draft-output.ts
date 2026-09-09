@@ -61,6 +61,9 @@ export const bridgeAirDraftOutput: OutputModule = {
 
     const positionScan: PositionScanContributor = {
       poiTypes: BRIDGE_POI_TYPES,
+      // The alarm only fires inside this circle, so the monitor samples finely
+      // enough that a bridge cannot cross the circle between two evaluations.
+      alarmRadiusMeters: radiusMeters,
       buildFetchBox: (tickPosition) => positionToBbox(tickPosition, scanRadiusMeters),
       // alarms.evaluate is a closure, not a method, so it passes through
       // directly with no binding.

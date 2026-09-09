@@ -12,11 +12,18 @@
 
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createRouteHazardAlarms } from '../src/outputs/route-hazard/route-hazard-alarms.js'
+import { createRouteHazardAlarms, type RouteListScan } from '../src/outputs/route-hazard/route-hazard-alarms.js'
 import { resolveTooLowBridges } from '../src/outputs/route-hazard/route-hazard-output.js'
 import { createBridgeClearanceResolver } from '../src/outputs/bridge-air-draft/bridge-clearance-resolver.js'
 import type { CorridorPoi, PoiSummary } from '../src/shared/types.js'
 import { createCapturingApp } from './helpers.js'
+
+/**
+ * The scan record for a tick whose list carried nothing. These tests drive the
+ * message-rendering seam, where the tick's summaries play no part: the verdict
+ * map `resolveTooLowBridges` builds is what decides the message.
+ */
+const NO_LIST: RouteListScan = { pois: [], summaries: new Map(), listFetchedAt: 1_000_000 }
 
 /** A corridor bridge flagged by the scan, with no clearance of its own. */
 function corridorBridge (id: string, name: string, alongTrackDistanceMeters = 1200): CorridorPoi {
@@ -49,6 +56,11 @@ function bridgeSummary (id: string, clearanceMeters?: number): PoiSummary {
   }
 }
 
+/** The id-to-summary index `RouteHazardAlarms.completeList` hands the output. */
+function indexById (summaries: PoiSummary[]): ReadonlyMap<string, PoiSummary> {
+  return new Map(summaries.map((summary) => [summary.id, summary]))
+}
+
 /**
  * A resolver for the OpenSeaMap fixtures. Every summary carries (or lacks) its
  * own clearance, so the resolver answers synchronously and never reaches
@@ -67,14 +79,14 @@ test('a too-low corridor bridge gets a clearance-specific warn message', () => {
   const corridor = [corridorBridge('b1', 'Low swing bridge')]
   const tooLow = resolveTooLowBridges({
     corridorPois: corridor,
-    pois: [bridgeSummary('b1', 4)],
+    summaries: indexById([bridgeSummary('b1', 4)]),
     resolver: makeResolver(),
     airDraftMeters: 5,
     marginMeters: 1
   })
 
   assert.equal(tooLow.size, 1, 'the too-low bridge is recorded')
-  alarms.evaluate(corridor, tooLow)
+  alarms.evaluate(NO_LIST, corridor, tooLow)
 
   assert.equal(captured.length, 1)
   assert.equal(captured[0].value.state, 'warn', 'the clearance upgrade stays a warn')
@@ -91,14 +103,14 @@ test('a fitting corridor bridge keeps the generic message', () => {
   const corridor = [corridorBridge('b1', 'Tall bridge')]
   const tooLow = resolveTooLowBridges({
     corridorPois: corridor,
-    pois: [bridgeSummary('b1', 20)],
+    summaries: indexById([bridgeSummary('b1', 20)]),
     resolver: makeResolver(),
     airDraftMeters: 5,
     marginMeters: 1
   })
 
   assert.equal(tooLow.size, 0, 'a bridge that clears is not recorded')
-  alarms.evaluate(corridor, tooLow)
+  alarms.evaluate(NO_LIST, corridor, tooLow)
   assert.ok(captured[0].value.message.includes('on the route ahead'))
   assert.ok(!captured[0].value.message.includes('clearance'), 'no clearance clause on a fitting bridge')
 })
@@ -109,14 +121,14 @@ test('a corridor bridge with an unknown clearance keeps the generic message', ()
   const corridor = [corridorBridge('b1', 'Unknown bridge')]
   const tooLow = resolveTooLowBridges({
     corridorPois: corridor,
-    pois: [bridgeSummary('b1')],
+    summaries: indexById([bridgeSummary('b1')]),
     resolver: makeResolver(),
     airDraftMeters: 5,
     marginMeters: 1
   })
 
   assert.equal(tooLow.size, 0, 'an unknown clearance produces no verdict')
-  alarms.evaluate(corridor, tooLow)
+  alarms.evaluate(NO_LIST, corridor, tooLow)
   assert.ok(!captured[0].value.message.includes('clearance'))
 })
 
@@ -126,14 +138,14 @@ test('an unknown air draft keeps the generic message even for a low bridge', () 
   const corridor = [corridorBridge('b1', 'Low bridge')]
   const tooLow = resolveTooLowBridges({
     corridorPois: corridor,
-    pois: [bridgeSummary('b1', 4)],
+    summaries: indexById([bridgeSummary('b1', 4)]),
     resolver: makeResolver(),
     airDraftMeters: null,
     marginMeters: 1
   })
 
   assert.equal(tooLow.size, 0, 'no air draft means no comparison and no detail fetch')
-  alarms.evaluate(corridor, tooLow)
+  alarms.evaluate(NO_LIST, corridor, tooLow)
   assert.ok(!captured[0].value.message.includes('clearance'))
 })
 
@@ -145,14 +157,14 @@ test('a corridor bridge with no matching summary keeps the generic message', () 
   // cannot be resolved by id.
   const tooLow = resolveTooLowBridges({
     corridorPois: corridor,
-    pois: [],
+    summaries: indexById([]),
     resolver: makeResolver(),
     airDraftMeters: 5,
     marginMeters: 1
   })
 
   assert.equal(tooLow.size, 0)
-  alarms.evaluate(corridor, tooLow)
+  alarms.evaluate(NO_LIST, corridor, tooLow)
   assert.ok(!captured[0].value.message.includes('clearance'))
 })
 
@@ -169,13 +181,50 @@ test('a non-bridge corridor point is never upgraded', () => {
   }
   const tooLow = resolveTooLowBridges({
     corridorPois: [hazard],
-    pois: [{ ...bridgeSummary('h1', 1), type: 'Hazard' }],
+    summaries: indexById([{ ...bridgeSummary('h1', 1), type: 'Hazard' }]),
     resolver: makeResolver(),
     airDraftMeters: 5,
     marginMeters: 1
   })
 
   assert.equal(tooLow.size, 0, 'only Bridge corridor points are tested')
-  alarms.evaluate([hazard], tooLow)
+  alarms.evaluate(NO_LIST, [hazard], tooLow)
   assert.ok(!captured[0].value.message.includes('clearance'))
+})
+
+test('a corridor bridge held by retention keeps its clearance upgrade', () => {
+  // `completeList` indexes the completed list, so the index it hands the
+  // clearance lookup covers a bridge a partial result omitted and retention put
+  // back. Indexing the tick's raw list instead would drop that bridge's verdict
+  // and quietly downgrade a too-low bridge to the generic message.
+  const { app, captured } = createCapturingApp()
+  const alarms = createRouteHazardAlarms(app)
+  const corridor = [corridorBridge('b1', 'Low swing bridge')]
+  const resolver = makeResolver()
+
+  const first = alarms.completeList([bridgeSummary('b1', 4)], 1_000_000)
+  alarms.evaluate(first, corridor, resolveTooLowBridges({
+    corridorPois: corridor,
+    summaries: first.summaries,
+    resolver,
+    airDraftMeters: 5,
+    marginMeters: 1
+  }))
+  assert.ok(captured[0].value.message.includes('clearance 4 m'))
+
+  // The bridge's source times out, so the list omits it and retention holds it.
+  const held = alarms.completeList([], 1_060_000)
+  assert.deepEqual(held.pois.map((poi) => poi.id), ['b1'], 'retention put the bridge back')
+
+  const tooLow = resolveTooLowBridges({
+    corridorPois: corridor,
+    summaries: held.summaries,
+    resolver,
+    airDraftMeters: 5,
+    marginMeters: 1
+  })
+
+  assert.equal(tooLow.size, 1, 'the held bridge is still resolvable by id')
+  alarms.evaluate(held, corridor, tooLow)
+  assert.equal(captured.length, 1, 'the message is unchanged, so no second delta')
 })

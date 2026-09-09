@@ -1,6 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createBridgeClearanceResolver } from '../src/outputs/bridge-air-draft/bridge-clearance-resolver.js'
+import {
+  createBridgeClearanceResolver,
+  FAILED_FETCH_RETRY_MS
+} from '../src/outputs/bridge-air-draft/bridge-clearance-resolver.js'
 import { ACTIVE_CAPTAIN_SOURCE_ID, OPENSEAMAP_SOURCE_ID } from '../src/shared/source-ids.js'
 import type { PoiDetailView, PoiSummary, PoiType } from '../src/shared/types.js'
 import { flush } from './helpers.js'
@@ -93,18 +96,49 @@ test('does not stack duplicate fetches while one is in flight', async () => {
   assert.equal(calls, 1, 'in-flight dedup collapses the burst into one fetch')
 })
 
-test('a fetch failure is not cached, so a later encounter retries', async () => {
+test('a fetch failure is not cached as a clearance, so a later encounter retries', async () => {
+  let clock = 1_000_000
   let calls = 0
   const resolver = createBridgeClearanceResolver({
     getDetails: async () => { calls += 1; throw new Error('offline') },
-    debug: () => {}
+    debug: () => {},
+    now: () => clock
   })
   const ac = bridge({ id: 'ac4' })
   assert.equal(resolver.clearanceMeters(ac), null)
   await flush()
   assert.equal(resolver.clearanceMeters(ac), null, 'still unknown after a failed fetch')
   await flush()
-  assert.ok(calls >= 2, 'a transient failure is retried on a later encounter')
+  assert.equal(calls, 1, 'the failure is not pinned, but the retry waits out its window')
+
+  clock += FAILED_FETCH_RETRY_MS
+  assert.equal(resolver.clearanceMeters(ac), null)
+  await flush()
+  assert.equal(calls, 2, 'a transient failure is retried on a later encounter')
+})
+
+test('an unresolvable bridge is fetched once per retry window, not once per evaluation', async () => {
+  // The alarm evaluation runs on the position fix rate, so a bridge sitting in
+  // range with a failing detail fetch is asked for its clearance every ten to
+  // thirty seconds. Only this window stands between that and the same number of
+  // requests at the upstream.
+  let clock = 1_000_000
+  let calls = 0
+  const resolver = createBridgeClearanceResolver({
+    getDetails: async () => { calls += 1; throw new Error('offline') },
+    debug: () => {},
+    now: () => clock
+  })
+  const ac = bridge({ id: 'ac-cooldown' })
+
+  // Ten seconds apart, over three windows.
+  for (let elapsed = 0; elapsed < FAILED_FETCH_RETRY_MS * 3; elapsed += 10_000) {
+    resolver.clearanceMeters(ac)
+    await flush()
+    clock += 10_000
+  }
+
+  assert.equal(calls, 3, 'one attempt per window, not one per evaluation')
 })
 
 test('re-resolves an ActiveCaptain clearance after its TTL so an upstream correction is picked up', async () => {
@@ -159,6 +193,7 @@ test('never fetches for a non-bridge ActiveCaptain POI', async () => {
 })
 
 test('a timed-out fetch releases inFlight and cannot overwrite a newer retry', async () => {
+  let clock = 1_000_000
   let calls = 0
   let resolveFirst: ((value: PoiDetailView) => void) | undefined
   let resolveSecond: ((value: PoiDetailView) => void) | undefined
@@ -171,13 +206,18 @@ test('a timed-out fetch releases inFlight and cannot overwrite a newer retry', a
       })
     },
     debug: () => {},
-    fetchTimeoutMs: 10
+    fetchTimeoutMs: 10,
+    now: () => clock
   })
   const ac = bridge({ id: 'ac-timeout' })
   assert.equal(resolver.clearanceMeters(ac), null, 'first tick: unknown, fetch started')
   assert.equal(calls, 1)
   await new Promise((resolve) => setTimeout(resolve, 20))
 
+  // A timed-out fetch is a failed attempt, so the retry waits out the window
+  // its own start began. The fetch timeout runs on real timers; only the retry
+  // window reads the injected clock.
+  clock += FAILED_FETCH_RETRY_MS
   assert.equal(resolver.clearanceMeters(ac), null, 'after timeout: still unknown, retry started')
   assert.equal(calls, 2, 'a second fetch is started after the timeout releases the slot')
   resolveSecond?.(detail(3))
@@ -192,6 +232,7 @@ test('a timed-out fetch releases inFlight and cannot overwrite a newer retry', a
 })
 
 test('a synchronous detail adapter failure stays fire-and-forget and can retry', async () => {
+  let clock = 1_000_000
   let calls = 0
   const resolver = createBridgeClearanceResolver({
     getDetails: () => {
@@ -199,11 +240,13 @@ test('a synchronous detail adapter failure stays fire-and-forget and can retry',
       throw new Error('synchronous failure')
     },
     debug: () => {},
-    fetchTimeoutMs: 10
+    fetchTimeoutMs: 10,
+    now: () => clock
   })
   const ac = bridge({ id: 'ac-sync-failure' })
   assert.doesNotThrow(() => resolver.clearanceMeters(ac))
   await flush()
+  clock += FAILED_FETCH_RETRY_MS
   assert.doesNotThrow(() => resolver.clearanceMeters(ac))
   assert.equal(calls, 2)
 })

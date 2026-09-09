@@ -18,6 +18,11 @@
  * `BridgeClearanceResolver`, which returns OpenSeaMap clearances synchronously
  * and resolves ActiveCaptain clearances from a cached detail fetch.
  *
+ * The tick's list is completed with every alarming bridge the list omitted,
+ * held at the position a list last reported it at, because an aggregate list
+ * result is legitimately partial and absence from one is not evidence that the
+ * vessel has passed a bridge. See `alarm-retention.ts`.
+ *
  * The notification is emitted on the path
  * `notifications.navigation.crowsNest.bridgeClearance.<poiId>`, in the
  * `vessels.self` context, with `$source` suffix `bridge`. A raised alarm
@@ -30,6 +35,7 @@ import { createNotificationTracker, type NotificationTrackerApp } from '../../sh
 import { bridgeBlocksVessel, formatClearanceMeters } from '../../shared/bridge-clearance.js'
 import { hysteresisThreshold } from '../../shared/proximity-radius.js'
 import { distanceMeters } from '../../geo/position-utilities.js'
+import { completeWithRetained, unconfirmedClearReason, type RetainedPoi } from '../alarm-retention.js'
 import type { BridgeClearanceResolver } from './bridge-clearance-resolver.js'
 import type { PoiSummary, PoiType, Position } from '../../shared/types.js'
 
@@ -74,9 +80,10 @@ export interface BridgeClearanceAlarms {
    * notification for each too-low bridge that has just come within the radius
    * and clearing each one that has just left. Non-Bridge POIs are ignored.
    * When the vessel air draft is unknown the check is inert: it raises nothing
-   * and clears any active alarm.
+   * and clears any active alarm. `listFetchedAt` is when the request behind
+   * `pois` landed, which the reconfirmation window runs on.
    */
-  evaluate: (vesselPosition: Position, pois: PoiSummary[]) => void
+  evaluate: (vesselPosition: Position, pois: PoiSummary[], listFetchedAt: number) => void
   /**
    * Clear every notification currently in the alarm state. Called on plugin
    * stop so a stale bridge alarm does not linger after the monitor is gone.
@@ -84,9 +91,14 @@ export interface BridgeClearanceAlarms {
   clearAll: () => void
 }
 
+/** What the tracker holds for an alarming bridge: always raised off a list entry. */
+interface BridgeEntry extends RetainedPoi {
+  summary: PoiSummary
+}
+
 /** An in-alarm bridge for this pass, with the figures the alarm message needs. */
 interface InAlarmEntry {
-  name: string
+  poi: PoiSummary
   clearanceMeters: number
   airDraftMeters: number
   rangeMeters: number
@@ -106,18 +118,22 @@ export function createBridgeClearanceAlarms (
 
   // Tracker-owned raise-once/clear-once hysteresis and episode clock, same
   // shape as the proximity alarm (see proximity-alarms.ts), with a bridge as
-  // the tracked subject.
-  const tracker = createNotificationTracker<{ name: string }>({
+  // the tracked subject, and the same hold across a partial list result.
+  const tracker = createNotificationTracker<BridgeEntry>({
     app,
     pathPrefix: NOTIFICATION_PATH_PREFIX,
     sourceSuffix: SOURCE_SUFFIX,
-    buildClearValue: ({ name }, raisedAt) => ({
+    buildClearValue: ({ summary, unconfirmed }, raisedAt) => ({
       state: 'normal',
       method: [],
-      message: `Bridge "${name}" clearance alarm cleared`,
+      message: unconfirmed === true
+        // The vessel has not passed this bridge, so the clear must not read as
+        // though it had.
+        ? `Bridge "${summary.name}" clearance alarm cleared: ${unconfirmedClearReason('within the alarm radius')}`
+        : `Bridge "${summary.name}" clearance alarm cleared`,
       createdAt: raisedAt
     }),
-    describeClear: (poiId, { name }) => `Bridge clearance alarm cleared for bridge ${poiId} ("${name}")`
+    describeClear: (poiId, { summary }) => `Bridge clearance alarm cleared for bridge ${poiId} ("${summary.name}")`
   })
 
   // Tracks whether the air draft was available on the previous pass, so the
@@ -125,9 +141,15 @@ export function createBridgeClearanceAlarms (
   // means no pass has run yet, so the first pass always logs its state.
   let airDraftAvailable: boolean | null = null
 
-  function raise (poiId: string, entry: InAlarmEntry): void {
-    const { name, clearanceMeters, airDraftMeters, rangeMeters: distance } = entry
-    const raisedAt = tracker.set(poiId, { name })
+  // The list result the box was last warmed for, so a replay of that result
+  // does not warm it again. Undefined until the first warm, so no clock value
+  // doubles as a sentinel meaning "not yet".
+  let warmedListFetchedAt: number | undefined
+
+  function raise (entry: InAlarmEntry, listFetchedAt: number): void {
+    const { poi, clearanceMeters, airDraftMeters, rangeMeters: distance } = entry
+    const { id: poiId, name } = poi
+    const raisedAt = tracker.set(poiId, { summary: poi, lastListedAt: listFetchedAt })
     const value: NotificationValue = {
       state: 'alarm',
       method: ['visual', 'sound'],
@@ -145,7 +167,7 @@ export function createBridgeClearanceAlarms (
     )
   }
 
-  function evaluate (vesselPosition: Position, pois: PoiSummary[]): void {
+  function evaluate (vesselPosition: Position, pois: PoiSummary[], listFetchedAt: number): void {
     const airDraftMeters = getAirDraft()
     const available = airDraftMeters !== null
     if (available !== airDraftAvailable) {
@@ -160,32 +182,52 @@ export function createBridgeClearanceAlarms (
       tracker.clearAll()
       return
     }
-    if (pois.length === 0) {
+    // Hold every alarming bridge the list omitted at its last reported
+    // position, so the exit decision below rests on where the bridge is rather
+    // than on whether a partial upstream result happened to mention it. The
+    // window runs on when the request behind this list landed, not on this
+    // call: the monitor replays one result across many evaluations, and a
+    // replay is not a fresh report.
+    const scanned = completeWithRetained(tracker, pois, listFetchedAt)
+    if (scanned.length === 0) {
       tracker.clearStale([])
       return
     }
+
+    // Warming the whole box is worth one pass per list result: an
+    // ActiveCaptain bridge's clearance is then known by the time the bridge
+    // reaches the alarm radius rather than a tick later. It is not worth
+    // repeating on a replay of that result. The list has not changed, so a
+    // resolvable bridge answers from cache and an unresolvable one starts a
+    // fresh detail fetch, which the resolver deliberately does not suppress: at
+    // an evaluation every ten to thirty seconds that is several times the
+    // request rate the upstream saw when evaluation ran once a minute. Between
+    // requests, only the bridges that could alarm on this pass are resolved.
+    const warmingBox = listFetchedAt !== warmedListFetchedAt
+    warmedListFetchedAt = listFetchedAt
 
     // Bridges that should be alarming after this pass, with the figures kept for
     // the alarm message. A bridge not yet alarming must come inside the raise
     // radius; one already alarming holds until it passes the wider clear radius.
     const inAlarm = new Map<string, InAlarmEntry>()
-    for (const poi of pois) {
+    for (const poi of scanned) {
       if (poi.type !== BRIDGE_POI_TYPE) {
         continue
       }
-      // Resolve every bridge in the scan box, warming the resolver cache so an
-      // ActiveCaptain bridge's clearance is known by the time it reaches the
-      // alarm radius rather than a tick later.
-      const clearanceMeters = resolver.clearanceMeters(poi)
       const distance = distanceMeters(vesselPosition, poi.position)
+      const threshold = hysteresisThreshold(radiusMeters, tracker.has(poi.id))
+      const inRange = Number.isFinite(distance) && distance <= threshold
+      if (!warmingBox && !inRange) {
+        continue
+      }
+      const clearanceMeters = resolver.clearanceMeters(poi)
       if (!Number.isFinite(distance)) {
         // A non-finite distance means a bad vessel or bridge coordinate.
         // Skipping it silently would drop a safety alarm, so log it.
         app.debug(`Bridge clearance alarm skipped bridge ${poi.id}: non-finite distance`)
         continue
       }
-      const threshold = hysteresisThreshold(radiusMeters, tracker.has(poi.id))
-      if (distance > threshold) {
+      if (!inRange) {
         continue
       }
       if (clearanceMeters === null) {
@@ -195,13 +237,13 @@ export function createBridgeClearanceAlarms (
       if (!bridgeBlocksVessel(clearanceMeters, airDraftMeters, marginMeters)) {
         continue
       }
-      inAlarm.set(poi.id, { name: poi.name, clearanceMeters, airDraftMeters, rangeMeters: distance })
+      inAlarm.set(poi.id, { poi, clearanceMeters, airDraftMeters, rangeMeters: distance })
     }
 
     // Entry: a bridge now in alarm that was not already alarming.
-    for (const [poiId, entry] of inAlarm) {
-      if (!tracker.has(poiId)) {
-        raise(poiId, entry)
+    for (const entry of inAlarm.values()) {
+      if (!tracker.has(entry.poi.id)) {
+        raise(entry, listFetchedAt)
       }
     }
 

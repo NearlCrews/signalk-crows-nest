@@ -50,10 +50,24 @@ export interface NotificationTrackerConfig<T> {
 
 /** Public surface of the tracker. */
 export interface NotificationTracker<T> {
+  /**
+   * How many entries are currently in the alarm state. Lets a caller take the
+   * no-alarm path without {@link entries} building the snapshot it would then
+   * throw away, which matters because the alarm outputs ask on every position
+   * fix and the answer is almost always zero.
+   */
+  readonly size: number
   /** True when the POI id is currently in the alarm state. */
   has: (poiId: string) => boolean
   /** The active entry for `poiId`, or `undefined` when none. */
   get: (poiId: string) => T | undefined
+  /**
+   * Every active entry, with the raw POI id it was keyed by. A snapshot, so a
+   * caller can `set` while walking it. The alarm outputs use this to decide
+   * whether an entry the tick's list omitted should be held or cleared, which
+   * would otherwise need a second copy of the active set beside the tracker's.
+   */
+  entries: () => Array<{ poiId: string, entry: T }>
   /**
    * Mark `poiId` as currently alarming and store its entry. Returns the
    * alarm episode's `raisedAt` ISO timestamp: stamped on the first `set` of
@@ -129,8 +143,15 @@ export function createNotificationTracker<T> (
   }
 
   return {
+    get size () {
+      return active.size
+    },
     has: (poiId) => active.has(sanitizePoiId(poiId)),
     get: (poiId) => active.get(sanitizePoiId(poiId))?.entry,
+    // The raw id, not the encoded key: a caller compares these against ids
+    // straight off the wire, and re-encoding an encoded suffix would not
+    // round-trip (see the note on `clear` above).
+    entries: () => [...active.values()].map(({ poiId, entry }) => ({ poiId, entry })),
     set: (poiId, entry) => {
       const safeId = sanitizePoiId(poiId)
       // Preserve the episode start across an overwrite (a message refresh);

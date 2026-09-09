@@ -8,8 +8,8 @@ import {
   type PositionStream
 } from '../src/monitoring/position-monitor.js'
 import type { PositionScanContributor } from '../src/outputs/output.js'
-import type { Bbox, PoiSummary, Position } from '../src/shared/types.js'
-import { flush } from './helpers.js'
+import type { Bbox, PoiSummary, PoiType, Position } from '../src/shared/types.js'
+import { flush, poiSummary } from './helpers.js'
 
 /** A controllable monotonic clock, so the throttle is tested without waiting. */
 function createClock (): { now: () => number, advance: (ms: number) => void } {
@@ -27,11 +27,13 @@ function createMockApp (): {
   isUnsubscribed: () => boolean
   subscribedPath: () => string | undefined
   debugMessages: () => string[]
+  errorMessages: () => string[]
 } {
   let handler: ((delta: NormalizedDelta) => void) | undefined
   let unsubscribed = false
   let path: string | undefined
   const debugMessages: string[] = []
+  const errorMessages: string[] = []
   const stream: PositionStream = {
     onValue: (incoming) => {
       handler = incoming
@@ -45,7 +47,8 @@ function createMockApp (): {
         return stream
       }
     },
-    debug: (message) => { debugMessages.push(message) }
+    debug: (message) => { debugMessages.push(message) },
+    error: (message) => { errorMessages.push(message) }
   }
   return {
     app,
@@ -53,7 +56,8 @@ function createMockApp (): {
     emit: (value) => { handler?.({ value } as unknown as NormalizedDelta) },
     isUnsubscribed: () => unsubscribed,
     subscribedPath: () => path,
-    debugMessages: () => debugMessages
+    debugMessages: () => debugMessages,
+    errorMessages: () => errorMessages
   }
 }
 
@@ -629,6 +633,367 @@ test('does not issue a list request when no contributor produces a fetch box', a
   mockApp.emit({ latitude: 10, longitude: 20 })
   await flush()
   assert.equal(mockClient.calls.length, 0, 'no list request is issued')
+
+  monitor.stop()
+})
+
+/**
+ * Meters per degree on the spherical Earth the geo helpers use, so a fixture
+ * can be placed at a known offset from the equator without importing the
+ * projection helpers the code under test uses.
+ */
+const METERS_PER_DEGREE = (6_371_000 * Math.PI) / 180
+
+/** Meters per second for a speed in knots. */
+const METERS_PER_SECOND_PER_KNOT = 1852 / 3600
+
+/** A position `metersEast` along a due-east track on the equator. */
+function eastAt (metersEast: number): Position {
+  return { latitude: 0, longitude: metersEast / METERS_PER_DEGREE }
+}
+
+/**
+ * Drive a monitor along a due-east equatorial track past one hazard, with a
+ * fix every second, and report which evaluations found the hazard inside the
+ * alarm radius. `phaseSeconds` slides the track's start so the sweep covers
+ * every phase the throttle can land on.
+ */
+async function runPast (options: {
+  speedKnots: number
+  abeamMeters: number
+  alarmRadiusMeters: number
+  phaseSeconds: number
+}): Promise<{ sightings: number, errors: string[] }> {
+  const { speedKnots, abeamMeters, alarmRadiusMeters, phaseSeconds } = options
+  const mockApp = createMockApp()
+  const mockClient = createMockClient()
+  const clock = createClock()
+  const hazard: PoiSummary = {
+    ...HAZARD,
+    position: {
+      latitude: abeamMeters / METERS_PER_DEGREE,
+      longitude: 5000 / METERS_PER_DEGREE
+    }
+  }
+  mockClient.setPois([hazard])
+
+  let sightings = 0
+  const contributor: PositionScanContributor = {
+    poiTypes: ['Hazard'],
+    alarmRadiusMeters,
+    buildFetchBox: () => SCAN_BOX,
+    evaluate: (position, pois) => {
+      for (const poi of pois) {
+        const north = (poi.position.latitude - position.latitude) * METERS_PER_DEGREE
+        const east = (poi.position.longitude - position.longitude) * METERS_PER_DEGREE
+        if (Math.hypot(north, east) <= alarmRadiusMeters) {
+          sightings += 1
+        }
+      }
+    }
+  }
+
+  const monitor = createPositionMonitor({
+    app: mockApp.app,
+    client: mockClient.client,
+    contributors: [contributor],
+    poiTypes: 'Hazard',
+    now: clock.now
+  })
+
+  const speed = speedKnots * METERS_PER_SECOND_PER_KNOT
+  // From well before the hazard to well past it, one fix a second.
+  for (let second = 0; second <= 10_000 / speed; second += 1) {
+    clock.advance(1000)
+    mockApp.emit(eastAt((second + phaseSeconds) * speed))
+    await flush()
+    await flush()
+  }
+  monitor.stop()
+  return { sightings, errors: mockApp.errorMessages() }
+}
+
+test('a hazard passing abeam is evaluated inside the radius at every tick phase', async () => {
+  // 20 kt past a hazard 450 m off the track, with the default 500 m radius.
+  // The hazard is inside the radius for 436 m of track, which is less than the
+  // 617 m the vessel covers in one minute, so a once-a-minute evaluation can
+  // straddle the whole pass.
+  for (let phase = 0; phase < 12; phase += 1) {
+    const { sightings } = await runPast({
+      speedKnots: 20,
+      abeamMeters: 450,
+      alarmRadiusMeters: 500,
+      phaseSeconds: phase * 5
+    })
+    assert.ok(sightings > 0, `no evaluation caught the hazard at phase ${phase}`)
+  }
+})
+
+test('a hazard dead ahead is evaluated inside the radius at every tick phase', async () => {
+  // 35 kt straight at a hazard: 1080 m covered in a minute against a 1000 m
+  // chord through the alarm zone.
+  for (let phase = 0; phase < 12; phase += 1) {
+    const { sightings } = await runPast({
+      speedKnots: 35,
+      abeamMeters: 0,
+      alarmRadiusMeters: 500,
+      phaseSeconds: phase * 5
+    })
+    assert.ok(sightings > 0, `no evaluation caught the hazard at phase ${phase}`)
+  }
+})
+
+test('outrunning the sampling for a tight alarm radius is reported, not silent', async () => {
+  const { errors } = await runPast({
+    speedKnots: 60,
+    abeamMeters: 0,
+    alarmRadiusMeters: 10,
+    phaseSeconds: 0
+  })
+
+  const gap = errors.find((message) => message.includes('between alarm checks'))
+  assert.ok(gap !== undefined, 'the coverage gap is reported')
+  assert.ok(gap.includes('10 m'), 'the report names the radius that cannot be sampled')
+})
+
+test('an alarm radius the sampling cannot resolve is reported at startup', () => {
+  const mockApp = createMockApp()
+  const mockClient = createMockClient()
+  const contributor: PositionScanContributor = {
+    poiTypes: ['Hazard'],
+    alarmRadiusMeters: 1,
+    buildFetchBox: () => SCAN_BOX,
+    evaluate: () => {}
+  }
+
+  const monitor = createPositionMonitor({
+    app: mockApp.app,
+    client: mockClient.client,
+    contributors: [contributor],
+    poiTypes: 'Hazard',
+    now: createClock().now
+  })
+
+  const reported = mockApp.errorMessages().find((message) => message.includes('narrower than the sampling'))
+  assert.ok(reported !== undefined, 'a radius that can never be honored is called out at startup')
+  monitor.stop()
+})
+
+test('evaluations between list requests replay the last result without refetching', async () => {
+  const mockApp = createMockApp()
+  const mockClient = createMockClient()
+  const clock = createClock()
+  const evaluations: PoiSummary[][] = []
+  const contributor: PositionScanContributor = {
+    poiTypes: ['Hazard'],
+    alarmRadiusMeters: 500,
+    buildFetchBox: () => SCAN_BOX,
+    evaluate: (_position, pois) => { evaluations.push(pois) }
+  }
+  mockClient.setPois([HAZARD])
+
+  const monitor = createPositionMonitor({
+    app: mockApp.app,
+    client: mockClient.client,
+    contributors: [contributor],
+    poiTypes: 'Hazard',
+    now: clock.now
+  })
+
+  mockApp.emit(eastAt(0))
+  await flush()
+  assert.equal(mockClient.calls.length, 1)
+  assert.equal(evaluations.length, 1)
+
+  // Two more fixes, 200 m apart, well inside the one-minute refetch interval.
+  for (const metersEast of [200, 400]) {
+    clock.advance(10_000)
+    mockApp.emit(eastAt(metersEast))
+    await flush()
+  }
+
+  assert.equal(mockClient.calls.length, 1, 'no extra upstream traffic')
+  assert.equal(evaluations.length, 3, 'the alarms still ran on both fixes')
+  assert.deepEqual(evaluations[2], [HAZARD], 'against the last result')
+
+  monitor.stop()
+})
+
+test('leaving the water the last list covered forces a refetch before the interval', async () => {
+  const mockApp = createMockApp()
+  const mockClient = createMockClient()
+  const clock = createClock()
+  const contributor: PositionScanContributor = {
+    poiTypes: ['Hazard'],
+    // A 500 m radius fetches a 2000 m box, so the box stops reaching the alarm
+    // zone 1500 m from the position it was built around.
+    alarmRadiusMeters: 500,
+    buildFetchBox: () => SCAN_BOX,
+    evaluate: () => {}
+  }
+
+  const monitor = createPositionMonitor({
+    app: mockApp.app,
+    client: mockClient.client,
+    contributors: [contributor],
+    poiTypes: 'Hazard',
+    now: clock.now
+  })
+
+  mockApp.emit(eastAt(0))
+  await flush()
+  assert.equal(mockClient.calls.length, 1)
+
+  clock.advance(1000)
+  mockApp.emit(eastAt(1400))
+  await flush()
+  assert.equal(mockClient.calls.length, 1, 'still covered, so the interval gate holds')
+
+  clock.advance(1000)
+  mockApp.emit(eastAt(1600))
+  await flush()
+  assert.equal(mockClient.calls.length, 2, 'past the covered distance the interval is overridden')
+
+  monitor.stop()
+})
+
+test('a contributor with no alarm radius keeps the plain tick cadence', async () => {
+  const mockApp = createMockApp()
+  const mockClient = createMockClient()
+  const clock = createClock()
+  const scan = createMockContributor(['Hazard'], SCAN_BOX)
+
+  const monitor = createPositionMonitor({
+    app: mockApp.app,
+    client: mockClient.client,
+    contributors: [scan.contributor],
+    poiTypes: 'Hazard',
+    now: clock.now
+  })
+
+  mockApp.emit(eastAt(0))
+  await flush()
+  for (const metersEast of [5000, 10_000, 15_000]) {
+    clock.advance(1000)
+    mockApp.emit(eastAt(metersEast))
+    await flush()
+  }
+
+  assert.equal(mockClient.calls.length, 1, 'no coverage override without a declared radius')
+  assert.equal(scan.evaluations().length, 1, 'and no evaluation between list requests')
+
+  monitor.stop()
+})
+
+test('a replayed result keeps the time its own list request landed', async () => {
+  const mockApp = createMockApp()
+  const mockClient = createMockClient()
+  const clock = createClock()
+  const stamps: number[] = []
+  const contributor: PositionScanContributor = {
+    poiTypes: ['Hazard'],
+    alarmRadiusMeters: 500,
+    buildFetchBox: () => SCAN_BOX,
+    evaluate: (_position, _pois, listFetchedAt) => { stamps.push(listFetchedAt) }
+  }
+  mockClient.setPois([HAZARD])
+
+  const monitor = createPositionMonitor({
+    app: mockApp.app,
+    client: mockClient.client,
+    contributors: [contributor],
+    poiTypes: 'Hazard',
+    now: clock.now
+  })
+
+  const fetchedAt = clock.now()
+  mockApp.emit(eastAt(0))
+  await flush()
+
+  clock.advance(20_000)
+  mockApp.emit(eastAt(300))
+  await flush()
+
+  assert.equal(mockClient.calls.length, 1, 'the second fix replays rather than refetches')
+  assert.deepEqual(stamps, [fetchedAt, fetchedAt],
+    'the replay reports the request time, so a held alarm still ages out')
+
+  monitor.stop()
+})
+
+test('a replay carries exactly the points each zone contributor would see in the full list', async () => {
+  const mockApp = createMockApp()
+  const mockClient = createMockClient()
+  const clock = createClock()
+
+  /** A zone contributor recording the list it was handed on each evaluation. */
+  function zoneContributor (poiTypes: readonly PoiType[]): {
+    contributor: PositionScanContributor
+    lists: () => PoiSummary[][]
+  } {
+    const lists: PoiSummary[][] = []
+    return {
+      contributor: {
+        poiTypes,
+        alarmRadiusMeters: 500,
+        buildFetchBox: () => SCAN_BOX,
+        evaluate: (_position, pois) => { lists.push(pois) }
+      },
+      lists: () => lists
+    }
+  }
+
+  // The two shipped zone contributors: the proximity alarm reads Hazard, the
+  // bridge air-draft check reads Bridge. The combined list carries the other
+  // outputs' types too, and none of those has a between-request reader.
+  const hazardScan = zoneContributor(['Hazard'])
+  const bridgeScan = zoneContributor(['Bridge'])
+  const combined = [
+    poiSummary('h1', 'Hazard', 'Rock', eastAt(50)),
+    poiSummary('m1', 'Marina', 'Town quay', eastAt(60)),
+    poiSummary('b1', 'Bridge', 'Low bridge', eastAt(70)),
+    poiSummary('l1', 'Lock', 'Canal lock', eastAt(80)),
+    poiSummary('h2', 'Hazard', 'Wreck', eastAt(90)),
+    poiSummary('a1', 'Anchorage', 'The pool', eastAt(100)),
+    poiSummary('b2', 'Bridge', 'Swing bridge', eastAt(110))
+  ]
+  mockClient.setPois(combined)
+
+  const monitor = createPositionMonitor({
+    app: mockApp.app,
+    client: mockClient.client,
+    contributors: [hazardScan.contributor, bridgeScan.contributor],
+    poiTypes: 'Hazard,Bridge,Marina,Lock,Anchorage',
+    now: clock.now
+  })
+
+  mockApp.emit(eastAt(0))
+  await flush()
+
+  clock.advance(20_000)
+  mockApp.emit(eastAt(300))
+  await flush()
+
+  assert.equal(mockClient.calls.length, 1, 'the second fix replays rather than refetches')
+
+  // The property the narrowed replay has to hold: whatever a contributor would
+  // pick out of the tick's full list, it picks the same points out of the
+  // replay, in the same order.
+  for (const [scan, poiTypes] of [[hazardScan, ['Hazard']], [bridgeScan, ['Bridge']]] as const) {
+    const [tickList, replayList] = scan.lists()
+    assert.equal(scan.lists().length, 2, 'one tick evaluation and one replay')
+    const readable = (pois: PoiSummary[]): PoiSummary[] =>
+      pois.filter((poi) => (poiTypes as readonly PoiType[]).includes(poi.type))
+    assert.deepEqual(readable(replayList), readable(tickList),
+      `a ${poiTypes[0]} reader sees the same points either way`)
+    assert.ok(readable(tickList).length > 0, 'and the comparison is not vacuous')
+  }
+
+  // Only the types the two of them read survive, so the points belonging to
+  // outputs that never replay are not carried between ticks.
+  const [, replayList] = hazardScan.lists()
+  assert.deepEqual(replayList.map((poi) => poi.id), ['h1', 'b1', 'h2', 'b2'])
+  assert.ok(replayList.length < combined.length, 'the replay really is narrower')
 
   monitor.stop()
 })

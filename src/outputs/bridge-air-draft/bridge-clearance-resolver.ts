@@ -22,8 +22,10 @@
  *
  * `null` from {@link BridgeClearanceResolver.clearanceMeters} means "no usable
  * clearance right now," which the callers treat as "do not warn." A transient
- * `getDetails` failure is not cached, so the bridge is retried on a later
- * encounter rather than being pinned to "unknown" for the session.
+ * `getDetails` failure is not cached as a clearance, so the bridge is retried
+ * on a later encounter rather than being pinned to "unknown" for the session.
+ * The retry is rate-limited rather than free: see
+ * {@link FAILED_FETCH_RETRY_MS}.
  */
 
 import { LRUCache } from 'lru-cache'
@@ -44,6 +46,25 @@ const DEFAULT_CLEARANCE_TTL_MINUTES = MINUTES_PER_DAY
 
 /** Wall-clock limit for one bridge detail lookup. */
 const DEFAULT_CLEARANCE_FETCH_TIMEOUT_MS = 30_000
+
+/**
+ * How long, in milliseconds, after an attempt for a bridge began before that
+ * bridge may be fetched again once the attempt failed.
+ *
+ * A failure is deliberately not cached as a clearance, so nothing else stops
+ * the caller asking again on its next pass. That was harmless while a caller's
+ * passes were a minute apart; the alarm evaluation now runs against the last
+ * list result on every position fix, which is every ten to thirty seconds at
+ * the default alarm radius, so an unresolvable bridge would otherwise put that
+ * many requests a minute at the upstream for as long as it stayed in range.
+ *
+ * A minute is chosen because it is the rate the upstream already saw, so no
+ * clearance resolves later than it did before evaluation moved onto the fix
+ * rate. The window is measured from when the attempt started, not from when it
+ * failed, so a fetch that burns its own timeout has already spent most of the
+ * window and retries promptly rather than serving a second delay on top.
+ */
+export const FAILED_FETCH_RETRY_MS = MS_PER_MINUTE
 
 /** Dependencies for {@link createBridgeClearanceResolver}. */
 export interface ClearanceResolverDeps {
@@ -108,6 +129,10 @@ export function createBridgeClearanceResolver (deps: ClearanceResolverDeps): Bri
   // Ids with a detail fetch in flight, so a burst of ticks cannot stack
   // duplicate fetches for the same bridge.
   const inFlight = new Set<string>()
+  // When the last failed attempt for an id began, so a bridge that cannot be
+  // resolved is retried on a bounded schedule rather than on every pass. Same
+  // LRU bound as the clearance cache, for the same reason.
+  const failedFetchStartedAt = new LRUCache<string, number>({ max: MAX_POI_CACHE_ENTRIES })
   // Pending per-fetch timeout timers, so close() can drop them rather than
   // leave one holding the event loop for the rest of its window.
   const timers = new Set<ReturnType<typeof setTimeout>>()
@@ -117,6 +142,7 @@ export function createBridgeClearanceResolver (deps: ClearanceResolverDeps): Bri
 
   function startFetch (id: string): void {
     inFlight.add(id)
+    const startedAt = now()
     // Keep cache mutation after the race. If a timed-out request eventually
     // resolves, its late value must not overwrite a newer retry's result.
     let detailPromise: Promise<PoiDetailView>
@@ -144,13 +170,21 @@ export function createBridgeClearanceResolver (deps: ClearanceResolverDeps): Bri
           clearance: toFiniteNumber(detail.verticalClearanceMeters),
           resolvedAt: now()
         })
+        // A resolved bridge is no longer cooling off. The stamp is inert once
+        // a clearance is cached, since that suppresses the fetch on its own,
+        // but leaving it would outlive the clearance's own day-long entry.
+        failedFetchStartedAt.delete(id)
       })
       .catch((error: unknown) => {
-        // Transient failure: leave it uncached so a later encounter retries.
-        // The bound that prevents a tight loop is the inFlight dedupe set
-        // (one fetch per bridge id at a time) plus getDetails' own
-        // retry/backoff; scan ticks are usually a minute apart but a forced
-        // scan can arrive sooner, so the dedupe is the guarantee that holds.
+        // Transient failure: leave it uncached as a clearance so a later
+        // encounter retries rather than reading "unknown" for the session.
+        // Three bounds keep that from becoming a tight loop: the inFlight
+        // dedupe set allows one fetch per bridge id at a time,
+        // FAILED_FETCH_RETRY_MS allows one attempt per bridge per minute, and
+        // getDetails brings its own retry and backoff. The caller's pass rate
+        // is not one of them: an alarm evaluation runs on the position fix
+        // rate, not the list request rate.
+        failedFetchStartedAt.set(id, startedAt)
         debug(`Bridge clearance fetch failed for ${id}: ${String(error)}`)
       })
       .finally(() => {
@@ -166,6 +200,7 @@ export function createBridgeClearanceResolver (deps: ClearanceResolverDeps): Bri
     timers.clear()
     inFlight.clear()
     cache.clear()
+    failedFetchStartedAt.clear()
   }
 
   function clearanceMeters (poi: PoiSummary): number | null {
@@ -181,9 +216,12 @@ export function createBridgeClearanceResolver (deps: ClearanceResolverDeps): Bri
     }
     const cached = cache.get(poi.id)
     const fresh = cached !== undefined && now() - cached.resolvedAt < ttlMs
-    // (Re-)fetch on a miss or a stale entry, unless one is already in flight
-    // or the run has been torn down.
-    if (!closed && !fresh && !inFlight.has(poi.id)) {
+    const lastFailedAt = failedFetchStartedAt.get(poi.id)
+    const coolingOff = lastFailedAt !== undefined && now() - lastFailedAt < FAILED_FETCH_RETRY_MS
+    // (Re-)fetch on a miss or a stale entry, unless one is already in flight,
+    // the last attempt failed inside the retry window, or the run has been
+    // torn down.
+    if (!closed && !fresh && !coolingOff && !inFlight.has(poi.id)) {
       startFetch(poi.id)
     }
     // Serve a known clearance, even a stale one, while a refresh runs, so a

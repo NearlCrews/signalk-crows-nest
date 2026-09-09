@@ -4,6 +4,9 @@ import { proximityAlarmOutput } from '../src/outputs/proximity-alarm/proximity-a
 import type { OutputContext } from '../src/outputs/output.js'
 import { northOfOrigin } from './helpers.js'
 
+/** When the request behind the tick's list landed, as the monitor reports it. */
+const FETCHED_AT = 1_000_000
+
 /** Build an OutputContext whose app records every notification delta. */
 function createContext (messages: unknown[]): OutputContext {
   return {
@@ -55,7 +58,7 @@ test('start contributes a Hazard scan and raises an alarm on evaluate', () => {
       attribution: 'Data from Garmin ActiveCaptain',
       skIcon: 'hazard'
     }
-  ])
+  ], FETCHED_AT)
   assert.equal(messages.length, 1)
   handle.stop()
   assert.equal(messages.length, 2) // a clear notification on stop
@@ -78,7 +81,7 @@ test('a non-Hazard POI inside the radius is ignored', () => {
       attribution: 'Data from Garmin ActiveCaptain',
       skIcon: 'marina'
     }
-  ])
+  ], FETCHED_AT)
   assert.equal(messages.length, 0)
   handle.stop()
   assert.equal(messages.length, 0, 'stop has no active alarm to clear')
@@ -99,9 +102,9 @@ test('multiple hazards raise and clear independently', () => {
   const far = { id: 'far', name: 'Far rock', type: 'Hazard' as const, position: northOfOrigin(3000), ...tag }
 
   // Pass one: only `near` is within the 500 m radius.
-  handle.positionScan.evaluate({ latitude: 0, longitude: 0 }, [near, far])
+  handle.positionScan.evaluate({ latitude: 0, longitude: 0 }, [near, far], FETCHED_AT)
   // Pass two: the vessel moved to `far`, so `far` raises and `near` clears.
-  handle.positionScan.evaluate(northOfOrigin(3000), [near, far])
+  handle.positionScan.evaluate(northOfOrigin(3000), [near, far], FETCHED_AT)
 
   const events = notifications(messages)
   assert.equal(events.length, 3)

@@ -12,6 +12,14 @@
  * distance, and ETA) is the job of `route-corridor.ts`. This module is the
  * stateful raise/clear layer on top of that pure scan.
  *
+ * `completeList` sits in front of that scan: it hands back a {@link RouteListScan}
+ * whose list is the tick's own with every alarming point the list omitted added
+ * back at the position a list last reported it at. An aggregate list result is
+ * legitimately partial, and a point missing from a partial result has not left
+ * the route ahead, so scanning the raw list would drop it out of the corridor
+ * and clear its alarm. See `alarm-retention.ts`. The same record is handed to
+ * `evaluate`, which is what keeps the two halves of a tick from drifting apart.
+ *
  * The notification is emitted through `app.handleMessage` on the path
  * `notifications.navigation.crowsNest.route.<poiId>`, in the
  * `vessels.self` context. It carries `state: 'warn'` rather than `'alarm'`:
@@ -25,10 +33,11 @@
 import { emitNotification, type NotificationValue } from '../../shared/notification-path.js'
 import { createNotificationTracker, type NotificationTrackerApp } from '../../shared/notification-tracker.js'
 import { formatClearanceMeters } from '../../shared/bridge-clearance.js'
+import { completeWithRetained, unconfirmedClearReason, type RetainedPoi } from '../alarm-retention.js'
 import { METERS_PER_KM } from '../../shared/length.js'
 import { toFiniteNumber } from '../../shared/numbers.js'
 import { MINUTES_PER_HOUR, SECONDS_PER_MINUTE } from '../../shared/time.js'
-import type { CorridorPoi } from '../../shared/types.js'
+import type { CorridorPoi, PoiSummary } from '../../shared/types.js'
 
 /** Path prefix for the per-point route notification, completed with the POI id. */
 const NOTIFICATION_PATH_PREFIX = 'notifications.navigation.crowsNest.route.'
@@ -98,20 +107,86 @@ function formatEta (seconds: number): string {
  */
 export type RouteAlarmApp = NotificationTrackerApp
 
+/** What the tracker holds for an alarming corridor point. */
+interface RouteEntry extends RetainedPoi {
+  /**
+   * The point's display name, for the clear message. It comes off the corridor
+   * point, so it is known even for a point raised before any list result was
+   * recorded for it.
+   */
+  name: string
+  /**
+   * The message last emitted for this point, so the notification is refreshed
+   * only when the distance, the ETA, or the clearance verdict actually change.
+   */
+  message: string
+}
+
+/**
+ * One tick's list, as {@link RouteHazardAlarms.completeList} left it, and the
+ * bookkeeping the {@link RouteHazardAlarms.evaluate} that follows needs from
+ * it: the summaries the list carried, and when the request behind it landed.
+ *
+ * A value rather than state on the alarms, so the two halves of a tick are
+ * tied together by the call itself: `evaluate` takes the tick's record as an
+ * argument rather than reading back whatever the last `completeList` left
+ * behind, which is what a caller that skipped it would silently do.
+ */
+export interface RouteListScan {
+  /**
+   * The list to run the corridor scan over: the tick's own, completed with
+   * every still-warned point it omitted. The caller's own array when nothing
+   * had to be added.
+   */
+  pois: PoiSummary[]
+  /**
+   * {@link pois} keyed by id: the one index over the tick's list, built here so
+   * the route-hazard output does not build a second one to resolve a corridor
+   * bridge's clearance. A point newly on the route is held by the summary from
+   * here, which is the same object the corridor scan projected it from.
+   */
+  summaries: ReadonlyMap<string, PoiSummary>
+  /**
+   * When the request behind the tick's list landed, so a point newly on the
+   * route starts its reconfirmation window at the report rather than at the
+   * evaluation.
+   */
+  listFetchedAt: number
+}
+
 /** Public surface of the route-corridor hazard alarms. */
 export interface RouteHazardAlarms {
+  /**
+   * Complete a tick's combined list with the last reported summary of every
+   * point still alarming that the list omitted, so a partial upstream result
+   * cannot drop a point out of the corridor scan and clear its alarm.
+   *
+   * `listFetchedAt` is when the request behind `pois` landed, which the
+   * reconfirmation window runs on. Call this on the tick's list, run the
+   * corridor scan over the returned `pois`, then hand the same record back to
+   * {@link evaluate} with the corridor points.
+   */
+  completeList: (pois: PoiSummary[], listFetchedAt: number) => RouteListScan
   /**
    * Evaluate the points of interest the route-corridor scan flagged for the
    * current tick, raising a notification for each one that has just appeared
    * on the route ahead and clearing each one that has just dropped off.
    *
+   * `scan` is the record {@link completeList} returned for this tick, which is
+   * where a point newly on the route picks up the summary and the report time
+   * it will be held by.
+   *
    * `tooLow` maps the id of each corridor bridge the air-draft check found too
    * low to its clearance verdict; such a bridge gets a clearance-specific warn
    * message. It defaults to empty, so a caller with the bridge air-draft check
-   * off (or no check at all) calls `evaluate(corridorPois)` and every point
-   * keeps today's generic message.
+   * off (or no check at all) calls `evaluate(scan, corridorPois)` and every
+   * point keeps today's generic message.
    */
-  evaluate: (corridorPois: CorridorPoi[], tooLow?: ReadonlyMap<string, BridgeClearanceVerdict>) => void
+  evaluate: (
+    scan: RouteListScan,
+    corridorPois: CorridorPoi[],
+    tooLow?: ReadonlyMap<string, BridgeClearanceVerdict>
+  ) => void
   /**
    * Clear every notification currently in the alarm state. Called on plugin
    * stop so a stale route alarm does not linger after the monitor is gone.
@@ -126,19 +201,24 @@ export interface RouteHazardAlarms {
  */
 export function createRouteHazardAlarms (app: RouteAlarmApp): RouteHazardAlarms {
   // The tracker owns the active set, the clear half, and the episode clock.
-  // Each entry keeps the display name (for the clear message) and the last
+  // Each entry keeps the display name (for the clear message), the last
   // message emitted (so the notification can be refreshed when the distance
-  // or ETA changes without raising a fresh alarm); the tracker-stamped
-  // `raisedAt` keeps `createdAt` at the episode start across refreshes and
-  // the clear rather than resetting on every update.
-  const tracker = createNotificationTracker<{ name: string, message: string }>({
+  // or ETA changes without raising a fresh alarm), and the summary a list last
+  // reported the point with (so `completeList` can put it back); the
+  // tracker-stamped `raisedAt` keeps `createdAt` at the episode start across
+  // refreshes and the clear rather than resetting on every update.
+  const tracker = createNotificationTracker<RouteEntry>({
     app,
     pathPrefix: NOTIFICATION_PATH_PREFIX,
     sourceSuffix: SOURCE_SUFFIX,
-    buildClearValue: ({ name }, raisedAt) => ({
+    buildClearValue: ({ name, unconfirmed }, raisedAt) => ({
       state: 'normal',
       method: [],
-      message: `"${name}" is no longer on the route ahead`,
+      message: unconfirmed === true
+        // The point has not dropped off the route, so the clear must not read
+        // as though it had.
+        ? `"${name}" warning cleared: ${unconfirmedClearReason('on the route ahead')}`
+        : `"${name}" is no longer on the route ahead`,
       createdAt: raisedAt
     }),
     describeClear: (poiId, { name }) => `Route hazard alarm cleared for ${poiId} ("${name}")`
@@ -181,7 +261,22 @@ export function createRouteHazardAlarms (app: RouteAlarmApp): RouteHazardAlarms 
     emitNotification(app, NOTIFICATION_PATH_PREFIX, poiId, value, SOURCE_SUFFIX)
   }
 
+  function completeList (pois: PoiSummary[], listFetchedAt: number): RouteListScan {
+    // Index the completed list, not the tick's raw one. The two differ only by
+    // the points retention put back, and every one of those is already tracked
+    // with a held summary that wins over this map, so the entry-and-hold path
+    // reads the same either way. Indexing the completed list is what lets the
+    // corridor bridge lookup share this map.
+    const completed = completeWithRetained(tracker, pois, listFetchedAt)
+    const summaries = new Map<string, PoiSummary>()
+    for (const poi of completed) {
+      summaries.set(poi.id, poi)
+    }
+    return { pois: completed, summaries, listFetchedAt }
+  }
+
   function evaluate (
+    scan: RouteListScan,
     corridorPois: CorridorPoi[],
     tooLow: ReadonlyMap<string, BridgeClearanceVerdict> = NO_CLEARANCE_VERDICTS
   ): void {
@@ -211,7 +306,15 @@ export function createRouteHazardAlarms (app: RouteAlarmApp): RouteHazardAlarms 
         // The tracker stamps `raisedAt` on the first set of the episode and
         // preserves it across this refresh overwrite, so the refreshed delta
         // keeps the original `createdAt`.
-        const raisedAt = tracker.set(poi.id, { name: poi.name, message })
+        const raisedAt = tracker.set(poi.id, {
+          name: poi.name,
+          message,
+          // Hold the point by the summary the corridor scan projected it from.
+          // `completeList` has already refreshed it for a point this tick's
+          // list carried, so preferring the stored one keeps that fix.
+          summary: existing?.summary ?? scan.summaries.get(poi.id),
+          lastListedAt: existing?.lastListedAt ?? scan.listFetchedAt
+        })
         emitWarn(poi.id, message, raisedAt)
         if (existing === undefined) {
           app.debug(`Route hazard alarm raised for ${poi.type} ${poi.id} ("${poi.name}")`)
@@ -225,5 +328,5 @@ export function createRouteHazardAlarms (app: RouteAlarmApp): RouteHazardAlarms 
     tracker.clearStale(flagged.keys())
   }
 
-  return { evaluate, clearAll: tracker.clearAll }
+  return { completeList, evaluate, clearAll: tracker.clearAll }
 }

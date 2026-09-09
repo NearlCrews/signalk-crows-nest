@@ -129,3 +129,43 @@ test('has and get report entries by raw id, and clearAll empties the tracker', (
   assert.equal(tracker.has('poi-1'), false, 'clearAll drops every entry')
   assert.equal(tracker.get('poi-2'), undefined)
 })
+
+test('entries snapshots the active set with raw ids, so a caller can set while walking it', () => {
+  const { tracker, captured } = createTracker()
+  tracker.set('wreck.123', { name: 'Wreck' })
+  tracker.set('rock', { name: 'Rock' })
+
+  const entries = tracker.entries()
+  assert.deepEqual(entries.map(({ poiId }) => poiId), ['wreck.123', 'rock'],
+    'raw ids, matching what a caller compares against a list result')
+  assert.deepEqual(entries.map(({ entry }) => entry.name), ['Wreck', 'Rock'])
+
+  // Overwriting from inside the walk is safe, and does not emit.
+  for (const { poiId, entry } of entries) {
+    tracker.set(poiId, { name: `${entry.name} (held)` })
+  }
+  assert.equal(captured.length, 0)
+  assert.equal(tracker.get('wreck.123')?.name, 'Wreck (held)')
+
+  tracker.clearAll()
+  assert.deepEqual(tracker.entries(), [])
+})
+
+test('size counts the active entries, so a caller can skip building a snapshot', () => {
+  const { tracker } = createTracker()
+  assert.equal(tracker.size, 0)
+
+  tracker.set('wreck.123', { name: 'Wreck' })
+  tracker.set('rock', { name: 'Rock' })
+  assert.equal(tracker.size, 2)
+
+  // An overwrite refresh is the same entry, not a second one.
+  tracker.set('rock', { name: 'Rock (held)' })
+  assert.equal(tracker.size, 2)
+
+  tracker.clearStale(['rock'])
+  assert.equal(tracker.size, 1, 'a cleared entry leaves the active set')
+
+  tracker.clearAll()
+  assert.equal(tracker.size, 0)
+})

@@ -5,6 +5,9 @@ import { routeHazardOutput } from '../src/outputs/route-hazard/route-hazard-outp
 import type { OutputContext } from '../src/outputs/output.js'
 import { courseWithoutRoute, flush, poiSummary, routeResource } from './helpers.js'
 
+/** When the request behind the tick's list landed, as the monitor reports it. */
+const FETCHED_AT = 1_000_000
+
 /** Build a course with an active route referencing the supplied href. */
 function courseWithRoute (href: string): CourseInfo {
   return {
@@ -173,7 +176,7 @@ test('a tick with a route raises an alarm, a tick without a route clears it', as
   // A hazard close ahead on the route corridor raises one notification.
   const hazard = poiSummary('h1', 'Hazard', 'Rock', { latitude: 0.1, longitude: 0 })
   handle.positionScan.buildFetchBox({ latitude: 0, longitude: 0 })
-  handle.positionScan.evaluate({ latitude: 0, longitude: 0 }, [hazard])
+  handle.positionScan.evaluate({ latitude: 0, longitude: 0 }, [hazard], FETCHED_AT)
   assert.equal(messages.length, 1)
 
   // The route is canceled; a tick with no route clears the stale alarm.
@@ -181,7 +184,7 @@ test('a tick with a route raises an alarm, a tick without a route clears it', as
   emitCourseDelta()
   await flush()
   handle.positionScan.buildFetchBox({ latitude: 0, longitude: 0 })
-  handle.positionScan.evaluate({ latitude: 0, longitude: 0 }, [])
+  handle.positionScan.evaluate({ latitude: 0, longitude: 0 }, [], FETCHED_AT)
   assert.equal(messages.length, 2)
   handle.stop()
 })
@@ -202,7 +205,7 @@ test('evaluate scans the corridor from the fresh fix, not the frozen one', async
   // fresh position the monitor passes, not the one buildFetchBox froze.
   const hazard = poiSummary('h1', 'Hazard', 'Rock', { latitude: -0.05, longitude: 0 })
   handle.positionScan.buildFetchBox({ latitude: 0, longitude: 0 })
-  handle.positionScan.evaluate({ latitude: -0.1, longitude: 0 }, [hazard])
+  handle.positionScan.evaluate({ latitude: -0.1, longitude: 0 }, [hazard], FETCHED_AT)
   assert.equal(messages.length, 1, 'the corridor scan measured from the fresh fix')
   handle.stop()
 })
@@ -220,7 +223,7 @@ test('a POI well outside the corridor is not alarmed', async () => {
   // outside the 500 m corridor half-width, so evaluate must not alarm it.
   const hazard = poiSummary('h1', 'Hazard', 'Distant rock', { latitude: 0.5, longitude: 0.1 })
   handle.positionScan.buildFetchBox({ latitude: 0, longitude: 0 })
-  handle.positionScan.evaluate({ latitude: 0, longitude: 0 }, [hazard])
+  handle.positionScan.evaluate({ latitude: 0, longitude: 0 }, [hazard], FETCHED_AT)
   assert.equal(messages.length, 0)
   handle.stop()
 })
@@ -236,7 +239,7 @@ test('stop stops the course reader and clears active alarms', async () => {
 
   const hazard = poiSummary('h1', 'Hazard', 'Rock', { latitude: 0.1, longitude: 0 })
   handle.positionScan.buildFetchBox({ latitude: 0, longitude: 0 })
-  handle.positionScan.evaluate({ latitude: 0, longitude: 0 }, [hazard])
+  handle.positionScan.evaluate({ latitude: 0, longitude: 0 }, [hazard], FETCHED_AT)
   assert.equal(messages.length, 1)
 
   handle.stop()
@@ -258,7 +261,7 @@ test('stop unsubscribes the course reader even when clearing an alarm throws', a
 
   const hazard = poiSummary('h1', 'Hazard', 'Rock', { latitude: 0.1, longitude: 0 })
   handle.positionScan.buildFetchBox({ latitude: 0, longitude: 0 })
-  handle.positionScan.evaluate({ latitude: 0, longitude: 0 }, [hazard])
+  handle.positionScan.evaluate({ latitude: 0, longitude: 0 }, [hazard], FETCHED_AT)
 
   failNextHandleMessage()
   assert.throws(() => { handle.stop() }, /a delta subscriber threw/)

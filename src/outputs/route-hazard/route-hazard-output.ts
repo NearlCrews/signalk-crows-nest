@@ -88,8 +88,12 @@ function routeCorridorBbox (route: RoutePolyline, corridorWidthMeters: number): 
 export interface TooLowBridgeInput {
   /** The corridor points flagged for this tick; only `Bridge` points are tested. */
   corridorPois: CorridorPoi[]
-  /** The tick's combined list result, used to resolve each bridge's clearance by id. */
-  pois: PoiSummary[]
+  /**
+   * The tick's list keyed by id, used to resolve each bridge's clearance. It is
+   * the index `completeList` already built over the same list, so the corridor
+   * bridge lookup costs no second pass over it.
+   */
+  summaries: ReadonlyMap<string, PoiSummary>
   /** The shared clearance resolver (synchronous summary hit, async ActiveCaptain detail). */
   resolver: BridgeClearanceResolver
   /** The vessel air draft, in meters, or `null` when unknown (the check is then inert). */
@@ -111,7 +115,7 @@ export interface TooLowBridgeInput {
  * verdict, so that bridge keeps the generic message.
  */
 export function resolveTooLowBridges (input: TooLowBridgeInput): Map<string, BridgeClearanceVerdict> {
-  const { corridorPois, pois, resolver, airDraftMeters, marginMeters } = input
+  const { corridorPois, summaries, resolver, airDraftMeters, marginMeters } = input
   const tooLow = new Map<string, BridgeClearanceVerdict>()
   // An unknown air draft makes the check inert: no comparison, and no
   // ActiveCaptain detail fetches kicked off through the resolver this tick.
@@ -124,13 +128,9 @@ export function resolveTooLowBridges (input: TooLowBridgeInput): Map<string, Bri
   }
   // The resolver works from the PoiSummary (which can carry the clearance, or
   // be the key the ActiveCaptain detail fetch is cached under), not the
-  // clearance-free CorridorPoi, so index the tick's summaries by id.
-  const bySummaryId = new Map<string, PoiSummary>()
-  for (const summary of pois) {
-    bySummaryId.set(summary.id, summary)
-  }
+  // clearance-free CorridorPoi, so each bridge is looked up by id.
   for (const poi of bridges) {
-    const summary = bySummaryId.get(poi.id)
+    const summary = summaries.get(poi.id)
     if (summary === undefined) {
       continue
     }
@@ -216,7 +216,13 @@ export const routeHazardOutput: OutputModule = {
         }
         return routeCorridorBbox(tickRoute, corridorWidthMeters)
       },
-      evaluate: (vesselPosition, pois) => {
+      evaluate: (vesselPosition, rawPois, listFetchedAt) => {
+        // An aggregate list result is legitimately partial, and a point missing
+        // from a partial one has not left the route ahead. Complete the list
+        // with what the alarms already hold before the corridor scan sees it,
+        // so the scan decides from the route geometry rather than from which
+        // sources answered this tick.
+        const scan = alarms.completeList(rawPois, listFetchedAt)
         let corridorPois: CorridorPoi[] = []
         if (tickRoute !== null) {
           const vesselState = courseReader.getVesselState()
@@ -226,23 +232,23 @@ export const routeHazardOutput: OutputModule = {
             // list request was slow); the buildFetchBox box was already
             // sized to that earlier tickPosition.
             route: { ...tickRoute, vesselPosition },
-            pois,
+            pois: scan.pois,
             corridorHalfWidthMeters: corridorWidthMeters,
             speedOverGround: vesselState.speedOverGround
           }).filter((poi) => poi.alongTrackDistanceMeters <= ROUTE_LOOK_AHEAD_METERS)
         }
         if (bridgeCheck === null) {
-          alarms.evaluate(corridorPois)
+          alarms.evaluate(scan, corridorPois)
           return
         }
         const tooLow = resolveTooLowBridges({
           corridorPois,
-          pois,
+          summaries: scan.summaries,
           resolver: bridgeCheck.resolver,
           airDraftMeters: bridgeCheck.getAirDraft(),
           marginMeters: bridgeCheck.marginMeters
         })
-        alarms.evaluate(corridorPois, tooLow)
+        alarms.evaluate(scan, corridorPois, tooLow)
       }
     }
     return {
