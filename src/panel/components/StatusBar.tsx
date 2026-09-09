@@ -1,57 +1,112 @@
 /**
- * Live status bar: a small bordered card at the top of the panel that
- * lists one row per enabled POI source (name, reachability dot + label,
- * and the relative time of the last list fetch), plus any recent
- * errors. Driven entirely by the StatusSnapshot polled from the plugin.
+ * Plugin status section at the top of the panel: one row per enabled POI
+ * source (name, reachability, and the relative time of the last list fetch),
+ * plus any recent errors. Driven entirely by the StatusSnapshot polled from
+ * the plugin.
  *
- * The bar reports source HEALTH, not the count returned by the most
- * recent list call. The count is just "what fell inside the
- * chartplotter's last bounding-box query" and is meaningless until
- * the chart is panned, so showing it here (or in the per-card pill)
- * reads as misleading.
+ * The section reports source HEALTH, not the count returned by the most
+ * recent list call. The count is just "what fell inside the chartplotter's
+ * last bounding-box query" and is meaningless until the chart is panned, so
+ * showing it here reads as misleading.
+ *
+ * The section is a passive readout, not a live region: the relative ages
+ * tick every few seconds, so announcing the whole section on each change
+ * would be pure noise. The save bar remains the panel's one polite live
+ * region, which is the right number.
  */
 
 import type * as React from 'react'
 import { memo } from 'react'
-import type { SourceStatus, StatusSnapshot } from '../../status/status-types.js'
-import { relativeTime } from '../relative-time.js'
-import { S } from '../styles.js'
+import {
+  Banner,
+  Button,
+  Cluster,
+  RelativeAge,
+  Section,
+  Stack,
+  StatusIndicator,
+  Text,
+  type StatusTone
+} from 'signalk-nearlcrews-ui'
+import { Table, TableCell, TableHeaderCell } from 'signalk-nearlcrews-ui/composites'
+import type { SourceStatus, StatusError, StatusSnapshot } from '../../status/status-types.js'
 
-// The dot base merged with each state variant once at module load, rather than
-// rebuilding the merged object on every row of every 5 s poll render.
-const DOT_OK: React.CSSProperties = { ...S.dot, ...S.dotOk }
-const DOT_OFF: React.CSSProperties = { ...S.dot, ...S.dotOff }
-const DOT_ERROR: React.CSSProperties = { ...S.dot, ...S.dotError }
-
-/** Map the tri-state apiReachable flag to a status dot style and label. */
-function apiState (reachable: boolean | null): { dot: React.CSSProperties, label: string } {
-  if (reachable === true) return { dot: DOT_OK, label: 'reachable' }
-  if (reachable === false) return { dot: DOT_ERROR, label: 'unreachable' }
-  return { dot: DOT_OFF, label: 'not yet contacted' }
+/** Map the tri-state apiReachable flag to a status tone and label. */
+function apiState (reachable: boolean | null): { tone: StatusTone, label: string } {
+  if (reachable === true) return { tone: 'success', label: 'reachable' }
+  if (reachable === false) return { tone: 'danger', label: 'unreachable' }
+  return { tone: 'neutral', label: 'not yet contacted' }
 }
 
 /**
- * One row in the status grid: dot, source name, state, last-fetch
- * time. Wrapped in a `display: contents` div so the four spans flow
- * directly into the parent grid's four columns. The wrapper also pins
- * the 4-cells-per-source contract: a future fifth cell would land
- * outside this wrapper, making any drift visible. No ARIA table roles
- * are applied: this is a read-only health readout, not an interactive
- * data grid, so the spans read in DOM order (name, state, last fetch)
- * rather than as a headerless and therefore malformed table.
+ * The per-source health table. Two columns keep it inside a 320 pixel panel
+ * without a scroll region: the source name is the row header, and the status
+ * cell stacks the reachability indicator over the last-fetch age.
  */
-function SourceRow ({ source }: { source: SourceStatus }): React.ReactElement {
-  const api = apiState(source.apiReachable)
-  const fetched = source.lastListFetch === null
-    ? 'no fetch yet'
-    : `updated ${relativeTime(source.lastListFetch.at)}`
+function SourceTable ({ sources }: { sources: SourceStatus[] }): React.ReactElement {
   return (
-    <div style={S.statusGridRow}>
-      <span style={api.dot} aria-hidden='true' />
-      <span style={S.statusGridName}>{source.name}</span>
-      <span style={S.statusGridState}>{api.label}</span>
-      <span style={S.statusGridFetch}>{fetched}</span>
-    </div>
+    <Table caption='Data source health' captionVisibility='hidden' density='compact'>
+      <thead>
+        <tr>
+          <TableHeaderCell>Source</TableHeaderCell>
+          <TableHeaderCell>Status</TableHeaderCell>
+        </tr>
+      </thead>
+      <tbody>
+        {sources.map((source) => {
+          const api = apiState(source.apiReachable)
+          return (
+            <tr key={source.source}>
+              <TableHeaderCell scope='row'>{source.name}</TableHeaderCell>
+              <TableCell>
+                <StatusIndicator tone={api.tone}>{api.label}</StatusIndicator>
+                <Text as='div' tone='muted' size='sm'>
+                  {source.lastListFetch === null
+                    ? 'no fetch yet'
+                    : <>updated <RelativeAge since={source.lastListFetch.at} /></>}
+                </Text>
+              </TableCell>
+            </tr>
+          )
+        })}
+      </tbody>
+    </Table>
+  )
+}
+
+interface RecentErrorsProps {
+  errors: StatusError[]
+  sources: SourceStatus[]
+  onJumpToSource: ((slug: string) => void) | undefined
+}
+
+/**
+ * The recent-error list. An error recorded against a known source gets a
+ * button that expands and scrolls to that source's card, named after the
+ * source so eight identical "Show source" buttons never reach a screen
+ * reader's button list.
+ */
+function RecentErrors ({ errors, sources, onJumpToSource }: RecentErrorsProps): React.ReactElement {
+  const nameBySlug = new Map(sources.map((source) => [source.source, source.name]))
+  return (
+    <Banner tone='danger' title='Recent errors'>
+      {/* A list Stack wraps each child in its own list item. */}
+      <Stack as='ul' gap={2}>
+        {errors.map(({ at, message, source }, index) => (
+          <Cluster key={`${at}-${source ?? ''}-${message}-${index}`} gap={2}>
+            <Text tone='muted' size='sm'><RelativeAge since={at} /></Text>
+            <span>{message}</span>
+            {source !== undefined && onJumpToSource !== undefined
+              ? (
+                <Button onClick={() => onJumpToSource(source)}>
+                  Show {nameBySlug.get(source) ?? source}
+                </Button>
+                )
+              : null}
+          </Cluster>
+        ))}
+      </Stack>
+    </Banner>
   )
 }
 
@@ -59,94 +114,49 @@ interface Props {
   status: StatusSnapshot | null
   /**
    * Epoch milliseconds of the most recent successful status poll, or null.
-   * Renders as a "checked Ns ago" note so the operator can tell a live
+   * Renders as a "checked N ago" note so the operator can tell a live
    * readout from a stalled one.
    */
   lastUpdatedMs: number | null
   /**
    * Expand and scroll to the source card an error belongs to. When given,
-   * a recent error recorded against a known source renders as a clickable
-   * shortcut.
+   * a recent error recorded against a known source renders a jump button.
    */
   onJumpToSource?: (slug: string) => void
 }
 
 /**
- * The status bar shown at the top of the configuration panel. Memoized: the
- * `status` prop is referentially stable between polls and `lastUpdatedMs`
+ * The status section shown at the top of the configuration panel. Memoized:
+ * the `status` prop is referentially stable between polls and `lastUpdatedMs`
  * changes only on the 5 s poll tick, so a keystroke elsewhere on the panel
- * does not re-run the per-source relative-time (Intl) formatting.
+ * does not re-render the table. The relative ages own their own clocks.
  */
 export default memo(function StatusBar ({ status, lastUpdatedMs, onJumpToSource }: Props): React.ReactElement {
-  // The loading state and the populated state both render the title
-  // plus a fixed-height body region. The body reserves a min-height so
-  // the bar does not visibly grow when the first poll resolves and
-  // swaps the loading line for the source-health grid.
-  // The bar is a passive health readout, not a live region: it carries no
-  // role='status'. The relative "N minutes ago" text re-renders on every 5 s
-  // poll, so announcing the whole bar on each change would be pure noise. The
-  // transient save-request confirmation in FooterBar remains the one polite live
-  // region, which is the right number for the panel.
-  if (status === null) {
-    return (
-      <div style={S.statusBar}>
-        <span style={S.statusBarTitle}>Plugin status</span>
-        <div style={S.statusBarBody}>
-          <span style={S.statusBarLoading}>
-            <span style={DOT_OFF} aria-hidden='true' />
-            Loading status...
-          </span>
-        </div>
-      </div>
-    )
-  }
-
-  const { sources, recentErrors } = status
-
   return (
-    <div style={S.statusBar}>
-      <div style={S.statusTitleRow}>
-        <span style={S.statusBarTitle}>Plugin status</span>
-        {lastUpdatedMs !== null
+    <Section
+      title='Plugin status'
+      actions={lastUpdatedMs !== null
+        ? <Text tone='muted' size='sm'>Checked <RelativeAge since={lastUpdatedMs} /></Text>
+        : undefined}
+    >
+      {status === null
+        ? <StatusIndicator tone='neutral'>Loading status...</StatusIndicator>
+        : status.sources.length === 0
           ? (
-            <span style={S.statusCheckedAt}>
-              checked {relativeTime(lastUpdatedMs)}
-            </span>
+            <Text as='p' tone='muted'>
+              No data source enabled yet. Open a card below and toggle one on.
+            </Text>
             )
-          : null}
-      </div>
-      <div style={S.statusBarBody}>
-        {sources.length === 0
-          ? <span style={S.statusBarEmpty}>No data source enabled yet. Open a card below and toggle one on.</span>
-          : (
-            <div style={S.statusGrid}>
-              {sources.map((source) => <SourceRow key={source.source} source={source} />)}
-            </div>
-            )}
-      </div>
-      {recentErrors.length > 0
+          : <SourceTable sources={status.sources} />}
+      {status !== null && status.recentErrors.length > 0
         ? (
-          <ul style={S.statusErrors} aria-label='Recent errors'>
-            {recentErrors.map(({ at, message, source }, index) => (
-              <li key={`${at}-${source ?? ''}-${message}-${index}`} style={S.statusErrorItem}>
-                <span style={S.statusErrorTime}>{relativeTime(at)}</span>
-                {source !== undefined && onJumpToSource !== undefined
-                  ? (
-                    <button
-                      type='button'
-                      style={S.statusErrorJump}
-                      title='Show the source this error belongs to'
-                      onClick={() => onJumpToSource(source)}
-                    >
-                      {message}
-                    </button>
-                    )
-                  : <span>{message}</span>}
-              </li>
-            ))}
-          </ul>
+          <RecentErrors
+            errors={status.recentErrors}
+            sources={status.sources}
+            onJumpToSource={onJumpToSource}
+          />
           )
         : null}
-    </div>
+    </Section>
   )
 })

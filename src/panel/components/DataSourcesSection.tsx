@@ -3,9 +3,14 @@
  * It renders one collapsible `DataSourceCard` per POI source, each with the
  * matching card-body component as its children, plus a one-line summary built
  * from the current configuration so a collapsed card still says what it does.
+ * The section itself is a shared `CollapsibleSection` that retains its
+ * children while collapsed, so an in-progress numeric draft inside a card
+ * survives a collapse.
  *
- * Disclosure state (which card is expanded) lives on the panel root and is
- * passed down here so the section is purely declarative. The card id is the
+ * Disclosure state lives on the panel root, both for the section (which opens
+ * on first render as the operator's primary work area) and for the cards, so
+ * the section is purely declarative and the jump-to-error shortcut can open
+ * the section before revealing a card inside it. The card id is the
  * source's own PoiSource.id constant (imported from the source module), so a
  * future rename of one of the source ids is a single-site TypeScript
  * compile error rather than a silent panel/registry skew.
@@ -13,7 +18,7 @@
 
 import type * as React from 'react'
 import { memo, useMemo, type Dispatch } from 'react'
-import { Banner } from 'signalk-nearlcrews-ui'
+import { Banner, CollapsibleSection, Stack } from 'signalk-nearlcrews-ui'
 import type { ConfigAction } from '../config-reducer.js'
 import { SEAMARK_GROUP_REFS } from '../../shared/seamark-groups.js'
 import {
@@ -42,7 +47,6 @@ import DataSourceCard from './DataSourceCard.js'
 import NoaaCoopsSource from './NoaaCoopsSource.js'
 import NoaaEncSource from './NoaaEncSource.js'
 import OpenSeaMapSource from './OpenSeaMapSource.js'
-import SectionBox from './SectionBox.js'
 import UsaceSource from './UsaceSource.js'
 import UscgLightListSource from './UscgLightListSource.js'
 import UscgLnmSource from './UscgLnmSource.js'
@@ -55,8 +59,12 @@ interface Props {
   status: StatusSnapshot | null
   /** Which card slugs are currently expanded. */
   expanded: Partial<Record<SourceSlug, boolean>>
-  /** Toggle the expansion of one card by its slug. */
-  onToggleExpanded: (cardId: SourceSlug) => void
+  /** Record one card's new open state by its slug. */
+  onToggleExpanded: (cardId: SourceSlug, open: boolean) => void
+  /** Whether the section itself is expanded. */
+  open: boolean
+  /** Record the section's new open state. */
+  onOpenChange: (open: boolean) => void
 }
 
 /** Build the ActiveCaptain card's collapsed one-line summary. */
@@ -167,7 +175,7 @@ function useStatusBySource (
  * identity across a tick.
  */
 export default memo(function DataSourcesSection (
-  { state, dispatch, status, expanded, onToggleExpanded }: Props
+  { state, dispatch, status, expanded, onToggleExpanded, open, onOpenChange }: Props
 ): React.ReactElement {
   const statusBySource = useStatusBySource(status)
   // Off-by-default sources the getting-started callout points at: shown only
@@ -181,112 +189,114 @@ export default memo(function DataSourcesSection (
     state.wpiEnabled !== true &&
     state.usaceEnabled !== true
   return (
-    <SectionBox cardId='data-sources' title='Data sources' defaultExpanded>
-      {noOptionalSourceEnabled
-        ? (
-          <Banner tone='info' title='Getting started'>
-            Garmin ActiveCaptain is always on. The other
-            sources below are off by default; expand a card and toggle one on
-            to layer OpenSeaMap, US government, or worldwide port data onto
-            the chart.
-          </Banner>
-          )
-        : null}
-      <DataSourceCard
-        cardId={ACTIVE_CAPTAIN_SOURCE_ID}
-        name='Garmin ActiveCaptain'
-        enabled
-        summary={activeCaptainSummary(state)}
-        expanded={expanded[ACTIVE_CAPTAIN_SOURCE_ID] === true}
-        onToggleExpanded={onToggleExpanded}
-        status={statusBySource.get(ACTIVE_CAPTAIN_SOURCE_ID)}
-      >
-        <ActiveCaptainSource state={state} dispatch={dispatch} />
-      </DataSourceCard>
-      <DataSourceCard
-        cardId={OPENSEAMAP_SOURCE_ID}
-        name='OpenSeaMap'
-        enabled={state.openSeaMapEnabled === true}
-        summary={openSeaMapSummary(state)}
-        expanded={expanded[OPENSEAMAP_SOURCE_ID] === true}
-        onToggleExpanded={onToggleExpanded}
-        onToggleEnabled={(enabled) => dispatch({ type: 'setOpenSeaMapEnabled', enabled })}
-        status={statusBySource.get(OPENSEAMAP_SOURCE_ID)}
-      >
-        <OpenSeaMapSource state={state} dispatch={dispatch} />
-      </DataSourceCard>
-      <DataSourceCard
-        cardId={USCG_LIGHT_LIST_SOURCE_ID}
-        name='USCG Light List (US Aids to Navigation)'
-        enabled={state.uscgLightListEnabled === true}
-        summary={uscgLightListSummary(state)}
-        expanded={expanded[USCG_LIGHT_LIST_SOURCE_ID] === true}
-        onToggleExpanded={onToggleExpanded}
-        onToggleEnabled={(enabled) => dispatch({ type: 'setUscgLightListEnabled', enabled })}
-        status={statusBySource.get(USCG_LIGHT_LIST_SOURCE_ID)}
-      >
-        <UscgLightListSource state={state} dispatch={dispatch} />
-      </DataSourceCard>
-      <DataSourceCard
-        cardId={NOAA_ENC_SOURCE_ID}
-        name='NOAA ENC Direct (US wrecks, obstructions, and rocks)'
-        enabled={state.noaaEncEnabled === true}
-        summary={noaaEncSummary(state)}
-        expanded={expanded[NOAA_ENC_SOURCE_ID] === true}
-        onToggleExpanded={onToggleExpanded}
-        onToggleEnabled={(enabled) => dispatch({ type: 'setNoaaEncEnabled', enabled })}
-        status={statusBySource.get(NOAA_ENC_SOURCE_ID)}
-      >
-        <NoaaEncSource state={state} dispatch={dispatch} />
-      </DataSourceCard>
-      <DataSourceCard
-        cardId={NOAA_COOPS_SOURCE_ID}
-        name='NOAA CO-OPS (US tide and current stations)'
-        enabled={state.noaaCoopsEnabled === true}
-        summary={noaaCoopsSummary(state)}
-        expanded={expanded[NOAA_COOPS_SOURCE_ID] === true}
-        onToggleExpanded={onToggleExpanded}
-        onToggleEnabled={(enabled) => dispatch({ type: 'setNoaaCoopsEnabled', enabled })}
-        status={statusBySource.get(NOAA_COOPS_SOURCE_ID)}
-      >
-        <NoaaCoopsSource state={state} dispatch={dispatch} />
-      </DataSourceCard>
-      <DataSourceCard
-        cardId={USCG_LNM_SOURCE_ID}
-        name='USCG Local Notice to Mariners (US live safety notices)'
-        enabled={state.uscgLnmEnabled === true}
-        summary={uscgLnmSummary(state)}
-        expanded={expanded[USCG_LNM_SOURCE_ID] === true}
-        onToggleExpanded={onToggleExpanded}
-        onToggleEnabled={(enabled) => dispatch({ type: 'setUscgLnmEnabled', enabled })}
-        status={statusBySource.get(USCG_LNM_SOURCE_ID)}
-      >
-        <UscgLnmSource state={state} dispatch={dispatch} />
-      </DataSourceCard>
-      <DataSourceCard
-        cardId={WPI_SOURCE_ID}
-        name='NGA World Port Index (worldwide ports)'
-        enabled={state.wpiEnabled === true}
-        summary={wpiSummary(state)}
-        expanded={expanded[WPI_SOURCE_ID] === true}
-        onToggleExpanded={onToggleExpanded}
-        onToggleEnabled={(enabled) => dispatch({ type: 'setWpiEnabled', enabled })}
-        status={statusBySource.get(WPI_SOURCE_ID)}
-      >
-        <WpiSource state={state} dispatch={dispatch} />
-      </DataSourceCard>
-      <DataSourceCard
-        cardId={USACE_SOURCE_ID}
-        name='USACE locks and dams (US waterways)'
-        enabled={state.usaceEnabled === true}
-        summary={usaceSummary(state)}
-        expanded={expanded[USACE_SOURCE_ID] === true}
-        onToggleExpanded={onToggleExpanded}
-        onToggleEnabled={(enabled) => dispatch({ type: 'setUsaceEnabled', enabled })}
-        status={statusBySource.get(USACE_SOURCE_ID)}
-      >
-        <UsaceSource state={state} dispatch={dispatch} />
-      </DataSourceCard>
-    </SectionBox>
+    <CollapsibleSection title='Data sources' open={open} onOpenChange={onOpenChange}>
+      <Stack gap={3}>
+        {noOptionalSourceEnabled
+          ? (
+            <Banner tone='info' title='Getting started'>
+              Garmin ActiveCaptain is always on. The other
+              sources below are off by default; expand a card and toggle one on
+              to layer OpenSeaMap, US government, or worldwide port data onto
+              the chart.
+            </Banner>
+            )
+          : null}
+        <DataSourceCard
+          cardId={ACTIVE_CAPTAIN_SOURCE_ID}
+          name='Garmin ActiveCaptain'
+          enabled
+          summary={activeCaptainSummary(state)}
+          expanded={expanded[ACTIVE_CAPTAIN_SOURCE_ID] === true}
+          onToggleExpanded={onToggleExpanded}
+          status={statusBySource.get(ACTIVE_CAPTAIN_SOURCE_ID)}
+        >
+          <ActiveCaptainSource state={state} dispatch={dispatch} />
+        </DataSourceCard>
+        <DataSourceCard
+          cardId={OPENSEAMAP_SOURCE_ID}
+          name='OpenSeaMap'
+          enabled={state.openSeaMapEnabled === true}
+          summary={openSeaMapSummary(state)}
+          expanded={expanded[OPENSEAMAP_SOURCE_ID] === true}
+          onToggleExpanded={onToggleExpanded}
+          onToggleEnabled={(enabled) => dispatch({ type: 'setOpenSeaMapEnabled', enabled })}
+          status={statusBySource.get(OPENSEAMAP_SOURCE_ID)}
+        >
+          <OpenSeaMapSource state={state} dispatch={dispatch} />
+        </DataSourceCard>
+        <DataSourceCard
+          cardId={USCG_LIGHT_LIST_SOURCE_ID}
+          name='USCG Light List (US Aids to Navigation)'
+          enabled={state.uscgLightListEnabled === true}
+          summary={uscgLightListSummary(state)}
+          expanded={expanded[USCG_LIGHT_LIST_SOURCE_ID] === true}
+          onToggleExpanded={onToggleExpanded}
+          onToggleEnabled={(enabled) => dispatch({ type: 'setUscgLightListEnabled', enabled })}
+          status={statusBySource.get(USCG_LIGHT_LIST_SOURCE_ID)}
+        >
+          <UscgLightListSource state={state} dispatch={dispatch} />
+        </DataSourceCard>
+        <DataSourceCard
+          cardId={NOAA_ENC_SOURCE_ID}
+          name='NOAA ENC Direct (US wrecks, obstructions, and rocks)'
+          enabled={state.noaaEncEnabled === true}
+          summary={noaaEncSummary(state)}
+          expanded={expanded[NOAA_ENC_SOURCE_ID] === true}
+          onToggleExpanded={onToggleExpanded}
+          onToggleEnabled={(enabled) => dispatch({ type: 'setNoaaEncEnabled', enabled })}
+          status={statusBySource.get(NOAA_ENC_SOURCE_ID)}
+        >
+          <NoaaEncSource state={state} dispatch={dispatch} />
+        </DataSourceCard>
+        <DataSourceCard
+          cardId={NOAA_COOPS_SOURCE_ID}
+          name='NOAA CO-OPS (US tide and current stations)'
+          enabled={state.noaaCoopsEnabled === true}
+          summary={noaaCoopsSummary(state)}
+          expanded={expanded[NOAA_COOPS_SOURCE_ID] === true}
+          onToggleExpanded={onToggleExpanded}
+          onToggleEnabled={(enabled) => dispatch({ type: 'setNoaaCoopsEnabled', enabled })}
+          status={statusBySource.get(NOAA_COOPS_SOURCE_ID)}
+        >
+          <NoaaCoopsSource state={state} dispatch={dispatch} />
+        </DataSourceCard>
+        <DataSourceCard
+          cardId={USCG_LNM_SOURCE_ID}
+          name='USCG Local Notice to Mariners (US live safety notices)'
+          enabled={state.uscgLnmEnabled === true}
+          summary={uscgLnmSummary(state)}
+          expanded={expanded[USCG_LNM_SOURCE_ID] === true}
+          onToggleExpanded={onToggleExpanded}
+          onToggleEnabled={(enabled) => dispatch({ type: 'setUscgLnmEnabled', enabled })}
+          status={statusBySource.get(USCG_LNM_SOURCE_ID)}
+        >
+          <UscgLnmSource state={state} dispatch={dispatch} />
+        </DataSourceCard>
+        <DataSourceCard
+          cardId={WPI_SOURCE_ID}
+          name='NGA World Port Index (worldwide ports)'
+          enabled={state.wpiEnabled === true}
+          summary={wpiSummary(state)}
+          expanded={expanded[WPI_SOURCE_ID] === true}
+          onToggleExpanded={onToggleExpanded}
+          onToggleEnabled={(enabled) => dispatch({ type: 'setWpiEnabled', enabled })}
+          status={statusBySource.get(WPI_SOURCE_ID)}
+        >
+          <WpiSource state={state} dispatch={dispatch} />
+        </DataSourceCard>
+        <DataSourceCard
+          cardId={USACE_SOURCE_ID}
+          name='USACE locks and dams (US waterways)'
+          enabled={state.usaceEnabled === true}
+          summary={usaceSummary(state)}
+          expanded={expanded[USACE_SOURCE_ID] === true}
+          onToggleExpanded={onToggleExpanded}
+          onToggleEnabled={(enabled) => dispatch({ type: 'setUsaceEnabled', enabled })}
+          status={statusBySource.get(USACE_SOURCE_ID)}
+        >
+          <UsaceSource state={state} dispatch={dispatch} />
+        </DataSourceCard>
+      </Stack>
+    </CollapsibleSection>
   )
 })

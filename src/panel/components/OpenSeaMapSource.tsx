@@ -9,20 +9,19 @@
 
 import type * as React from 'react'
 import type { Dispatch } from 'react'
+import { FieldGroup } from 'signalk-nearlcrews-ui'
 import type { ConfigAction } from '../config-reducer.js'
 import { DEFAULT_MINIMUM_YEAR } from '../../shared/year-filter.js'
 import { DEFAULT_OVERPASS_ENDPOINT } from '../../shared/overpass-endpoints.js'
 import { DEFAULT_OPENSEAMAP_DEBOUNCE_SECONDS } from '../../shared/bbox-debounce-bounds.js'
-import { SEAMARK_GROUP_IDS } from '../../shared/seamark-groups.js'
 import type { PluginConfig } from '../../shared/types.js'
-import Disclosure from './Disclosure.js'
 import EndpointUrlField from './EndpointUrlField.js'
 import FallbackEndpointsField from './FallbackEndpointsField.js'
-import Fieldset from './Fieldset.js'
 import MergeWithActiveCaptain from './MergeWithActiveCaptain.js'
 import MinimumYearField from './MinimumYearField.js'
 import RefreshSecondsField from './RefreshSecondsField.js'
 import SeamarkGroups from './SeamarkGroups.js'
+import SourceAdvanced from './SourceAdvanced.js'
 
 interface Props {
   state: PluginConfig
@@ -31,28 +30,17 @@ interface Props {
 
 /** The configuration fields for the OpenSeaMap source. */
 export default function OpenSeaMapSource ({ state, dispatch }: Props): React.ReactElement {
-  const selected = state.openSeaMapSeamarkGroups ?? []
   // Dedupe defaults on: an absent value is treated as checked.
   const dedupeEnabled = state.openSeaMapDedupe !== false
 
   return (
     <>
       <SeamarkGroups
-        selected={selected}
-        onToggle={(id, enabled) => dispatch({
-          type: 'setOpenSeaMapSeamarkGroups',
-          // Rebuild from the canonical group order so toggling a group off and
-          // on again does not reshuffle the stored list.
-          groups: SEAMARK_GROUP_IDS.filter(
-            (groupId) => groupId === id ? enabled : selected.includes(groupId))
-        })}
-        onSetAll={(enabled) => dispatch({
-          type: 'setOpenSeaMapSeamarkGroups',
-          groups: enabled ? [...SEAMARK_GROUP_IDS] : []
-        })}
+        selected={state.openSeaMapSeamarkGroups ?? []}
+        onChange={(groups) => dispatch({ type: 'setOpenSeaMapSeamarkGroups', groups })}
       />
-      <Disclosure>
-        <Fieldset title='Connection'>
+      <SourceAdvanced>
+        <FieldGroup legend='Connection'>
           <EndpointUrlField
             value={state.openSeaMapEndpoint ?? DEFAULT_OVERPASS_ENDPOINT}
             onChange={(endpoint) => dispatch({ type: 'setOpenSeaMapEndpoint', endpoint })}
@@ -61,27 +49,26 @@ export default function OpenSeaMapSource ({ state, dispatch }: Props): React.Rea
             value={state.openSeaMapFallbackEndpoints ?? []}
             onChange={(endpoints) => dispatch({ type: 'setOpenSeaMapFallbackEndpoints', endpoints })}
           />
-        </Fieldset>
-        <Fieldset title='Refresh and freshness'>
+        </FieldGroup>
+        <FieldGroup legend='Refresh and freshness'>
           <RefreshSecondsField
-            label='Refresh period (seconds)'
             upstreamHint={'OSM seamark edits trickle in slowly, and the Overpass ' +
-              'mirrors are shared community infrastructure, so the 10 minute ' +
-              'default is friendly to both; raise it freely.'}
+            'mirrors are shared community infrastructure, so the 10 minute ' +
+            'default is friendly to both; raise it freely.'}
             value={state.openSeaMapRefreshSeconds ?? DEFAULT_OPENSEAMAP_DEBOUNCE_SECONDS}
             onChange={(seconds) => dispatch({ type: 'setOpenSeaMapRefreshSeconds', seconds })}
           />
           <MinimumYearField
             label='Earliest update year'
             hint={'Hide OSM elements whose last-edit timestamp is older than ' +
-              'this year. Leave at 0 to import every element. The timestamp is ' +
-              'an OSM contributor freshness signal: an unedited element from ' +
-              '2012 may still be correct, so old does not always mean stale. ' +
-              'Elements with no recorded timestamp are always included.'}
+            'this year. Leave at 0 to import every element. The timestamp is ' +
+            'an OSM contributor freshness signal: an unedited element from ' +
+            '2012 may still be correct, so old does not always mean stale. ' +
+            'Elements with no recorded timestamp are always included.'}
             value={state.openSeaMapMinimumYear ?? DEFAULT_MINIMUM_YEAR}
             onChange={(year) => dispatch({ type: 'setOpenSeaMapMinimumYear', year })}
           />
-        </Fieldset>
+        </FieldGroup>
         <MergeWithActiveCaptain
           sourceName='OpenSeaMap'
           enabled={dedupeEnabled}
@@ -89,7 +76,7 @@ export default function OpenSeaMapSource ({ state, dispatch }: Props): React.Rea
           radiusMeters={state.openSeaMapDedupeRadiusMeters}
           onChangeRadius={(meters) => dispatch({ type: 'setOpenSeaMapDedupeRadius', meters })}
         />
-      </Disclosure>
+      </SourceAdvanced>
     </>
   )
 }

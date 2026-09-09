@@ -7,14 +7,14 @@
 
 import type * as React from 'react'
 import type { Dispatch } from 'react'
+import { FieldGroup } from 'signalk-nearlcrews-ui'
 import type { ConfigAction } from '../config-reducer.js'
 import { DEFAULT_REFRESH_HOURS } from '../../shared/refresh-hours.js'
 import type { PluginConfig } from '../../shared/types.js'
-import Disclosure from './Disclosure.js'
-import Fieldset from './Fieldset.js'
 import IncludeToggles from './IncludeToggles.js'
 import MergeWithActiveCaptain from './MergeWithActiveCaptain.js'
 import RefreshHoursField from './RefreshHoursField.js'
+import SourceAdvanced from './SourceAdvanced.js'
 
 interface Props {
   state: PluginConfig
@@ -36,28 +36,28 @@ export default function NoaaCoopsSource ({ state, dispatch }: Props): React.Reac
         emptyWarning='Choose at least one station type; with both off the source is enabled but imports nothing.'
         options={[
           {
-            id: 'noaa-coops-tide',
+            value: 'tide',
             label: 'Tide (water level) stations',
             checked: includeTide,
             onChange: (enabled) => dispatch({ type: 'setNoaaCoopsIncludeTideStations', enabled })
           },
           {
-            id: 'noaa-coops-current',
+            value: 'current',
             label: 'Current stations',
             checked: includeCurrent,
             onChange: (enabled) => dispatch({ type: 'setNoaaCoopsIncludeCurrentStations', enabled })
           }
         ]}
       />
-      <Disclosure>
-        <Fieldset title='Refresh and freshness'>
+      <SourceAdvanced>
+        <FieldGroup legend='Refresh and freshness'>
           <RefreshHoursField
             upstreamHint={'The CO-OPS station lists change rarely, so a long ' +
-              'period costs almost nothing.'}
+            'period costs almost nothing.'}
             value={state.noaaCoopsRefreshHours ?? DEFAULT_REFRESH_HOURS}
             onChange={(hours) => dispatch({ type: 'setNoaaCoopsRefreshHours', hours })}
           />
-        </Fieldset>
+        </FieldGroup>
         <MergeWithActiveCaptain
           sourceName='NOAA CO-OPS'
           enabled={dedupeEnabled}
@@ -65,7 +65,7 @@ export default function NoaaCoopsSource ({ state, dispatch }: Props): React.Reac
           radiusMeters={state.noaaCoopsDedupeRadiusMeters}
           onChangeRadius={(meters) => dispatch({ type: 'setNoaaCoopsDedupeRadius', meters })}
         />
-      </Disclosure>
+      </SourceAdvanced>
     </>
   )
 }

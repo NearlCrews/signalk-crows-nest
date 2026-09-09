@@ -1,14 +1,15 @@
 /**
  * Number input for a per-source minimum-year filter. A thin wrapper around
- * NumberField that fixes the 0-to-9999 clamp and the integer step the year
- * field needs; the label and hint are passed in per source because each
- * source describes its date a little differently (survey date for NOAA ENC,
- * update date for USCG Light List, last-edit date for OpenSeaMap).
+ * the shared NumberField that fixes the 0-to-9999 clamp the year field needs;
+ * the label and hint are passed in per source because each source describes
+ * its date a little differently (survey date for NOAA ENC, update date for
+ * USCG Light List, last-edit date for OpenSeaMap).
  */
 
 import type * as React from 'react'
-import { clampMinimumYear, MAX_YEAR } from '../../shared/year-filter.js'
-import NumberField from './NumberField.js'
+import { NumberField } from 'signalk-nearlcrews-ui'
+import { useDraftResetKey } from '../hooks/draft-reset-context.js'
+import { clampMinimumYear, DEFAULT_MINIMUM_YEAR, MAX_YEAR } from '../../shared/year-filter.js'
 
 interface Props {
   /** Visible field label, e.g. `Earliest survey year`. */
@@ -31,13 +32,17 @@ export default function MinimumYearField ({
   return (
     <NumberField
       label={label}
-      hint={hint}
+      description={hint}
+      layout='inline'
       value={value}
-      onChange={(year) => onChange(clampMinimumYear(year))}
+      onValueChange={(year) => onChange(clampMinimumYear(year))}
+      // The off sentinel is 0, so the field floor has to admit it; clampMinimumYear
+      // owns raising a positive year below the validation floor up to it.
       min={0}
       max={MAX_YEAR}
+      fallback={DEFAULT_MINIMUM_YEAR}
       integer
-      step={1}
+      resetKey={useDraftResetKey()}
     />
   )
 }

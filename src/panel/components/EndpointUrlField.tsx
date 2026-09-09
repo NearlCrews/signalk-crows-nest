@@ -1,13 +1,12 @@
 /**
  * Text input for the OpenSeaMap source's Overpass API endpoint URL. The URL is
  * a free-form string, so the field is a plain controlled input: it commits
- * every keystroke and applies no clamping.
+ * every keystroke and applies no clamping. The monospace face makes a typo in
+ * a host name easier to spot.
  */
 
 import type * as React from 'react'
-import { TextInput } from 'signalk-nearlcrews-ui'
-import LabeledField from './LabeledField.js'
-import { S } from '../styles.js'
+import { LabeledField, TextInput } from 'signalk-nearlcrews-ui'
 
 interface Props {
   value: string
@@ -19,22 +18,20 @@ export default function EndpointUrlField ({ value, onChange }: Props): React.Rea
   return (
     <LabeledField
       label='Overpass API endpoint URL'
-      hint={
+      layout='inline'
+      description={
         <>
           The OpenStreetMap Overpass API endpoint the OpenSeaMap source queries.
           Leave the default unless you run your own Overpass instance.
         </>
       }
     >
-      {(controlProps) => (
-        <TextInput
-          {...controlProps}
-          type='url'
-          style={S.monoInput}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-        />
-      )}
+      <TextInput
+        type='url'
+        monospace
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
     </LabeledField>
   )
 }

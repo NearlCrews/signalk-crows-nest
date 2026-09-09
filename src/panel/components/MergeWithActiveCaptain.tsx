@@ -1,23 +1,23 @@
 /**
- * The "Merge with ActiveCaptain" fieldset shared by every non-base source
- * card (OpenSeaMap, USCG Light List, NOAA ENC). Each non-base card had its
- * own near-identical copy of a toggle plus a merge-radius field plus a
- * one-paragraph rationale; the duplication made the per-card files
- * harder to scan and was a real maintenance hazard whenever the copy
- * needed editing in one place. Centralizing the block here keeps every
- * card's merge UX in lockstep.
+ * The "Merge with ActiveCaptain" group shared by every non-base source card
+ * (OpenSeaMap, USCG Light List, NOAA ENC, NOAA CO-OPS, USCG LNM, World Port
+ * Index, and USACE): a dedupe toggle, a merge-radius field, and the
+ * one-paragraph rationale. Centralizing the block here keeps every card's
+ * merge UX in lockstep.
  *
- * The fieldset, legend, toggle, and hint shell come from `ToggleFieldset`;
- * this component slots its merge-radius LengthField as the children.
+ * The fieldset and legend come from the shared `FieldGroup`; the toggle is a
+ * shared `Checkbox` whose description carries the rationale, and the radius
+ * is a `LengthField` disabled while the toggle is off because the setting
+ * then has no effect.
  */
 
 import type * as React from 'react'
+import { Checkbox, FieldGroup } from 'signalk-nearlcrews-ui'
 import {
   DEFAULT_DEDUPE_RADIUS_METERS,
   MIN_DEDUPE_RADIUS_METERS
 } from '../../shared/dedupe-radius.js'
 import LengthField from './LengthField.js'
-import ToggleFieldset from './ToggleFieldset.js'
 
 interface Props {
   /** Human-readable source name, e.g. `OpenSeaMap`, used in the toggle label. */
@@ -41,31 +41,30 @@ export default function MergeWithActiveCaptain ({
   onChangeRadius
 }: Props): React.ReactElement {
   return (
-    <ToggleFieldset
-      title='Merge with ActiveCaptain'
-      toggleLabel={<>Merge {sourceName} markers that duplicate an ActiveCaptain marker</>}
-      toggleHint={
-        <>
-          When enabled, a {sourceName} point of interest close to an
-          ActiveCaptain point of the same type is merged into it, so one
-          physical feature is shown once. The surviving marker records every
-          source that reported it.
-        </>
-      }
-      enabled={enabled}
-      onToggleEnabled={onToggleEnabled}
-    >
+    <FieldGroup legend='Merge with ActiveCaptain'>
+      <Checkbox
+        label={<>Merge {sourceName} markers that duplicate an ActiveCaptain marker</>}
+        description={
+          <>
+            When enabled, a {sourceName} point of interest close to an
+            ActiveCaptain point of the same type is merged into it, so one
+            physical feature is shown once. The surviving marker records every
+            source that reported it.
+          </>
+        }
+        checked={enabled}
+        onChange={(event) => onToggleEnabled(event.target.checked)}
+      />
       <LengthField
         label='Merge radius'
         hint='How far apart two markers can be and still count as the same point.'
         valueMeters={radiusMeters ?? DEFAULT_DEDUPE_RADIUS_METERS}
         onChangeMeters={onChangeRadius}
         minMeters={MIN_DEDUPE_RADIUS_METERS}
-        step={10}
         integer
         disabled={!enabled}
         dense
       />
-    </ToggleFieldset>
+    </FieldGroup>
   )
 }

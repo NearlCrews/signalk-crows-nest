@@ -10,16 +10,16 @@
 
 import type * as React from 'react'
 import type { Dispatch } from 'react'
+import { FieldGroup } from 'signalk-nearlcrews-ui'
 import type { ConfigAction } from '../config-reducer.js'
 import { DEFAULT_MINIMUM_RATING } from '../../shared/rating.js'
 import { DEFAULT_ACTIVE_CAPTAIN_DEBOUNCE_SECONDS } from '../../shared/bbox-debounce-bounds.js'
 import type { PluginConfig } from '../../shared/types.js'
 import ActiveCaptainPoiTypes from './ActiveCaptainPoiTypes.js'
 import CacheDurationField from './CacheDurationField.js'
-import Disclosure from './Disclosure.js'
-import Fieldset from './Fieldset.js'
 import RatingFilterField from './RatingFilterField.js'
 import RefreshSecondsField from './RefreshSecondsField.js'
+import SourceAdvanced from './SourceAdvanced.js'
 
 interface Props {
   state: PluginConfig
@@ -35,12 +35,11 @@ export default function ActiveCaptainSource ({ state, dispatch }: Props): React.
         onToggle={(flag, enabled) => dispatch({ type: 'setPoiType', flag, enabled })}
         onSetAll={(enabled) => dispatch({ type: 'setAllPoiTypes', enabled })}
       />
-      <Disclosure>
-        <Fieldset title='Refresh and freshness'>
+      <SourceAdvanced>
+        <FieldGroup legend='Refresh and freshness'>
           <RefreshSecondsField
-            label='Refresh period (seconds)'
             upstreamHint={'ActiveCaptain is the most dynamic source (reviews and ' +
-              'hazard reports arrive continuously), so its default stays short.'}
+            'hazard reports arrive continuously), so its default stays short.'}
             value={state.activeCaptainRefreshSeconds ?? DEFAULT_ACTIVE_CAPTAIN_DEBOUNCE_SECONDS}
             onChange={(seconds) => dispatch({ type: 'setActiveCaptainRefreshSeconds', seconds })}
           />
@@ -48,14 +47,14 @@ export default function ActiveCaptainSource ({ state, dispatch }: Props): React.
             value={state.cachingDurationMinutes}
             onChange={(minutes) => dispatch({ type: 'setCacheDuration', minutes })}
           />
-        </Fieldset>
-        <Fieldset title='Filters'>
+        </FieldGroup>
+        <FieldGroup legend='Filters'>
           <RatingFilterField
             value={state.minimumRating ?? DEFAULT_MINIMUM_RATING}
             onChange={(rating) => dispatch({ type: 'setMinimumRating', rating })}
           />
-        </Fieldset>
-      </Disclosure>
+        </FieldGroup>
+      </SourceAdvanced>
     </>
   )
 }

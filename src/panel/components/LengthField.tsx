@@ -1,15 +1,19 @@
 /**
- * A NumberField for a length stored in meters, rendered in the display system
- * the server's unit preferences select. The parent always deals in meters
- * (the config's only length unit); this component converts the value and the
- * bounds at the display edge and appends the unit to the label, so an
- * imperial preset shows feet without the stored configuration changing
- * shape.
+ * A shared `NumberField` for a length stored in meters, rendered in the
+ * display system the server's unit preferences select. The parent always
+ * deals in meters (the config's only length unit); this component converts
+ * the value and the bounds at the display edge and shows the unit beside the
+ * input, so an imperial preset shows feet without the stored configuration
+ * changing shape.
+ *
+ * The field clamps rather than validates: an empty or unparsable draft
+ * commits the display minimum, matching the schema floor the plugin enforces.
  */
 
 import type * as React from 'react'
 import { useContext } from 'react'
-import NumberField from './NumberField.js'
+import { NumberField } from 'signalk-nearlcrews-ui'
+import { useDraftResetKey } from '../hooks/draft-reset-context.js'
 import { UnitSystemContext } from '../hooks/use-unit-system.js'
 import { clampNumber } from '../../shared/numbers.js'
 import {
@@ -19,9 +23,9 @@ import {
 } from '../unit-system.js'
 
 interface Props {
-  /** Field label without a unit suffix; the display unit is appended. */
+  /** Field label without a unit; the display unit renders beside the input. */
   label: string
-  /** Hint paragraph rendered next to the input. */
+  /** Description linked to the input through aria-describedby. */
   hint: React.ReactNode
   /** Committed value, in meters. */
   valueMeters: number
@@ -31,13 +35,11 @@ interface Props {
   minMeters: number
   /** Largest allowed value, in meters. Omit to leave the high end unbounded. */
   maxMeters?: number
-  /** Step the up/down arrows use, in display units. */
-  step?: number
   /** Truncate any fractional part of the typed display value. */
   integer?: boolean
   /** Disable the input. */
   disabled?: boolean
-  /** Use the tighter labelled-input row layout used below an alarm toggle. */
+  /** Use the tighter labeled-input row layout used below an alarm toggle. */
   dense?: boolean
 }
 
@@ -49,31 +51,35 @@ export default function LengthField ({
   onChangeMeters,
   minMeters,
   maxMeters,
-  step,
   integer,
   disabled,
   dense
 }: Props): React.ReactElement {
   const system = useContext(UnitSystemContext)
+  const resetKey = useDraftResetKey()
+  const displayMin = lengthDisplayFromMeters(minMeters, system)
 
   return (
     <NumberField
-      label={`${label} (${lengthUnitLabel(system)})`}
-      hint={hint}
+      label={label}
+      description={hint}
+      layout='inline'
+      density={dense === true ? 'compact' : 'default'}
+      unit={lengthUnitLabel(system)}
       value={lengthDisplayFromMeters(valueMeters, system)}
-      onChange={(display) => onChangeMeters(
+      onValueChange={(display) => onChangeMeters(
         // Re-clamp in meters, the authoritative space: the display-side bounds
         // are nearest-rounded, so committing exactly the displayed minimum can
         // land a hair under the schema bound (3.28 ft is 0.9997 m against a
         // 1 m minimum) without this.
         clampNumber(lengthMetersFromDisplay(display, system), minMeters, maxMeters ?? Infinity, minMeters)
       )}
-      min={lengthDisplayFromMeters(minMeters, system)}
+      min={displayMin}
       max={maxMeters === undefined ? undefined : lengthDisplayFromMeters(maxMeters, system)}
-      step={step}
+      fallback={displayMin}
       integer={integer}
       disabled={disabled}
-      dense={dense}
+      resetKey={resetKey}
     />
   )
 }

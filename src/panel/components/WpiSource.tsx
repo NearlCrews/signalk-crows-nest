@@ -7,14 +7,13 @@
 
 import type * as React from 'react'
 import type { Dispatch } from 'react'
+import { FieldGroup, Text } from 'signalk-nearlcrews-ui'
 import type { ConfigAction } from '../config-reducer.js'
 import { DEFAULT_REFRESH_HOURS } from '../../shared/refresh-hours.js'
-import { S } from '../styles.js'
 import type { PluginConfig } from '../../shared/types.js'
-import Disclosure from './Disclosure.js'
-import Fieldset from './Fieldset.js'
 import MergeWithActiveCaptain from './MergeWithActiveCaptain.js'
 import RefreshHoursField from './RefreshHoursField.js'
+import SourceAdvanced from './SourceAdvanced.js'
 
 interface Props {
   state: PluginConfig
@@ -28,20 +27,20 @@ export default function WpiSource ({ state, dispatch }: Props): React.ReactEleme
 
   return (
     <>
-      <p style={S.hint}>
+      <Text as='p' tone='muted' size='sm'>
         Imports every port in the NGA World Port Index (Pub 150) worldwide.
         There is no layer choice; tune the refresh and merge behavior under
         Advanced.
-      </p>
-      <Disclosure>
-        <Fieldset title='Refresh and freshness'>
+      </Text>
+      <SourceAdvanced>
+        <FieldGroup legend='Refresh and freshness'>
           <RefreshHoursField
             upstreamHint={'NGA publishes the World Port Index quarterly, so the ' +
-              'daily default is already conservative.'}
+            'daily default is already conservative.'}
             value={state.wpiRefreshHours ?? DEFAULT_REFRESH_HOURS}
             onChange={(hours) => dispatch({ type: 'setWpiRefreshHours', hours })}
           />
-        </Fieldset>
+        </FieldGroup>
         <MergeWithActiveCaptain
           sourceName='World Port Index'
           enabled={dedupeEnabled}
@@ -49,7 +48,7 @@ export default function WpiSource ({ state, dispatch }: Props): React.ReactEleme
           radiusMeters={state.wpiDedupeRadiusMeters}
           onChangeRadius={(meters) => dispatch({ type: 'setWpiDedupeRadius', meters })}
         />
-      </Disclosure>
+      </SourceAdvanced>
     </>
   )
 }

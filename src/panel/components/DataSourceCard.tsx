@@ -1,39 +1,58 @@
 /**
- * A collapsible data-source card for the configuration panel's accordion.
- * The header row carries an enable checkbox (or an "Always on" badge for a
- * source with no enable toggle), the source name, a one-line summary, an
- * optional live-status pill, and an expand chevron. The source's own fields
- * render as `children` always (gated by CSS visibility, not by conditional
- * mount) so an in-progress draft inside a NumberField survives a collapse
- * and re-expand of the card.
+ * A collapsible data-source card for the configuration panel's accordion,
+ * built on the shared `CollapsibleSection`. The header carries an enable
+ * checkbox (or an "Always on" badge for a source with no enable toggle) in the
+ * leading slot, the source name as an h3, a one-line summary while collapsed,
+ * and an optional live-status pill in the actions slot. The shared section
+ * owns the heading button, `aria-expanded`, the named content region, focus
+ * restore on collapse, and the retained subtree that keeps a half-typed
+ * numeric draft alive across a collapse and re-expand.
  *
  * Disclosure state lives on the panel root and is threaded down through
- * `expanded` + `onToggleExpanded(cardId)`. Keeping the state outside the
- * card lets it survive any future subtree remount, lets the panel persist
- * it across saves if it ever wants to, and lets the panel iterate cards
- * with a stable map of slug to expanded-flag.
+ * `expanded` + `onToggleExpanded(cardId, open)`. Keeping the state outside the
+ * card lets it survive any future subtree remount, lets the panel persist it
+ * across saves if it ever wants to, and lets the panel iterate cards with a
+ * stable map of slug to expanded-flag.
  *
- * The card surfaces "Disabled" inline in the summary when the enable
- * toggle is off, so a collapsed disabled row reads as off at a glance and
- * not just as a configured-but-unchecked source. An always-on source (one
- * with no enable toggle) omits `onToggleEnabled`; the header shows an
- * "Always on" badge instead of a checkbox so it cannot be mistaken for a
- * disabled toggle.
+ * The card surfaces "Disabled" inline in the summary when the enable toggle
+ * is off, so a collapsed disabled row reads as off at a glance and not just
+ * as a configured-but-unchecked source. An always-on source (one with no
+ * enable toggle) omits `onToggleEnabled`; the header shows an "Always on"
+ * badge instead of a checkbox so it cannot be mistaken for a disabled toggle.
  *
- * The optional `status` prop drives a compact pill rendered AS A SIBLING
- * of the disclosure button, not nested inside it: a touch user tapping
- * the pill must not toggle the card, and a screen reader walking the
- * header must not absorb the pill's status text into the button's
- * accessible name.
+ * The status pill sits in the actions slot, outside the toggle button: a
+ * touch user tapping the pill must not toggle the card, and a screen reader
+ * walking the header must not absorb the pill's status text into the button's
+ * accessible name. The pill's longer explanation ("17 POIs in last fetch, 5
+ * minutes ago") is visible text at the top of the expanded card rather than a
+ * tooltip, so keyboard and touch users can reach it.
+ *
+ * The cards are not region landmarks: eight regions inside the Data sources
+ * region would crowd a screen reader's landmark list, and the h3 headings
+ * already give heading navigation one stop per source.
  */
 
 import type * as React from 'react'
-import { Badge, type StatusTone } from 'signalk-nearlcrews-ui'
-import { useCollapseFocusRestore } from '../hooks/use-collapse-focus-restore.js'
-import { S } from '../styles.js'
-import { pillContent, pillVariant } from '../source-status-pill.js'
+import {
+  Badge,
+  Checkbox,
+  CollapsibleSection,
+  RelativeAge,
+  Stack,
+  Text,
+  type StatusTone
+} from 'signalk-nearlcrews-ui'
+import { pillContent, pillVariant, type PillVariant } from '../source-status-pill.js'
 import type { SourceSlug } from '../../shared/source-ids.js'
 import type { SourceStatus } from '../../status/status-types.js'
+
+/** The badge tone for each pill variant; the label carries the meaning too. */
+const PILL_TONE: Record<PillVariant, StatusTone> = {
+  error: 'danger',
+  waiting: 'warning',
+  idle: 'neutral',
+  ok: 'success'
+}
 
 interface Props {
   /**
@@ -50,8 +69,8 @@ interface Props {
   summary: string
   /** Whether the card is currently expanded. */
   expanded: boolean
-  /** Toggle the expanded state on a header click; receives the cardId. */
-  onToggleExpanded: (cardId: SourceSlug) => void
+  /** Record the card's new open state; receives the cardId. */
+  onToggleExpanded: (cardId: SourceSlug, open: boolean) => void
   /**
    * Called when the enable checkbox is toggled. Omitted for an always-on
    * source; the header then shows an "Always on" badge in place of the
@@ -82,119 +101,87 @@ export default function DataSourceCard ({
   status,
   children
 }: Props): React.ReactElement {
-  const { bodyRef, buttonRef, restoreFocusBeforeCollapse } = useCollapseFocusRestore()
   // Prefix the summary with "Disabled" when the enable toggle is off, so
   // a collapsed disabled card never reads as if it were live (the small
   // unchecked checkbox alone is too subtle a signal).
   const summaryText = enabled ? summary : `Disabled. ${summary}`
+  const variant = status === undefined ? undefined : pillVariant(status)
+  const pill = status === undefined || variant === undefined ? undefined : pillContent(status, variant)
   return (
-    <div id={sourceCardDomId(cardId)} style={S.sourceCard}>
-      <div style={S.sourceCardHeader}>
-        {onToggleEnabled !== undefined
+    <CollapsibleSection
+      id={sourceCardDomId(cardId)}
+      title={name}
+      headingLevel={3}
+      landmark={false}
+      open={expanded}
+      onOpenChange={(open) => onToggleExpanded(cardId, open)}
+      leading={onToggleEnabled !== undefined
+        ? (
+          <Checkbox
+            label={`Enable ${name}`}
+            labelVisibility='hidden'
+            checked={enabled}
+            onChange={(event) => onToggleEnabled(event.target.checked)}
+          />
+          )
+        : (
+          // An always-on source shows a non-interactive "Always on" badge
+          // rather than a disabled checkbox: a disabled checkbox is
+          // visually indistinguishable from an off-and-greyed-out toggle,
+          // so an operator might think the source is unavailable.
+          <Badge tone='neutral'>Always on</Badge>
+          )}
+      summary={summaryText}
+      summaryPlacement='header'
+      actions={pill !== undefined && variant !== undefined
+        ? <Badge tone={PILL_TONE[variant]}>{pill.label}</Badge>
+        : undefined}
+    >
+      <Stack gap={3}>
+        {pill !== undefined
           ? (
-            // The label supplies the tap target the painted 22px box does not
-            // reach on its own. It wraps no text, so the input's aria-label
-            // remains the control's accessible name.
-            <label style={S.checkboxTarget}>
-              <input
-                type='checkbox'
-                style={S.checkbox}
-                checked={enabled}
-                aria-label={`Enable ${name}`}
-                onChange={(e) => onToggleEnabled(e.target.checked)}
-              />
-            </label>
+            <Text as='p' tone='muted' size='sm'>
+              {pill.detail}
+              {pill.since !== undefined ? <>, <RelativeAge since={pill.since} /></> : null}.
+            </Text>
             )
-          : (
-            // An always-on source shows a non-interactive "Always on" badge
-            // rather than a disabled checkbox: a disabled checkbox is
-            // visually indistinguishable from an off-and-greyed-out toggle,
-            // so an operator might think the source is unavailable.
-            <Badge tone='neutral' aria-label={`${name} is always on`}>
-              Always on
-            </Badge>
-            )}
-        <button
-          ref={buttonRef}
-          type='button'
-          style={S.sourceCardToggle}
-          aria-expanded={expanded}
-          aria-controls={bodyId(cardId)}
-          onClick={() => {
-            // Restore focus to this button before collapsing, so the
-            // `display: none` flip does not strand a keyboard user whose
-            // focus is inside the card body on document.body.
-            if (expanded) restoreFocusBeforeCollapse()
-            onToggleExpanded(cardId)
-          }}
-        >
-          <span style={S.sourceCardName}>{name}</span>
-          <span style={S.sourceCardSummary}>{summaryText}</span>
-          <span style={S.sourceCardChevron} aria-hidden='true'>{expanded ? '▾' : '▸'}</span>
-        </button>
-        {status !== undefined ? <SourceStatusPill status={status} /> : null}
-      </div>
-      {/* Body always mounts; visibility flips via display so the per-field
-          draft state survives a collapse-and-expand round trip. `inert`
-          plus aria-hidden keep the hidden subtree out of the tab order and
-          the accessibility tree even if the hide mechanism ever changes
-          from display:none to visibility-based. */}
-      <div
-        ref={bodyRef}
-        id={bodyId(cardId)}
-        style={expanded ? S.sourceCardBody : S.collapsedBody}
-        aria-hidden={!expanded}
-        inert={!expanded}
-      >
+          : null}
         {children}
-      </div>
-    </div>
+      </Stack>
+    </CollapsibleSection>
   )
 }
 
-/** Build a stable id for the card's body region (used by aria-controls). */
-function bodyId (cardId: string): string {
-  return `ac-source-card-body-${cardId}`
-}
-
 /**
- * Stable DOM id of a source card's outer element, exported so the status
- * bar's jump-to-error shortcut can scroll the offending card into view.
+ * Stable DOM id of a source card's outer element, so the jump-to-error
+ * shortcut can find the offending card without a ref through the accordion.
  */
 export function sourceCardDomId (cardId: string): string {
   return `ac-source-card-${cardId}`
 }
 
 /**
- * Render a compact status pill with three states: idle (no list-fetch
- * outcome recorded yet), ok (last fetch returned data), and error (last
- * attempt failed). Distinct glyphs and tooltip wording prevent the
- * "idle" and "ok" states from collapsing into the same green check.
+ * Bring a source card that has just been expanded into view, and hand focus
+ * to it.
  *
- * The pill is NOT a live region: it carries no `role='status'`. The
- * StatusBar at the top of the panel already surfaces per-source health,
- * so making every per-source pill its own polite live region only
- * produced redundant re-announcements as the relative "N minutes ago"
- * title ticked on every 5 s poll. The concise visible label (ok / idle /
- * error) is exposed to assistive tech; only the decorative glyph is
- * hidden. The `title` attribute delivers the longer "N POIs in last
- * fetch, M minutes ago" context to a sighted user on hover.
+ * Focus goes to the card's own disclosure toggle. That names the source and
+ * reports the card as expanded, so a screen reader announces the destination
+ * instead of the operator being silently scrolled, and it leaves the next Tab
+ * on the card's first field rather than on the rest of the error list. It is
+ * also where the shared section returns focus when the card is collapsed
+ * again, so a jump and a collapse agree on where the card's handle is.
+ *
+ * The toggle is the button inside the card's own h3: `headingLevel={3}` above
+ * is what makes that unambiguous, because the Advanced disclosure nested in
+ * the body is an h4. Focus runs first with `preventScroll` so the browser's
+ * instant focus scroll does not cancel the smooth scroll that follows.
  */
-function SourceStatusPill ({ status }: { status: SourceStatus }): React.ReactElement {
-  const variant = pillVariant(status)
-  const tone: StatusTone = variant === 'error'
-    ? 'danger'
-    : variant === 'waiting'
-      ? 'warning'
-      : variant === 'idle'
-        ? 'neutral'
-        : 'success'
-  const { glyph, label, title } = pillContent(status, variant)
-  return (
-    <Badge tone={tone} title={title}>
-      <span aria-hidden='true'>{glyph}</span> {label}
-    </Badge>
-  )
+export function revealSourceCard (cardId: string): void {
+  const card = document.getElementById(sourceCardDomId(cardId))
+  if (card === null) return
+  card.querySelector<HTMLElement>('h3 button')?.focus({ preventScroll: true })
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  card.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' })
 }
 
 // pillVariant + pillContent are in `../source-status-pill.ts` so the

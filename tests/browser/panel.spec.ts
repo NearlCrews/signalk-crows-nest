@@ -3,43 +3,19 @@ import { expect, test } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-const EXPECTED_SHARED_UI_VERSION = '0.8.2'
-// Split for the same reason as scripts/check-package.mjs: the shape assertion
-// is never hand-edited, so pasting a failing range into the literal above
-// cannot quietly turn an exact pin into a range that still reports as exact.
-const EXACT_SHARED_UI_VERSION = /^0\.\d+\.\d+$/
-const packageManifest: unknown = JSON.parse(readFileSync(resolve('package.json'), 'utf8'))
+// The installed shared UI's version, which the built remote must stamp on its
+// root. The exact pin, its agreement with the installed package, and the stamp
+// inside the bundle are asserted by the library's own `snui-check-consumer`
+// command (`npm run check:panel`); this spec only proves the mounted panel
+// reports that same version at runtime.
 const uiPackage: unknown = JSON.parse(
   readFileSync(resolve('node_modules/signalk-nearlcrews-ui/package.json'), 'utf8')
 )
-if (typeof packageManifest !== 'object' || packageManifest === null ||
-    !('devDependencies' in packageManifest) ||
-    typeof packageManifest.devDependencies !== 'object' || packageManifest.devDependencies === null ||
-    !('signalk-nearlcrews-ui' in packageManifest.devDependencies)) {
-  throw new Error('package.json declares no signalk-nearlcrews-ui development dependency')
-}
-const pinnedVersion: unknown = packageManifest.devDependencies['signalk-nearlcrews-ui']
-if (typeof pinnedVersion !== 'string' || !EXACT_SHARED_UI_VERSION.test(pinnedVersion)) {
-  throw new Error(
-    'package.json must pin signalk-nearlcrews-ui to an exact version, not a range; it has ' +
-    JSON.stringify(pinnedVersion)
-  )
-}
-if (pinnedVersion !== EXPECTED_SHARED_UI_VERSION) {
-  throw new Error(
-    `package.json must pin signalk-nearlcrews-ui ${EXPECTED_SHARED_UI_VERSION}; it has ${pinnedVersion}`
-  )
-}
 if (typeof uiPackage !== 'object' || uiPackage === null ||
     !('version' in uiPackage) || typeof uiPackage.version !== 'string') {
   throw new Error('signalk-nearlcrews-ui package.json carries no version string')
 }
 const uiVersion = uiPackage.version
-if (uiVersion !== EXPECTED_SHARED_UI_VERSION) {
-  throw new Error(
-    `installed signalk-nearlcrews-ui must be ${EXPECTED_SHARED_UI_VERSION}; it is ${uiVersion}`
-  )
-}
 
 test.beforeEach(async ({ page }) => {
   page.on('console', (message) => {
@@ -64,9 +40,48 @@ test('loads the production remote with the current shared UI and saves defaults'
 
   await page.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(page.locator('body')).toHaveAttribute('data-save-count', '1')
-  await expect(page.getByRole('status')).toContainText('Save requested')
-  await expect(page.getByRole('status')).toBeFocused()
+  // The save bar's status is the panel's one polite live region for the save
+  // flow; the checkbox groups each mount an empty status region for their
+  // empty-selection warning, so the text filter picks the save bar's.
+  const saveStatus = page.getByRole('status').filter({ hasText: 'Save requested' })
+  await expect(saveStatus).toBeVisible()
+  // Focus moves to the bar's status destination, which wraps the live region,
+  // so the focused element contains the confirmation rather than being it.
+  await expect(page.locator(':focus')).toContainText('Save requested')
   await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled()
+})
+
+test('renders each roled live region without a redundant aria-live', async ({ page }) => {
+  // A roled live region must not also carry aria-live, which double announces
+  // on some screen readers. Sweep every status and alert in the panel,
+  // including the ones inside expanded cards.
+  await page.getByRole('button', { name: /Garmin ActiveCaptain/ }).click()
+  await page.getByRole('button', { name: 'Alerts' }).click()
+  const roledRegions = page.locator('[data-snui-root] [role="status"], [data-snui-root] [role="alert"]')
+  const count = await roledRegions.count()
+  expect(count).toBeGreaterThan(0)
+  for (let index = 0; index < count; index++) {
+    await expect(roledRegions.nth(index)).not.toHaveAttribute('aria-live')
+  }
+})
+
+test('builds one heading outline from the sections down to each card', async ({ page }) => {
+  // Signal K Admin owns the page heading and the h5 card header, so the panel
+  // starts at h2: the status section, Data sources, and Alerts. Each source
+  // card is an h3 under Data sources and its Advanced disclosure an h4, so a
+  // screen reader's heading list reads as a tree rather than eight siblings.
+  await expect(page.getByRole('heading', { level: 2, name: 'Plugin status' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 2, name: 'Data sources' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 2, name: 'Alerts' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 3 })).toHaveCount(8)
+  await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1)
+  await page.getByRole('button', { name: /OpenSeaMap/ }).click()
+  await expect(page.getByRole('heading', { level: 4, name: 'Advanced' })).toHaveCount(1)
+  // The enable checkbox sits beside the heading, outside the toggle button,
+  // and keeps its name through a visually hidden label.
+  const enable = page.getByRole('checkbox', { name: 'Enable OpenSeaMap' })
+  await expect(enable).toBeVisible()
+  await expect(page.getByRole('button', { name: /OpenSeaMap/ })).not.toContainText('Enable')
 })
 
 test('preserves unknown configuration keys through an edit and save request', async ({ page }) => {
@@ -91,18 +106,14 @@ test('provides deterministic populated state for the release screenshot', async 
   await expect(page.getByRole('radio', { name: 'Light' })).toBeChecked()
   await expect(page.getByText('reachable', { exact: true })).toHaveCount(8)
   await expect(page.getByRole('checkbox', { checked: true })).toHaveCount(7)
-  for (const name of [
-    'Garmin ActiveCaptain',
-    'OpenSeaMap',
-    'USCG Light List',
-    'NOAA ENC Direct',
-    'NOAA CO-OPS',
-    'USCG Local Notice to Mariners',
-    'NGA World Port Index',
-    'USACE locks and dams'
-  ]) {
-    await expect(page.locator(`[title^="${name}: 1 POI in last fetch"]`)).toHaveCount(1)
-  }
+  // Every card header carries an ok pill whose accessible text is the tone
+  // label plus the label, and every retained card body holds the visible
+  // detail line that replaced the old hover-only tooltip.
+  await expect(page.getByText('Success. ok')).toHaveCount(8)
+  await expect(page.getByText('1 POI in last fetch')).toHaveCount(8)
+  // Every retained body holds the line; only the expanded card shows it.
+  await page.getByRole('button', { name: /OpenSeaMap/ }).click()
+  await expect(page.getByText('1 POI in last fetch, now.').filter({ visible: true })).toHaveCount(1)
 })
 
 test('supports every explicit theme and returns to Auto', async ({ page }) => {
@@ -210,9 +221,11 @@ test('gives every interactive control a 44-pixel coarse-pointer target @coarse',
   // almost nothing would otherwise pass silently.
   expect(measured.total).toBeGreaterThan(80)
 
-  // The enable checkbox is a square target taking its size from a text-free
-  // label, so its width has to clear the floor too.
-  const enableTarget = page.locator('label:has(input[aria-label="Enable OpenSeaMap"])')
+  // The enable checkbox is a square target whose label is visually hidden,
+  // so its width has to clear the floor too.
+  const enableTarget = page.locator('label', {
+    has: page.getByRole('checkbox', { name: 'Enable OpenSeaMap' })
+  })
   const targetBox = await enableTarget.boundingBox()
   expect(targetBox?.width).toBeGreaterThanOrEqual(44)
 })
@@ -224,4 +237,74 @@ test('shows a compatibility message when native CSS scope is unavailable', async
     'Browser update required'
   )
   await expect(page.locator('[data-snui-root]')).toHaveCount(0)
+})
+
+test('announces a status-poll failure from a region that predates the message', async ({ page }) => {
+  // A live region created in the same commit as its text is not announced
+  // reliably, so the announcer stays mounted and empty while the endpoint is
+  // healthy and only its text changes when a poll fails. The empty region on
+  // a healthy panel is the half a banner-only implementation cannot have.
+  const announcer = page.locator('#ac-status-announcement')
+  await expect(announcer).toHaveAttribute('role', 'status')
+  await expect(announcer).toHaveText('')
+
+  await page.goto('/?status-error')
+  await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true')
+  await expect(announcer).toHaveText(
+    'Status unavailable. HTTP 503. The next poll will retry automatically.'
+  )
+
+  // The visible banner repeats the same words without becoming a second live
+  // region, so a screen reader hears the failure once.
+  const announcing = page
+    .locator('[data-snui-root] [role="status"], [data-snui-root] [role="alert"], [data-snui-root] [aria-live]')
+    .filter({ hasText: 'Status unavailable' })
+  await expect(announcing).toHaveCount(1)
+  await expect(announcing).toHaveAttribute('id', 'ac-status-announcement')
+
+  // The failure is still on screen and not only announced: the banner repeats
+  // the words outside the visually hidden announcer.
+  const onScreen = page
+    .getByText('HTTP 503. The next poll will retry automatically.', { exact: true })
+    .and(page.locator('[data-snui-root] :not(#ac-status-announcement)'))
+  await expect(onScreen).toHaveCount(1)
+  await expect(onScreen).toBeVisible()
+})
+
+test('opens a collapsed Data sources section when jumping to a source', async ({ page }) => {
+  await page.goto('/?errors')
+  await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true')
+
+  const section = page.getByRole('button', { name: 'Data sources' })
+  await section.click()
+  await expect(section).toHaveAttribute('aria-expanded', 'false')
+  const card = page.getByRole('button', { name: 'OpenSeaMap', exact: true })
+  await expect(card).toBeHidden()
+
+  // The recent-error list is the only place this button exists, and the
+  // section it points into is the one the operator just closed.
+  await page.getByRole('button', { name: 'Show openseamap' }).click()
+
+  await expect(section).toHaveAttribute('aria-expanded', 'true')
+  await expect(card).toBeVisible()
+  await expect(card).toHaveAttribute('aria-expanded', 'true')
+  await expect(card).toBeInViewport()
+  // Focus reaches a card that React had to reveal in the same commit, which
+  // pins the handoff as running after the reveal rather than racing it.
+  await expect(page.locator(':focus')).toHaveAccessibleName('OpenSeaMap')
+})
+
+test('moves focus to the revealed card when jumping to a source', async ({ page }) => {
+  await page.goto('/?errors')
+  await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true')
+
+  await page.getByRole('button', { name: 'Show openseamap' }).click()
+
+  // Focus lands on the card's own disclosure toggle: it names the source and
+  // reports that the card is now expanded, so the destination is announced
+  // rather than merely scrolled to, and the next Tab reaches the first field
+  // instead of the rest of the error list.
+  const focused = page.locator(':focus')
+  await expect(focused).toHaveAccessibleName('OpenSeaMap')
+  await expect(focused).toHaveAttribute('aria-expanded', 'true')
 })

@@ -7,15 +7,14 @@
 
 import type * as React from 'react'
 import type { Dispatch } from 'react'
+import { FieldGroup } from 'signalk-nearlcrews-ui'
 import type { ConfigAction } from '../config-reducer.js'
 import { DEFAULT_USACE_DEBOUNCE_SECONDS } from '../../shared/bbox-debounce-bounds.js'
-import { S } from '../styles.js'
 import type { PluginConfig } from '../../shared/types.js'
-import Disclosure from './Disclosure.js'
-import Fieldset from './Fieldset.js'
 import IncludeToggles from './IncludeToggles.js'
 import MergeWithActiveCaptain from './MergeWithActiveCaptain.js'
 import RefreshSecondsField from './RefreshSecondsField.js'
+import SourceAdvanced from './SourceAdvanced.js'
 
 interface Props {
   state: PluginConfig
@@ -35,39 +34,34 @@ export default function UsaceSource ({ state, dispatch }: Props): React.ReactEle
       <IncludeToggles
         legend='Import structures'
         emptyWarning='Choose at least one structure type; with both off the source is enabled but imports nothing.'
+        description={'Dams default off because the National Inventory of Dams lists tens of ' +
+          'thousands of dams nationwide, most of them not on navigable water, ' +
+          'which slows the chartplotter and obscures the locks.'}
         options={[
           {
-            id: 'usace-locks',
+            value: 'locks',
             label: 'Locks',
             checked: includeLocks,
             onChange: (enabled) => dispatch({ type: 'setUsaceIncludeLocks', enabled })
           },
           {
-            id: 'usace-dams',
+            value: 'dams',
             label: 'Dams',
             checked: includeDams,
             onChange: (enabled) => dispatch({ type: 'setUsaceIncludeDams', enabled })
           }
         ]}
-        footnote={
-          <p style={S.hintBelow}>
-            Dams default off because the National Inventory of Dams lists tens of
-            thousands of dams nationwide, most of them not on navigable water,
-            which slows the chartplotter and obscures the locks.
-          </p>
-        }
       />
-      <Disclosure>
-        <Fieldset title='Refresh and freshness'>
+      <SourceAdvanced>
+        <FieldGroup legend='Refresh and freshness'>
           <RefreshSecondsField
-            label='Refresh period (seconds)'
             upstreamHint={'USACE locks and dams change on an infrastructure ' +
-              'timescale, so the 30 minute default only spares the ArcGIS ' +
-              'services from re-serving identical structures; raise it freely.'}
+            'timescale, so the 30 minute default only spares the ArcGIS ' +
+            'services from re-serving identical structures; raise it freely.'}
             value={state.usaceRefreshSeconds ?? DEFAULT_USACE_DEBOUNCE_SECONDS}
             onChange={(seconds) => dispatch({ type: 'setUsaceRefreshSeconds', seconds })}
           />
-        </Fieldset>
+        </FieldGroup>
         <MergeWithActiveCaptain
           sourceName='USACE'
           enabled={dedupeEnabled}
@@ -75,7 +69,7 @@ export default function UsaceSource ({ state, dispatch }: Props): React.ReactEle
           radiusMeters={state.usaceDedupeRadiusMeters}
           onChangeRadius={(meters) => dispatch({ type: 'setUsaceDedupeRadius', meters })}
         />
-      </Disclosure>
+      </SourceAdvanced>
     </>
   )
 }

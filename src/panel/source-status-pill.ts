@@ -1,22 +1,30 @@
 /**
- * Pure helpers for the per-source status pill rendered by
- * `DataSourceCard.tsx`. Lives in its own non-TSX module so the unit
- * tests can import the variant + content logic without pulling in any
- * React JSX (the test tsconfig has `--jsx` off by design: source code
- * targets the panel tsconfig, tests target the node tsconfig).
+ * Pure helpers for the per-source status pill `DataSourceCard.tsx` renders in
+ * each card header, and for the detail sentence the expanded card shows under
+ * it. Lives in its own non-TSX module so the unit tests can import the
+ * classification and wording without pulling in any React JSX (the test
+ * tsconfig has `--jsx` off by design: source code targets the panel tsconfig,
+ * tests target the node tsconfig).
  */
 
-import { relativeTime } from './relative-time.js'
+import { capitalizeFirst } from '../shared/strings.js'
 import type { SourceStatus } from '../status/status-types.js'
 
 /** The four variants the status pill renders in. */
 export type PillVariant = 'idle' | 'waiting' | 'ok' | 'error'
 
-/** The display content of a status pill: the glyph, the short label, and the long tooltip. */
+/** The display content of a status pill and its detail line. */
 export interface PillContent {
-  glyph: string
+  /** The short label the header pill shows, e.g. `ok`. */
   label: string
-  title: string
+  /**
+   * The sentence the expanded card shows below the header, without its
+   * trailing period. For the `ok` variant it names the count from the last
+   * fetch and the card appends the fetch's relative age from `since`.
+   */
+  detail: string
+  /** The last list fetch's timestamp, present only for the `ok` variant. */
+  since?: string
 }
 
 /**
@@ -44,22 +52,21 @@ export function pillVariant (status: SourceStatus): PillVariant {
 }
 
 /**
- * Compose the visible glyph + short label and the longer tooltip text
- * for a pill in the given state. The `ok` tooltip includes a relative
- * "last fetch N minutes ago" reading so a stale snapshot is visible on
- * hover.
+ * Compose the short header label and the longer detail sentence for a pill in
+ * the given state. The `ok` detail carries the count from the last fetch and
+ * names the fetch timestamp so the card can show a live relative age.
  */
 export function pillContent (status: SourceStatus, variant: PillVariant): PillContent {
   if (variant === 'error') {
-    return { glyph: '!', label: 'error', title: `${status.name}: last request failed` }
+    return { label: 'error', detail: 'Last request failed' }
   }
   if (variant === 'waiting') {
     // A transient deferral: the fetch is still running and the next refresh
     // serves it, so the short label stays calm and the full reason (e.g.
-    // "list request exceeded 5s; result will appear on next refresh") rides
-    // the hover title.
+    // "list request exceeded 5s; result will appear on next refresh") is the
+    // detail.
     const reason = status.lastSkip?.reason ?? 'result will appear on next refresh'
-    return { glyph: '…', label: 'waiting', title: `${status.name}: ${reason}` }
+    return { label: 'waiting', detail: capitalizeFirst(reason) }
   }
   if (variant === 'idle') {
     // A skipping source explains itself, e.g. "Idle: outside US waters", so an
@@ -67,28 +74,23 @@ export function pillContent (status: SourceStatus, variant: PillVariant): PillCo
     // no reason it is simply awaiting its first request.
     if (status.lastSkip !== null) {
       return {
-        glyph: '…',
         label: `Idle: ${status.lastSkip.reason}`,
-        title: `${status.name}: ${status.lastSkip.reason}`
+        detail: capitalizeFirst(status.lastSkip.reason)
       }
     }
-    return { glyph: '…', label: 'idle', title: `${status.name}: awaiting first request` }
+    return { label: 'idle', detail: 'Awaiting first request' }
   }
   const fetch = status.lastListFetch as Exclude<SourceStatus['lastListFetch'], null>
   // The pill reports source HEALTH, not the count from the last fetch:
   // the count is just "what fell inside the chartplotter's most recent
   // bounding-box query", which is meaningless until you pan the chart.
-  // A user who sees "✓ 0 POI" on every source could reasonably think
+  // A user who sees "0 POI" on every collapsed card could reasonably think
   // nothing is selected, when in fact the sources are healthy and the
   // chart simply hasn't zoomed to anywhere with markers yet. The pill
-  // says "ok"; the longer "N POIs in last fetch, M minutes ago" lives
-  // in the hover/aria title.
-  const countText = fetch.poiCount === 1
+  // says "ok"; the "N POIs in last fetch, M minutes ago" sentence shows
+  // once the card is expanded.
+  const detail = fetch.poiCount === 1
     ? '1 POI in last fetch'
     : `${fetch.poiCount} POIs in last fetch`
-  return {
-    glyph: '✓',
-    label: 'ok',
-    title: `${status.name}: ${countText}, ${relativeTime(fetch.at)}`
-  }
+  return { label: 'ok', detail, since: fetch.at }
 }

@@ -1,5 +1,5 @@
 /**
- * Tests for the tri-state select-all derivation used by SelectAllCheckbox.
+ * Tests for the tri-state select-all derivation ActiveCaptainPoiTypes uses.
  */
 
 import test from 'node:test'

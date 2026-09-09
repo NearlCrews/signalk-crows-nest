@@ -7,13 +7,14 @@
  */
 
 import type * as React from 'react'
-import { Textarea } from 'signalk-nearlcrews-ui'
-import LabeledField from './LabeledField.js'
+import { LabeledField, Textarea } from 'signalk-nearlcrews-ui'
 import { RECOMMENDED_OVERPASS_FALLBACK_ENDPOINTS } from '../../shared/overpass-endpoints.js'
-import { S } from '../styles.js'
 
 /** Hoisted so the placeholder string is not re-joined on every render. */
 const PLACEHOLDER = RECOMMENDED_OVERPASS_FALLBACK_ENDPOINTS.join('\n')
+
+/** Room for the suggested mirrors without scrolling. */
+const VISIBLE_ROWS = 3
 
 interface Props {
   value: string[]
@@ -25,7 +26,8 @@ export default function FallbackEndpointsField ({ value, onChange }: Props): Rea
   return (
     <LabeledField
       label='Fallback endpoints'
-      hint={
+      layout='inline'
+      description={
         <>
           Optional Overpass mirrors, one per line, tried in order when the primary
           endpoint is unreachable. Leave empty to use only the primary. The
@@ -34,15 +36,13 @@ export default function FallbackEndpointsField ({ value, onChange }: Props): Rea
         </>
       }
     >
-      {(controlProps) => (
-        <Textarea
-          {...controlProps}
-          style={S.monoTextarea}
-          value={value.join('\n')}
-          placeholder={PLACEHOLDER}
-          onChange={(e) => onChange(e.target.value.split('\n'))}
-        />
-      )}
+      <Textarea
+        monospace
+        minRows={VISIBLE_ROWS}
+        value={value.join('\n')}
+        placeholder={PLACEHOLDER}
+        onChange={(event) => onChange(event.target.value.split('\n'))}
+      />
     </LabeledField>
   )
 }

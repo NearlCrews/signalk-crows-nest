@@ -8,20 +8,17 @@
 
 import type * as React from 'react'
 import type { Dispatch } from 'react'
-import { Select } from 'signalk-nearlcrews-ui'
+import { FieldGroup, LabeledField, Select } from 'signalk-nearlcrews-ui'
 import type { ConfigAction } from '../config-reducer.js'
 import { DEFAULT_MINIMUM_YEAR } from '../../shared/year-filter.js'
 import { DEFAULT_NOAA_ENC_DEBOUNCE_SECONDS } from '../../shared/bbox-debounce-bounds.js'
-import { S } from '../styles.js'
 import { DEFAULT_SCALE_BAND, SCALE_BAND_LABELS, SCALE_BANDS } from '../../shared/scale-band.js'
 import type { PluginConfig } from '../../shared/types.js'
-import Disclosure from './Disclosure.js'
-import Fieldset from './Fieldset.js'
 import IncludeToggles from './IncludeToggles.js'
-import LabeledField from './LabeledField.js'
 import MergeWithActiveCaptain from './MergeWithActiveCaptain.js'
 import MinimumYearField from './MinimumYearField.js'
 import RefreshSecondsField from './RefreshSecondsField.js'
+import SourceAdvanced from './SourceAdvanced.js'
 
 interface Props {
   state: PluginConfig
@@ -44,74 +41,67 @@ export default function NoaaEncSource ({ state, dispatch }: Props): React.ReactE
       <IncludeToggles
         legend='Import layers'
         emptyWarning='Choose at least one layer; with all three off the source is enabled but imports nothing.'
+        description={'Underwater rocks default off because a coastal-band query can ' +
+          'return tens of thousands of rocks, which slows the chartplotter and ' +
+          'obscures other hazards.'}
         options={[
           {
-            id: 'noaa-enc-wrecks',
+            value: 'wrecks',
             label: 'Wrecks',
             checked: includeWrecks,
             onChange: (enabled) => dispatch({ type: 'setNoaaEncIncludeWrecks', enabled })
           },
           {
-            id: 'noaa-enc-obstructions',
+            value: 'obstructions',
             label: 'Obstructions',
             checked: includeObstructions,
             onChange: (enabled) => dispatch({ type: 'setNoaaEncIncludeObstructions', enabled })
           },
           {
-            id: 'noaa-enc-rocks',
+            value: 'rocks',
             label: 'Underwater rocks',
             checked: includeRocks,
             onChange: (enabled) => dispatch({ type: 'setNoaaEncIncludeRocks', enabled })
           }
         ]}
-        footnote={
-          <p style={S.hintBelow}>
-            Underwater rocks default off because a coastal-band query can
-            return tens of thousands of rocks, which slows the chartplotter
-            and obscures other hazards.
-          </p>
-        }
       >
         <LabeledField
           label='Chart scale band'
-          hint={'Which ENC chart scale to query. Overview returns large-area ' +
+          layout='inline'
+          description={'Which ENC chart scale to query. Overview returns large-area ' +
             'features only; berthing returns the densest, finest detail. ' +
             'Coastal is the recommended default for most underway use.'}
         >
-          {(controlProps) => (
-            <Select
-              {...controlProps}
-              value={band}
-              onChange={(e) => dispatch({ type: 'setNoaaEncScaleBand', band: e.target.value })}
-            >
-              {SCALE_BANDS.map((bandId) => (
-                <option key={bandId} value={bandId}>{SCALE_BAND_LABELS[bandId]}</option>
-              ))}
-            </Select>
-          )}
+          <Select
+            value={band}
+            onChange={(event) => dispatch({ type: 'setNoaaEncScaleBand', band: event.target.value })}
+          >
+            {SCALE_BANDS.map((bandId) => (
+              <option key={bandId} value={bandId}>{SCALE_BAND_LABELS[bandId]}</option>
+            ))}
+          </Select>
         </LabeledField>
       </IncludeToggles>
-      <Disclosure>
-        <Fieldset title='Refresh and freshness'>
+      <SourceAdvanced>
+        <FieldGroup legend='Refresh and freshness'>
           <RefreshSecondsField
-            label='Refresh period (seconds)'
             upstreamHint={'NOAA refreshes ENC data weekly, so the 30 minute ' +
-              'default only spares the ArcGIS service from re-serving identical ' +
-              'wrecks; raise it freely.'}
+            'default only spares the ArcGIS service from re-serving identical ' +
+            'wrecks; raise it freely.'}
             value={state.noaaEncRefreshSeconds ?? DEFAULT_NOAA_ENC_DEBOUNCE_SECONDS}
             onChange={(seconds) => dispatch({ type: 'setNoaaEncRefreshSeconds', seconds })}
           />
           <MinimumYearField
             label='Earliest survey year'
             hint={'Hide features whose hydrographic survey was conducted before ' +
-              'this year. Leave at 0 to import every survey. SORDAT is the ' +
-              'survey date, not the chart refresh date, so a feature surveyed ' +
-              'in 1985 carries that year even though NOAA refreshes the chart ' +
-              'weekly. Features with no recorded survey date are always included.'}
+            'this year. Leave at 0 to import every survey. SORDAT is the ' +
+            'survey date, not the chart refresh date, so a feature surveyed ' +
+            'in 1985 carries that year even though NOAA refreshes the chart ' +
+            'weekly. Features with no recorded survey date are always included.'}
             value={minimumSurveyYear}
             onChange={(year) => dispatch({ type: 'setNoaaEncMinimumSurveyYear', year })}
           />
-        </Fieldset>
+        </FieldGroup>
         <MergeWithActiveCaptain
           sourceName='NOAA ENC'
           enabled={dedupeEnabled}
@@ -119,7 +109,7 @@ export default function NoaaEncSource ({ state, dispatch }: Props): React.ReactE
           radiusMeters={state.noaaEncDedupeRadiusMeters}
           onChangeRadius={(meters) => dispatch({ type: 'setNoaaEncDedupeRadius', meters })}
         />
-      </Disclosure>
+      </SourceAdvanced>
     </>
   )
 }

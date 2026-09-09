@@ -84,6 +84,14 @@ window.fetch = async (input): Promise<Response> => {
   const rawUrl = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
   const path = new URL(rawUrl, window.location.origin).pathname
   if (path.endsWith('/api/status')) {
+    // A status endpoint that never answers, so the panel's poll-failure
+    // banner and the announcement that goes with it are measurable.
+    if (fixtureParams.has('status-error')) {
+      return new Response(JSON.stringify({ error: 'status unavailable' }), {
+        status: 503,
+        headers: { 'content-type': 'application/json' }
+      })
+    }
     return new Response(JSON.stringify(statusPayload), {
       status: 200,
       headers: { 'content-type': 'application/json' }

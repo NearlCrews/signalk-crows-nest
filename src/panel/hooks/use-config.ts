@@ -45,9 +45,9 @@ export function useConfig (configuration: unknown): UseConfigResult {
   // Keep markSaveRequested's identity stable across renders by reading the latest
   // state through a ref, assigned during render (the same pattern the panel
   // root uses for handleSave) so the ref can never lag a committed state.
-  // The previous `useCallback(_, [state])` recreated this callback on every
-  // keystroke, cascading through handleSave and re-rendering FooterBar even
-  // when only an unrelated field changed.
+  // A `useCallback(_, [state])` would recreate this callback on every
+  // keystroke, cascading through handleSave and re-rendering the save bar
+  // even when only an unrelated field changed.
   const stateRef = useRef(state)
   stateRef.current = state
   const markSaveRequested = useCallback((): void => {

@@ -1,22 +1,20 @@
 /**
  * Number input for a per-source bbox-debounce window, in seconds. A thin
- * wrapper around NumberField that fixes the `[0, 3600]` clamp and the
- * integer step every refresh-seconds field needs. The shared
- * stale-while-revalidate mechanism is described here, once, so the three
- * cards cannot drift on how the cache behaves; each card passes only the
- * sentence about its own upstream.
+ * wrapper around the shared NumberField that fixes the `[0, 3600]` clamp
+ * every refresh-seconds field needs. The shared stale-while-revalidate
+ * mechanism is described here, once, so the cards cannot drift on how the
+ * cache behaves; each card passes only the sentence about its own upstream.
  */
 
 import type * as React from 'react'
+import { NumberField } from 'signalk-nearlcrews-ui'
+import { useDraftResetKey } from '../hooks/draft-reset-context.js'
 import {
   MAX_BBOX_DEBOUNCE_SECONDS,
   MIN_BBOX_DEBOUNCE_SECONDS
 } from '../../shared/bbox-debounce-bounds.js'
-import NumberField from './NumberField.js'
 
 interface Props {
-  /** Visible field label, e.g. `Refresh period (seconds)`. */
-  label: string
   /**
    * The upstream-specific sentence appended to the shared mechanism
    * description: name the source's upstream and why its default cadence
@@ -31,15 +29,14 @@ interface Props {
 
 /** The shared per-bbox refresh-period field used by the at-runtime cards. */
 export default function RefreshSecondsField ({
-  label,
   upstreamHint,
   value,
   onChange
 }: Props): React.ReactElement {
   return (
     <NumberField
-      label={label}
-      hint={
+      label='Refresh period'
+      description={
         <>
           How long to reuse the most recent result for the same chart viewport
           before re-querying in the background. An already-seen view is served
@@ -48,12 +45,15 @@ export default function RefreshSecondsField ({
           call. {upstreamHint}
         </>
       }
+      layout='inline'
+      unit='seconds'
       value={value}
-      onChange={onChange}
+      onValueChange={onChange}
       min={MIN_BBOX_DEBOUNCE_SECONDS}
       max={MAX_BBOX_DEBOUNCE_SECONDS}
+      fallback={MIN_BBOX_DEBOUNCE_SECONDS}
       integer
-      step={5}
+      resetKey={useDraftResetKey()}
     />
   )
 }

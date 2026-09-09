@@ -8,18 +8,17 @@
 
 import type * as React from 'react'
 import type { Dispatch } from 'react'
+import { FieldGroup, NumberField, Text } from 'signalk-nearlcrews-ui'
 import type { ConfigAction } from '../config-reducer.js'
 import {
   DEFAULT_USCG_LNM_DEBOUNCE_SECONDS,
   MAX_BBOX_DEBOUNCE_SECONDS,
   MIN_BBOX_DEBOUNCE_SECONDS
 } from '../../shared/bbox-debounce-bounds.js'
-import { S } from '../styles.js'
 import type { PluginConfig } from '../../shared/types.js'
-import Disclosure from './Disclosure.js'
-import Fieldset from './Fieldset.js'
+import { useDraftResetKey } from '../hooks/draft-reset-context.js'
 import MergeWithActiveCaptain from './MergeWithActiveCaptain.js'
-import NumberField from './NumberField.js'
+import SourceAdvanced from './SourceAdvanced.js'
 
 interface Props {
   state: PluginConfig
@@ -30,32 +29,36 @@ interface Props {
 export default function UscgLnmSource ({ state, dispatch }: Props): React.ReactElement {
   // Dedupe defaults on: an absent value is treated as checked.
   const dedupeEnabled = state.uscgLnmDedupe !== false
+  const resetKey = useDraftResetKey()
 
   return (
     <>
-      <p style={S.hint}>
+      <Text as='p' tone='muted' size='sm'>
         Imports live Local Notice to Mariners layers from USCG NAVCEN: reported
         hazards and obstructions, discrepant and off-station aids, temporary
         changes, dredging and marine construction, bridge notices, and general
         marine-safety notices. Hazard and discrepant-aid notices are marked as
         hazards so the proximity and route alarms pick them up. US waters only.
-      </p>
-      <Disclosure>
-        <Fieldset title='Refresh and freshness'>
+      </Text>
+      <SourceAdvanced>
+        <FieldGroup legend='Refresh and freshness'>
           <NumberField
-            label='Refresh period (seconds)'
-            hint={'How often the plugin re-downloads the NAVCEN notice files in ' +
-              'the background. NAVCEN republishes the notices about every 15 ' +
-              'minutes, so the default matches that cadence; leave at 0 to use ' +
-              'the default.'}
+            label='Refresh period'
+            description={'How often the plugin re-downloads the NAVCEN notice files in ' +
+            'the background. NAVCEN republishes the notices about every 15 ' +
+            'minutes, so the default matches that cadence; leave at 0 to use ' +
+            'the default.'}
+            layout='inline'
+            unit='seconds'
             value={state.uscgLnmRefreshSeconds ?? DEFAULT_USCG_LNM_DEBOUNCE_SECONDS}
-            onChange={(seconds) => dispatch({ type: 'setUscgLnmRefreshSeconds', seconds })}
+            onValueChange={(seconds) => dispatch({ type: 'setUscgLnmRefreshSeconds', seconds })}
             min={MIN_BBOX_DEBOUNCE_SECONDS}
             max={MAX_BBOX_DEBOUNCE_SECONDS}
-            step={30}
+            fallback={MIN_BBOX_DEBOUNCE_SECONDS}
             integer
+            resetKey={resetKey}
           />
-        </Fieldset>
+        </FieldGroup>
         <MergeWithActiveCaptain
           sourceName='USCG Local Notice to Mariners'
           enabled={dedupeEnabled}
@@ -63,7 +66,7 @@ export default function UscgLnmSource ({ state, dispatch }: Props): React.ReactE
           radiusMeters={state.uscgLnmDedupeRadiusMeters}
           onChangeRadius={(meters) => dispatch({ type: 'setUscgLnmDedupeRadius', meters })}
         />
-      </Disclosure>
+      </SourceAdvanced>
     </>
   )
 }

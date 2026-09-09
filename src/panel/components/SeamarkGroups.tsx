@@ -1,61 +1,36 @@
 /**
  * The OpenSeaMap seamark-group selector: a checklist of the four feature
- * groups the OpenSeaMap source can import. A note appears when nothing is
- * selected, because the source then has nothing to fetch.
+ * groups the OpenSeaMap source can import, with a select-all box and a
+ * warning when nothing is selected, because the source then has nothing to
+ * fetch. The shared `CheckboxGroup` reports the selection in option order,
+ * which is the canonical group order, so toggling a group off and on again
+ * never reshuffles the stored list.
  */
 
 import type * as React from 'react'
-import { Checkbox } from 'signalk-nearlcrews-ui'
+import { CheckboxGroup } from 'signalk-nearlcrews-ui/composites'
 import { SEAMARK_GROUP_REFS } from '../../shared/seamark-groups.js'
-import { S } from '../styles.js'
-import Fieldset from './Fieldset.js'
-import SelectAllCheckbox from './SelectAllCheckbox.js'
+
+/** Hoisted so the option list is not rebuilt on every render. */
+const OPTIONS = SEAMARK_GROUP_REFS.map((group) => ({ value: group.id, label: group.label }))
 
 interface Props {
   /** The currently selected seamark group ids. */
   selected: string[]
-  /** Called when a group checkbox is toggled. */
-  onToggle: (id: string, enabled: boolean) => void
-  /** Called with the state every group should take (select-all control). */
-  onSetAll: (enabled: boolean) => void
+  /** Called with the new selection, in canonical group order. */
+  onChange: (groups: string[]) => void
 }
 
 /** The seamark feature-group checkboxes shown in the OpenSeaMap card body. */
-export default function SeamarkGroups ({ selected, onToggle, onSetAll }: Props): React.ReactElement {
-  const selectedSet = new Set(selected)
-  const selectedCount = SEAMARK_GROUP_REFS.filter((group) => selectedSet.has(group.id)).length
+export default function SeamarkGroups ({ selected, onChange }: Props): React.ReactElement {
   return (
-    <div style={S.groupsSection}>
-      <Fieldset
-        title='Feature groups to import'
-        actions={
-          <SelectAllCheckbox
-            label='All groups'
-            checkedCount={selectedCount}
-            total={SEAMARK_GROUP_REFS.length}
-            onSetAll={onSetAll}
-          />
-        }
-      >
-        <div style={S.checkboxGrid}>
-          {SEAMARK_GROUP_REFS.map((group) => (
-            <Checkbox
-              key={group.id}
-              label={group.label}
-              checked={selectedSet.has(group.id)}
-              onChange={(event) => onToggle(group.id, event.target.checked)}
-            />
-          ))}
-        </div>
-      </Fieldset>
-      {selected.length === 0
-        ? (
-          <p style={S.hint}>
-            No feature groups are selected, so the OpenSeaMap source imports
-            nothing. Choose at least one group.
-          </p>
-          )
-        : null}
-    </div>
+    <CheckboxGroup<string>
+      legend='Feature groups to import'
+      options={OPTIONS}
+      value={selected}
+      onValueChange={(values) => onChange([...values])}
+      selectAllLabel='All groups'
+      emptyWarning='No feature groups are selected, so the OpenSeaMap source imports nothing. Choose at least one group.'
+    />
   )
 }

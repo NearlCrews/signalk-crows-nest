@@ -1,8 +1,8 @@
 /**
  * Pure logic for a tri-state select-all checkbox over a group of toggles.
  *
- * Extracted from SelectAllCheckbox so it can be unit-tested without a React
- * renderer, following the footer-bar-state pattern.
+ * Kept out of the component that renders the checkbox so the derivation can
+ * be unit-tested without a React renderer.
  */
 
 /** The visual state a select-all checkbox should render. */

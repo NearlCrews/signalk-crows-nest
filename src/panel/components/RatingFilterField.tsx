@@ -1,13 +1,18 @@
 /**
- * Number input for the minimumRating setting. A thin wrapper around
- * NumberField that fixes the label, hint, and 0-to-5 clamp the rating range
- * needs. Fractional ratings such as 3.5 are allowed.
+ * Number input for the minimumRating setting. A thin wrapper around the
+ * shared NumberField that fixes the label, hint, and 0-to-5 clamp the rating
+ * range needs. Ratings step in halves: the arrows move half a star and a typed
+ * value snaps to the nearest half, which is the precision ActiveCaptain
+ * reviews carry.
  */
 
 import type * as React from 'react'
+import { NumberField } from 'signalk-nearlcrews-ui'
+import { useDraftResetKey } from '../hooks/draft-reset-context.js'
 import { MAX_RATING, MIN_RATING } from '../../shared/rating.js'
-import NumberField from './NumberField.js'
-import { HALF_UNIT_STEP } from '../step-sizes.js'
+
+/** Half a star per arrow press, and the resolution typed ratings snap to. */
+const HALF_STAR_STEP = 0.5
 
 interface Props {
   value: number
@@ -19,12 +24,15 @@ export default function RatingFilterField ({ value, onChange }: Props): React.Re
   return (
     <NumberField
       label='Minimum rating'
-      hint={`Hide points of interest whose average review rating is below this value (${MIN_RATING} to ${MAX_RATING}). Leave it at ${MIN_RATING} to show every rating.`}
+      description={`Hide points of interest whose average review rating is below this value (${MIN_RATING} to ${MAX_RATING}). Leave it at ${MIN_RATING} to show every rating.`}
+      layout='inline'
       value={value}
-      onChange={onChange}
+      onValueChange={onChange}
       min={MIN_RATING}
       max={MAX_RATING}
-      step={HALF_UNIT_STEP}
+      step={HALF_STAR_STEP}
+      fallback={MIN_RATING}
+      resetKey={useDraftResetKey()}
     />
   )
 }
