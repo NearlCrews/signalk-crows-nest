@@ -226,12 +226,34 @@ export function createLnmClient (config: LnmClientConfig = {}): LnmClient {
       if (result.status !== 'ok') {
         return result
       }
-      const collection = JSON.parse(result.body) as { features?: LnmFeature[] }
+      const collection = JSON.parse(result.body) as { features?: LnmFeature[] } | null
+      const features = collection?.features
+      // A GeoJSON file always ships a features array, empty when the layer
+      // page holds nothing. Anything else is valid JSON in a shape this parser
+      // does not know, so it is reported as a failure rather than coerced to
+      // an empty file: the refresh treats an empty file as authoritative and
+      // would drop every notice stored for this layer page.
+      if (!Array.isArray(features)) {
+        return { status: 'error', message: 'response carried no GeoJSON features array' }
+      }
       const records: LnmRecord[] = []
-      for (const feature of collection.features ?? []) {
+      for (const feature of features) {
         const parsed = parseFeature(feature, layer)
         if (parsed !== null) {
           records.push(parsed)
+        }
+      }
+      // A file that arrived full and yielded no record is what an upstream
+      // property rename looks like, and it is reported as a failure rather
+      // than as an empty file. The caller replaces a layer file wholesale with
+      // what it is handed, and an empty file is authoritative there, so
+      // passing this up as a success would drop every stored notice for the
+      // file. On the Hazard-typed danger layers that is the proximity alarm
+      // and the route scan going quiet behind a green status row.
+      if (records.length === 0 && features.length > 0) {
+        return {
+          status: 'error',
+          message: `${features.length} features on the wire, none parseable`
         }
       }
       return { status: 'ok', records, headers: result.headers }

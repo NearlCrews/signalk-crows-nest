@@ -266,11 +266,21 @@ test('refreshAll iterates every district page when the vessel is in US waters', 
   }
 })
 
-test('refreshAll records an error status when a district download fails', async () => {
+test('a failed district download records an error and keeps the stored page', async () => {
+  // Every wire failure reaches the source as an error result, the client's
+  // "the page arrived full and nothing parsed" report included, and none of
+  // them may reach `upsertDistrict`: replacing the page would drop every
+  // stored aid and take the proximity alarm quiet, and advancing the
+  // validators would earn a 304 against the bad body and make the outage
+  // stick until NAVCEN changed again.
   const dir = await mkdtemp(join(tmpdir(), 'll-src-'))
   try {
     const store = createLightListStore(dir)
     await store.load()
+    store.upsertDistrict('D01', 1, [sampleRecord()], {
+      lastModified: 'Mon, 01 Sep 2026 00:00:00 GMT',
+      etag: '"good"'
+    })
     const { events, status } = createStubStatus()
     const client: LightListClient = {
       downloadDistrict: async (): Promise<DownloadResult> =>
@@ -286,6 +296,12 @@ test('refreshAll records an error status when a district download fails', async 
     })
     await source.refreshAll()
     assert.ok(events.some(event => event.startsWith(`error:${USCG_LIGHT_LIST_SOURCE_ID}`)))
+    assert.ok(!events.some(event => event.startsWith(`list:${USCG_LIGHT_LIST_SOURCE_ID}`)),
+      'a failed pass must not report a successful fetch')
+    assert.equal(store.recordCount(), 1, 'the stored aid survives a failed refresh')
+    const meta = store.snapshot().districts.D01_1
+    assert.equal(meta?.lastModified, 'Mon, 01 Sep 2026 00:00:00 GMT')
+    assert.equal(meta?.etag, '"good"')
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
@@ -498,6 +514,41 @@ test('an all-304 refresh pass records the ingested count, not the index size', a
     await source.refreshAll()
     assert.ok(events.includes(`list:${USCG_LIGHT_LIST_SOURCE_ID}:0`),
       'a pass where every page answered 304 ingested nothing')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('a page the upstream really publishes empty clears its stored records', async () => {
+  // The other half of the guard: a page NAVCEN genuinely empties still
+  // replaces its record set, so a retired aid stops serving. Only "features
+  // arrived and none parsed" is treated as a failure.
+  const dir = await mkdtemp(join(tmpdir(), 'll-empty-'))
+  try {
+    const store = createLightListStore(dir)
+    await store.load()
+    loadOne(store)
+    const { events, status } = createStubStatus()
+    const client: LightListClient = {
+      downloadDistrict: async (district, page): Promise<DownloadResult> =>
+        district === 'D01' && page === 1
+          ? { status: 'ok', records: [], headers: { etag: '"empty"' } }
+          : { status: 'not-modified' }
+    }
+    const source = createUscgLightListSource({
+      client,
+      store,
+      minimumYear: 0,
+      status,
+      getCurrentPosition: () => ({ latitude: 42.36, longitude: -71.05 })
+    })
+    await source.refreshAll()
+
+    assert.equal(store.recordCount(), 0, 'a genuinely empty page still replaces its records')
+    assert.ok(events.includes(`list:${USCG_LIGHT_LIST_SOURCE_ID}:0`),
+      'an empty page is a successful fetch, not an error')
+    assert.equal(store.snapshot().districts.D01_1?.etag, '"empty"',
+      'a successful empty page still advances its validators')
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

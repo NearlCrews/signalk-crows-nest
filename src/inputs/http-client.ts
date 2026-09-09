@@ -12,7 +12,7 @@
 import type { Logger } from '../shared/types.js'
 import { parseRetryAfterMs } from '../shared/retry-after.js'
 import { combineAbortSignals } from '../shared/abort.js'
-import { DEFAULT_MAX_RESPONSE_BYTES } from './http-one-shot.js'
+import { DEFAULT_MAX_RESPONSE_BYTES, ResponseTooLargeError } from './http-one-shot.js'
 
 /** Tunable rate-limit knobs. All optional at the call site; defaults fill gaps. */
 export interface RateLimitOptions {
@@ -258,13 +258,6 @@ export interface HttpClient {
  * for {@link createHttpClient}; injectable for tests.
  */
 export type Sleep = (ms: number, signal?: AbortSignal) => Promise<void>
-
-class ResponseTooLargeError extends Error {
-  constructor (label: string, url: string, maxResponseBytes: number) {
-    super(`${label} response exceeds ${maxResponseBytes} bytes: ${url}`)
-    this.name = 'ResponseTooLargeError'
-  }
-}
 
 /**
  * Wrap a fetch response in a byte-counting stream. This preserves streaming

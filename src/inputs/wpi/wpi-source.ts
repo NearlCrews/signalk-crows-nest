@@ -246,6 +246,16 @@ export function createWpiSource (config: WpiSourceConfig): PoiSource {
       // row reuses them rather than re-deriving the pair.
       rows.push({ lat: summary.position.latitude, lon: summary.position.longitude, summary })
     }
+    // The dump carried ports and not one of them yielded a listable row, which
+    // is what an upstream field rename looks like. The replace below is
+    // authoritative, so applying it would drop the whole worldwide index while
+    // the list call still reported a fresh fetch. Throwing instead hands the
+    // pass to the offline fallback, which serves the ports already loaded and
+    // records the failure, and leaves `lastFetchedAt` unadvanced so the set is
+    // never marked fresh on an unusable dump.
+    if (ports.length > 0 && rows.length === 0) {
+      throw new Error(`World Port Index carried ${ports.length} ports, none usable`)
+    }
     // A successful full dump is authoritative. Replace the complete snapshot
     // only after it has been parsed so an interrupted refresh retains the last
     // good dataset, while ports removed upstream disappear everywhere.

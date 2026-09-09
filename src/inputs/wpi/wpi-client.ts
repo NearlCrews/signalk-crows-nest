@@ -56,8 +56,17 @@ export function createWpiClient (config: WpiClientConfig = {}): WpiClient {
       const url = buildUrl(baseUrl)
       const parsed = await requestJson(
         url, headers, REQUEST_TIMEOUT_MS, 'World Port Index', signal
-      ) as WpiListResponse
-      return parsed.ports ?? []
+      ) as WpiListResponse | null
+      const ports = parsed?.ports
+      // The envelope always carries a ports array, empty when NGA publishes
+      // nothing. Anything else is valid JSON in a shape this client does not
+      // know, so it rejects rather than coercing to an empty index: the source
+      // treats a full dump as authoritative and would replace the whole
+      // worldwide set with nothing while still reporting a fresh fetch.
+      if (!Array.isArray(ports)) {
+        throw new Error('World Port Index response carried no ports array')
+      }
+      return ports
     }
   }
 }

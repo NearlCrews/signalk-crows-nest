@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { createLightListClient } from '../src/inputs/uscg-light-list/light-list-client.js'
-import { startStubServer, type StubServer } from './helpers.js'
+import { startJsonServer, startStubServer, type StubServer } from './helpers.js'
 
 /**
  * A stub NAVCEN server that serves the district fixture with Last-Modified
@@ -86,6 +86,94 @@ test('downloadDistrict sends the descriptive User-Agent', async () => {
     await client.downloadDistrict('D01', 1)
     const userAgent = server.requests.at(-1)?.headers['user-agent']
     assert.match(userAgent ?? '', /signalk-crows-nest/)
+  } finally {
+    await server.close()
+  }
+})
+
+test('downloadDistrict keeps a page whose features only partly parse', async () => {
+  // Dropping the features this parser cannot read is normal: the page is still
+  // a good page, and every record that did parse must reach the store.
+  const server = await startJsonServer({
+    type: 'FeatureCollection',
+    features: [
+      {
+        properties: {
+          LIGHT_LIST_NUMBER: 100,
+          VOLUME_NUMBER: '01',
+          NAME: 'Good Light',
+          DECIMAL_LATITUDE: 42.1,
+          DECIMAL_LONGITUDE: -70.9
+        }
+      },
+      // Renamed coordinate keys: what an upstream schema change looks like.
+      { properties: { LIGHT_LIST_NUMBER: 101, VOLUME_NUMBER: '01', LAT: 42.2, LON: -70.8 } },
+      { properties: { LIGHT_LIST_NUMBER: 102, VOLUME_NUMBER: '01', LAT: 42.3, LON: -70.7 } }
+    ]
+  })
+  try {
+    const client = createLightListClient({ baseUrl: server.url })
+    const result = await client.downloadDistrict('D01', 1)
+    assert.equal(result.status, 'ok')
+    if (result.status !== 'ok') return
+    assert.equal(result.records.length, 1)
+  } finally {
+    await server.close()
+  }
+})
+
+test('downloadDistrict reports an error when a full page yields no record', async () => {
+  // NAVCEN renames a property and every feature on a 200 stops parsing. The
+  // source replaces a district page wholesale with what it is handed, so
+  // reporting this as an empty page would drop every stored aid for the page
+  // and take the proximity alarm quiet behind a green status row. Failing here
+  // also leaves the stored validators alone, so the next tick re-requests the
+  // page instead of being answered 304 against the unparseable one.
+  const server = await startJsonServer({
+    type: 'FeatureCollection',
+    features: [
+      { properties: { LIGHT_LIST_NUMBER: 100, VOLUME_NUMBER: '01', LAT: 42.1, LON: -70.9 } },
+      { properties: { LIGHT_LIST_NUMBER: 101, VOLUME_NUMBER: '01', LAT: 42.2, LON: -70.8 } },
+      { properties: { LIGHT_LIST_NUMBER: 102, VOLUME_NUMBER: '01', LAT: 42.3, LON: -70.7 } }
+    ]
+  })
+  try {
+    const client = createLightListClient({ baseUrl: server.url })
+    const result = await client.downloadDistrict('D01', 1)
+    assert.equal(result.status, 'error')
+    if (result.status !== 'error') return
+    assert.match(result.message, /3 features on the wire, none parseable/)
+  } finally {
+    await server.close()
+  }
+})
+
+test('downloadDistrict reports an empty page as zero records, not an error', async () => {
+  // A district page NAVCEN publishes with nothing on it is a legitimate answer
+  // and must stay representable without an error, so a page that really did
+  // empty still clears its stored aids.
+  const server = await startJsonServer({ type: 'FeatureCollection', features: [] })
+  try {
+    const client = createLightListClient({ baseUrl: server.url })
+    const result = await client.downloadDistrict('D01', 1)
+    assert.equal(result.status, 'ok')
+    if (result.status !== 'ok') return
+    assert.equal(result.records.length, 0)
+  } finally {
+    await server.close()
+  }
+})
+
+test('downloadDistrict reports an error when the body carries no features array', async () => {
+  // Valid JSON in an unexpected shape. Coercing the missing array to an empty
+  // page told the refresh the district really had emptied, which wiped it.
+  const server = await startJsonServer({ type: 'FeatureCollection', records: [] })
+  try {
+    const client = createLightListClient({ baseUrl: server.url })
+    const result = await client.downloadDistrict('D01', 1)
+    assert.equal(result.status, 'error')
+    if (result.status !== 'error') return
+    assert.match(result.message, /no GeoJSON features array/)
   } finally {
     await server.close()
   }

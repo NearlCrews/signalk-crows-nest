@@ -105,12 +105,32 @@ export function createCoopsClient (config: CoopsClientConfig = {}): CoopsClient 
       if (result.status !== 'ok') {
         return result
       }
-      const parsed = JSON.parse(result.body) as CoopsStationsResponse
+      const parsed = JSON.parse(result.body) as CoopsStationsResponse | null
+      const stations = parsed?.stations
+      // The mdapi always answers with a stations array, empty when the family
+      // holds nothing. Anything else is valid JSON in a shape this parser does
+      // not know, so it is reported as a failure rather than coerced to an
+      // empty list: the refresh treats an empty list as authoritative and
+      // would drop every station stored for this family.
+      if (!Array.isArray(stations)) {
+        return { status: 'error', message: 'response carried no stations array' }
+      }
       const records: CoopsStationRecord[] = []
-      for (const station of parsed.stations ?? []) {
+      for (const station of stations) {
         const record = parseStation(station, stationType)
         if (record !== null) {
           records.push(record)
+        }
+      }
+      // A list that arrived full and yielded no record is what an upstream
+      // field rename looks like, and it is reported as a failure rather than
+      // as an empty family. The caller replaces a station family wholesale
+      // with what it is handed, and an empty list is authoritative there, so
+      // passing this up as a success would drop every stored station.
+      if (records.length === 0 && stations.length > 0) {
+        return {
+          status: 'error',
+          message: `${stations.length} stations on the wire, none parseable`
         }
       }
       return { status: 'ok', records, headers: result.headers }

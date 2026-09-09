@@ -17,6 +17,7 @@ import type { WpiPort } from '../src/inputs/wpi/wpi-types.js'
 import type { Bbox } from '../src/shared/types.js'
 import { WPI_SOURCE_ID } from '../src/shared/source-ids.js'
 import { MAX_POI_CACHE_ENTRIES } from '../src/shared/cache.js'
+import { MS_PER_HOUR } from '../src/shared/time.js'
 import { createStubStatus, withTempDir } from './helpers.js'
 
 const brooklyn: WpiPort = {
@@ -408,4 +409,72 @@ test('a detail miss inside the freshness window records no unearned success', as
   // repaint the pill green during an outage.
   await assert.rejects(() => source.getDetails('99999'), /99999/)
   assert.deepEqual(events, [])
+})
+
+test('a dump whose ports all fail to parse keeps the loaded index and records a stale serve', async () => {
+  // The wire-shape defect this guards: NGA renames a field, every port in the
+  // full dump fails to yield a listable row, and the authoritative replace
+  // drops the whole worldwide index while the list call still reports a fresh
+  // fetch.
+  await withTempDir('wpi-source-', async (dir) => {
+    // The second dump arrives with every coordinate key renamed.
+    const renamed = [
+      { portNumber: 7630, portName: 'Brooklyn', lon: -74.0167, lat: 40.6667 },
+      { portNumber: 48430, portName: 'Abadan', lon: 48.2833, lat: 30.3333 }
+    ] as unknown as WpiPort[]
+    let ports: WpiPort[] = [brooklyn, abadan]
+    let clock = 0
+    const client: FakeClient = { fetchAllPorts: async () => ports }
+    const { events, status } = createStubStatus()
+    const source = createWpiSource({
+      client: client as never,
+      refreshHours: 24,
+      status: status as never,
+      dataDir: dir,
+      now: () => clock
+    })
+    assert.equal((await source.listPointsOfInterest(NY_BBOX, '')).length, 1)
+
+    ports = renamed
+    clock += 25 * MS_PER_HOUR // past the refresh window, so the dump is re-fetched
+    const list = await source.listPointsOfInterest(NY_BBOX, '')
+
+    assert.equal(list.length, 1, 'the previously loaded port still lists')
+    assert.equal(list[0].id, '7630')
+    assert.ok(
+      events.some((e) => e === `stale:${WPI_SOURCE_ID}:World Port Index unreachable`),
+      'the serve is recorded as stale, not as a fresh fetch'
+    )
+    assert.equal(source.cacheSize(), 2, 'the loaded index survives an unusable dump')
+    source.close()
+  })
+})
+
+test('a dump the upstream really publishes empty clears the loaded index', async () => {
+  // The other half of the guard: an upstream that genuinely publishes no
+  // ports still replaces the set, so a delisted port stops serving. Only
+  // "ports arrived and none usable" is treated as a failure.
+  await withTempDir('wpi-source-', async (dir) => {
+    let ports: WpiPort[] = [brooklyn]
+    let clock = 0
+    const client: FakeClient = { fetchAllPorts: async () => ports }
+    const { events, status } = createStubStatus()
+    const source = createWpiSource({
+      client: client as never,
+      refreshHours: 24,
+      status: status as never,
+      dataDir: dir,
+      now: () => clock
+    })
+    assert.equal((await source.listPointsOfInterest(NY_BBOX, '')).length, 1)
+
+    ports = []
+    clock += 25 * MS_PER_HOUR
+    assert.equal((await source.listPointsOfInterest(NY_BBOX, '')).length, 0,
+      'a genuinely empty dump still replaces the set')
+    assert.equal(source.cacheSize(), 0)
+    assert.ok(!events.some((e) => e.startsWith(`stale:${WPI_SOURCE_ID}`)),
+      'an empty dump is a successful fetch, not an outage')
+    source.close()
+  })
 })

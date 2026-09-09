@@ -167,13 +167,31 @@ test('refreshAll skips outbound HTTP when the vessel is outside US waters', asyn
   })
 })
 
-test('refreshAll records an error status when a file download fails', async () => {
+test('a failed file download records an error and keeps the stored notices', async () => {
+  // Every wire failure reaches the source as an error result, the client's
+  // "the file arrived full and nothing parsed" report included, and none of
+  // them may reach `upsertFile`: replacing the file would drop every stored
+  // notice, and on the Hazard-typed danger layers that takes the proximity
+  // alarm and the route scan quiet. Leaving the validators alone keeps the
+  // next tick re-requesting the file rather than being answered 304 against
+  // the bad body, which would make the outage stick.
   await withStore(async (store) => {
+    store.upsertFile('haznav_1', [noticeRecord(58, 42.4, -70.9)], {
+      lastModified: 'Mon, 01 Sep 2026 00:00:00 GMT',
+      etag: '"good"'
+    })
     const { client } = stubClient(() => ({ status: 'error', message: 'HTTP 500' }))
     const { events, status } = createStubStatus()
     const source = createUscgLnmSource({ client, store, status, getCurrentPosition: () => BOSTON })
     await source.refreshAll()
     assert.ok(events.some((event) => event.startsWith(`error:${USCG_LNM_SOURCE_ID}`)))
+    assert.ok(!events.some((event) => event.startsWith(`list:${USCG_LNM_SOURCE_ID}`)),
+      'a failed pass must not report a successful fetch')
+    assert.equal(store.recordCount(), 1, 'the stored notice survives a failed refresh')
+    assert.deepEqual(store.headersFor('haznav_1'), {
+      lastModified: 'Mon, 01 Sep 2026 00:00:00 GMT',
+      etag: '"good"'
+    })
   })
 })
 
@@ -313,5 +331,27 @@ test('refreshAll prunes a store file that left the pinned catalog', async () => 
       'the retired file record no longer serves')
     assert.equal(store.headersFor('discfedaid_9'), undefined,
       'the retired file entry is gone from the store')
+  })
+})
+
+test('a file the upstream really publishes empty clears its stored notices', async () => {
+  // The other half of the guard: a file NAVCEN genuinely empties still
+  // replaces its record set, so a cancelled notice stops serving. Only
+  // "features arrived and none parsed" is treated as a failure.
+  await withStore(async (store) => {
+    store.upsertFile('haznav_1', [noticeRecord(58, 42.4, -70.9)], { etag: '"good"' })
+    const { client } = stubClient((slug, page) =>
+      slug === 'haznav' && page === 1
+        ? { status: 'ok', records: [], headers: { etag: '"empty"' } }
+        : { status: 'not-modified' })
+    const { events, status } = createStubStatus()
+    const source = createUscgLnmSource({ client, store, status, getCurrentPosition: () => BOSTON })
+    await source.refreshAll()
+
+    assert.equal(store.recordCount(), 0, 'a genuinely empty file still replaces its records')
+    assert.ok(events.includes(`list:${USCG_LNM_SOURCE_ID}:0`),
+      'an empty file is a successful fetch, not an error')
+    assert.deepEqual(store.headersFor('haznav_1'), { etag: '"empty"' },
+      'a successful empty file still advances its validators')
   })
 })

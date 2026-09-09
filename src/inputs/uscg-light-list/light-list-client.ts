@@ -157,12 +157,33 @@ export function createLightListClient (
       if (result.status !== 'ok') {
         return result
       }
-      const collection = JSON.parse(result.body) as { features?: LightListFeature[] }
+      const collection = JSON.parse(result.body) as { features?: LightListFeature[] } | null
+      const features = collection?.features
+      // A GeoJSON page always ships a features array, empty when the page
+      // holds nothing. Anything else is valid JSON in a shape this parser does
+      // not know, so it is reported as a failure rather than coerced to an
+      // empty page: the refresh treats an empty page as authoritative and
+      // would drop every aid stored for this district.
+      if (!Array.isArray(features)) {
+        return { status: 'error', message: 'response carried no GeoJSON features array' }
+      }
       const records: LightListRecord[] = []
-      for (const feature of collection.features ?? []) {
+      for (const feature of features) {
         const parsed = parseFeature(feature, district)
         if (parsed !== null) {
           records.push(parsed)
+        }
+      }
+      // A page that arrived full and yielded no record is what an upstream
+      // property rename looks like, and it is reported as a failure rather
+      // than as an empty page. The caller replaces a district page wholesale
+      // with what it is handed, and an empty page is authoritative there, so
+      // passing this up as a success would drop every stored aid for the page
+      // and take the proximity alarm quiet behind a green status row.
+      if (records.length === 0 && features.length > 0) {
+        return {
+          status: 'error',
+          message: `${features.length} features on the wire, none parseable`
         }
       }
       return { status: 'ok', records, headers: result.headers }

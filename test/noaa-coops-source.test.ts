@@ -178,10 +178,20 @@ test('refreshAll fetches each enabled station type when the vessel is in US wate
   })
 })
 
-test('refreshAll records an error status when a download fails', async () => {
+test('a failed download records an error and keeps the stored stations', async () => {
+  // Every wire failure reaches the source as an error result, the client's
+  // "the list arrived full and nothing parsed" report included, and none of
+  // them may reach `upsertType`: replacing the family would drop every stored
+  // station. Leaving the validators alone keeps the next tick re-requesting
+  // the list rather than being answered 304 against the bad body, which would
+  // make the outage stick.
   await withTempDir('coops-src-', async (dir) => {
     const store = createCoopsStore(dir)
     await store.load()
+    store.upsertType('tide', [station('8447386', 'tide')], {
+      lastModified: 'Mon, 01 Sep 2026 00:00:00 GMT',
+      etag: '"good"'
+    })
     const { events, status } = createStubStatus()
     const client: CoopsClient = {
       downloadStations: async (): Promise<CoopsDownloadResult> => ({ status: 'error', message: 'HTTP 500' })
@@ -195,6 +205,12 @@ test('refreshAll records an error status when a download fails', async () => {
     })
     await source.refreshAll()
     assert.ok(events.some(event => event.startsWith(`error:${NOAA_COOPS_SOURCE_ID}`)))
+    assert.ok(!events.some(event => event.startsWith(`list:${NOAA_COOPS_SOURCE_ID}`)),
+      'a failed pass must not report a successful fetch')
+    assert.equal(store.recordCount(), 1, 'the stored station survives a failed refresh')
+    const meta = store.snapshot().types.tide
+    assert.equal(meta?.lastModified, 'Mon, 01 Sep 2026 00:00:00 GMT')
+    assert.equal(meta?.etag, '"good"')
   })
 })
 
@@ -247,5 +263,38 @@ test('refreshAll prunes records of a station family the user turned off', async 
     await source.refreshAll()
     assert.equal(store.recordCount(), 1, 'the disabled family left the index')
     assert.equal(store.snapshot().types.current, undefined)
+  })
+})
+
+test('a station family the upstream really publishes empty clears its stored stations', async () => {
+  // The other half of the guard: a family the mdapi genuinely empties still
+  // replaces its record set, so a decommissioned station stops serving. Only
+  // "stations arrived and none parsed" is treated as a failure.
+  await withTempDir('coops-src-', async (dir) => {
+    const store = createCoopsStore(dir)
+    await store.load()
+    store.upsertType('tide', [station('8447386', 'tide')], { etag: '"good"' })
+    const { events, status } = createStubStatus()
+    const client: CoopsClient = {
+      downloadStations: async (): Promise<CoopsDownloadResult> => ({
+        status: 'ok',
+        records: [],
+        headers: { etag: '"empty"' }
+      })
+    }
+    const source = createNoaaCoopsSource({
+      client,
+      store,
+      stationTypes: ['tide'],
+      status,
+      getCurrentPosition: () => BOSTON
+    })
+    await source.refreshAll()
+
+    assert.equal(store.recordCount(), 0, 'a genuinely empty list still replaces its records')
+    assert.ok(events.includes(`list:${NOAA_COOPS_SOURCE_ID}:0`),
+      'an empty list is a successful fetch, not an error')
+    assert.equal(store.snapshot().types.tide?.etag, '"empty"',
+      'a successful empty list still advances its validators')
   })
 })

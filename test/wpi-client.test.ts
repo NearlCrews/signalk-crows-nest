@@ -12,6 +12,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import type { IncomingMessage } from 'node:http'
+import { gzipSync } from 'node:zlib'
 import { createWpiClient } from '../src/inputs/wpi/wpi-client.js'
 import { startStubServer, type StubServer } from './helpers.js'
 
@@ -59,8 +60,24 @@ test('fetchAllPorts sends the descriptive User-Agent header', async () => {
   }
 })
 
-test('fetchAllPorts resolves to an empty array when the envelope carries no ports', async () => {
+test('fetchAllPorts rejects when the envelope carries no ports array', async () => {
+  // Valid JSON in an unexpected shape, which is what an upstream envelope
+  // rename looks like. Coercing the missing array to an empty list told the
+  // source the index really had emptied, and its authoritative replace wiped
+  // every port while the list call still reported a fresh fetch.
   const server = await startServer(() => ({ body: {} }))
+  try {
+    const client = createWpiClient({ baseUrl: server.url })
+    await assert.rejects(() => client.fetchAllPorts(), /ports/)
+  } finally {
+    await server.close()
+  }
+})
+
+test('fetchAllPorts resolves to an empty array when the upstream publishes no ports', async () => {
+  // An explicitly empty array is a legitimate answer and must stay
+  // representable without an error.
+  const server = await startServer(() => ({ body: { ports: [] } }))
   try {
     const client = createWpiClient({ baseUrl: server.url })
     assert.deepEqual(await client.fetchAllPorts(), [])
@@ -74,6 +91,26 @@ test('fetchAllPorts rejects on a non-2xx response', async () => {
   try {
     const client = createWpiClient({ baseUrl: server.url })
     await assert.rejects(() => client.fetchAllPorts(), /World Port Index HTTP 503/)
+  } finally {
+    await server.close()
+  }
+})
+
+test('fetchAllPorts decodes a gzip-compressed full dump', async () => {
+  // The live NGA endpoint answers `gzip` when it is advertised (measured
+  // 2026-09-09: 6,316,131 bytes uncompressed, 578,874 compressed, the largest
+  // single saving in the plugin).
+  const server = await startStubServer((_req, res) => {
+    res.setHeader('Content-Type', 'application/json')
+    res.setHeader('Content-Encoding', 'gzip')
+    res.end(gzipSync(Buffer.from(JSON.stringify({ ports: samplePorts }), 'utf8')))
+  })
+  try {
+    const client = createWpiClient({ baseUrl: server.url })
+    const ports = await client.fetchAllPorts()
+    assert.equal(ports.length, 2)
+    assert.equal(ports[0].portName, 'Brooklyn')
+    assert.equal(server.requests[0]?.headers['accept-encoding'], 'gzip, br')
   } finally {
     await server.close()
   }

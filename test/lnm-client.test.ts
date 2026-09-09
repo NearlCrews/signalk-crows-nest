@@ -12,7 +12,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { createLnmClient } from '../src/inputs/uscg-lnm/lnm-client.js'
 import { LNM_LAYER_BY_SLUG, type LnmLayer } from '../src/inputs/uscg-lnm/lnm-layers.js'
-import { startStubServer, type StubServer } from './helpers.js'
+import { startJsonServer, startStubServer, type StubServer } from './helpers.js'
 
 const HAZNAV = LNM_LAYER_BY_SLUG.get('haznav') as LnmLayer
 const DISCFEDAID = LNM_LAYER_BY_SLUG.get('discfedaid') as LnmLayer
@@ -140,6 +140,94 @@ test('downloadLayerPage reports an error status on a non-2xx response', async ()
     if (result.status === 'error') {
       assert.match(result.message, /HTTP 500/)
     }
+  } finally {
+    await server.close()
+  }
+})
+
+test('downloadLayerPage keeps a file whose features only partly parse', async () => {
+  // Dropping the features this parser cannot read is normal: the file is still
+  // a good file, and every record that did parse must reach the store.
+  const server = await startJsonServer({
+    type: 'FeatureCollection',
+    features: [
+      {
+        properties: {
+          MSI_UID: 1,
+          DECIMAL_LATITUDE: 42.1,
+          DECIMAL_LONGITUDE: -70.9,
+          SUB_CATEGORY: 'Hazards To Navigation'
+        }
+      },
+      // Renamed coordinate keys: what an upstream schema change looks like.
+      { properties: { MSI_UID: 2, LAT: 42.2, LON: -70.8 } },
+      { properties: { MSI_UID: 3, LAT: 42.3, LON: -70.7 } }
+    ]
+  })
+  try {
+    const client = createLnmClient({ baseUrl: server.url })
+    const result = await client.downloadLayerPage(HAZNAV, 1)
+    assert.equal(result.status, 'ok')
+    if (result.status !== 'ok') return
+    assert.equal(result.records.length, 1)
+  } finally {
+    await server.close()
+  }
+})
+
+test('downloadLayerPage reports an error when a full file yields no record', async () => {
+  // NAVCEN renames a property and every feature on a 200 stops parsing. The
+  // source replaces a layer file wholesale with what it is handed, so
+  // reporting this as an empty file would drop every stored notice for the
+  // file. On the Hazard-typed danger layers that is the proximity alarm and
+  // the route scan going quiet behind a green status row. Failing here also
+  // leaves the stored validators alone, so the next tick re-requests the file
+  // instead of being answered 304 against the unparseable one.
+  const server = await startJsonServer({
+    type: 'FeatureCollection',
+    features: [
+      { properties: { MSI_UID: 1, LAT: 42.1, LON: -70.9 } },
+      { properties: { MSI_UID: 2, LAT: 42.2, LON: -70.8 } },
+      { properties: { MSI_UID: 3, LAT: 42.3, LON: -70.7 } }
+    ]
+  })
+  try {
+    const client = createLnmClient({ baseUrl: server.url })
+    const result = await client.downloadLayerPage(HAZNAV, 1)
+    assert.equal(result.status, 'error')
+    if (result.status !== 'error') return
+    assert.match(result.message, /3 features on the wire, none parseable/)
+  } finally {
+    await server.close()
+  }
+})
+
+test('downloadLayerPage reports an empty file as zero records, not an error', async () => {
+  // A layer file NAVCEN publishes with nothing on it is a legitimate answer
+  // and must stay representable without an error, so a file that really did
+  // empty still clears its stored notices.
+  const server = await startJsonServer({ type: 'FeatureCollection', features: [] })
+  try {
+    const client = createLnmClient({ baseUrl: server.url })
+    const result = await client.downloadLayerPage(HAZNAV, 1)
+    assert.equal(result.status, 'ok')
+    if (result.status !== 'ok') return
+    assert.equal(result.records.length, 0)
+  } finally {
+    await server.close()
+  }
+})
+
+test('downloadLayerPage reports an error when the body carries no features array', async () => {
+  // Valid JSON in an unexpected shape. Coercing the missing array to an empty
+  // file told the refresh the layer really had emptied, which wiped it.
+  const server = await startJsonServer({ type: 'FeatureCollection', records: [] })
+  try {
+    const client = createLnmClient({ baseUrl: server.url })
+    const result = await client.downloadLayerPage(HAZNAV, 1)
+    assert.equal(result.status, 'error')
+    if (result.status !== 'error') return
+    assert.match(result.message, /no GeoJSON features array/)
   } finally {
     await server.close()
   }

@@ -240,6 +240,22 @@ export interface StubServer {
  * owns the listen, address-to-url, request recording, and close plumbing they
  * all shared, leaving each test only its own response behavior.
  */
+/**
+ * Start a {@link startStubServer} that answers every request with `body` as
+ * JSON, carrying the conditional-GET validators a real 200 from these feeds
+ * does. Each raw-client test grew its own copy of this to drive one wire shape
+ * through a client that speaks real sockets; the validator values are fixture
+ * furniture rather than anything a caller asserts on, so they live here too.
+ */
+export function startJsonServer (body: unknown): Promise<StubServer> {
+  return startStubServer((_req, res) => {
+    res.setHeader('Content-Type', 'application/json')
+    res.setHeader('Last-Modified', 'Fri, 04 Sep 2026 00:00:00 GMT')
+    res.setHeader('ETag', '"stub-body"')
+    res.end(JSON.stringify(body))
+  })
+}
+
 export async function startStubServer (
   handler: (req: IncomingMessage, res: ServerResponse) => void
 ): Promise<StubServer> {
