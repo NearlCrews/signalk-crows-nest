@@ -11,6 +11,151 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+<a id="v0160"></a>
+
+## [0.16.0] - 2026-09-09
+
+This release fixes three ways a hazard alarm could fail to warn you, none of
+which announced itself. Read the Fixed section before upgrading: two of the
+three changed when an alarm sounds, and one changed how often the plugin
+asks an upstream service for data.
+
+### Fixed
+
+- A hazard could pass inside the alarm radius without raising an alarm. Alarms
+  were evaluated on a fixed cadence of one minute and 100 metres of movement,
+  unrelated to the configured radius, while the distance a vessel covers
+  between evaluations can exceed the alarm zone's along-track length. At the
+  default 500 metre radius a hazard 450 metres abeam was missed from 20 knots,
+  and a hazard dead ahead from about 32 knots. The data was already fetched;
+  it was never examined at a moment the hazard was inside the radius. Alarm
+  checks now run against the last list on every position fix, with the
+  sampling derived from the tightest configured radius, so no extra upstream
+  requests are made. A radius too small to honour at any plausible speed is
+  reported at startup, and a pass that outruns the sampling is reported when
+  it happens, rather than either failing silently.
+- A slow or failing upstream cleared a standing hazard alarm and then raised
+  it again, with sound, once the source answered. The alarm outputs treated
+  each tick's combined list as proof of what exists, so a source that timed
+  out, failed while others succeeded, or returned a partial layer took its
+  hazards with it. A tracked hazard is now held at the position it was last
+  reported at and cleared by the same geometry as any other, so it clears when
+  the vessel is genuinely clear of it. A hazard nothing reports for thirty
+  minutes clears with a message saying it went unreported, rather than the
+  misleading "no longer nearby".
+- An upstream response that parsed as valid JSON but carried an unexpected
+  shape emptied the stored records for that source and reported a successful
+  fetch. A renamed field in the USCG Light List, the Local Notice to Mariners,
+  the NOAA CO-OPS station list, or the NGA World Port Index would have removed
+  every hazard, aid, or port it had stored, silently, on one refresh. The Local
+  Notice layers carry the hazard markers the proximity and route alarms run
+  on, so the alarms would have gone quiet with the panel still showing a
+  healthy fetch. A response whose collection is missing or is not an array is
+  now an error, a page that carries rows but parses none is a failure rather
+  than an empty result, and neither advances the stored cache validators, so
+  the next refresh re-fetches instead of being told nothing changed.
+- The panel announced a status-poll failure through a live region created in
+  the same moment as its message, which is not reliably read aloud. The
+  region is now always present and only its text changes.
+- "Show <source>" in the panel's error list did nothing when the Data sources
+  section was collapsed, and never moved focus. It now opens the section,
+  scrolls to the card, and puts focus on that card's own toggle, so the
+  destination is announced rather than only shown.
+
+### Changed
+
+- Downloads now negotiate compression. The World Port Index refresh transfers
+  about 579 KB instead of 6.3 MB, the USACE dams query 74 KB instead of
+  1.4 MB, and the NOAA CO-OPS station list 32 KB instead of 777 KB. The
+  response size limit counts decompressed bytes, so a small compressed body
+  that expands past the limit is still refused. NAVCEN offers no compression,
+  so the Light List and the Local Notices are unchanged.
+- An unresolvable bridge is asked about once a minute rather than once per
+  alarm evaluation. Moving evaluation onto the position fix rate would
+  otherwise have multiplied requests to the ActiveCaptain service several
+  times over for every bridge whose clearance cannot be read. A bridge still
+  resolves before it reaches the alarm radius, and no clearance resolves later
+  than it did in 0.15.6.
+- The panel's per-source status pills read `ok`, `idle`, `waiting`, and
+  `error`, each with the shared glyph for its tone. The documented labels were
+  wrong for three of the four.
+
+- The configuration panel builds on `signalk-nearlcrews-ui` 0.9.0. The shared
+  panel shell runs the browser preflight, places the theme toggle, and wraps
+  the panel in an error boundary whose first recovery, Try again, remounts the
+  panel instead of reloading the whole Admin page. The Save and Discard footer
+  is the shared save bar, so Save, Discard, and the status line follow the
+  same rules as the other NearlCrews panels, and that status is the panel's
+  one polite live region for the save flow.
+- Plugin status is a titled section with a source health table: each row
+  names the source, shows its reachability with a shaped, glyph-marked
+  indicator rather than a color-only dot, and states when it was last
+  fetched. Recent errors render in a danger banner with a "Show <source>"
+  button per error that expands and scrolls to the source card.
+- Every data-source card is a collapsible section with a level 3 heading, and
+  its Advanced disclosure a level 4 heading, so heading navigation reads one
+  entry per source under Data sources instead of eight identical Advanced
+  entries beside it. The enable checkbox sits beside the heading with a hidden
+  label, outside the toggle, and so does the status pill. The pill's detail
+  ("17 POIs in last fetch, 5 minutes ago") is visible text at the top of the
+  expanded card rather than a hover tooltip, so keyboard and touch users can
+  read it.
+- Import layers, seamark groups, and the ActiveCaptain POI types are shared
+  checkbox groups with a responsive grid. Their empty-selection warnings are
+  announced politely, and a standing note such as why NOAA ENC leaves
+  underwater rocks off now sits under its group legend and is read with the
+  group rather than trailing it as loose text.
+- Numeric fields are the shared number field: the unit renders beside the
+  input instead of inside the label, and a cleared field still commits its
+  minimum. The arrow keys step by one display unit on every field except the
+  minimum rating, which keeps its half-star step. The coarser steps are gone
+  (the alarm radius and the corridor width stepped by 50, the merge radius by
+  10, the refresh periods by 5 or 30 seconds, and the two air-draft fields by
+  half a unit), because the shared field snaps a committed value to its step
+  and a clearance or an alarm radius has to keep the exact figure the operator
+  entered.
+- Relative ages are `<time>` elements that carry their own clock, so a card's
+  last-fetch age keeps ticking while the card stays open instead of waiting
+  for the next status change to redraw it.
+- The Module Federation share map comes from
+  `signalk-nearlcrews-ui/federation`, and the packaging gate runs the
+  library's `snui-check-consumer` command (`npm run check:panel`) in place of
+  the local pin checks and the size-limit budget: exact pin, version stamp, no
+  bundled React, the published host shares, and a gzip size baseline in
+  `scripts/panel-size-baseline.json`.
+- The toolchain moved to current releases, including two majors. TypeScript 7 now builds and
+  type-checks the plugin, the panel, and the tests through
+  `scripts/tsc7.mjs`, while the bare `typescript` specifier is aliased to the
+  TypeScript 6 compiler API that typescript-eslint and knip still require;
+  `npm run typecheck:ts6` checks the same projects under that compiler. The
+  other updates are minor or patch releases of Playwright, webpack,
+  webpack-cli, tsx, cspell, knip, the Vite React plugin, and the React DOM
+  types. Babel 8 transpiles the panel. It requires Node 22.18 or
+  newer, so the panel build toolchain now needs that while the plugin runtime
+  keeps its Node 20.3 floor: `npm run build` skips the panel bundle with a
+  printed notice on a Node below that floor, because `public/` is a prebuilt
+  release artifact that a Node 20 install never rebuilds, so the Node 20 CI
+  leg and the advisory armv7 lane of the Signal K plugin CI still compile the
+  plugin and run its tests. ESLint stays at 9 because neostandard declares an
+  `eslint ^9` peer range; `@types/node` stays at 20 to match the runtime
+  floor.
+- Dependabot proposes `signalk-nearlcrews-ui` updates in their own pull
+  request rather than inside the weekly development batch, because the
+  library ships breaking changes in 0.x minors.
+
+### Removed
+
+- The panel's local footer bar, save status, error boundary, number-draft
+  hook, relative-time formatter, collapse focus-restore hook, inline style
+  module with its `--ac-*` token aliases, and the rename-only adapters over
+  the shared UI. The shared package provides each of them.
+- The `size-limit` dependency and `npm run size`; `npm run check:panel`
+  measures the panel against the baseline instead.
+- A vector-tile test fixture left behind when that feature was removed in
+  0.12.0, two icon sizes below the Signal K App Store's minimum that nothing
+  referenced, two unused npm scripts, and lint and type-check entries
+  excluding a directory that has never existed in this repository.
+
 <a id="v0156"></a>
 
 ## [0.15.6] - 2026-08-23
@@ -2030,6 +2175,7 @@ bridges, and locks along it.**
   health through `setPluginStatus`, and documents its HTTP API with
   `getOpenApi`.
 
-[Unreleased]: https://github.com/NearlCrews/signalk-crows-nest/compare/v0.15.6...HEAD
+[Unreleased]: https://github.com/NearlCrews/signalk-crows-nest/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/NearlCrews/signalk-crows-nest/compare/v0.15.6...v0.16.0
 [0.15.6]: https://github.com/NearlCrews/signalk-crows-nest/compare/v0.15.5...v0.15.6
 [0.15.5]: https://github.com/NearlCrews/signalk-crows-nest/compare/v0.15.4...v0.15.5

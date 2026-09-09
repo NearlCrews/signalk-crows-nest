@@ -36,11 +36,17 @@ interface WebpackConfig {
 
 const webpackConfig = require('../webpack.config.cjs') as WebpackConfig
 
-const babel = require('@babel/core') as {
-  transformSync: (code: string, options: object) => { code: string } | null
-}
+// Babel 8 requires Node 22.18 or newer. The Node 20 CI leg verifies the plugin
+// runtime only and never builds the panel, so the transform check has nothing
+// to prove there and skips itself rather than failing on a toolchain the leg
+// does not run.
+const NODE_MAJOR = Number(process.versions.node.split('.')[0])
+const BABEL_SKIP = NODE_MAJOR >= 22 ? false : 'Babel 8 needs Node 22.18 or newer; this Node checks the plugin runtime only'
 
-test('the panel JSX transform emits the production automatic runtime', () => {
+test('the panel JSX transform emits the production automatic runtime', { skip: BABEL_SKIP }, () => {
+  const babel = require('@babel/core') as {
+    transformSync: (code: string, options: object) => { code: string } | null
+  }
   const rule = webpackConfig.module.rules.find((r) => r.loader === 'babel-loader')
   assert.ok(rule !== undefined)
   const out = babel.transformSync('export const probe = <div />', {
@@ -58,16 +64,19 @@ test('the panel JSX transform emits the production automatic runtime', () => {
 test('React and React DOM are host-provided singletons while the UI stays bundled', () => {
   const federation = webpackConfig.plugins.find((plugin) => plugin.options?.shared !== undefined)
   assert.ok(federation?.options?.shared !== undefined)
-  const shared = federation.options.shared
-  assert.deepEqual(Object.keys(shared).sort(), ['react', 'react-dom'])
+  // The config spreads the share map the shared UI package publishes, so the
+  // remote is verified against exactly the map the library was tested with:
+  // React and React DOM as non-strict singletons with no bundled fallback.
+  // strictVersion must stay absent: Signal K Admin releases up to at least
+  // 2.24.0 register their React share as 19.0.0 while shipping a newer React,
+  // so a strict check would reject a healthy host and the panel would never
+  // mount.
+  const published = require('signalk-nearlcrews-ui/federation') as { shared: unknown }
+  assert.deepEqual(federation.options.shared, published.shared)
+  assert.deepEqual(Object.keys(federation.options.shared).sort(), ['react', 'react-dom'])
   for (const packageName of ['react', 'react-dom']) {
-    assert.deepEqual(shared[packageName], {
-      singleton: true,
-      // strictVersion must stay absent: the Signal K Admin registers its React
-      // share as 19.0.0 while shipping a ^19.2.0-compatible React, so a strict
-      // check would reject a healthy host and the panel would never mount.
-      requiredVersion: '^19.2.0',
-      import: false
-    })
+    assert.equal(federation.options.shared[packageName]?.singleton, true)
+    assert.equal(federation.options.shared[packageName]?.import, false)
+    assert.equal('strictVersion' in (federation.options.shared[packageName] ?? {}), false)
   }
 })

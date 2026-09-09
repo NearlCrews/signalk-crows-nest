@@ -4,12 +4,6 @@ import { promisify } from 'node:util'
 import { normalizePackReport } from './package-report.mjs'
 
 const execFileAsync = promisify(execFile)
-const EXPECTED_SHARED_UI_VERSION = '0.8.2'
-// The shape of an exact pin, asserted separately from the version literal
-// above. The shared UI is 0.x, where its own guidance is to pin exactly
-// because the API may change between minors, so a leading 0 is part of the
-// shape and a 1.0 release is meant to trip this deliberately.
-const EXACT_SHARED_UI_VERSION = /^0\.\d+\.\d+$/
 const packageJson = JSON.parse(await readFile('package.json', 'utf8'))
 const { stdout } = await execFileAsync(
   process.platform === 'win32' ? 'npm.cmd' : 'npm',
@@ -106,27 +100,13 @@ for (const file of files) {
   }
 }
 
+// The shared UI must stay a bundled development dependency: it ships inside
+// the panel remote, never as a runtime dependency of the plugin. The exact
+// pin, its agreement with the installed package, the version stamp in the
+// built remote, the host share map, and the size baseline are asserted by the
+// library's own `snui-check-consumer` command (`npm run check:panel`).
 if (packageJson.dependencies?.['signalk-nearlcrews-ui']) {
   throw new Error('signalk-nearlcrews-ui must be a bundled development dependency.')
-}
-// Two guards rather than one. An equality check alone has a repair-path hole:
-// after `npm install signalk-nearlcrews-ui@latest` rewrites the pin to a range
-// such as ^0.9.0, the obvious repair is to paste the failing value into the
-// literal, after which both sides read ^0.9.0, this passes, and the error
-// message still claims exactness. The shape assertion is never hand-edited, so
-// it keeps holding whatever the literal is bumped to.
-const sharedUiVersion = packageJson.devDependencies?.['signalk-nearlcrews-ui']
-if (typeof sharedUiVersion !== 'string' || !EXACT_SHARED_UI_VERSION.test(sharedUiVersion)) {
-  throw new Error(
-    'The UI package must be pinned to an exact version, not a range. ' +
-    `package.json has ${JSON.stringify(sharedUiVersion)}.`
-  )
-}
-if (sharedUiVersion !== EXPECTED_SHARED_UI_VERSION) {
-  throw new Error(
-    `The UI package must be pinned to ${EXPECTED_SHARED_UI_VERSION}. ` +
-    `package.json has ${sharedUiVersion}.`
-  )
 }
 
 // THIRD_PARTY_NOTICES.md ships in the tarball, so it is a published

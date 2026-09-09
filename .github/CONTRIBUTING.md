@@ -47,6 +47,20 @@ serves, and any implementation ideas you have.
 - Default to no comments. Add one only when the WHY is non-obvious (a hidden
   constraint, a subtle invariant, or a workaround).
 
+## TypeScript compilers
+
+`devDependencies` lists two compilers under npm aliases. `@typescript/native`
+is the real `typescript` package at 7.x; `npm run build:plugin` and
+`npm run typecheck` reach it through `scripts/tsc7.mjs`, which resolves the
+compiler by package name because the bare `tsc` binary link depends on install
+order. `typescript` is aliased to `@typescript/typescript6`, which supplies the
+TypeScript 6 compiler API plus a `tsc6` binary, because typescript-eslint and
+knip import that API and do not yet run under TypeScript 7.
+`npm run typecheck:ts6` type-checks the same projects under TypeScript 6 so the
+two compilers cannot disagree unnoticed. Dependabot does not bump npm-alias
+ranges, so check both entries by hand with `npm outdated` when updating
+dependencies.
+
 ## Architecture rule
 
 This repository ships exactly ONE npm package and ONE Signal K plugin. Keep the

@@ -22,26 +22,41 @@ route-corridor, and bridge air-draft alarms.
 > safety-of-life navigation: always cross-check against official charts and
 > your primary instruments.
 
-## What's new in 0.15.6
+## What's new in 0.16.0
 
-- **Accurate third-party attribution.** The notices shipped with the package
-  are now generated from the packages webpack actually bundles, with each
-  license text embedded, and the packaging gate fails when they stop matching
-  the installed tree. The previous hand-maintained list omitted `react-aria`
-  and `webpack`, both of which the panel carries.
-- **Current shared panel UI.** The panel bundles `signalk-nearlcrews-ui` 0.8.2
-  and consumes React and React DOM as singletons from the Signal K admin host.
-- **Precise runtime support.** `engines.node` reads `^20.3.0 || >=22`, which
-  states the supported runtimes exactly rather than admitting Node 21, which a
-  dependency excludes.
-- **Pairs with the NMEA 2000 emitter.** The App Store listing now points to
-  `signalk-nmea2000-emitter-cannon`, which converts the hazard, route, and
-  bridge notifications this plugin raises into NMEA 2000 alert messages.
-- **Touch targets at the helm.** Every control the panel renders now meets the
-  coarse-pointer target floor, including the data-source card header controls
-  and the recent-error jump button.
+This release fixes three ways a hazard alarm could fail to warn you. Two of
+them change when an alarm sounds, so read the changelog before upgrading.
 
-See the [v0.15.6 changelog entry](https://github.com/NearlCrews/signalk-crows-nest/blob/main/CHANGELOG.md#v0156)
+- **A hazard can no longer pass inside the alarm radius unnoticed.** Alarms
+  were checked once a minute regardless of the radius you set, and a vessel
+  can cross the whole alarm zone in less than that: at the default 500 metres,
+  a hazard 450 metres abeam was missed from 20 knots, and one dead ahead from
+  about 32. Alarms are now checked on every position fix, at a rate derived
+  from the tightest radius you have configured, and the plugin asks the
+  upstream services no more often than before.
+- **A slow source no longer cancels a standing alarm.** An upstream that timed
+  out or failed took its hazards out of the alarm with it, then raised the
+  alarm again, with sound, when it recovered. A hazard is now held at the
+  position it was last seen at and clears when you are genuinely clear of it.
+- **A confused upstream no longer empties your hazards in silence.** A
+  response that was valid JSON but carried an unexpected shape wiped the
+  stored records for that source and reported a successful fetch, which for
+  the Local Notice to Mariners meant losing the hazard markers the alarms run
+  on. That case is now an error, and the next refresh re-fetches.
+- **Far less data over the wire.** The plugin now negotiates compression: the
+  World Port Index refresh drops from 6.3 MB to about 579 KB, and the tide
+  station list from 777 KB to 32 KB. That matters on a metered link.
+- **Rebuilt configuration panel.** The panel is built on
+  `signalk-nearlcrews-ui` 0.9.0 throughout: a shared shell, a shared save bar,
+  and shared fields in place of the panel's own copies. Plugin status is a
+  titled section with a per-source health table, each recent error carries a
+  button that opens and scrolls to the source it came from, and that button
+  now works when the section is collapsed and moves focus when you use it.
+- **Numeric fields that keep what you type.** Units render beside the input
+  rather than inside the label, and the arrow keys step by one display unit,
+  so a bridge clearance or an alarm radius holds the exact figure you entered.
+
+See the [v0.16.0 changelog entry](https://github.com/NearlCrews/signalk-crows-nest/blob/main/CHANGELOG.md#v0160)
 and [full release history](https://github.com/NearlCrews/signalk-crows-nest/blob/main/CHANGELOG.md).
 
 ## What it does
@@ -134,7 +149,7 @@ one panel.
 
 Crow's Nest is one plugin built from focused modules:
 
-- **TypeScript 6 under strict flags.** The Node plugin compiles with `tsc`;
+- **TypeScript 7 under strict flags.** The Node plugin compiles with `tsc`;
   the React configuration panel bundles with webpack 5 as a Module
   Federation remote that the Signal K admin UI loads. The panel uses
   `signalk-nearlcrews-ui` for shared controls and token-driven themes.
@@ -280,18 +295,19 @@ contacted` for each enabled source, the last successful upstream list-fetch
    earliest-year filter, `0` means off; positive values below 1900 normalize
    to 1900.
 
-4. **Alerts section** (collapsed by default, opens automatically when an
-   alarm is enabled): the proximity-alarm, route-corridor scan, and
-   bridge air-draft check controls, each in its own fieldset with an
-   opt-in toggle and its numeric settings.
+4. **Alerts section** (collapsed by default; expand it to configure an
+   alarm): the proximity-alarm, route-corridor scan, and bridge air-draft
+   check controls, each in its own fieldset with an opt-in toggle and its
+   numeric settings.
 
 Per-source enable toggles live on each card's header, alongside the
 disclosure chevron. Each card carries a small live-status pill on the
-header: `✓ ok` after a successful upstream list fetch, `… idle` before the
-first request or during an intentional skip, `… waiting` when a slow request
-continues after the five-second aggregate deadline, and `! error` after a
-failure. Idle pills include reasons such as `outside US waters`, and the ok
-tooltip carries the longer "N POIs in last fetch, M minutes ago" detail.
+header: `✓ ok` after a successful upstream list fetch, `idle` before the
+first request or during an intentional skip, `! waiting` when a slow request
+continues after the five-second aggregate deadline, and `× error` after a
+failure. An idle pill names its reason when it has one, as in `Idle: outside
+US waters`. Expanding a card puts the longer detail under the header as
+visible text, such as "17 POIs in last fetch, 5 minutes ago".
 Disabled cards show a "Disabled." prefix on their summary so an off source
 never reads as live. Every numeric input clears cleanly mid-edit. Saving
 applies immediately; the plugin rebuilds its runtime and in-memory viewport
@@ -311,8 +327,8 @@ caches while retaining the on-disk data used for offline operation.
 ## Development
 
 This project targets Node 20.3 or newer and develops against
-`@signalk/server-api` 2.31.1 or newer, with TypeScript 6 and the exact shared
-UI package `signalk-nearlcrews-ui` 0.8.2 (development only). The full local
+`@signalk/server-api` 2.31.1 or newer, with TypeScript 7 and the exact shared
+UI package `signalk-nearlcrews-ui` 0.9.0 (development only). The full local
 toolchain supports Node 22 from 22.22.2, Node 24 from 24.15.0, and Node 26,
 while the published plugin runtime keeps its Node 20.3 compatibility floor.
 

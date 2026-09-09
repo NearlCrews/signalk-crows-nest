@@ -99,13 +99,13 @@ honestly reads as unreachable.
 Each source card condenses that state into one of four pills:
 
 - `✓ ok`: the last upstream list request succeeded.
-- `… idle`: the source is awaiting its first request or deliberately skipped
-  one. The visible label includes a reason when known, such as `outside US
+- `idle`: the source is awaiting its first request or deliberately skipped
+  one. The label names the reason when it has one, as in `Idle: outside US
 waters`.
-- `… waiting`: the source exceeded the aggregate's five-second response window,
+- `! waiting`: the source exceeded the aggregate's five-second response window,
   but its request is still filling the viewport cache. Refresh the chart to use
   the result after it finishes.
-- `! error`: the last real request failed. The recent-error list keeps the
+- `× error`: the last real request failed. The recent-error list keeps the
   failure details, and a source-attributed message opens the matching card.
 
 Common failures include a lost internet connection, Cloudflare throttling the

@@ -2,7 +2,14 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": true,
-    "rootDir": "."
+    "rootDir": ".",
+    // The test suite is CommonJS (tsx compiles it to require calls) and it
+    // imports the ESM-only shared UI package, which Node 20.19 and 22.12 or
+    // newer load through require(esm). The node16 setting the plugin build
+    // uses predates that and reports TS1479 for the import; nodenext models the
+    // runtime the suite actually runs on: nodenext admits require(esm).
+    "module": "nodenext",
+    "moduleResolution": "nodenext"
   },
   "include": ["test/**/*"],
   "exclude": ["node_modules", "dist"]

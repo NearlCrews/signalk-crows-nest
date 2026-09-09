@@ -267,6 +267,10 @@ self-contained module registered on one line in `src/index.ts`.
     - `output-registry.ts` - holds the registered outputs and starts the
       enabled ones. A failing `isEnabled` check or `start` is isolated and
       logged so one broken output cannot block the rest.
+    - `alarm-retention.ts` - holds a point of interest at the position a list
+      last reported it at, so a partial or failed upstream result cannot clear
+      and re-raise a standing alarm. A held point clears on the ordinary exit
+      geometry, or after thirty minutes unreported, whichever comes first.
     - `notes-resource/` - the `notes` resource output: `notes-resource-output.ts`
       (the `OutputModule` that registers the SignalK `notes` provider),
       `note-builder.ts` (turns a POI into a `notes` resource object, publishing
@@ -303,7 +307,11 @@ self-contained module registered on one line in `src/index.ts`.
   - `monitoring/` - `position-monitor.ts` subscribes to `navigation.position`,
     exposes the latest fix through `getCurrentPosition` (read by the US-only
     inputs to gate outbound HTTP), and drives the per-tick scan from the
-    position-driven outputs' scan contributors.
+    position-driven outputs' scan contributors. A contributor that declares an
+    `alarmRadiusMeters` is re-evaluated against the last list on every position
+    fix, while the list request itself stays on the tick throttle, so a hazard
+    cannot cross the alarm radius unexamined without costing extra requests.
+    `scan-cadence.ts` derives that sampling from the tightest declared radius.
   - `geo/` - `position-utilities.ts`: geo helpers (`toPosition` parsing,
     position to bounding box, great-circle `distanceMeters`, `unionBbox`,
     the antimeridian-aware `bboxContainsPoint` (a box whose `west` exceeds
@@ -443,61 +451,60 @@ self-contained module registered on one line in `src/index.ts`.
     `schemaVersion`, and the shared `pushSection`, `textItem`, and
     `meterMeasureItem` builders).
   - `panel/` - federated React configuration panel. Root and reducer:
-    `index.tsx` (Module Federation entry), `PluginConfigurationPanel.tsx`,
-    `config-reducer.ts`, `normalize-config.ts`, plus the UI-metadata
-    modules `active-captain-poi-types.ts` (the grouped options and collapsed
-    selection summary), `styles.ts` (plugin-specific layout and status styles,
-    with the remaining `--ac-*` aliases mapped to the shared
-    `signalk-nearlcrews-ui` theme tokens), `relative-time.ts`,
-    `source-status-pill.ts` (the pure `pillVariant` + `pillContent` helpers
-    used by the per-source live-status pill on each card header),
-    `footer-bar-state.ts` (the pure Save-button disabled logic),
-    `select-all-state.ts` (the pure tri-state select-all derivation),
+    `index.tsx` (Module Federation entry), `PluginConfigurationPanel.tsx`
+    (the shared `PanelShell` frame, the status poll, the configuration state,
+    and the shared `SaveActionBar`), `config-reducer.ts`,
+    `normalize-config.ts`, plus the UI-metadata modules
+    `active-captain-poi-types.ts` (the grouped options and collapsed
+    selection summary), `source-status-pill.ts` (the pure `pillVariant` +
+    `pillContent` helpers behind the per-source status pill on each card
+    header and the detail line in its body), `checkbox-group-value.ts` (the
+    pure translation between per-layer boolean flags and the shared
+    `CheckboxGroup`'s value array), `select-all-state.ts` (the pure tri-state
+    select-all derivation for the ActiveCaptain POI-type selector),
     `request-timeout.ts` (the panel-wide per-request timeout the status
     poller and the unit-preferences fetch share), and `unit-system.ts` (the
     React-free display-units module keyed off the server unit-preset's
     `categories.length.targetUnit`). `hooks/` holds `use-config`,
-    `use-status` (which also exposes `lastUpdatedMs`), `use-unit-system` (resolves
-    the display system from the server's unit preferences), `use-number-draft`
-    (the raw-text draft state for clearable numeric inputs),
-    `draft-reset-context` (the Discard epoch each number draft watches so a
-    stale draft clears even when the restored value is unchanged),
-    and `use-collapse-focus-restore` (the focus-restore-on-collapse hook
-    DataSourceCard uses).
-    `components/` holds the layout pieces: `ErrorBoundary` (a class-component
-    error boundary inside the shared panel shell that catches hook and render
-    errors and shows a styled fallback so a single rendering failure does not
-    unmount the panel), `SectionBox` (the shared collapsible-section primitive),
-    `StatusBar`, `FooterBar` (sticky,
-    composing `SaveStatus`), `DataSourcesSection` (the per-source accordion
-    shell), `DataSourceCard` (one collapsible card, with an in-header
-    live-status pill), `ActiveCaptainSource`, `OpenSeaMapSource`,
+    `use-status` (which also exposes `lastUpdatedMs`), `use-unit-system`
+    (resolves the display system from the server's unit preferences), and
+    `draft-reset-context` (the Discard epoch every shared `NumberField`
+    receives as its `resetKey`, so a stale draft clears even when the restored
+    value is unchanged).
+    `components/` holds the layout pieces: `StatusBar` (a shared `Section`
+    holding the per-source health `Table` and the recent-error `Banner`),
+    `DataSourcesSection` (the per-source accordion shell),
+    `DataSourceCard` (one `CollapsibleSection` per source at heading level 3,
+    with the enable `Checkbox` in its leading slot and the status pill in its
+    actions slot), `ActiveCaptainSource`, `OpenSeaMapSource`,
     `UscgLightListSource`, `NoaaEncSource`, `NoaaCoopsSource`,
     `UscgLnmSource`, `WpiSource`, and `UsaceSource` (the per-source card
-    bodies), `IncludeToggles` (the shared import-layers checkbox grid with
-    its empty-selection warning), `SelectAllCheckbox` (the tri-state
-    select-all control the ActiveCaptain POI types and the seamark groups
-    render beside their legends),
-    `AlertsSection` (the proximity, route-hazard, and bridge air-draft
-    controls); plus the per-field input components `LabeledField`,
-    `NumberField`, `LengthField`, `CacheDurationField`, `EndpointUrlField`,
-    `FallbackEndpointsField`, `Fieldset`, `Disclosure`, `ToggleFieldset`,
-    `RatingFilterField`, `MinimumYearField`, `RefreshSecondsField`,
-    `RefreshHoursField` (the bulk-download cadence field the USCG Light List,
-    NOAA CO-OPS, and World Port Index cards share),
-    `MergeWithActiveCaptain`, `ProximityAlarmFields`, `RouteHazardScanFields`,
-    `BridgeAirDraftFields`, `ActiveCaptainPoiTypes`, `SeamarkGroups`, and
-    `SaveStatus`. The local field and layout adapters compose shared
-    `signalk-nearlcrews-ui` controls. The panel is a per-source accordion: a
-    top control bar with the shared theme toggle, the status bar, a collapsible
-    card per data source, then the Alerts section. Card disclosure state lives
-    at the panel root so the card bodies share one stable map.
+    bodies), `IncludeToggles` (the shared import-layers `CheckboxGroup` with
+    its empty-selection warning), `AlertsSection` (the proximity,
+    route-hazard, and bridge air-draft controls); plus the per-field
+    components `LengthField`, `CacheDurationField`, `EndpointUrlField`,
+    `FallbackEndpointsField`, `RatingFilterField`, `MinimumYearField`,
+    `RefreshSecondsField`, `RefreshHoursField` (the bulk-download cadence
+    field the USCG Light List, NOAA CO-OPS, and World Port Index cards
+    share), `MergeWithActiveCaptain`, `ProximityAlarmFields`,
+    `RouteHazardScanFields`, `BridgeAirDraftFields`,
+    `ActiveCaptainPoiTypes`, and `SeamarkGroups`. Every component composes
+    the shared `signalk-nearlcrews-ui` primitives directly (`NumberField`,
+    `LabeledField`, `FieldGroup`, `Checkbox`, `CheckboxGroup`,
+    `CollapsibleSection`, `Text`, `RelativeAge`); the panel carries no rename
+    adapters, no draft hook, no inline style module, and no stylesheet of its
+    own. The panel is a per-source accordion: the shared theme toggle, the
+    status section, a collapsible card per data source (each with an h4
+    Advanced disclosure), then the Alerts section, then the sticky save bar.
+    Card disclosure state lives at the panel root so the card bodies share one
+    stable map.
 - `test/` - `node:test` test suite, run through `tsx`.
 - `docs/` - project documentation: the development guide, troubleshooting, the
   notes-resource integration guide (`notes-resource-format.md`), the Garmin API
   research notes, decision records, and maintainer notes.
-- `assets/` - committed, published static files: `icons/` (the plugin icon in
-  SVG and PNG sizes, wired through the `signalk.appIcon` field), and
+- `assets/` - committed, published static files: `icons/` (the plugin icon as
+  the master SVG plus 192-pixel and 512-pixel PNGs, with the 192 wired
+  through the `signalk.appIcon` field), and
   `screenshots/` (the admin-panel and Freeboard-SK images declared under
   `signalk.screenshots` for the plugin-registry listing).
 - `dist/` and `public/` - compiled plugin and bundled panel. Generated, not
@@ -507,46 +514,80 @@ self-contained module registered on one line in `src/index.ts`.
 
 ## Toolchain
 
-- TypeScript 6. The Node plugin is compiled with `tsc` (`tsconfig.json`).
-  TypeScript caps at 6 for now because the lint chain pins it there:
-  `@typescript-eslint/typescript-estree` and `@typescript-eslint/parser`
-  declare a `typescript >=4.8.4 <6.1.0` peer range, so TypeScript 7 cannot be
-  installed alongside the current typescript-eslint.
+- Two TypeScript compilers, under npm aliases. `@typescript/native` is the
+  real `typescript` package at 7.x; `scripts/tsc7.mjs` resolves its compiler
+  by package name, and `npm run build:plugin` and `npm run typecheck` go
+  through that wrapper (`tsconfig.json`, `tsconfig.panel.json`,
+  `tsconfig.test.json`). The bare `typescript` specifier is aliased to
+  `@typescript/typescript6`, which provides the TypeScript 6 compiler API plus
+  a `tsc6` binary, because typescript-eslint (through neostandard) and knip
+  import that API and still declare a `typescript >=4.8.4 <6.1.0` peer range.
+  `npm run typecheck:ts6` type-checks the same three projects under
+  TypeScript 6 and runs inside `verify:fast`, so the compiler the lint rules
+  reason with and the compiler that emits `dist/` cannot diverge silently.
+  Never call the bare `tsc` binary from a script: the shim's own TypeScript 6
+  dependency also declares `tsc`, so which package `node_modules/.bin/tsc`
+  links to depends on install order. Dependabot does not bump npm-alias
+  ranges, so both `typescript` and `@typescript/native` need a manual
+  `npm outdated` check. Collapse back to one `typescript` dependency once
+  typescript-eslint supports TypeScript 7.
 - The React panel under `src/panel/` is bundled to `public/` by webpack as a
   Module Federation remote (`webpack.config.cjs`, `tsconfig.panel.json`),
-  transpiled by `babel-loader` with Babel 7. Babel caps at 7: Babel 8 declares
-  `node: ^22.18.0 || >=24.11.0`, which drops the Node 20 lanes this project
-  builds on, including the armv7 Cerbo GX lane. Raising Babel would mean
-  raising `engines.node` past the plugin's supported runtime floor to satisfy a
-  build-time transpiler. The React preset pins
-  `development: false` so an unset `NODE_ENV` cannot select a development
-  transform and emit `jsxDEV` calls that the bundled production
-  `react/jsx-dev-runtime` does not implement, which breaks the panel at first
-  render. The `test/panel-babel-config.test.ts` contract test locks this in.
-- `signalk-nearlcrews-ui` 0.8.2 supplies the panel shell, theme system, and
-  shared controls. It is pinned exactly. Fresh profiles use Auto, which follows
-  an explicit host theme and otherwise uses Light. System follows the operating
-  system preference. The host supplies React and React DOM `^19.2.0` singletons
-  without bundled fallbacks.
+  transpiled by `babel-loader` with Babel 8. Babel 8 declares
+  `node: ^22.18.0 || >=24.11.0`, so the panel build toolchain needs Node
+  22.18 or newer while `engines.node` stays `^20.3.0 || >=22` for the plugin
+  runtime: Signal K server itself requires Node 22, and a build-time major is
+  not held back for a runtime lane. `npm run build:panel` goes through
+  `scripts/build-panel.mjs`, which skips the webpack bundle with a printed
+  notice on a Node below that floor (`scripts/panel-toolchain.mjs` holds the
+  predicate, tested by `scripts/test-panel-toolchain.mjs` in `package:check`),
+  because `public/` is a prebuilt release artifact that a Node 20 install
+  never rebuilds. So the Signal K plugin-ci armv7 Node 20 lane still runs
+  `npm run build` and `npm test` and stays green: it compiles the plugin,
+  skips the panel, and runs the node tests, with the Babel contract test
+  skipping itself below Node 22. The ci.yml Node 20 leg runs `build:plugin`,
+  `typecheck`, `test`, `lint:code`, and `audit:runtime`. The React preset
+  pins `development: false` so an unset `NODE_ENV`
+  cannot select a development transform and emit `jsxDEV` calls that the
+  bundled production `react/jsx-dev-runtime` does not implement, which breaks
+  the panel at first render. The `test/panel-babel-config.test.ts` contract
+  test locks this in.
+- `signalk-nearlcrews-ui` 0.9.0 supplies the panel shell (`PanelShell`, with
+  the browser preflight and the error boundary built in), the theme system,
+  the save bar (`SaveActionBar` plus `useUnsavedChangesGuard`), the numeric
+  field (`NumberField`), collapsible sections, checkbox groups, the status
+  indicators, and the relative-age formatter. It is pinned exactly, and
+  `npm run check:panel` runs the library's own `snui-check-consumer` against
+  the built remote: exact pin, version stamp, no bundled React, the published
+  share map (`signalk-nearlcrews-ui/federation`, which `webpack.config.cjs`
+  spreads), and the gzip size baseline in `scripts/panel-size-baseline.json`.
+  Fresh profiles use Auto, which follows an explicit host theme and otherwise
+  uses Light. System follows the operating system preference. The host
+  supplies React and React DOM `^19.2.0` singletons without bundled fallbacks.
 - `CollapsibleSection` defaults to `mountStrategy="retain"`, which wraps its
   children in React `Activity`. Collapsing runs every effect cleanup in the
   subtree and reopening re-runs those effects, while component state and refs
   survive. A mount effect is therefore NOT run-once. Any effect inside a
   retained section that resets state, reports validity upward, or holds an
-  abortable request must be written to tolerate being replayed:
-  `use-number-draft.ts` compares against a ref for exactly this reason.
-- The shared UI package is ESM-only: every entry point in its export map
-  declares an `import` condition and nothing else. Webpack resolves that
-  condition, so panel `.tsx` components may import it freely. A plain `.ts`
-  module that the `node:test` suite reaches may NOT: this package is CommonJS,
-  so `tsx` loads those modules through `require`, which fails on that export
-  map with `ERR_PACKAGE_PATH_NOT_EXPORTED` (and `tsc` reports TS1479 first).
-  Node's `require(esm)` does not help, because there is no `require` or
-  `default` condition to resolve, and the Node 20 CI lane has no `require(esm)`
-  at all. This is why `panel/relative-time.ts` keeps its own age formatting
-  instead of the package's `formatRelativeAge`: it and `source-status-pill.ts`
-  are both unit-tested under `node:test`. Put shared-UI usage in a component,
-  not in a node-tested helper.
+  abortable request must be written to tolerate being replayed. The shared
+  `NumberField` stores its draft beside the value it was typed against, so a
+  collapse cannot discard an edit, and the Discard epoch reaches it as
+  `resetKey` rather than through an effect.
+- The shared UI package is ESM-only, and every entry in its export map
+  declares a `default` condition beside `import`, so Node's `require(esm)`
+  (Node 20.19 and 22.12 or newer; the CI lanes install the latest Node 20,
+  22, and 24) loads it from this CommonJS package. The `node:test` suite
+  therefore imports the package's pure utilities and constants directly,
+  `tsconfig.test.json` sets `module` and `moduleResolution` to `nodenext` so
+  `tsc` accepts a `require` of an ES module (the plugin build keeps `node16`
+  and never touches the package), and `test/shared-ui-package.test.ts` pins
+  that contract together with the installed version. The components
+  themselves still render only in the browser: keep component usage in the
+  `.tsx` files webpack bundles, and import only utilities such as
+  `formatRelativeAgeSince` or `resolveSaveActionBarState` from node-tested
+  code. Verified 2026-09-06 on Node 24.20 with tsx 4; 0.8.2 and earlier
+  carried only an `import` condition, which is why the panel used to keep its
+  own relative-time formatter.
 - The test suite is type-checked separately (`tsconfig.test.json`); all three
   configs run under `npm run typecheck`.
 - ESLint 9 with [neostandard](https://github.com/neostandard/neostandard)
@@ -571,7 +612,12 @@ self-contained module registered on one line in `src/index.ts`.
 
 - `npm run build` - build the plugin and the configuration panel.
 - `npm run build:plugin` - compile `src/` to `dist/` with `tsc`.
-- `npm run build:panel` - bundle the React panel to `public/` with webpack.
+- `npm run build:panel` - bundle the React panel to `public/` with webpack;
+  on a Node below 22.18 it prints a notice and skips instead, because the
+  panel toolchain (Babel 8) cannot run there.
+- `npm run check:panel` - run the shared UI's consumer check against the
+  built panel: exact pin, version stamp, host shares, and the gzip size
+  baseline.
 - `npm test` - run the test suite under `test/`.
 - `npm run typecheck` - type-check the plugin, the panel, and the tests without emitting.
 - `npm run lint` - run code, Markdown, and spelling checks.
@@ -592,3 +638,14 @@ self-contained module registered on one line in `src/index.ts`.
 - Keep modules focused and small. Shared types belong in `src/shared/types.ts`.
 - Do not edit `dist/` or `public/`; they are generated.
 - Run `npm run verify` before committing.
+
+## Shared skills
+
+Domain expertise for this repository lives in the shared skills installed for both Codex and Claude Code from `~/src/nearlcrews-agent-toolkit` (Claude Code: `/skill-name`; Codex: `$skill-name`; both hosts also select them from their descriptions). Load these before working here:
+
+- `signalk-development`: Signal K plugin and webapp lifecycle, server APIs, deltas, route security, package metadata, App Store, registry score, plugin CI, and release readiness.
+- `maritime-ui`: the lookout, alarm, and helm-facing UI surfaces.
+- `standardize-project-toolchain`: toolchain audits, lint, type, test, and CI alignment, and Node or TypeScript floor decisions.
+- `better-accessibility, better-colors, better-layout, better-typography, and better-writing`: UI copy, layout, color, type, and accessibility.
+
+To delegate, spawn a general-purpose subagent and tell it which of these to load; there are no per-host agent definitions.

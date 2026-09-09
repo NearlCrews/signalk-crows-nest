@@ -6,6 +6,7 @@ import {
   type NotificationEmitterApp,
   type NotificationValue
 } from '../src/shared/notification-path.js'
+import type { Delta } from '@signalk/server-api'
 import { PLUGIN_ID } from '../src/shared/plugin-id.js'
 
 test('sanitizePoiId leaves a path-safe id unchanged', () => {
@@ -102,4 +103,59 @@ test('emitNotification sanitizes the POI id embedded in the path', () => {
   )
 
   assert.deepEqual(paths, ['notifications.navigation.crowsNest.route.escaped.YS5iL2M'])
+})
+
+test('the emitted delta is the shape the server notification manager tracks', () => {
+  // Verified against signalk-server 2.31.1 (src/api/notifications/index.ts and
+  // alarm.ts). The server registers a delta input handler that intercepts every
+  // `notifications.*` update, assigns it a stable notification id keyed on
+  // context, path, and `$source`, registers it with the NotificationManager,
+  // and re-emits it with `id` and `status` added. So a delta of this shape is
+  // already addressable through the v2 notifications API, and can be silenced
+  // and acknowledged there, while keeping the per-output `$source` and the
+  // `method` the output chose. `notifications.raise()` would take both of those
+  // away: it hard-codes `$source: 'notificationsApi'` and
+  // `method: ['visual', 'sound']`, which would make the route-corridor
+  // advisories sound. This test pins the four things the interception depends on.
+  const deltas: Array<Partial<Delta>> = []
+  const app: NotificationEmitterApp = { handleMessage: (_id, delta) => { deltas.push(delta) } }
+  const value: NotificationValue = {
+    state: 'warn',
+    method: ['visual'],
+    message: 'Hazard "Wreck" is on the route ahead',
+    createdAt: '2026-01-01T00:00:00.000Z'
+  }
+
+  emitNotification(app, 'notifications.navigation.crowsNest.route.', 'h1', value, 'route')
+
+  const update = deltas[0].updates?.[0]
+  assert.ok(update !== undefined && 'values' in update)
+  assert.equal(deltas[0].context, undefined, 'no context, so the server fills in vessels.self')
+  assert.equal(update.$source, `${PLUGIN_ID}.route`, 'the id the server keys the notification by')
+  assert.equal('notificationId' in update, false, 'not an echo of the server own manager')
+  assert.ok(String(update.values[0].path).startsWith('notifications.'), 'on the intercepted branch')
+  assert.deepEqual(update.values[0].value, value, 'a Notification the manager can parse')
+
+  // The per-output method survives, which is the half `raise()` cannot express.
+  const alarmValue: NotificationValue = {
+    state: 'alarm',
+    method: ['visual', 'sound'],
+    message: 'Hazard "Wreck" is 111 m away',
+    createdAt: '2026-01-01T00:00:00.000Z'
+  }
+  emitNotification(app, 'notifications.navigation.crowsNest.hazard.', 'h1', alarmValue, 'proximity')
+
+  const raised = deltas[1].updates?.[0]
+  assert.ok(raised !== undefined && 'values' in raised)
+  assert.equal(raised.$source, `${PLUGIN_ID}.proximity`, 'each output keeps its own source brand')
+  assert.deepEqual(
+    deltas.map((delta) => {
+      const one = delta.updates?.[0]
+      return one !== undefined && 'values' in one
+        ? (one.values[0].value as NotificationValue).method
+        : undefined
+    }),
+    [['visual'], ['visual', 'sound']],
+    'a route advisory stays silent while a proximity hazard sounds'
+  )
 })

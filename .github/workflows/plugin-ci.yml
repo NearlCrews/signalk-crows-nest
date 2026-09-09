@@ -7,8 +7,13 @@ name: SignalK Plugin CI
 # published version's commit; without one it applies a scoring penalty. The
 # tag trigger guarantees a run exists on the exact commit each release is
 # published from. The reusable workflow runs npm ci, the build, the tests, and
-# npm pack across Linux, macOS, and Windows on Node 22 and 24, plus the armv7
-# Cerbo GX lane on Node 20 (supported here: engines.node is >=20.3.0).
+# npm pack across Linux, macOS, and Windows on Node 22 and 24, plus the
+# advisory armv7 Cerbo GX lane on Node 20, the lowest Node the plugin
+# advertises. That lane cannot run the panel toolchain (Babel 8 requires Node
+# 22.18 or newer), so `npm run build` skips the panel bundle there with a
+# printed notice and the lane proves the plugin installs, compiles, and passes
+# its tests; public/ is a prebuilt release artifact a Node 20 install never
+# rebuilds.
 
 on:
   push:
@@ -31,6 +36,8 @@ jobs:
       coverage-command: npm run test:coverage
       node-versions: '["22", "24"]'
       # Pinned true on purpose: engines.node still admits Node 20, so the
-      # Cerbo GX lane is meaningful here. It is continue-on-error upstream,
-      # so ci.yml carries the blocking Node 20 lane.
+      # Cerbo GX lane is meaningful here, and scripts/build-panel.mjs keeps it
+      # green by skipping the panel bundle below Node 22.18. It is
+      # continue-on-error upstream, so ci.yml carries the blocking Node 20
+      # runtime leg.
       enable-armv7: true

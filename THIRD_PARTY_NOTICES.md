@@ -1,6 +1,6 @@
 # Third-party notices
 
-<!-- generated-for-signalk-nearlcrews-ui:0.8.2 -->
+<!-- generated-for-signalk-nearlcrews-ui:0.9.0 -->
 
 The configuration panel is a Module Federation remote, so the packages below are bundled into `public/*.js` and redistributed with this plugin. Their licenses follow. Regenerate with `npm run licenses` after any change to the panel dependency tree.
 
@@ -38,7 +38,7 @@ SOFTWARE.
 
 ## react-aria
 
-Version: 3.51.0
+Version: 3.52.1
 
 License: Apache-2.0
 
@@ -248,7 +248,7 @@ Apache License
 
 ## signalk-nearlcrews-ui
 
-Version: 0.8.2
+Version: 0.9.0
 
 License: Apache-2.0
 
@@ -447,7 +447,7 @@ Apache License
 
 ## webpack
 
-Version: 5.109.2
+Version: 5.110.3
 
 License: MIT
 

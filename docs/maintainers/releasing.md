@@ -25,7 +25,7 @@ The package's `files` field publishes `dist/`, `public/`, `assets/`,
 `CHANGELOG.md`, and `THIRD_PARTY_NOTICES.md`. npm also includes `package.json`,
 `README.md`, and `LICENSE` by default; source, tests, and the rest of `docs/`
 are not shipped. The `assets/` directory carries the Signal K admin UI icon
-set (the master SVG plus the four rasterized PNGs); the `build:icons` script
+set (the master SVG plus the two rasterized PNGs); the `build:icons` script
 also copies them under
 `public/assets/icons/` so the admin's `express.static` mount can serve them. It
 also carries `assets/screenshots/`, the images declared under
@@ -56,8 +56,18 @@ Before creating the GitHub release:
 
    This gate includes code and documentation checks, type checking, coverage,
    production builds, the cross-browser panel matrix, accessibility checks,
-   size limits, packed-package validation, and both dependency audits. Inspect
-   the package-check output, not only its exit code.
+   the shared UI consumer check with its panel size baseline, packed-package
+   validation, and the runtime dependency audit. Inspect the package-check
+   output, not only its exit code.
+
+   Two audits exist and only one gates a release. `npm run audit:runtime`
+   covers the tree a consumer installs, which is also what the Signal K
+   plugin registry scores, so it blocks. `npm run audit:full` covers the
+   development toolchain, where an advisory carries no runtime exposure for
+   an operator and sometimes has no upstream fix to take, so it runs as its
+   own reporting job in CI and does not hold up a release. Read it before
+   every release and take any fix that exists; do not add an allowlist to
+   either one.
 
 4. Update `README.md`, `CHANGELOG.md`, and the `docs/` tree if the release
    changes documented behavior, commands, or configuration options.
@@ -84,11 +94,16 @@ Before creating the GitHub release:
 
 ## Supported Node.js versions
 
-CI (`.github/workflows/ci.yml`) builds, type-checks, tests, and lints on
-Node.js 20 for runtime compatibility and runs the full gate on Node.js 22. The official Signal K plugin CI
-(`.github/workflows/plugin-ci.yml`) also exercises Node.js 22 and 24 across
-Linux, macOS, and Windows, plus its Node.js 20 armv7 lane. The publish workflow
-runs on Node.js 22. The `engines` field in `package.json` is
+CI (`.github/workflows/ci.yml`) compiles the plugin, type-checks, runs the
+node tests, lints, and audits on Node.js 20 for runtime compatibility, and
+runs the full gate on Node.js 22. The Node.js 20 leg does not build the panel:
+Babel 8 requires Node.js 22.18 or newer, so the panel toolchain is exercised
+on Node.js 22 and 24 only. The official Signal K plugin CI
+(`.github/workflows/plugin-ci.yml`) exercises Node.js 22 and 24 across Linux,
+macOS, and Windows, plus its advisory Node.js 20 armv7 lane, where
+`npm run build` skips the panel bundle with a notice and the lane proves the
+plugin installs, compiles, and passes its tests on the lowest Node it
+advertises. The publish workflow runs on Node.js 22. The `engines` field in `package.json` is
 `^20.3.0 || >=22` (the ActiveCaptain client uses `AbortSignal.any`, added in
 Node 20.3, and `lru-cache` excludes Node 21); keep its floor at or below the
 lowest Node.js version CI exercises.

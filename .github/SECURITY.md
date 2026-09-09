@@ -47,8 +47,8 @@ When using this plugin:
 2. **Review Dependencies**: regularly update dependencies.
 3. **Network Security**: ensure your Signal K server is properly secured.
 4. **Access Control**: limit access to your Signal K admin interface. The
-   plugin's status API and the optional route-draft endpoint share one admin
-   gate that fails closed, so keep server access control enabled.
+   plugin's status API sits behind an admin gate that fails closed, so keep
+   server access control enabled.
 5. **Monitor Logs**: watch for unusual activity in the Signal K logs.
 
 ## Dependency Security
@@ -66,24 +66,18 @@ npm audit
 
 ## Data Handling
 
-For points of interest the plugin talks to four unauthenticated read-only
-APIs: the Garmin ActiveCaptain community API, the OpenStreetMap Overpass API
-the OpenSeaMap source queries, the USCG NAVCEN Maritime Safety Information
-feed, and the NOAA ENC Direct ArcGIS service. These requests carry only chart
-coordinates (bounding boxes), point-of-interest ids, and standard HTTP cache
-headers; the plugin sends no personal data, no credentials, and no account
-login of any kind. It does not store or transmit user identifiers. See
+For points of interest the plugin talks only to unauthenticated read-only
+APIs: the Garmin ActiveCaptain community API, the OpenStreetMap Overpass
+API that the OpenSeaMap source queries, the USCG NAVCEN Maritime Safety
+Information feeds behind the Light List and the Local Notices to Mariners,
+the NOAA ENC Direct ArcGIS service, the NOAA CO-OPS station-metadata API,
+the NGA World Port Index API, and the USACE locks and dams feature
+services. These requests carry only chart coordinates (bounding boxes),
+point-of-interest ids, and standard HTTP cache headers; the plugin sends no
+personal data, no credentials, and no account login of any kind. It does not
+store or transmit user identifiers. See
 [docs/garmin-api.md](../docs/garmin-api.md) for the full ActiveCaptain API
 research notes.
-
-The optional, admin-gated AI route-draft feature additionally talks to
-OpenRouter with an API key you configure, to EMODnet for European modeled
-depth, and to the vector-tile water source the channel router uses. The
-OpenRouter key is stored in the plugin configuration and sent only to
-OpenRouter; the route-draft request carries the passage prompt, the vessel
-position, and the chart bounds you submit, and nothing else. The feature is
-off until you set a key, and the endpoint is mounted only when the server has
-access control enabled and the caller is an authenticated administrator.
 
 ## Signal K Security
 

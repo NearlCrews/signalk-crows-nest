@@ -3,6 +3,11 @@
 const path = require('node:path')
 const webpack = require('webpack')
 const pkg = require('./package.json')
+// The Module Federation share map the shared UI package was verified with:
+// React and React DOM as host-owned, non-strict singletons with no bundled
+// fallback. Read `hostNotes` from the same entry for why the shares are not
+// strict.
+const { shared } = require('signalk-nearlcrews-ui/federation')
 
 // The SignalK admin UI looks up a configurator panel on window[<safeName>],
 // so the Module Federation container name must be the package name with any
@@ -66,25 +71,10 @@ module.exports = {
         // rather than dead code beside the panel.
         './PluginConfigurationPanel': './src/panel/index.tsx'
       },
-      // React and React DOM are host-owned singletons. The shared UI package is
-      // intentionally absent from this map so it remains bundled with the
-      // remote while both React packages resolve from Signal K Admin.
-      // strictVersion must stay OFF: Signal K 2.24.0's Admin bundles React
-      // 19.2.4 but registers its share with a hardcoded 19.0.0, so a strict
-      // ^19.2.0 check rejects a fully compatible host and, with import: false,
-      // the panel never mounts. A range mismatch stays a console warning.
-      shared: {
-        react: {
-          singleton: true,
-          requiredVersion: '^19.2.0',
-          import: false
-        },
-        'react-dom': {
-          singleton: true,
-          requiredVersion: '^19.2.0',
-          import: false
-        }
-      }
+      // The shared UI package is intentionally absent from this map so it
+      // remains bundled with the remote while both React packages resolve from
+      // Signal K Admin.
+      shared
     })
   ]
 }

@@ -1,15 +1,13 @@
 /**
- * Shared relative-time unit stepping.
+ * Relative-time unit stepping for the ActiveCaptain detail renderer
+ * (`active-captain/poi-detail-renderer.ts`), which phrases a delta like
+ * "3 days ago" inside the rendered note HTML. The subtle "pick the coarsest
+ * unit, then step up when rounding spills into the next unit" loop lives here
+ * so the renderer's unit table stays declarative.
  *
- * The panel status bar (`panel/relative-time.ts`) and the ActiveCaptain detail
- * renderer (`active-captain/poi-detail-renderer.ts`) both render a delta as a
- * phrase like "3 days ago". They differ only in their unit table (the renderer
- * adds month and year) and their locale, so the subtle "pick the coarsest unit,
- * then step up when rounding spills into the next unit" loop lives here once
- * rather than in two copies that must be fixed in lockstep.
- *
- * Dependency-free so both the browser-bundled panel and the node-side renderer
- * can import it.
+ * The configuration panel does not use this: it renders ages through the
+ * shared UI package's `RelativeAge`, which the plugin runtime cannot depend on
+ * because that package is a development dependency bundled into the panel.
  */
 
 /** A relative-time unit paired with its length in seconds. */

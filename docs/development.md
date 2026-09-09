@@ -4,8 +4,11 @@
 
 - Node.js 20.3 or newer
 - Node.js `^22.22.2 || ^24.15.0 || ^26.0.0` for the complete development
-  toolchain
-- TypeScript 6 (installed as a dev dependency)
+  toolchain (the panel build alone needs Node.js 22.18 or newer, which Babel 8
+  requires)
+- TypeScript 7 for builds and type checks, with TypeScript 6 beside it for
+  the lint chain (both installed as dev dependencies under npm aliases; see
+  the contributing guide)
 - npm 12.0.2; `packageManager` pins that version for repository commands
 
 ## Setup
@@ -21,10 +24,12 @@ npm install
 ```bash
 npm run build         # Build the plugin and the configuration panel
 npm run build:plugin  # Compile src/ (excluding src/panel/) to dist/ with tsc
-npm run build:panel   # Bundle the React panel to public/ with webpack
+npm run build:panel   # Bundle the React panel to public/ with webpack (skipped with a notice below Node 22.18)
 npm run build:icons   # Copy the SignalK admin-UI icon set into public/assets/icons/
+npm run watch:panel   # Rebuild the panel on every change while iterating on it
 npm test              # Run the test suite under test/
 npm run typecheck     # Type-check the plugin, panel, and tests (no emit)
+npm run typecheck:ts6 # The same three projects under the TypeScript 6 API the lint chain uses
 npm run lint          # Lint with ESLint 9 and neostandard
 npm run lint:fix      # Lint and auto-fix
 npm run format        # Format source, documentation, and configuration files
@@ -32,11 +37,17 @@ npm run format:check  # Check formatting without writing files
 npm run test:coverage # Run unit tests with coverage reporting
 npm run test:browser  # Build and test the panel in Chromium
 npm run deadcode      # Report high-signal Knip findings
+npm run check:panel   # Check the built panel against the shared UI consumer contract
 npm run package:check # Validate package metadata and packed contents
 npm run verify        # Run the complete local verification gate
 npm run verify:release # Add the full browser matrix and full dependency audit
 npm run clean         # Remove dist/ and the panel build artifacts
 ```
+
+`watch:panel` runs the same guarded bundler `build:panel` uses, so a Node below
+the panel toolchain floor prints the skip notice instead of a raw Babel engine
+error. Webpack clears `public/` on every rebuild, so run `npm run build:icons`
+again after a watch session before packing or checking the package.
 
 The `prepack` lifecycle runs `clean` then `build` automatically before
 `npm pack` or `npm publish`. It does not run when a registry consumer installs
@@ -74,12 +85,12 @@ across restarts.
 The plugin ships its own configuration panel: a federated React app, loaded by
 the Signal K admin UI through Module Federation, that replaces the generated
 settings form with a live status section and grouped POI-type toggles. The
-panel uses the exact `signalk-nearlcrews-ui` 0.8.2 package for its shell,
+panel uses the exact `signalk-nearlcrews-ui` 0.9.0 package for its shell,
 themes, and shared controls, while the Signal K host supplies React and React
 DOM at `^19.2.0`. Fresh
 profiles use Auto, which follows an explicit host theme and otherwise uses
 Light. System follows the operating-system color scheme. The
-panel build transpiles with Babel 7, whose React preset keeps
+panel build transpiles with Babel 8, whose React preset keeps
 `development: false` pinned (see the comment in `webpack.config.cjs` and the
 `test/panel-babel-config.test.ts` contract test): a development transform would
 emit runtime JSX that the bundled production React does not implement.
@@ -90,7 +101,8 @@ not scan arbitrary host `script` or `style` elements for a nonce, because that
 cannot establish a trusted value. An independently hardened host that enforces
 a strict nonce-based `style-src` policy is unsupported for the embedded panel
 until Signal K provides a trusted nonce contract. If that contract is added,
-pass the host-provided value to `PanelRoot` through its `styleNonce` prop.
+pass the host-provided value to `PanelShell`, which forwards it to
+`PanelRoot` through its `styleNonce` prop.
 
 ## Project structure
 
@@ -198,25 +210,25 @@ src/                      # TypeScript source
     ├── config-reducer.ts  # Pure reducer over the plugin config (testable)
     ├── normalize-config.ts# Normalizes the raw config object
     ├── active-captain-poi-types.ts  # ActiveCaptain POI-type metadata and summary
-    ├── relative-time.ts   # ISO timestamp to a localized "N minutes ago" phrase
-    ├── styles.ts          # Plugin layout styles and shared-theme token aliases
+    ├── checkbox-group-value.ts  # Per-flag config to shared CheckboxGroup value glue
     ├── unit-system.ts     # The display-units resolver keyed off the server unit preset
     ├── select-all-state.ts# Pure tri-state select-all derivation
+    ├── source-status-pill.ts  # Pure per-source pill variant, label, and detail wording
     ├── hooks/             # use-config, use-status, use-unit-system,
-    │                      #   use-number-draft, draft-reset-context,
-    │                      #   use-collapse-focus-restore
-    └── components/        # ErrorBoundary, StatusBar, FooterBar, DataSourcesSection (per-source
+    │                      #   draft-reset-context
+    └── components/        # StatusBar, DataSourcesSection (per-source
                            #   accordion shell), DataSourceCard (one collapsible card),
                            #   ActiveCaptainSource, OpenSeaMapSource, UscgLightListSource,
                            #   NoaaEncSource, NoaaCoopsSource, UscgLnmSource, WpiSource,
-                           #   UsaceSource (card bodies), SelectAllCheckbox (the
-                           #   tri-state select-all control), AlertsSection (the proximity,
-                           #   route-hazard, and bridge air-draft controls),
-                           #   and the per-field input adapters, including NumberField,
-                           #   LengthField (the meters-backed,
-                           #   unit-aware wrapper), MinimumYearField (the per-source
-                           #   earliest-year filter), ProximityAlarmFields, and
-                           #   RouteHazardScanFields
+                           #   UsaceSource (card bodies), SourceAdvanced (the shared
+                           #   Advanced disclosure each card body puts its tuning
+                           #   fields in), AlertsSection (the proximity, route-hazard,
+                           #   and bridge air-draft controls), and the per-field
+                           #   wrappers over the shared UI, including LengthField (the
+                           #   meters-backed, unit-aware wrapper), MinimumYearField
+                           #   (the per-source earliest-year filter), IncludeToggles
+                           #   (the shared import-layer group), ProximityAlarmFields,
+                           #   and RouteHazardScanFields
 test/                     # node:test suites, run through tsx
 dist/                     # Compiled plugin output (generated, not committed)
 public/                   # Webpack Module Federation output for the panel (generated, not committed)
@@ -227,7 +239,8 @@ docs/                     # Project documentation
 `dist/`, `public/`, `assets/`, `CHANGELOG.md`, and `THIRD_PARTY_NOTICES.md` are
 allowlisted for npm (see the `files` field in `package.json`); npm also includes
 `package.json`, `README.md`, and `LICENSE`. `assets/icons/` holds the Signal K
-admin UI icon set (the master SVG and the four rasterized PNGs), and the
+admin UI icon set: the master SVG, the 192-pixel PNG that `signalk.appIcon`
+points at, and a 512-pixel PNG for listings that want a larger raster. The
 `build:icons` script copies them under `public/assets/icons/` so the Signal K
 admin's `express.static` mount can serve them at runtime.
 
