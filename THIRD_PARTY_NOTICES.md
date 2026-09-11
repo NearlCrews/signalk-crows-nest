@@ -1,6 +1,6 @@
 # Third-party notices
 
-<!-- generated-for-signalk-nearlcrews-ui:0.9.0 -->
+<!-- generated-for-signalk-nearlcrews-ui:0.10.1 -->
 
 The configuration panel is a Module Federation remote, so the packages below are bundled into `public/*.js` and redistributed with this plugin. Their licenses follow. Regenerate with `npm run licenses` after any change to the panel dependency tree.
 
@@ -8,7 +8,7 @@ React is supplied by the Signal K admin host as a Module Federation singleton an
 
 ## react
 
-Version: 19.2.8
+Version: 19.3.0
 
 License: MIT
 
@@ -248,7 +248,7 @@ Apache License
 
 ## signalk-nearlcrews-ui
 
-Version: 0.9.0
+Version: 0.10.1
 
 License: Apache-2.0
 

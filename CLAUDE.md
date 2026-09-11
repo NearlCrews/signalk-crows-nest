@@ -36,7 +36,7 @@ In practice:
 ## Layout
 
 The code is organized into purpose-named directories under `src/`. A POI data
-source is an "input"; a SignalK consumer of POI data is an "output". Each is a
+source is an "input"; a Signal K consumer of POI data is an "output". Each is a
 self-contained module registered on one line in `src/index.ts`.
 
 - `src/` - TypeScript source. The Node plugin (everything except `src/panel/`)
@@ -49,7 +49,7 @@ self-contained module registered on one line in `src/index.ts`.
       registries' fragments and owns the `start`/`stop` lifecycle, including
       the shared position monitor.
     - `plugin-config.ts` - merges the per-module config-schema fragments into
-      the single schema the SignalK admin UI renders.
+      the single schema the Signal K admin UI renders.
   - `inputs/` - POI data sources.
     - `poi-source.ts` - the `PoiSource` and `InputModule` contracts an input
       implements, plus the shared per-source policy helpers:
@@ -261,7 +261,7 @@ self-contained module registered on one line in `src/index.ts`.
       and dams to `Dam`, the types the route-hazard scan treats specially;
       wire dimensions are feet, stored SI via `metersFromFeet`),
       `usace-detail.ts`, `usace-sections.ts`, and `usace-types.ts`.
-  - `outputs/` - SignalK consumers of POI data.
+  - `outputs/` - Signal K consumers of POI data.
     - `output.ts` - the `OutputModule`, `OutputHandle`, `OutputContext`, and
       `PositionScanContributor` contracts an output implements.
     - `output-registry.ts` - holds the registered outputs and starts the
@@ -272,28 +272,28 @@ self-contained module registered on one line in `src/index.ts`.
       and re-raise a standing alarm. A held point clears on the ordinary exit
       geometry, or after thirty minutes unreported, whichever comes first.
     - `notes-resource/` - the `notes` resource output: `notes-resource-output.ts`
-      (the `OutputModule` that registers the SignalK `notes` provider),
+      (the `OutputModule` that registers the Signal K `notes` provider),
       `note-builder.ts` (turns a POI into a `notes` resource object, publishing
       the source-agnostic normalized detail on `properties.crowsNest` alongside
       the HTML description so a structured client can render it natively), and
       `resource-query.ts` (parses a resource query into a bounding box).
     - `proximity-alarm/` - the proximity-alarm output: `proximity-alarm-output.ts`
-      (the `OutputModule`) and `proximity-alarms.ts` (emits SignalK hazard
+      (the `OutputModule`) and `proximity-alarms.ts` (emits Signal K hazard
       notifications, with hysteresis, near a Hazard).
     - `route-hazard/` - the route-corridor hazard output: `route-hazard-output.ts`
       (the `OutputModule`, which also resolves a too-low-bridge verdict when the
-      bridge air-draft check is on), `route-hazard-alarms.ts` (emits SignalK
+      bridge air-draft check is on), `route-hazard-alarms.ts` (emits Signal K
       route notifications, raised once and cleared once, with a
       clearance-specific message for a too-low bridge), `route-corridor.ts` (pure
       corridor geometry), and `course-reader.ts` (reads the active route from
-      the SignalK Course API and forces a scan only when the resolved route
+      the Signal K Course API and forces a scan only when the resolved route
       actually changed, since external NMEA course sources re-publish an
       unchanged destination continuously).
     - `bridge-air-draft/` - the bridge air-draft check (US and worldwide,
       defaults off): warns when a bridge's vertical clearance is at or below the
       vessel air draft plus a configurable margin. `bridge-air-draft-output.ts`
       (the `OutputModule`, a proximity scan over Bridge POIs),
-      `bridge-clearance-alarms.ts` (emits SignalK alarm notifications with the
+      `bridge-clearance-alarms.ts` (emits Signal K alarm notifications with the
       same raise-once, clear-once hysteresis as the proximity hazard alarm), and
       `bridge-clearance-resolver.ts` (resolves a bridge's clearance: a
       synchronous OpenSeaMap summary hit, or a deduped, cached ActiveCaptain
@@ -389,7 +389,7 @@ self-contained module registered on one line in `src/index.ts`.
     lifecycle predicate that prevents a stopped run from publishing),
     `url-safety.ts` (the `safeLinkUrl` scheme allowlist both
     the Handlebars detail templates and the structured section builders gate a
-    link value through), `notification-path.ts` (builds path-safe SignalK
+    link value through), `notification-path.ts` (builds path-safe Signal K
     notification deltas, shared by the alarm outputs, with a `sourceSuffix`
     arg so proximity and route alarms get distinct `$source` brands),
     `notification-tracker.ts` (raise/clear bookkeeping shared by the
@@ -493,9 +493,14 @@ self-contained module registered on one line in `src/index.ts`.
     `LabeledField`, `FieldGroup`, `Checkbox`, `CheckboxGroup`,
     `CollapsibleSection`, `Text`, `RelativeAge`); the panel carries no rename
     adapters, no draft hook, no inline style module, and no stylesheet of its
-    own. The panel is a per-source accordion: the shared theme toggle, the
-    status section, a collapsible card per data source (each with an h4
-    Advanced disclosure), then the Alerts section, then the sticky save bar.
+    own. The panel is a per-source accordion: the status section, a
+    collapsible card per data source (each with an h4 Advanced disclosure),
+    the Alerts section, the sticky save bar, and last the shared theme toggle,
+    which `PanelShell` places with `themeToggle='end'` so chrome does not take
+    the first tab stop ahead of the operator's own task. The shell carries no
+    `title`, which keeps its sections at the level the Admin's card header
+    expects; note that adding one would both derive a deeper heading level and
+    make `themeToggle='between'` meaningful again.
     Card disclosure state lives at the panel root so the card bodies share one
     stable map.
 - `test/` - `node:test` test suite, run through `tsx`.
@@ -535,7 +540,8 @@ self-contained module registered on one line in `src/index.ts`.
   Module Federation remote (`webpack.config.cjs`, `tsconfig.panel.json`),
   transpiled by `babel-loader` with Babel 8. Babel 8 declares
   `node: ^22.18.0 || >=24.11.0`, so the panel build toolchain needs Node
-  22.18 or newer while `engines.node` stays `^20.3.0 || >=22` for the plugin
+  22.18 or newer (or 24.11 or newer), which excludes Node 23 and Node 24.0
+  through 24.10, while `engines.node` stays `^20.3.0 || >=22` for the plugin
   runtime: Signal K server itself requires Node 22, and a build-time major is
   not held back for a runtime lane. `npm run build:panel` goes through
   `scripts/build-panel.mjs`, which skips the webpack bundle with a printed
@@ -552,18 +558,41 @@ self-contained module registered on one line in `src/index.ts`.
   bundled production `react/jsx-dev-runtime` does not implement, which breaks
   the panel at first render. The `test/panel-babel-config.test.ts` contract
   test locks this in.
-- `signalk-nearlcrews-ui` 0.9.0 supplies the panel shell (`PanelShell`, with
+- `signalk-nearlcrews-ui` 0.10.1 supplies the panel shell (`PanelShell`, with
   the browser preflight and the error boundary built in), the theme system,
   the save bar (`SaveActionBar` plus `useUnsavedChangesGuard`), the numeric
   field (`NumberField`), collapsible sections, checkbox groups, the status
   indicators, and the relative-age formatter. It is pinned exactly, and
   `npm run check:panel` runs the library's own `snui-check-consumer` against
-  the built remote: exact pin, version stamp, no bundled React, the published
-  share map (`signalk-nearlcrews-ui/federation`, which `webpack.config.cjs`
-  spreads), and the gzip size baseline in `scripts/panel-size-baseline.json`.
+  the built remote. The static half checks the exact pin, the version stamp,
+  no bundled React, the published share map
+  (`signalk-nearlcrews-ui/federation`, which `webpack.config.cjs` spreads), and
+  the gzip size baseline in `scripts/panel-size-baseline.json`. On top of that,
+  `--runtime --expose ./PluginConfigurationPanel --expect "Plugin status"`
+  renders the built panel the way the Signal K Admin host does, on `node:vm`
+  with no extra dependency, and asserts that the exposed module evaluates and
+  mounts, that the production JSX runtime was bundled rather than the
+  development one, that the version stamp reaches the markup, that the rendered
+  panel contains its Plugin status section, and that the panel does not call
+  `save` while it renders. That half needs a built `public/remoteEntry.js`,
+  which `verify` already sequences before it. The `--expect` anchor is the same
+  string `tests/browser/panel.spec.ts` asserts, so three places now depend on
+  that heading text.
   Fresh profiles use Auto, which follows an explicit host theme and otherwise
   uses Light. System follows the operating system preference. The host
   supplies React and React DOM `^19.2.0` singletons without bundled fallbacks.
+- Two shared components own state the panel used to hold, so do not rebuild
+  either by hand. `SaveActionBar` owns how long its saved message stays up,
+  measured from `saveRequestedAt`, so the panel records that timestamp and
+  keeps no timer, no duration constant, and no effect writing the prop back to
+  null. `Banner` and `StatusIndicator` mount their live region before its
+  first message when given `live`, and render nothing and occupy no space
+  while empty, so the correct spelling is one always-mounted component with
+  conditional CONTENT: `<Banner live="polite">{message}</Banner>`, never
+  `{message && <Banner live="polite">{message}</Banner>}`. The conditional form
+  builds the region and its first message in one commit, which screen readers
+  do not announce reliably, and a hidden `LiveRegion` beside a conditional
+  banner says the same words twice.
 - `CollapsibleSection` defaults to `mountStrategy="retain"`, which wraps its
   children in React `Activity`. Collapsing runs every effect cleanup in the
   subtree and reopening re-runs those effects, while component state and refs
@@ -613,11 +642,13 @@ self-contained module registered on one line in `src/index.ts`.
 - `npm run build` - build the plugin and the configuration panel.
 - `npm run build:plugin` - compile `src/` to `dist/` with `tsc`.
 - `npm run build:panel` - bundle the React panel to `public/` with webpack;
-  on a Node below 22.18 it prints a notice and skips instead, because the
+  on a Node outside Babel 8's range it prints a notice and skips instead,
+  because the
   panel toolchain (Babel 8) cannot run there.
 - `npm run check:panel` - run the shared UI's consumer check against the
   built panel: exact pin, version stamp, host shares, and the gzip size
-  baseline.
+  baseline, then render it as the Admin host does and assert it mounts on the
+  production JSX runtime with its Plugin status section present.
 - `npm test` - run the test suite under `test/`.
 - `npm run typecheck` - type-check the plugin, the panel, and the tests without emitting.
 - `npm run lint` - run code, Markdown, and spelling checks.
@@ -638,6 +669,27 @@ self-contained module registered on one line in `src/index.ts`.
 - Keep modules focused and small. Shared types belong in `src/shared/types.ts`.
 - Do not edit `dist/` or `public/`; they are generated.
 - Run `npm run verify` before committing.
+- `README.md` carries NO relative Markdown file links. The Signal K App Store
+  renders the npm README and rewrites relative IMAGE paths against the package
+  root, but leaves every other link target untouched, so a relative link to
+  `CHANGELOG.md`, `LICENSE`, `docs/`, or `.github/` is dead there. Name a
+  shipped guide in plain text and use an absolute `https://github.com/...` URL
+  only where a working link is essential. Relative image paths are correct as
+  long as the file ships in the tarball, which is why `assets/screenshots/`
+  stays relative. This shipped as a fix in 0.15.6. The rule does not apply to
+  `docs/` or `.github/`, which are read on GitHub and are not packed.
+- The README carries exactly one `## What's new in X.Y.Z` section, describing
+  the current release alone and matching the `package.json` version. Overwrite
+  it every release rather than letting it accumulate.
+- Write the product name as `Signal K` in prose. `signalk` stays as it is
+  inside package names, keywords, paths, URLs, and the plugin id.
+- No `prepare`, `preinstall`, or `postinstall` lifecycle script, ever. Build
+  steps hang off `prepack`, and git hooks belong behind a non-lifecycle script
+  a contributor opts into once. `scripts/check-package.mjs` fails the packaging
+  gate on all three and its comment carries the reasoning: npm 10, which the
+  plugin CI's Node 22 lanes ship, runs `prepare` during
+  `npm pack --ignore-scripts` and prints it on stdout, so any caller reading a
+  bare pack capture takes that banner for the tarball name.
 
 ## Shared skills
 

@@ -47,7 +47,11 @@ Before creating the GitHub release:
    below any `## [Unreleased]` section, with an `<a id="vXYZ"></a>` anchor line
    directly above the heading (digits only, no dots: `0.5.0` -> `v050`). Group
    the changes under `### Added`, `### Changed`, `### Fixed`, and the other Keep
-   a Changelog subsections.
+   a Changelog subsections. Then, at the foot of the file, repoint
+   `[Unreleased]` at the new tag and add a `[X.Y.Z]` compare link beneath it.
+   Those definitions start at 0.15.5 and are maintained forward only, so do not
+   backfill the releases below it. The anchors, not the compare links, are what
+   the README deep-links to.
 3. Run the full local release check:
 
    ```bash
@@ -56,9 +60,9 @@ Before creating the GitHub release:
 
    This gate includes code and documentation checks, type checking, coverage,
    production builds, the cross-browser panel matrix, accessibility checks,
-   the shared UI consumer check with its panel size baseline, packed-package
-   validation, and the runtime dependency audit. Inspect the package-check
-   output, not only its exit code.
+   the shared UI consumer check with its panel size baseline and its host-style
+   render of the built panel, packed-package validation, and the runtime
+   dependency audit. Inspect the package-check output, not only its exit code.
 
    Two audits exist and only one gates a release. `npm run audit:runtime`
    covers the tree a consumer installs, which is also what the Signal K
@@ -70,34 +74,55 @@ Before creating the GitHub release:
    either one.
 
 4. Update `README.md`, `CHANGELOG.md`, and the `docs/` tree if the release
-   changes documented behavior, commands, or configuration options.
+   changes documented behavior, commands, or configuration options. Three of
+   these go stale every release and are easy to miss:
+   - Overwrite the README's `## What's new in X.Y.Z` section so it describes
+     this release alone. It is a single current section, never an accumulating
+     list, and its heading must match the `package.json` version.
+   - Move the supported-version table in `.github/SECURITY.md` to the new
+     minor line.
+   - Re-check every version number the documentation states as current, which
+     today means the `@signalk/server-api` floor and the exact
+     `signalk-nearlcrews-ui` pin in `README.md`, `CLAUDE.md`, and
+     `docs/development.md`.
 5. Review the package metadata and plugin-registry inputs: description,
-   categories, engine range, icon paths, screenshot paths, and alt text,
-   recommendations, repository links, and funding link. Open every current
-   screenshot and confirm it matches the release UI. Regenerate the panel image
-   reproducibly with `npm run screenshot:panel` when the panel changes.
-6. Commit the version bump, the regenerated `package-lock.json`, the changelog
+   categories, engine range, icon path, screenshot paths, screenshot alt text,
+   repository links, and funding link. Open every current screenshot and
+   confirm it matches the release UI. Regenerate the panel image reproducibly
+   with `npm run screenshot:panel` when the panel changes.
+6. Refresh `signalk.recommends`. This is a standing item on every release, not
+   one-time setup: the App Store resolves the entries by npm package name and
+   renders them as "Works well with". List a plugin only where data actually
+   flows between it and this one, or where one consumes or enables the other's
+   output in a way an operator runs them together. Shared authorship or a
+   shared theme is not enough, and a loosely related entry is worse than a
+   shorter list. Leave out alternatives, competitors, forks of upstream, and
+   this package itself. Check whether a companion has been published since the
+   last release, and confirm each candidate is live on npm, because an
+   unpublished repository cannot appear in the listing.
+7. Commit the version bump, the regenerated `package-lock.json`, the changelog
    entry, and any new published assets (for example new `assets/screenshots/`
    images). Confirm with `git status` that nothing under `assets/` is left
    untracked, since the publish workflow ships only committed files.
-7. Push the preparation commit and confirm the CI, ESLint, and Signal K Plugin
+8. Push the preparation commit and confirm the CI, ESLint, and Signal K Plugin
    CI workflows pass on that exact commit.
-8. Get explicit final approval before creating a tag or GitHub release. A
+9. Get explicit final approval before creating a tag or GitHub release. A
    GitHub release immediately triggers npm publication, so preparing and
    pushing the release commit is not approval to publish it.
-9. After approval, create a GitHub release whose tag matches the new
-   `package.json` version (for example, tag `v0.6.0`). The build job fails fast
-   if the tag and version disagree. Watch the `Node.js Package` workflow to
-   completion, confirm Signal K Plugin CI ran on the tagged commit, and verify
-   the GitHub release, npm version, npm `latest` tag, registry `gitHead`, and
-   provenance statement before calling the release complete.
+10. After approval, create a GitHub release whose tag matches the new
+    `package.json` version (for example, tag `v0.6.0`). The build job fails fast
+    if the tag and version disagree. Watch the `Node.js Package` workflow to
+    completion, confirm Signal K Plugin CI ran on the tagged commit, and verify
+    the GitHub release, npm version, npm `latest` tag, registry `gitHead`, and
+    provenance statement before calling the release complete.
 
 ## Supported Node.js versions
 
 CI (`.github/workflows/ci.yml`) compiles the plugin, type-checks, runs the
 node tests, lints, and audits on Node.js 20 for runtime compatibility, and
 runs the full gate on Node.js 22. The Node.js 20 leg does not build the panel:
-Babel 8 requires Node.js 22.18 or newer, so the panel toolchain is exercised
+Babel 8 requires Node.js 22.18 or newer (or 24.11 or newer), so the panel
+toolchain is exercised
 on Node.js 22 and 24 only. The official Signal K plugin CI
 (`.github/workflows/plugin-ci.yml`) exercises Node.js 22 and 24 across Linux,
 macOS, and Windows, plus its advisory Node.js 20 armv7 lane, where

@@ -11,6 +11,115 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+<a id="v0170"></a>
+
+## [0.17.0] - 2026-09-11
+
+### Fixed
+
+- Two sources reporting the same harbour or hazard could both stay on the
+  chart instead of merging into one marker. The dedupe pass buckets points
+  into a grid and scans each bucket's neighbors, and it sized that grid from
+  the average latitude of the whole batch. A degree of longitude shrinks
+  toward the pole, so every point poleward of that average sat on a grid too
+  fine for it, and a genuine pair could land two buckets apart where the scan
+  never compares them. The further a batch spread north or south, the more
+  pairs it missed. The grid is now sized from the poleward-most point in the
+  batch, which is wide enough for every point in it.
+- A configuration save could leave a position subscription behind. If building
+  the position monitor failed after it had subscribed to
+  `navigation.position`, the plugin reported the failure and kept running, as
+  intended, but nothing held the handle needed to release that subscription,
+  so every save or restart from then on added another. A failure now releases
+  the subscription on its way out.
+- A `notes` resource request for a property the note does not carry could be
+  answered with a built-in belonging to every JavaScript object, such as
+  `constructor` or `toString`, rather than reported as absent. Only the note's
+  own properties are read now.
+- A cleared-route message sent while no route was loaded forced a full scan,
+  which costs one list request to every enabled source. An active route that
+  republished its cleared state produced that traffic repeatedly for no
+  result. Clearing a route that is already clear now does nothing.
+- In the panel's Plugin status section, a poll that cleared the recent errors
+  while a "Show source" button had focus took that button away and left focus
+  on the page body, with no keyboard route back. Focus now lands on the Plugin
+  status section itself, which announces where it went.
+- An Overpass endpoint the plugin cannot use was accepted, saved, and then
+  silently discarded. A typo in the primary endpoint or in any fallback line
+  was stored as typed, replaced with the default the next time the panel
+  loaded, and lost, so OpenSeaMap ran against an endpoint other than the one
+  shown on screen and nothing said so. Both fields now report the problem and
+  block Save until it is corrected.
+- A fallback-endpoints box left entirely blank could leave the panel
+  permanently unsaved, and no longer stores a single empty entry.
+- A navigation aid with no readable light characteristic rendered an empty
+  "Light:" line in the note popup, and gave a structured client an empty
+  Character row beside it. Both now leave the character out, and they decide it
+  the same way, so the popup text and the structured detail cannot disagree.
+  An aid that still carries a usable nominal range or focal plane keeps those.
+- On a server set to imperial units, a length field's own minimum could sit
+  out of reach. A 1 meter floor displayed as 3.28 feet, which a numeric keypad
+  cannot type, so the alarm radius, merge radius, and air-draft fields now
+  round their bounds inward to whole feet and stay inside the stored range.
+- The jump button beside a recent error named the source by its internal slug,
+  reading "Show openseamap", when the status snapshot carried no row for that
+  source. It now uses the source's name in every case.
+- The "Import layers" group on the ActiveCaptain card did not include its own
+  empty-selection warning in its description, so a screen reader entering the
+  group was not told why nothing would be imported. Each inner group already
+  did this; the outer one now matches.
+
+### Changed
+
+- The panel's Overpass fallback-mirror box no longer capitalizes, autocorrects,
+  or spell-checks what you type. A tablet at the helm was correcting each
+  mirror URL as it was entered and underlining every line of a valid list. The
+  endpoint field beside it already behaved this way.
+- A failed status poll explains itself in plain words instead of showing the
+  raw HTTP status. A signed-out admin session now reads "The admin session is
+  no longer signed in. Sign in to Signal K again to restore it." rather than
+  promising a retry that could never recover it. Any other HTTP failure names
+  the status and says the next poll will retry, and a reply the panel cannot
+  read now says so plainly instead of quoting the parser.
+- The per-source status labels read `Healthy`, `Idle`, `Fetching`, and
+  `Unreachable` on the card pills, and `Reachable`, `Unreachable`, and
+  `Not yet contacted` in the source health table. The old labels repeated their
+  own tone, so a screen reader announced "Success. ok" and "Error. error", and
+  the pill and the table used different words for the same condition.
+- The collapsed Alerts section now names which alarms are armed instead of
+  saying nothing, so the proximity, route-corridor, and bridge air-draft
+  settings can be checked without expanding it.
+- The USCG Local Notice to Mariners refresh field no longer describes itself
+  as a viewport cache. That source re-downloads whole notice files on a
+  schedule, so the shared stale-while-revalidate wording was wrong for it.
+- OpenSeaMap note detail labels a seamark's color as "Color", matching the
+  spelling used everywhere else. The label previously carried the British
+  spelling, so a chartplotter that matches on that exact string needs the new
+  one. The underlying data is unchanged.
+- The panel's theme toggle moves from the top of the panel to the foot of it,
+  below the Alerts section, so it no longer takes the first keyboard stop ahead
+  of the status readout and the source cards. The five themes, Auto, System,
+  Light, Dark, and the red-preserving Night, are unchanged, and an explicit
+  choice still persists across visits.
+- The packaging gate refuses a `prepare`, `preinstall`, or `postinstall`
+  lifecycle script. Build steps belong on `prepack`, which this package already
+  uses, and git hooks belong behind a script a contributor runs once. The check
+  reports the cause by name instead of surfacing later as an unreadable
+  packaging report.
+- The configuration panel builds on `signalk-nearlcrews-ui` 0.10.1, the plugin
+  compiles against `@signalk/server-api` 2.32.0, and React and React DOM move
+  to 19.3.0, the runtime the panel shares with the Signal K admin UI. Vite,
+  Babel, the React types, cspell, knip, the pinned workflow actions, and an
+  override on the documentation linter's TOML parser move to current releases
+  too. None of this reaches an installed plugin, whose runtime dependencies are
+  unchanged.
+- The panel's packaging gate now also renders the built panel the way the
+  Signal K admin UI does, and fails if it will not mount, if the development
+  JSX runtime was bundled in place of the production one, or if the status
+  section is missing. A panel that passed every file check but would have
+  failed to appear in the admin UI is now caught before release rather than
+  after it.
+
 <a id="v0160"></a>
 
 ## [0.16.0] - 2026-09-09
@@ -77,8 +186,9 @@ asks an upstream service for data.
   resolves before it reaches the alarm radius, and no clearance resolves later
   than it did in 0.15.6.
 - The panel's per-source status pills read `ok`, `idle`, `waiting`, and
-  `error`, each with the shared glyph for its tone. The documented labels were
-  wrong for three of the four.
+  `error`. The `ok`, `waiting`, and `error` pills each carry the shared glyph
+  for their tone; `idle` is neutral and carries none. The documented labels
+  were wrong for three of the four.
 
 - The configuration panel builds on `signalk-nearlcrews-ui` 0.9.0. The shared
   panel shell runs the browser preflight, places the theme toggle, and wraps
@@ -130,8 +240,9 @@ asks an upstream service for data.
   `npm run typecheck:ts6` checks the same projects under that compiler. The
   other updates are minor or patch releases of Playwright, webpack,
   webpack-cli, tsx, cspell, knip, the Vite React plugin, and the React DOM
-  types. Babel 8 transpiles the panel. It requires Node 22.18 or
-  newer, so the panel build toolchain now needs that while the plugin runtime
+  types. Babel 8 transpiles the panel. It requires Node 22.18 or newer (or
+  24.11 or newer), so Node 23 and Node 24.0 through 24.10 cannot build the
+  panel. The panel build toolchain now needs that while the plugin runtime
   keeps its Node 20.3 floor: `npm run build` skips the panel bundle with a
   printed notice on a Node below that floor, because `public/` is a prebuilt
   release artifact that a Node 20 install never rebuilds, so the Node 20 CI
@@ -2175,7 +2286,8 @@ bridges, and locks along it.**
   health through `setPluginStatus`, and documents its HTTP API with
   `getOpenApi`.
 
-[Unreleased]: https://github.com/NearlCrews/signalk-crows-nest/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/NearlCrews/signalk-crows-nest/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/NearlCrews/signalk-crows-nest/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/NearlCrews/signalk-crows-nest/compare/v0.15.6...v0.16.0
 [0.15.6]: https://github.com/NearlCrews/signalk-crows-nest/compare/v0.15.5...v0.15.6
 [0.15.5]: https://github.com/NearlCrews/signalk-crows-nest/compare/v0.15.4...v0.15.5

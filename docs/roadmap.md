@@ -16,7 +16,7 @@ terms-of-service exposure.
   `navigation.position` and scan for points of interest around the vessel as
   it moves. The enabler for the proximity alarms.
 - **Proximity hazard alarms.** When the vessel nears a Hazard (and optionally
-  a Bridge, Lock, or Inlet), emit a SignalK `notifications.*` delta. Turns a
+  a Bridge, Lock, or Inlet), emit a Signal K `notifications.*` delta. Turns a
   passive chart layer into an active safety tool.
 - **Persistent, offline cache.** Back the in-memory cache with on-disk storage
   so point-of-interest detail survives restarts and is readable with no
@@ -43,14 +43,14 @@ terms-of-service exposure.
   shared UI system in v0.15.0.
 - Night-vision theme for rendered note descriptions.
 - NOAA tide and current cross-reference for the nearest station.
-- CI release automation and SignalK App Store polish (icon, metadata). Shipped:
+- CI release automation and Signal K App Store polish (icon, metadata). Shipped:
   a GitHub-release-driven npm publish with provenance, the plugin app icon,
-  the registry screenshots, and a SignalK plugin-ci run on the published commit.
+  the registry screenshots, and a Signal K plugin-ci run on the published commit.
 
 ## Tier 3: ambitious or gated
 
-- A bundled SignalK webapp for browsing points of interest off the chart
-  plotter.
+- A bundled Signal K webapp for browsing points of interest off the
+  chartplotter.
 - Developer API local mirror: incremental sync and bulk export for a true
   offline regional dataset. Requires a Garmin developer API key and accepting
   Garmin's developer terms.
@@ -83,10 +83,10 @@ Most of the candidates from this research round shipped in v0.13.0:
   plugin's US bias for international cruisers.
 - **USACE locks and dams**: shipped in v0.13.0 (locks by default, dams
   opt-in).
-- **AIS Aids to Navigation read from SignalK itself**: still a candidate. A
-  new input that surfaces the AIS AtoN already on the SignalK bus (message
+- **AIS Aids to Navigation read from Signal K itself**: still a candidate. A
+  new input that surfaces the AIS AtoN already on the Signal K bus (message
   21, especially virtual AtoN) as POI notes. Global, no external API, and no
-  terms-of-service exposure; it introduces a read-from-SignalK input flavor
-  alongside the HTTP pulls.
+  terms-of-service exposure; it introduces an input that reads from Signal K
+  itself alongside the HTTP pulls.
 
 Waterway Guide remains the other candidate noted in Tier 3.

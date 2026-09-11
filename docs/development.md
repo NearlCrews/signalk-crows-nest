@@ -2,10 +2,13 @@
 
 ## Prerequisites
 
-- Node.js 20.3 or newer
+- Node.js 20.3 or newer, or 22 or newer (`engines.node` is
+  `^20.3.0 || >=22`; Node 21 is excluded because `lru-cache` does not support
+  it)
 - Node.js `^22.22.2 || ^24.15.0 || ^26.0.0` for the complete development
-  toolchain (the panel build alone needs Node.js 22.18 or newer, which Babel 8
-  requires)
+  toolchain. The panel build alone needs the Babel 8 range
+  (`^22.18.0 || >=24.11.0`), so Node 23 and Node 24.0 through 24.10 cannot
+  build it.
 - TypeScript 7 for builds and type checks, with TypeScript 6 beside it for
   the lint chain (both installed as dev dependencies under npm aliases; see
   the contributing guide)
@@ -24,8 +27,8 @@ npm install
 ```bash
 npm run build         # Build the plugin and the configuration panel
 npm run build:plugin  # Compile src/ (excluding src/panel/) to dist/ with tsc
-npm run build:panel   # Bundle the React panel to public/ with webpack (skipped with a notice below Node 22.18)
-npm run build:icons   # Copy the SignalK admin-UI icon set into public/assets/icons/
+npm run build:panel   # Bundle the React panel to public/ with webpack (skipped with a notice outside Babel 8's Node range)
+npm run build:icons   # Copy the Signal K admin-UI icon set into public/assets/icons/
 npm run watch:panel   # Rebuild the panel on every change while iterating on it
 npm test              # Run the test suite under test/
 npm run typecheck     # Type-check the plugin, panel, and tests (no emit)
@@ -37,7 +40,7 @@ npm run format:check  # Check formatting without writing files
 npm run test:coverage # Run unit tests with coverage reporting
 npm run test:browser  # Build and test the panel in Chromium
 npm run deadcode      # Report high-signal Knip findings
-npm run check:panel   # Check the built panel against the shared UI consumer contract
+npm run check:panel   # Check the built panel against the shared UI consumer contract, then render it as the Admin host does
 npm run package:check # Validate package metadata and packed contents
 npm run verify        # Run the complete local verification gate
 npm run verify:release # Add the full browser matrix and full dependency audit
@@ -85,7 +88,7 @@ across restarts.
 The plugin ships its own configuration panel: a federated React app, loaded by
 the Signal K admin UI through Module Federation, that replaces the generated
 settings form with a live status section and grouped POI-type toggles. The
-panel uses the exact `signalk-nearlcrews-ui` 0.9.0 package for its shell,
+panel uses the exact `signalk-nearlcrews-ui` 0.10.1 package for its shell,
 themes, and shared controls, while the Signal K host supplies React and React
 DOM at `^19.2.0`. Fresh
 profiles use Auto, which follows an explicit host theme and otherwise uses
@@ -106,7 +109,7 @@ pass the host-provided value to `PanelShell`, which forwards it to
 
 ## Project structure
 
-A POI data source is an "input"; a SignalK consumer of POI data is an "output".
+A POI data source is an "input"; a Signal K consumer of POI data is an "output".
 Each is a self-contained module registered on one line in `src/index.ts`.
 
 ```
@@ -163,10 +166,10 @@ src/                      # TypeScript source
 │   ├── usace/             # The USACE locks and dams input (US-only, at-runtime
 │   │                      #   bbox query): module, source adapter, ArcGIS
 │   │                      #   client, mapping, detail renderer, section builder
-├── outputs/              # SignalK consumers of POI data
+├── outputs/              # Signal K consumers of POI data
 │   ├── output.ts          # The OutputModule and PositionScanContributor contracts
 │   ├── output-registry.ts # Holds the outputs, starts the enabled ones
-│   ├── notes-resource/    # The SignalK notes resource provider output
+│   ├── notes-resource/    # The Signal K notes resource provider output
 │   ├── proximity-alarm/   # The proximity hazard-alarm output
 │   ├── route-hazard/      # The route-corridor hazard-scan output
 │   └── bridge-air-draft/  # The bridge air-draft check (proximity + route-ahead warning)

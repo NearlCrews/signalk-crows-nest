@@ -10,9 +10,9 @@
   The ActiveCaptain source is on by default; every other source (OpenSeaMap,
   USCG Light List, NOAA ENC Direct, NOAA CO-OPS, USCG Local Notice to
   Mariners, NGA World Port Index, and USACE locks and dams) is off by
-  default and has to be enabled on its card. Check the per-source status bar
+  default and has to be enabled on its card. Check the Plugin status section
   at the top of the panel: an enabled source whose API call has succeeded
-  reads as reachable and shows a recent fetch time.
+  reads as `Reachable` and shows a recent fetch time.
 - Confirm at least one ActiveCaptain POI type is selected. Selecting none
   intentionally hides the chart notes layer, including notes from optional
   sources. Enabled safety alerts still fetch the hazard types they need.
@@ -20,6 +20,30 @@
   every source (ActiveCaptain is heavy on the US East Coast and Gulf,
   OpenSeaMap is heavy in Europe), so an empty bounding box legitimately
   returns nothing.
+- Give a newly enabled source time to arrive, and expect a different wait
+  depending on which one it is. The USCG Light List, USCG Local Notice to
+  Mariners, and NOAA CO-OPS sources wait 30 seconds after the plugin starts
+  before their first download, so they legitimately show nothing straight
+  after you enable them, with their pill reading `Idle` and the health table
+  reading `Not yet contacted`. The viewport-driven sources answer the next
+  chart request instead, so they do not wait. The NGA
+  World Port Index is the slow one: it has no bounding-box query, so its first
+  list call downloads the whole worldwide index. Its pill reads `Idle` until
+  the chartplotter first asks for the area, then `Fetching` until the download
+  lands, and the expanded card explains the wait as
+  "List request exceeded 5s; result will appear on next refresh". The ports
+  appear on a later chart refresh, which on a satellite link can be minutes
+  rather than seconds.
+
+  A pill reading `Idle:` followed by a reason, such as
+  `Idle: outside US waters`, is the opposite case and waiting will not help.
+  That source is skipping on purpose and stays quiet until the reason stops
+  applying. Five of the eight sources are US-only and gate their requests on
+  the vessel position this way: the USCG Light List, USCG Local Notice to
+  Mariners, NOAA CO-OPS, NOAA ENC Direct, and USACE locks and dams. Offshore,
+  every one of them reads `Idle: outside US waters` until the vessel returns
+  to US waters, whichever section of this page brought you here.
+
 - Enable the plugin's debug log (see below) and watch for
   `Incoming request to list note resources`. If that line never appears, the
   chartplotter is not querying the `notes` resource type at all.
@@ -89,24 +113,25 @@ full browser reload of the admin UI so it re-fetches the panel bundle.
 
 ## The status section shows errors or a stale fetch time
 
-The status bar reports the result of real upstream requests. `reachable` means
-the latest request succeeded, `unreachable` means it failed, and `not yet
-contacted` means no request has completed during this plugin run. A local index
-or disk-cache hit does not change reachability or the last successful upstream
-list-fetch time. This is why cached markers can remain visible while the source
-honestly reads as unreachable.
+The source health table reports the result of real upstream requests.
+`Reachable` means the latest request succeeded, `Unreachable` means it failed,
+and `Not yet contacted` means no request has completed during this plugin run.
+A local index or disk-cache hit does not change reachability or the last
+successful upstream list-fetch time. This is why cached markers can remain
+visible while the source honestly reads as `Unreachable`.
 
 Each source card condenses that state into one of four pills:
 
-- `✓ ok`: the last upstream list request succeeded.
-- `idle`: the source is awaiting its first request or deliberately skipped
-  one. The label names the reason when it has one, as in `Idle: outside US
-waters`.
-- `! waiting`: the source exceeded the aggregate's five-second response window,
+- `✓ Healthy`: the last upstream list request succeeded.
+- `Idle`: the source is awaiting its first request or deliberately skipped
+  one. The label names the reason when it has one, as in
+  `Idle: outside US waters`.
+- `! Fetching`: the source exceeded the aggregate's five-second response window,
   but its request is still filling the viewport cache. Refresh the chart to use
   the result after it finishes.
-- `× error`: the last real request failed. The recent-error list keeps the
-  failure details, and a source-attributed message opens the matching card.
+- `× Unreachable`: the last real request failed. The recent-error list keeps the
+  failure details, and each entry carries a "Show <source>" button that opens
+  the matching card and moves focus to it.
 
 Common failures include a lost internet connection, Cloudflare throttling the
 ActiveCaptain community API, an overloaded Overpass endpoint, or an NGA
@@ -129,6 +154,16 @@ line). The source tries the primary first and fails over to each mirror in
 order, so a single Overpass instance outage no longer takes OpenSeaMap offline.
 Use full-planet mirrors only: a regional extract answers an out-of-region query
 with no data rather than an error.
+
+## Save is unavailable
+
+The panel refuses to save an Overpass endpoint the plugin cannot use, on the
+OpenSeaMap card's main endpoint field and on any line of its fallback list. The
+offending field states the problem, and Save stays unavailable until it is
+corrected. Clear the main endpoint field to return to the default. This is
+deliberate: an unusable endpoint used to be accepted, replaced with the default
+the next time the panel loaded, and lost, so OpenSeaMap ran against an endpoint
+other than the one shown on screen.
 
 ## Configuration changes do not take effect
 

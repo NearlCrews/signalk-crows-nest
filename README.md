@@ -6,7 +6,7 @@
 [![ESLint](https://github.com/NearlCrews/signalk-crows-nest/actions/workflows/eslint.yml/badge.svg)](https://github.com/NearlCrews/signalk-crows-nest/actions/workflows/eslint.yml)
 [![SignalK Plugin CI](https://github.com/NearlCrews/signalk-crows-nest/actions/workflows/plugin-ci.yml/badge.svg)](https://github.com/NearlCrews/signalk-crows-nest/actions/workflows/plugin-ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/NearlCrews/signalk-crows-nest/blob/main/LICENSE)
-[![node](https://img.shields.io/badge/node-%3E%3D20.3-brightgreen.svg)](https://nodejs.org)
+[![node](https://img.shields.io/badge/node-%5E20.3%20%7C%7C%20%3E%3D22-brightgreen.svg)](https://nodejs.org)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/nearlcrews)
 
 A points-of-interest importer for [Signal K](https://signalk.org): it pulls
@@ -22,41 +22,41 @@ route-corridor, and bridge air-draft alarms.
 > safety-of-life navigation: always cross-check against official charts and
 > your primary instruments.
 
-## What's new in 0.16.0
+## What's new in 0.17.0
 
-This release fixes three ways a hazard alarm could fail to warn you. Two of
-them change when an alarm sounds, so read the changelog before upgrading.
+This release is corrections and panel work. Nothing you have configured
+changes, and no alarm changes when it sounds, but two fixes change what reaches
+the chart and one changes what the panel will let you save.
 
-- **A hazard can no longer pass inside the alarm radius unnoticed.** Alarms
-  were checked once a minute regardless of the radius you set, and a vessel
-  can cross the whole alarm zone in less than that: at the default 500 metres,
-  a hazard 450 metres abeam was missed from 20 knots, and one dead ahead from
-  about 32. Alarms are now checked on every position fix, at a rate derived
-  from the tightest radius you have configured, and the plugin asks the
-  upstream services no more often than before.
-- **A slow source no longer cancels a standing alarm.** An upstream that timed
-  out or failed took its hazards out of the alarm with it, then raised the
-  alarm again, with sound, when it recovered. A hazard is now held at the
-  position it was last seen at and clears when you are genuinely clear of it.
-- **A confused upstream no longer empties your hazards in silence.** A
-  response that was valid JSON but carried an unexpected shape wiped the
-  stored records for that source and reported a successful fetch, which for
-  the Local Notice to Mariners meant losing the hazard markers the alarms run
-  on. That case is now an error, and the next refresh re-fetches.
-- **Far less data over the wire.** The plugin now negotiates compression: the
-  World Port Index refresh drops from 6.3 MB to about 579 KB, and the tide
-  station list from 777 KB to 32 KB. That matters on a metered link.
-- **Rebuilt configuration panel.** The panel is built on
-  `signalk-nearlcrews-ui` 0.9.0 throughout: a shared shell, a shared save bar,
-  and shared fields in place of the panel's own copies. Plugin status is a
-  titled section with a per-source health table, each recent error carries a
-  button that opens and scrolls to the source it came from, and that button
-  now works when the section is collapsed and moves focus when you use it.
-- **Numeric fields that keep what you type.** Units render beside the input
-  rather than inside the label, and the arrow keys step by one display unit,
-  so a bridge clearance or an alarm radius holds the exact figure you entered.
+- **Duplicate markers merge where they used to slip through.** Two sources
+  reporting the same harbour or hazard could both stay on the chart. The
+  duplicate pass sized its search grid from the average latitude of each
+  batch, which is too fine for every point nearer the pole than that average,
+  so real pairs were never compared. The further north or south a batch
+  spread, the more it missed.
+- **An unusable Overpass endpoint is refused instead of discarded.** A typo in
+  the OpenSeaMap endpoint or in any fallback line used to be saved, silently
+  replaced with the default the next time the panel loaded, and lost, so
+  OpenSeaMap ran against an endpoint other than the one on screen. Both fields
+  now say so and hold Save until it is corrected.
+- **Aids with no readable light characteristic no longer show an empty
+  line.** A navigation aid whose light characteristic arrived blank rendered a
+  bare "Light:" in the popup, and handed a structured chartplotter an empty
+  Character row. An aid that still has a usable range or focal plane keeps
+  those.
+- **Fewer pointless requests to the data sources.** A cleared-route message
+  arriving while no route was loaded forced a full scan, one list request to
+  every enabled source, and produced nothing.
+- **Plain language when the panel cannot reach the plugin.** A signed-out
+  admin session now says so and tells you to sign in again, rather than
+  showing a raw HTTP status and promising a retry that could never recover it.
+- **Clearer source status.** The per-source labels read `Healthy`, `Idle`,
+  `Fetching`, and `Unreachable`, the health table reads `Reachable`,
+  `Unreachable`, and `Not yet contacted`, and the collapsed Alerts section
+  names which alarms are armed. On a server set to imperial units, a length
+  field's own minimum is now reachable from a numeric keypad.
 
-See the [v0.16.0 changelog entry](https://github.com/NearlCrews/signalk-crows-nest/blob/main/CHANGELOG.md#v0160)
+See the [v0.17.0 changelog entry](https://github.com/NearlCrews/signalk-crows-nest/blob/main/CHANGELOG.md#v0170)
 and [full release history](https://github.com/NearlCrews/signalk-crows-nest/blob/main/CHANGELOG.md).
 
 ## What it does
@@ -128,7 +128,7 @@ air-draft check).
   `MODIFIED_DATE` on USCG, OSM element timestamp on OpenSeaMap), and a
   freshness warning in the popup for an ActiveCaptain Hazard whose report
   has not been confirmed in over two years.
-- **A React configuration panel** with a per-source status bar, an
+- **A React configuration panel** with a per-source health table, an
   accordion of cards each with a live-status pill, an Alerts section, and
   shared `signalk-nearlcrews-ui` controls and themes. Fresh profiles use Auto,
   which follows an explicit host theme and otherwise uses Light. System follows
@@ -212,7 +212,8 @@ The plugin also serves an admin-gated `GET` status endpoint.
   viewport. A `navigation.position` source on `vessels.self` is required for
   the position-driven alarms and lets the plugin avoid US-only requests when
   the vessel is clearly outside US waters.
-- Node.js 20.3 or newer.
+- Node.js 20.3 or newer, or 22 or newer. Node 21 is excluded, because a
+  dependency does not support it.
 - A chartplotter that consumes Signal K `notes` resources. Freeboard-SK
   is the reference consumer; any client that reads `notes` resources will
   see the markers, including [Binnacle](https://github.com/NearlCrews/signalk-binnacle),
@@ -246,20 +247,16 @@ ln -s "$(pwd)" ~/.signalk/node_modules/signalk-crows-nest
 In the Signal K admin UI, open **Server, then Plugin Config**, find
 "Crow's Nest", and enable the plugin. The defaults work for an
 ActiveCaptain-only setup; opt in to the other sources from their cards.
-The panel has these areas:
+The panel has these areas, from the top down:
 
-1. **Theme toggle** in the top corner: Auto, System, Light, Dark, or a
-   red-preserving Night mode for night vision at the helm. Auto is the default
-   for a fresh profile and follows an explicit host theme, falling back to Light.
-   System follows the operating-system color scheme, and an explicit choice
-   persists across visits.
-2. **Per-source status bar**: `reachable`, `unreachable`, or `not yet
-contacted` for each enabled source, the last successful upstream list-fetch
-   time, a "checked Ns ago" freshness note, and recent errors. A
-   source-attributed error is clickable and opens the matching source card.
-   Local cache and index reads do not count as proof that an upstream is
-   reachable.
-3. **Data sources accordion** with one collapsible card per source
+1. **Plugin status section**: a source health table reading `Reachable`,
+   `Unreachable`, or `Not yet contacted` for each enabled source, with the last
+   successful upstream list-fetch time and a "checked Ns ago" freshness note.
+   Recent errors appear below it, and each one carries its own
+   "Show <source>" button that expands the Data sources section, scrolls to
+   the source the error came from, and moves focus there. Local cache and index
+   reads do not count as proof that an upstream is reachable.
+2. **Data sources accordion** with one collapsible card per source
    (ActiveCaptain, OpenSeaMap, USCG Light List, NOAA ENC Direct, NOAA
    CO-OPS, USCG Local Notice to Mariners, NGA World Port Index, and USACE
    locks and dams). Each card's body groups its options into bordered
@@ -295,18 +292,24 @@ contacted` for each enabled source, the last successful upstream list-fetch
    earliest-year filter, `0` means off; positive values below 1900 normalize
    to 1900.
 
-4. **Alerts section** (collapsed by default; expand it to configure an
+3. **Alerts section** (collapsed by default; expand it to configure an
    alarm): the proximity-alarm, route-corridor scan, and bridge air-draft
    check controls, each in its own fieldset with an opt-in toggle and its
    numeric settings.
+4. **Theme toggle** at the foot of the panel: Auto, System, Light, Dark, or a
+   red-preserving Night mode for night vision at the helm. Auto is the default
+   for a fresh profile and follows an explicit host theme, falling back to Light.
+   System follows the operating-system color scheme, and an explicit choice
+   persists across visits.
 
 Per-source enable toggles live on each card's header, alongside the
 disclosure chevron. Each card carries a small live-status pill on the
-header: `✓ ok` after a successful upstream list fetch, `idle` before the
-first request or during an intentional skip, `! waiting` when a slow request
-continues after the five-second aggregate deadline, and `× error` after a
-failure. An idle pill names its reason when it has one, as in `Idle: outside
-US waters`. Expanding a card puts the longer detail under the header as
+header: `✓ Healthy` after a successful upstream list fetch, `Idle` before the
+first request or during an intentional skip, `! Fetching` when a slow request
+continues after the five-second aggregate deadline, and `× Unreachable` after a
+failure. An idle pill names its reason when it has one, as in
+`Idle: outside US waters`. Expanding a card puts the longer detail under the
+header as
 visible text, such as "17 POIs in last fetch, 5 minutes ago".
 Disabled cards show a "Disabled." prefix on their summary so an off source
 never reads as live. Every numeric input clears cleanly mid-edit. Saving
@@ -326,9 +329,10 @@ caches while retaining the on-disk data used for offline operation.
 
 ## Development
 
-This project targets Node 20.3 or newer and develops against
-`@signalk/server-api` 2.31.1 or newer, with TypeScript 7 and the exact shared
-UI package `signalk-nearlcrews-ui` 0.9.0 (development only). The full local
+This project targets Node 20.3 or newer, or 22 or newer (`engines.node` is
+`^20.3.0 || >=22`, which excludes Node 21), and develops against
+`@signalk/server-api` 2.32.0 or newer, with TypeScript 7 and the exact shared
+UI package `signalk-nearlcrews-ui` 0.10.1 (development only). The full local
 toolchain supports Node 22 from 22.22.2, Node 24 from 24.15.0, and Node 26,
 while the published plugin runtime keeps its Node 20.3 compatibility floor.
 

@@ -10,8 +10,7 @@ them as Signal K `notes` resources. There are two distinct APIs in play:
 2. The official **third-party / developer API** (`marine.garmin.com/thirdparty.../api/v2`) -
    requires an API key issued through the Garmin Developer Portal.
 
-The README links the developer API swagger page, but the running code talks to the
-community API. Both are documented below.
+The running code talks to the community API. Both are documented below.
 
 ---
 
@@ -261,19 +260,20 @@ not a license to hammer the service.
 
 Treat the plugin as a good citizen. Concrete values for the API client:
 
-| Setting                              | Recommended value                                                                                                                                                                |
-| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Max concurrency (in-flight requests) | **5** (hard ceiling 6)                                                                                                                                                           |
-| Steady-state request rate            | **~5 requests/second**, token-bucket limited, short bursts up to the concurrency cap                                                                                             |
-| Per-request timeout                  | 10 s connect + read (responses normally land well under 0.5 s)                                                                                                                   |
-| Retry on                             | `429`, `502`, `503`, `504`, and network errors only                                                                                                                              |
-| Do not retry on                      | other `4xx` (notably `404` = POI does not exist, permanent)                                                                                                                      |
-| Backoff                              | exponential with full jitter: base 1 s, factor 2, cap 30 s, max 4 retries                                                                                                        |
-| `Retry-After`                        | if present on a `429`/`503`, honor it instead of the computed backoff, but cap the wait at the maximum backoff (30 s) so a huge header value cannot stall a request indefinitely |
-| User-Agent                           | keep the shared `PLUGIN_USER_AGENT` (`signalk-crows-nest (+https://github.com/NearlCrews/signalk-crows-nest)`)                                                                   |
+| Setting                              | Recommended value                                                                                                                                                                                                                                                                               |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Max concurrency (in-flight requests) | **5** (hard ceiling 6)                                                                                                                                                                                                                                                                          |
+| Steady-state request rate            | **~5 requests/second**, token-bucket limited, short bursts up to the concurrency cap                                                                                                                                                                                                            |
+| Per-request timeout                  | 10 s connect + read (responses normally land well under 0.5 s)                                                                                                                                                                                                                                  |
+| Retry on                             | `429`, `502`, `503`, `504`, and network errors only                                                                                                                                                                                                                                             |
+| Do not retry on                      | other `4xx` (notably `404` = POI does not exist, permanent)                                                                                                                                                                                                                                     |
+| Backoff                              | exponential with full jitter: base 1 s, factor 2, cap 30 s, max 4 retries                                                                                                                                                                                                                       |
+| `Retry-After`                        | if present on a `429`/`503`, honor it instead of the computed backoff, but cap the wait so a huge header value cannot stall a request indefinitely. The client caps it at 5 minutes (`maxRetryAfterMs`), which is ample for a real Garmin cooldown and still bounded against a misbehaving edge |
+| User-Agent                           | keep the shared `PLUGIN_USER_AGENT` (`signalk-crows-nest (+https://github.com/NearlCrews/signalk-crows-nest)`)                                                                                                                                                                                  |
 
 The single most effective limiter is **caching**, which the plugin already does:
-summaries are cached (default 60 minutes via `cachingDurationMinutes`). Keep
+summaries are cached for the configured detail freshness window
+(`cachingDurationMinutes`, default 1440, so 24 hours). Keep
 that. The `bbox` list call is one request per `listResources` query and is low
 volume, so it does not need its own cache. Detail (`summary`) fetches are the
 ones that fan out, so the concurrency cap and rate limiter should be applied
@@ -350,9 +350,9 @@ requires the developer API and an API key. For the current feature set
 - Do not add Garmin login or an API key. They unlock the developer API, whose
   extra value is write/sync/export, not display data.
 - Apply the section 3.3 client settings: concurrency 5, ~5 req/s, exponential
-  backoff (base 1 s, cap 30 s, 4 retries), honor `Retry-After` capped at the
-  30 s maximum, retry only `429`/`5xx`/network errors, never retry `404`.
-- Keep caching summaries (default 60 min) - it is the main load mitigation.
+  backoff (base 1 s, cap 30 s, 4 retries), honor `Retry-After` capped at 5
+  minutes, retry only `429`/`5xx`/network errors, never retry `404`.
+- Keep caching summaries (default 24 hours): it is the main load mitigation.
 - The config UI exposes all 13 selectable POI types. The plugin renders every
   boater-useful summary section, including `services`, `mooring`, `navigation`,
   `retail`, and the `featuredReview`; only the sponsored `businessProgram`
