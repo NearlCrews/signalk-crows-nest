@@ -27,9 +27,9 @@
  * minutes ago") is visible text at the top of the expanded card rather than a
  * tooltip, so keyboard and touch users can reach it.
  *
- * The cards are not region landmarks: eight regions inside the Data sources
- * region would crowd a screen reader's landmark list, and the h3 headings
- * already give heading navigation one stop per source.
+ * The cards are not region landmarks: a nested region per source inside the
+ * Data sources region would crowd a screen reader's landmark list, and the h3
+ * headings already give heading navigation one stop per source.
  */
 
 import type * as React from 'react'
@@ -43,6 +43,7 @@ import {
   type StatusTone
 } from 'signalk-nearlcrews-ui'
 import { pillContent, pillVariant, type PillVariant } from '../source-status-pill.js'
+import { SOURCE_NAMES } from '../source-names.js'
 import type { SourceSlug } from '../../shared/source-ids.js'
 import type { SourceStatus } from '../../status/status-types.js'
 
@@ -61,8 +62,6 @@ interface Props {
    * expandedCards map AND looks up the source's StatusSnapshot entry.
    */
   cardId: SourceSlug
-  /** Source name shown in the header, e.g. `ActiveCaptain`. */
-  name: string
   /** Whether the source is enabled. */
   enabled: boolean
   /** One-line summary of the source's settings, shown collapsed. */
@@ -92,7 +91,6 @@ interface Props {
 /** A collapsible card for one POI data source. */
 export default function DataSourceCard ({
   cardId,
-  name,
   enabled,
   summary,
   expanded,
@@ -101,6 +99,9 @@ export default function DataSourceCard ({
   status,
   children
 }: Props): React.ReactElement {
+  // The slug already determines the name, so the card looks it up rather than
+  // taking a second prop that a new card could get out of step with it.
+  const name = SOURCE_NAMES[cardId]
   // Prefix the summary with "Disabled" when the enable toggle is off, so
   // a collapsed disabled card never reads as if it were live (the small
   // unchecked checkbox alone is too subtle a signal).

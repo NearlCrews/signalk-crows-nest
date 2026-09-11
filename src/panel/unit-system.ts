@@ -75,6 +75,44 @@ export function lengthUnitLabel (system: UnitSystem): 'meters' | 'feet' {
   return system === 'imperial' ? 'feet' : 'meters'
 }
 
+/** The min and max a length input should carry, in display units. */
+export interface LengthDisplayBounds {
+  min: number
+  max: number | undefined
+}
+
+/**
+ * Convert stored metric bounds into the ones a length input should carry.
+ *
+ * A whole-unit field rounds inward, the floor up and the ceiling down, so
+ * every value the input admits is inside the stored range and the re-clamp in
+ * meters never has to undo the rounding. Converting leaves fractions
+ * otherwise: a 1 m floor is 3.28 ft, which puts the spinner on a fractional
+ * grid and puts the floor itself out of reach of a numeric keypad, which has
+ * no decimal key.
+ *
+ * Rounding is skipped where no whole unit fits between the converted bounds,
+ * which is the one case where rounding inward would cross them (1 m to 1.2 m
+ * is 3.28 ft to 3.94 ft, and there is no whole foot in it). The field then
+ * keeps its exact fractional bounds and stays usable, rather than carrying a
+ * min above its own max. No field in the panel is that narrow today; the
+ * guard is here so adding one is not a trap.
+ */
+export function lengthDisplayBounds (
+  minMeters: number,
+  maxMeters: number | undefined,
+  system: UnitSystem,
+  wholeUnits: boolean
+): LengthDisplayBounds {
+  const min = lengthDisplayFromMeters(minMeters, system)
+  const max = maxMeters === undefined ? undefined : lengthDisplayFromMeters(maxMeters, system)
+  if (!wholeUnits) return { min, max }
+  const roundedMin = Math.ceil(min)
+  const roundedMax = max === undefined ? undefined : Math.floor(max)
+  if (roundedMax !== undefined && roundedMin > roundedMax) return { min, max }
+  return { min: roundedMin, max: roundedMax }
+}
+
 /**
  * The slice of `fetch` the ladder consumes, so tests can stub it without
  * constructing Response objects. The credentials literal is spelled out

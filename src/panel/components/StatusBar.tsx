@@ -9,14 +9,16 @@
  * last bounding-box query" and is meaningless until the chart is panned, so
  * showing it here reads as misleading.
  *
- * The section is a passive readout, not a live region: the relative ages
- * tick every few seconds, so announcing the whole section on each change
- * would be pure noise. The save bar remains the panel's one polite live
- * region, which is the right number.
+ * The section is a passive readout, not a live region: the relative ages tick
+ * every few seconds, and the error list holds up to `MAX_RECENT_ERRORS`
+ * entries, so announcing the section on each change would read the whole
+ * thing out for a changed age. The panel announces through the components that own a single
+ * message instead: the save bar, the status banner below this section, and
+ * each checkbox group's empty-selection warning.
  */
 
 import type * as React from 'react'
-import { memo } from 'react'
+import { memo, useRef, type RefObject } from 'react'
 import {
   Banner,
   Button,
@@ -29,13 +31,19 @@ import {
   type StatusTone
 } from 'signalk-nearlcrews-ui'
 import { Table, TableCell, TableHeaderCell } from 'signalk-nearlcrews-ui/composites'
+import { sourceDisplayName } from '../source-names.js'
 import type { SourceStatus, StatusError, StatusSnapshot } from '../../status/status-types.js'
 
-/** Map the tri-state apiReachable flag to a status tone and label. */
+/**
+ * Map the tri-state apiReachable flag to a status tone and label. Each label
+ * is capitalized and names the source's state rather than its severity: the
+ * tone already contributes "Success" or "Error" to the accessible name, so a
+ * label that repeated it would read as a stutter.
+ */
 function apiState (reachable: boolean | null): { tone: StatusTone, label: string } {
-  if (reachable === true) return { tone: 'success', label: 'reachable' }
-  if (reachable === false) return { tone: 'danger', label: 'unreachable' }
-  return { tone: 'neutral', label: 'not yet contacted' }
+  if (reachable === true) return { tone: 'success', label: 'Reachable' }
+  if (reachable === false) return { tone: 'danger', label: 'Unreachable' }
+  return { tone: 'neutral', label: 'Not yet contacted' }
 }
 
 /**
@@ -78,18 +86,39 @@ interface RecentErrorsProps {
   errors: StatusError[]
   sources: SourceStatus[]
   onJumpToSource: ((slug: string) => void) | undefined
+  /** Where focus lands if the banner goes while the operator is standing in it. */
+  focusFallbackRef: RefObject<HTMLElement | null>
 }
 
 /**
  * The recent-error list. An error recorded against a known source gets a
  * button that expands and scrolls to that source's card, named after the
- * source so eight identical "Show source" buttons never reach a screen
- * reader's button list.
+ * source so one identical "Show source" button per source never reaches a
+ * screen reader's button list.
+ *
+ * The banner carries those buttons, so a poll that clears the errors while
+ * one of them has focus would otherwise take the focused control away and
+ * drop the reader on the body. `dismissFocusRef` catches that: the section
+ * itself is the destination, so the reader is told where it landed.
+ *
+ * Known gap: no browser test covers that handoff. The fixture serves one
+ * status payload for the life of the page, so driving a mid-session clear
+ * would need a fixture mode of its own plus `page.clock` to reach the next
+ * poll, and a timing-driven test written against a release branch is how a
+ * flaky one gets in. The trigger is narrow (the plugin's error list is a
+ * bounded ring that clears only on a restart), so the gap was left open
+ * deliberately rather than overlooked.
  */
-function RecentErrors ({ errors, sources, onJumpToSource }: RecentErrorsProps): React.ReactElement {
+function RecentErrors (
+  { errors, sources, onJumpToSource, focusFallbackRef }: RecentErrorsProps
+): React.ReactElement {
+  // The snapshot is the authority where it has a row, and it does not always
+  // have one: plugin-status.ts records an error against a source that failed
+  // before it registered, which used to leave the button reading "Show
+  // openseamap". The panel's own names answer for those.
   const nameBySlug = new Map(sources.map((source) => [source.source, source.name]))
   return (
-    <Banner tone='danger' title='Recent errors'>
+    <Banner tone='danger' title='Recent errors' dismissFocusRef={focusFallbackRef}>
       {/* A list Stack wraps each child in its own list item. */}
       <Stack as='ul' gap={2}>
         {errors.map(({ at, message, source }, index) => (
@@ -99,7 +128,7 @@ function RecentErrors ({ errors, sources, onJumpToSource }: RecentErrorsProps): 
             {source !== undefined && onJumpToSource !== undefined
               ? (
                 <Button onClick={() => onJumpToSource(source)}>
-                  Show {nameBySlug.get(source) ?? source}
+                  Show {sourceDisplayName(source, nameBySlug.get(source))}
                 </Button>
                 )
               : null}
@@ -132,13 +161,27 @@ interface Props {
  * does not re-render the table. The relative ages own their own clocks.
  */
 export default memo(function StatusBar ({ status, lastUpdatedMs, onJumpToSource }: Props): React.ReactElement {
+  // Focus destination for the recent-error banner. The section is programmatically
+  // focusable only, so it adds no tab stop; a screen reader landing on it reads
+  // "Plugin status, region", which says where the errors went.
+  const sectionRef = useRef<HTMLElement>(null)
   return (
     <Section
+      ref={sectionRef}
+      tabIndex={-1}
       title='Plugin status'
       actions={lastUpdatedMs !== null
         ? <Text tone='muted' size='sm'>Checked <RelativeAge since={lastUpdatedMs} /></Text>
         : undefined}
     >
+      {/*
+        Prose rather than the shared EmptyState. This is one sentence inside a
+        section that already carries a heading and a freshness note, not a
+        blank page, so the component's title, description, icon, and action
+        layout would overstate it. It is also the only thing that would pull
+        EmptyState and its style module into a bundle that currently drops
+        both.
+      */}
       {status === null
         ? <StatusIndicator tone='neutral'>Loading status...</StatusIndicator>
         : status.sources.length === 0
@@ -154,6 +197,7 @@ export default memo(function StatusBar ({ status, lastUpdatedMs, onJumpToSource 
             errors={status.recentErrors}
             sources={status.sources}
             onJumpToSource={onJumpToSource}
+            focusFallbackRef={sectionRef}
           />
           )
         : null}

@@ -16,12 +16,40 @@ const STATUS_URL = `/plugins/${PLUGIN_ID}/api/status`
 /** How often, in milliseconds, to poll the status endpoint while visible. */
 const POLL_INTERVAL_MS = 5000
 
+/**
+ * What to tell the operator about a failed poll.
+ *
+ * The raw `HTTP 401` a thrown status carried was developer text, and the
+ * panel pairs every failure with "the next poll will retry automatically",
+ * which is a promise the retry cannot keep for an authentication failure: the
+ * endpoint is admin-gated, so 401 and 403 mean the admin session has gone and
+ * no number of retries brings it back. Everything else, a 5xx, a timeout, or
+ * a dropped connection, does recover on its own.
+ */
+export interface StatusPollError {
+  /** One sentence naming what went wrong, in the operator's terms. */
+  message: string
+  /** Whether the next poll can recover it without the operator acting. */
+  recoverable: boolean
+}
+
+/** Describe an HTTP status the poll rejected on. */
+function httpError (status: number): StatusPollError {
+  if (status === 401 || status === 403) {
+    return {
+      message: 'The admin session is no longer signed in',
+      recoverable: false
+    }
+  }
+  return { message: `The plugin returned HTTP ${status}`, recoverable: true }
+}
+
 /** The status surface the panel consumes. */
 export interface UseStatusResult {
   /** The most recent status snapshot, or null until the first poll succeeds. */
   status: StatusSnapshot | null
-  /** A non-fatal message describing the last failed poll, or null. */
-  error: string | null
+  /** The last failed poll, or null while the endpoint is answering. */
+  error: StatusPollError | null
   /**
    * Epoch milliseconds of the most recent successful poll, or null before
    * the first. Updated on every successful poll (unlike `status`, whose
@@ -36,7 +64,7 @@ export interface UseStatusResult {
 /** Poll the plugin status endpoint and expose the latest snapshot. */
 export function useStatus (): UseStatusResult {
   const [status, setStatus] = useState<StatusSnapshot | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<StatusPollError | null>(null)
   const [lastUpdatedMs, setLastUpdatedMs] = useState<number | null>(null)
   const canceled = useRef(false)
   const inFlight = useRef(false)
@@ -50,6 +78,27 @@ export function useStatus (): UseStatusResult {
     // Aborted on unmount so an outstanding request does not run to its
     // timeout against a component that is already gone.
     const unmountController = new AbortController()
+
+    /**
+     * Record a failed poll, keeping the previous description when the failure
+     * has not changed.
+     *
+     * A description is built fresh on every failed poll, so committing it
+     * unconditionally would re-render the panel root every 5 s for the length
+     * of an outage, where the string this used to hold settled into no
+     * re-renders at all. Comparing inside the update leaves the success path
+     * with nothing to reset.
+     */
+    function commitError (next: StatusPollError): void {
+      if (canceled.current) return
+      setError((previous) => (
+        previous !== null &&
+        previous.message === next.message &&
+        previous.recoverable === next.recoverable
+      )
+        ? previous
+        : next)
+    }
 
     // poll never rejects: it catches its own failures and surfaces them
     // through setError, so callers can leave its promise unhandled.
@@ -68,10 +117,16 @@ export function useStatus (): UseStatusResult {
             AbortSignal.timeout(PANEL_REQUEST_TIMEOUT_MS)
           ])
         })
-        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        // A rejected response is an ordinary outcome of a poll rather than an
+        // exception, so it is reported here instead of being thrown to a
+        // catch twenty lines below in the same function.
+        if (!response.ok) {
+          commitError(httpError(response.status))
+          return
+        }
         const parsed: unknown = await response.json()
         if (typeof parsed !== 'object' || parsed === null) {
-          throw new Error('status response was not a JSON object')
+          throw new Error('The plugin sent a status response the panel could not read')
         }
         const body = parsed as StatusSnapshot
         if (!canceled.current) {
@@ -92,9 +147,10 @@ export function useStatus (): UseStatusResult {
           setError(null)
         }
       } catch (e) {
-        if (!canceled.current) {
-          setError(e instanceof Error ? e.message : String(e))
-        }
+        // A timeout, an aborted request, a dropped connection, or a body the
+        // panel could not read. All of them are transient by nature, so the
+        // retry promise holds.
+        commitError({ message: e instanceof Error ? e.message : String(e), recoverable: true })
       } finally {
         inFlight.current = false
       }

@@ -54,7 +54,7 @@ test('pillVariant returns "error" when the most recent attempt failed', () => {
 
 test('pillContent for the idle variant shows an idle label and an awaiting-first-request detail', () => {
   assert.deepEqual(pillContent(status({ name: 'OpenSeaMap' }), 'idle'), {
-    label: 'idle',
+    label: 'Idle',
     detail: 'Awaiting first request'
   })
 })
@@ -95,7 +95,7 @@ test('pillContent for the waiting variant keeps the label calm and puts the reas
     'waiting'
   )
   assert.deepEqual(content, {
-    label: 'waiting',
+    label: 'Fetching',
     detail: 'List request exceeded 5s; result will appear on next refresh'
   })
 })
@@ -126,13 +126,15 @@ test('pillContent for the idle variant surfaces the skip reason as the label and
 })
 
 test('pillContent for the error variant shows the error label and the failure detail', () => {
+  // "Unreachable" rather than "error": the badge tone already contributes
+  // "Error" to the accessible name, so a label repeating it stuttered.
   assert.deepEqual(pillContent(status({ name: 'NOAA ENC' }), 'error'), {
-    label: 'error',
+    label: 'Unreachable',
     detail: 'Last request failed'
   })
 })
 
-test('pillContent for the ok variant shows a short "ok" label, the last-fetch count, and the fetch timestamp', () => {
+test('pillContent for the ok variant shows a short healthy label, the last-fetch count, and the fetch timestamp', () => {
   const at = '2026-05-23T08:15:00Z'
   const content = pillContent(
     status({
@@ -144,10 +146,10 @@ test('pillContent for the ok variant shows a short "ok" label, the last-fetch co
   )
   // The card renders the relative age from `since` itself, so the detail
   // stays a plain count and the timestamp travels beside it.
-  assert.deepEqual(content, { label: 'ok', detail: '17 POIs in last fetch', since: at })
+  assert.deepEqual(content, { label: 'Healthy', detail: '17 POIs in last fetch', since: at })
 })
 
-test('pillContent for the ok variant keeps the "ok" label when the last fetch returned zero POIs', () => {
+test('pillContent for the ok variant keeps the healthy label when the last fetch returned zero POIs', () => {
   // The count from a single bbox query is meaningless until you pan the
   // chart; reporting "0 POI" on the collapsed pill would read as a confusing
   // negative ("nothing selected?") when in fact the source is healthy and
@@ -161,7 +163,7 @@ test('pillContent for the ok variant keeps the "ok" label when the last fetch re
     }),
     'ok'
   )
-  assert.equal(content.label, 'ok')
+  assert.equal(content.label, 'Healthy')
   assert.equal(content.detail, '0 POIs in last fetch')
 })
 

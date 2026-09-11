@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright'
-import { expect, test } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
@@ -17,6 +17,30 @@ if (typeof uiPackage !== 'object' || uiPackage === null ||
 }
 const uiVersion = uiPackage.version
 
+/**
+ * Load a fixture mode and wait for the panel to mount.
+ *
+ * The wait is not optional: the fixture sets `data-fixture-ready` only after
+ * the federated remote has loaded and rendered, so a test that navigates
+ * without it races the mount and fails as a missing locator rather than as
+ * the thing it meant to assert.
+ */
+async function gotoFixture (page: Page, query = ''): Promise<void> {
+  await page.goto(`/${query}`)
+  await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true')
+}
+
+/**
+ * Open Alerts and arm the proximity alarm, returning the radius field, which
+ * is disabled until the toggle is on. Four tests need a live length control
+ * and this is the cheapest one to reach.
+ */
+async function armProximityAlarm (page: Page): Promise<Locator> {
+  await page.getByRole('button', { name: 'Alerts' }).click()
+  await page.getByRole('checkbox', { name: 'Emit an alarm when the vessel nears a hazard' }).check()
+  return page.getByRole('spinbutton', { name: /Alarm radius/ })
+}
+
 test.beforeEach(async ({ page }) => {
   page.on('console', (message) => {
     if (message.type() === 'error') throw new Error(`Browser console error: ${message.text()}`)
@@ -24,8 +48,7 @@ test.beforeEach(async ({ page }) => {
   page.on('pageerror', (error) => {
     throw error
   })
-  await page.goto('/')
-  await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true')
+  await gotoFixture(page)
   await expect(page.getByText('Plugin status', { exact: true })).toBeVisible()
 })
 
@@ -40,9 +63,11 @@ test('loads the production remote with the current shared UI and saves defaults'
 
   await page.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(page.locator('body')).toHaveAttribute('data-save-count', '1')
-  // The save bar's status is the panel's one polite live region for the save
-  // flow; the checkbox groups each mount an empty status region for their
-  // empty-selection warning, so the text filter picks the save bar's.
+  // Never query role="status" bare in this file. Several regions carry it at
+  // once: the save bar's own status, which also reports an unusable endpoint
+  // through invalidMessage, the always-mounted status-poll banner, the
+  // ActiveCaptain empty-selection chip, and one per checkbox group. A text
+  // filter or a scoped locator is what picks out the one under test.
   const saveStatus = page.getByRole('status').filter({ hasText: 'Save requested' })
   await expect(saveStatus).toBeVisible()
   // Focus moves to the bar's status destination, which wraps the live region,
@@ -85,8 +110,7 @@ test('builds one heading outline from the sections down to each card', async ({ 
 })
 
 test('preserves unknown configuration keys through an edit and save request', async ({ page }) => {
-  await page.goto('/?future-config')
-  await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true')
+  await gotoFixture(page, '?future-config')
 
   await page.getByRole('checkbox', { name: 'Enable OpenSeaMap' }).check()
   await page.getByRole('button', { name: 'Save', exact: true }).click()
@@ -100,16 +124,17 @@ test('preserves unknown configuration keys through an edit and save request', as
 
 test('provides deterministic populated state for the release screenshot', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-08-12T16:00:00.000Z'))
-  await page.goto('/?screenshot')
-  await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true')
+  await gotoFixture(page, '?screenshot')
   await page.getByRole('radio', { name: 'Light' }).click()
   await expect(page.getByRole('radio', { name: 'Light' })).toBeChecked()
-  await expect(page.getByText('reachable', { exact: true })).toHaveCount(8)
+  await expect(page.getByText('Reachable', { exact: true })).toHaveCount(8)
   await expect(page.getByRole('checkbox', { checked: true })).toHaveCount(7)
-  // Every card header carries an ok pill whose accessible text is the tone
-  // label plus the label, and every retained card body holds the visible
-  // detail line that replaced the old hover-only tooltip.
-  await expect(page.getByText('Success. ok')).toHaveCount(8)
+  // Every card header carries a healthy pill whose accessible text is the
+  // tone label plus the label, and every retained card body holds the visible
+  // detail line that replaced the old hover-only tooltip. The label names the
+  // source's state rather than repeating the tone, so it does not read as
+  // "Success. ok".
+  await expect(page.getByText('Success. Healthy')).toHaveCount(8)
   await expect(page.getByText('1 POI in last fetch')).toHaveCount(8)
   // Every retained body holds the line; only the expanded card shows it.
   await page.getByRole('button', { name: /OpenSeaMap/ }).click()
@@ -130,6 +155,19 @@ test('supports every explicit theme and returns to Auto', async ({ page }) => {
   }
   await themeGroup.getByRole('radio', { name: 'Auto' }).click()
   await expect(root).not.toHaveAttribute('data-snui-theme')
+
+  // The selector is chrome, not the operator's task, so it trails the panel
+  // and must not take the first tab stop ahead of the status readout and the
+  // source cards. Nothing here carries a positive tabindex, so document order
+  // is the tab order.
+  const trailsTheContent = await page.evaluate(() => {
+    const panel = document.querySelector('[data-snui-root]')
+    const group = panel?.querySelector('[role="radiogroup"]') ?? null
+    const card = panel?.querySelector('#ac-source-card-openseamap') ?? null
+    if (group === null || card === null) return null
+    return Boolean(card.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING)
+  })
+  expect(trailsTheContent).toBe(true)
 })
 
 test('holds a below-minimum numeric draft while editing and normalizes it on blur', async ({ page }) => {
@@ -141,12 +179,9 @@ test('holds a below-minimum numeric draft while editing and normalizes it on blu
   // default mountStrategy is 'retain', and collapsing one requires clicking
   // its header, which blurs the field first. A draft therefore cannot outlive
   // a collapse to be stranded by the effects React Activity re-runs on reopen.
-  await page.getByRole('button', { name: 'Alerts' }).click()
-  await page.getByRole('checkbox', { name: 'Emit an alarm when the vessel nears a hazard' }).check()
-
   // A raw "0" is below the one metre floor, so the committed value clamps away
   // from it. That is what makes this discriminating rather than tautological.
-  const radius = page.getByRole('spinbutton', { name: /Alarm radius/ })
+  const radius = await armProximityAlarm(page)
   await radius.fill('0')
   await expect(radius).toHaveValue('0')
 
@@ -154,8 +189,118 @@ test('holds a below-minimum numeric draft while editing and normalizes it on blu
   await expect(radius).not.toHaveValue('0')
 })
 
+test('Discard drops a number draft that did not change the committed value', async ({ page }) => {
+  // The case draft-reset-context.ts exists for, and the only one the Discard
+  // epoch can reach. A draft is shown while the value it was typed against is
+  // still committed, so a Discard that moves the value drops the draft by
+  // itself; a draft that resolves to the value already committed leaves
+  // nothing stale but the epoch.
+  //
+  // It discriminates on WebKit alone. Chromium moves focus to the Discard
+  // button when it is pressed, blurring the input and committing the draft
+  // before Discard runs, so the stale text is gone there either way.
+  // `npm run test:browser` is Chromium only and passes this for the wrong
+  // reason; the full matrix under `verify:release` is what exercises it. If
+  // the project list is ever trimmed for speed, this test needs WebKit or it
+  // stops discriminating.
+  const radius = await armProximityAlarm(page)
+  // Drive the committed value down to the 1 m floor and let it settle. The
+  // focus move is load-bearing, not cosmetic: it blurs the input so the draft
+  // commits, which is what establishes the floor as the committed value.
+  // `.focus()` rather than a click, so it cannot also toggle the section.
+  await radius.fill('0')
+  await page.getByRole('button', { name: 'Data sources' }).focus()
+  // Keep this as an assertion. If it ever reads anything else the setup has
+  // failed and everything after it is vacuous.
+  expect(await radius.inputValue()).toBe('1')
+
+  // Now a draft that resolves to the SAME committed value, so the field
+  // reports no change and only the epoch can clear the raw text.
+  await radius.fill('0')
+  expect(await radius.inputValue()).toBe('0')
+
+  const discard = page.getByRole('button', { name: 'Discard', exact: true })
+  await expect(discard).toBeEnabled()
+  await discard.click()
+  // The pre-edit value is the 500 m default, shown in metric because the
+  // fixture serves no unit preferences.
+  await expect(radius).toHaveValue('500')
+})
+
+test('Discard restores an edited field and clears the dirty state', async ({ page }) => {
+  await page.getByRole('button', { name: /Garmin ActiveCaptain/ }).click()
+  await page.getByRole('button', { name: 'Advanced' }).first().click()
+
+  const cache = page.getByRole('spinbutton', { name: /Cache duration/ })
+  // Read the default rather than naming it, so changing it does not break this.
+  const before = await cache.inputValue()
+  await cache.fill('99')
+  // Several regions carry role="status", so the text filter is what picks the
+  // save bar's out of them.
+  const unsaved = page.getByRole('status').filter({ hasText: 'Unsaved changes' })
+  await expect(unsaved).toBeVisible()
+
+  await page.getByRole('button', { name: 'Discard', exact: true }).click()
+  await expect(cache).toHaveValue(before)
+  await expect(unsaved).toHaveCount(0)
+})
+
+test('blocks Save on an Overpass endpoint the plugin would silently replace', async ({ page }) => {
+  // The plugin coerces an unusable endpoint to the FOSSGIS default, in its
+  // input module and in the panel's own normalizeConfig alike, so a typo that
+  // reached the save was written, ignored, and gone by the next mount with
+  // OpenSeaMap querying an endpoint other than the one on screen.
+  await page.getByRole('button', { name: /OpenSeaMap/ }).click()
+  await page.getByRole('button', { name: 'Advanced' }).first().click()
+
+  const endpoint = page.getByRole('textbox', { name: /Overpass API endpoint URL/ })
+  const save = page.getByRole('button', { name: 'Save', exact: true })
+  await expect(save).toBeEnabled()
+
+  // A host with no scheme: the shared coercion drops it.
+  await endpoint.fill('overpass-api.de/api/interpreter')
+  await expect(save).toBeDisabled()
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Overpass API endpoint URL' })
+  ).toBeVisible()
+
+  await endpoint.fill('https://overpass.kumi.systems/api/interpreter')
+  await expect(save).toBeEnabled()
+})
+
+test('renders lengths in feet on whole-foot bounds under an imperial preset', async ({ page }) => {
+  // The only test that exercises the imperial path at all: every other
+  // fixture mode 404s the unit-preferences ladder, which resolves to metric.
+  await gotoFixture(page, '?imperial')
+  const radius = await armProximityAlarm(page)
+  // The 500 m default, converted for display. The configuration stays metric.
+  await expect(radius).toHaveValue('1640.42')
+
+  // The stored floor is 1 m, which is 3.28 ft. A whole-unit field rounds that
+  // up to the next whole foot, so the spinner steps on the grid its own step
+  // describes and a numeric keypad, which has no decimal key, can reach the
+  // floor at all.
+  await expect(radius).toHaveAttribute('min', '4')
+  await expect(radius).toHaveAttribute('step', '1')
+  await expect(radius).toHaveAttribute('inputmode', 'numeric')
+})
+
 test('has no Axe findings or horizontal overflow at 320 pixels', async ({ page }) => {
+  // The collapsed panel shows almost none of its controls, so a sweep of the
+  // landing state would audit the section headers and little else. Open one
+  // source card and its Advanced disclosure, which between them render every
+  // field kind the panel has (checkbox group, number field, select, text
+  // input, and textarea), open Alerts for the alarm toggles, and take the
+  // fixture that renders the recent-error list with its jump buttons.
   await page.setViewportSize({ width: 320, height: 900 })
+  await gotoFixture(page, '?errors')
+  await page.getByRole('button', { name: /OpenSeaMap/ }).click()
+  await page.getByRole('button', { name: 'Advanced' }).first().click()
+  // Armed, so the radius renders as a live control: Axe exempts a disabled
+  // one from the contrast rules this sweep is here to run.
+  const radius = await armProximityAlarm(page)
+  await expect(radius).toBeEnabled()
+
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
   expect(overflow).toBeLessThanOrEqual(0)
   const results = await new AxeBuilder({ page }).analyze()
@@ -176,8 +321,7 @@ test('gives every interactive control a 44-pixel coarse-pointer target @coarse',
   // jump-to-source button in the recent-error list) then survived every check
   // here because no fixture state rendered it. So this expands everything,
   // renders the error state, and measures whatever the panel actually draws.
-  await page.goto('/?errors')
-  await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true')
+  await gotoFixture(page, '?errors')
 
   for (let pass = 0; pass < 40; pass++) {
     const collapsed = page.locator('[data-snui-root] button[aria-expanded="false"]')
@@ -231,8 +375,7 @@ test('gives every interactive control a 44-pixel coarse-pointer target @coarse',
 })
 
 test('shows a compatibility message when native CSS scope is unavailable', async ({ page }) => {
-  await page.goto('/?unsupported-css-scope')
-  await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true')
+  await gotoFixture(page, '?unsupported-css-scope')
   await expect(page.locator('[data-browser-compatibility-message]')).toContainText(
     'Browser update required'
   )
@@ -241,39 +384,38 @@ test('shows a compatibility message when native CSS scope is unavailable', async
 
 test('announces a status-poll failure from a region that predates the message', async ({ page }) => {
   // A live region created in the same commit as its text is not announced
-  // reliably, so the announcer stays mounted and empty while the endpoint is
-  // healthy and only its text changes when a poll fails. The empty region on
-  // a healthy panel is the half a banner-only implementation cannot have.
-  const announcer = page.locator('#ac-status-announcement')
-  await expect(announcer).toHaveAttribute('role', 'status')
-  await expect(announcer).toHaveText('')
+  // reliably, so the banner stays mounted and empty while the endpoint is
+  // healthy and only its content changes when a poll fails. The empty region
+  // on a healthy panel is the half a conditional banner cannot have.
+  const banner = page.locator('#ac-status-banner')
+  await expect(banner).toHaveAttribute('role', 'status')
+  await expect(banner).toBeEmpty()
+  // An always-mounted banner must not draw a danger box over a healthy panel,
+  // so the empty one is out of the flow and paints nothing.
+  const emptyBox = await banner.boundingBox()
+  expect(emptyBox?.height ?? 0).toBeLessThanOrEqual(1)
 
-  await page.goto('/?status-error')
-  await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true')
-  await expect(announcer).toHaveText(
-    'Status unavailable. HTTP 503. The next poll will retry automatically.'
-  )
+  await gotoFixture(page, '?status-error')
+  await expect(banner).toContainText('Status unavailable')
+  await expect(banner).toContainText('The plugin returned HTTP 503. The next poll will retry automatically.')
 
-  // The visible banner repeats the same words without becoming a second live
-  // region, so a screen reader hears the failure once.
+  // One element shows the failure and announces it, so a screen reader hears
+  // it once and the operator reads the same words on screen.
   const announcing = page
     .locator('[data-snui-root] [role="status"], [data-snui-root] [role="alert"], [data-snui-root] [aria-live]')
     .filter({ hasText: 'Status unavailable' })
   await expect(announcing).toHaveCount(1)
-  await expect(announcing).toHaveAttribute('id', 'ac-status-announcement')
+  await expect(announcing).toHaveAttribute('id', 'ac-status-banner')
+  await expect(announcing).toBeVisible()
 
-  // The failure is still on screen and not only announced: the banner repeats
-  // the words outside the visually hidden announcer.
-  const onScreen = page
-    .getByText('HTTP 503. The next poll will retry automatically.', { exact: true })
-    .and(page.locator('[data-snui-root] :not(#ac-status-announcement)'))
+  // The failure is on screen, not only in the accessibility tree.
+  const onScreen = page.getByText('The plugin returned HTTP 503. The next poll will retry automatically.', { exact: true })
   await expect(onScreen).toHaveCount(1)
   await expect(onScreen).toBeVisible()
 })
 
 test('opens a collapsed Data sources section when jumping to a source', async ({ page }) => {
-  await page.goto('/?errors')
-  await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true')
+  await gotoFixture(page, '?errors')
 
   const section = page.getByRole('button', { name: 'Data sources' })
   await section.click()
@@ -295,8 +437,7 @@ test('opens a collapsed Data sources section when jumping to a source', async ({
 })
 
 test('moves focus to the revealed card when jumping to a source', async ({ page }) => {
-  await page.goto('/?errors')
-  await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true')
+  await gotoFixture(page, '?errors')
 
   await page.getByRole('button', { name: 'Show openseamap' }).click()
 

@@ -80,27 +80,57 @@ const statusPayload = {
   startedAt: fixtureParams.has('screenshot') ? screenshotTimestamp : new Date().toISOString()
 }
 
+/**
+ * The server-wide active unit preset, served only under `?imperial`.
+ *
+ * Every other fixture mode 404s the whole `/signalk/v1/unitpreferences/`
+ * ladder, which resolves to metric, so without this mode no test ever renders
+ * a length field in feet. The panel's imperial path is where the metric
+ * bounds become fractional (a 1 m floor is 3.28 ft), so it needs a fixture of
+ * its own. Only the `length` category matters: `resolveUnitSystem` reads
+ * `categories.length.targetUnit` and treats anything but `foot` as metric.
+ */
+const imperialPreset = {
+  name: 'imperial',
+  categories: {
+    length: {
+      targetUnit: 'foot',
+      formula: 'value / 0.3048',
+      inverseFormula: 'value * 0.3048',
+      symbol: 'ft'
+    }
+  }
+}
+
+/** A JSON reply, the only kind this fixture serves. */
+function jsonResponse (body: unknown, status: number): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' }
+  })
+}
+
 window.fetch = async (input): Promise<Response> => {
   const rawUrl = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
   const path = new URL(rawUrl, window.location.origin).pathname
+  if (path.startsWith('/signalk/v1/unitpreferences/')) {
+    // The per-user applicationData document is left 404ing below, so the
+    // ladder falls through to the server-wide active preset, which is the
+    // rung a server with no per-user override actually answers on.
+    if (fixtureParams.has('imperial') && path.endsWith('/unitpreferences/active')) {
+      return jsonResponse(imperialPreset, 200)
+    }
+    return jsonResponse({ error: 'no unit preferences' }, 404)
+  }
   if (path.endsWith('/api/status')) {
     // A status endpoint that never answers, so the panel's poll-failure
     // banner and the announcement that goes with it are measurable.
     if (fixtureParams.has('status-error')) {
-      return new Response(JSON.stringify({ error: 'status unavailable' }), {
-        status: 503,
-        headers: { 'content-type': 'application/json' }
-      })
+      return jsonResponse({ error: 'status unavailable' }, 503)
     }
-    return new Response(JSON.stringify(statusPayload), {
-      status: 200,
-      headers: { 'content-type': 'application/json' }
-    })
+    return jsonResponse(statusPayload, 200)
   }
-  return new Response(JSON.stringify({ error: `Unhandled fixture request: ${path}` }), {
-    status: 404,
-    headers: { 'content-type': 'application/json' }
-  })
+  return jsonResponse({ error: `Unhandled fixture request: ${path}` }, 404)
 }
 
 async function loadRemote (): Promise<RemoteContainer> {

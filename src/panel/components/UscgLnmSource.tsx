@@ -8,16 +8,12 @@
 
 import type * as React from 'react'
 import type { Dispatch } from 'react'
-import { FieldGroup, NumberField, Text } from 'signalk-nearlcrews-ui'
+import { FieldGroup, Text } from 'signalk-nearlcrews-ui'
 import type { ConfigAction } from '../config-reducer.js'
-import {
-  DEFAULT_USCG_LNM_DEBOUNCE_SECONDS,
-  MAX_BBOX_DEBOUNCE_SECONDS,
-  MIN_BBOX_DEBOUNCE_SECONDS
-} from '../../shared/bbox-debounce-bounds.js'
+import { DEFAULT_USCG_LNM_DEBOUNCE_SECONDS } from '../../shared/bbox-debounce-bounds.js'
 import type { PluginConfig } from '../../shared/types.js'
-import { useDraftResetKey } from '../hooks/draft-reset-context.js'
 import MergeWithActiveCaptain from './MergeWithActiveCaptain.js'
+import RefreshSecondsField from './RefreshSecondsField.js'
 import SourceAdvanced from './SourceAdvanced.js'
 
 interface Props {
@@ -29,7 +25,6 @@ interface Props {
 export default function UscgLnmSource ({ state, dispatch }: Props): React.ReactElement {
   // Dedupe defaults on: an absent value is treated as checked.
   const dedupeEnabled = state.uscgLnmDedupe !== false
-  const resetKey = useDraftResetKey()
 
   return (
     <>
@@ -42,21 +37,16 @@ export default function UscgLnmSource ({ state, dispatch }: Props): React.ReactE
       </Text>
       <SourceAdvanced>
         <FieldGroup legend='Refresh and freshness'>
-          <NumberField
-            label='Refresh period'
+          <RefreshSecondsField
+            // LNM re-downloads whole notice files on a schedule rather than
+            // revalidating a per-viewport result, so it replaces the shared
+            // description instead of appending to it.
             description={'How often the plugin re-downloads the NAVCEN notice files in ' +
             'the background. NAVCEN republishes the notices about every 15 ' +
             'minutes, so the default matches that cadence; leave at 0 to use ' +
             'the default.'}
-            layout='inline'
-            unit='seconds'
             value={state.uscgLnmRefreshSeconds ?? DEFAULT_USCG_LNM_DEBOUNCE_SECONDS}
-            onValueChange={(seconds) => dispatch({ type: 'setUscgLnmRefreshSeconds', seconds })}
-            min={MIN_BBOX_DEBOUNCE_SECONDS}
-            max={MAX_BBOX_DEBOUNCE_SECONDS}
-            fallback={MIN_BBOX_DEBOUNCE_SECONDS}
-            integer
-            resetKey={resetKey}
+            onChange={(seconds) => dispatch({ type: 'setUscgLnmRefreshSeconds', seconds })}
           />
         </FieldGroup>
         <MergeWithActiveCaptain

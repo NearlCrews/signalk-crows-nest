@@ -14,6 +14,10 @@
  * source's own PoiSource.id constant (imported from the source module), so a
  * future rename of one of the source ids is a single-site TypeScript
  * compile error rather than a silent panel/registry skew.
+ *
+ * The card titles come from `source-names.ts` rather than sitting inline,
+ * because the status section needs the same names to label a jump button for
+ * a source the status snapshot carries no row for.
  */
 
 import type * as React from 'react'
@@ -39,6 +43,7 @@ import {
   DEFAULT_USCG_LNM_DEBOUNCE_SECONDS
 } from '../../shared/bbox-debounce-bounds.js'
 import { resolveScaleBand, SCALE_BAND_LABELS } from '../../shared/scale-band.js'
+import { joinWords } from '../../shared/strings.js'
 import type { PluginConfig } from '../../shared/types.js'
 import type { SourceStatus, StatusSnapshot } from '../../status/status-types.js'
 import { activeCaptainPoiTypeSelectionLabel } from '../active-captain-poi-types.js'
@@ -101,7 +106,7 @@ function noaaCoopsSummary (state: PluginConfig): string {
   const families: string[] = []
   if (state.noaaCoopsIncludeTideStations !== false) families.push('tide')
   if (state.noaaCoopsIncludeCurrentStations !== false) families.push('current')
-  const stations = families.length === 0 ? 'no stations' : `${families.join(' and ')} stations`
+  const stations = families.length === 0 ? 'no stations' : `${joinWords(families)} stations`
   return `${stations}, ${state.noaaCoopsRefreshHours ?? DEFAULT_REFRESH_HOURS} h refresh`
 }
 
@@ -129,7 +134,7 @@ function usaceSummary (state: PluginConfig): string {
   const layers: string[] = []
   if (state.usaceIncludeLocks !== false) layers.push('locks')
   if (state.usaceIncludeDams === true) layers.push('dams')
-  const layerList = layers.length === 0 ? 'no layers' : layers.join(' and ')
+  const layerList = layers.length === 0 ? 'no layers' : joinWords(layers)
   const seconds = state.usaceRefreshSeconds ?? DEFAULT_USACE_DEBOUNCE_SECONDS
   return `${layerList}, ${refreshSecondsLabel(seconds)} refresh`
 }
@@ -146,7 +151,7 @@ function noaaEncSummary (state: PluginConfig): string {
   if (state.noaaEncIncludeWrecks !== false) layers.push('wrecks')
   if (state.noaaEncIncludeObstructions !== false) layers.push('obstructions')
   if (state.noaaEncIncludeRocks === true) layers.push('rocks')
-  const layerList = layers.length === 0 ? 'no layers' : layers.join(', ')
+  const layerList = layers.length === 0 ? 'no layers' : joinWords(layers)
   return appendSinceYear(`${label} band, ${layerList}`, state.noaaEncMinimumSurveyYear)
 }
 
@@ -203,7 +208,6 @@ export default memo(function DataSourcesSection (
           : null}
         <DataSourceCard
           cardId={ACTIVE_CAPTAIN_SOURCE_ID}
-          name='Garmin ActiveCaptain'
           enabled
           summary={activeCaptainSummary(state)}
           expanded={expanded[ACTIVE_CAPTAIN_SOURCE_ID] === true}
@@ -214,7 +218,6 @@ export default memo(function DataSourcesSection (
         </DataSourceCard>
         <DataSourceCard
           cardId={OPENSEAMAP_SOURCE_ID}
-          name='OpenSeaMap'
           enabled={state.openSeaMapEnabled === true}
           summary={openSeaMapSummary(state)}
           expanded={expanded[OPENSEAMAP_SOURCE_ID] === true}
@@ -226,7 +229,6 @@ export default memo(function DataSourcesSection (
         </DataSourceCard>
         <DataSourceCard
           cardId={USCG_LIGHT_LIST_SOURCE_ID}
-          name='USCG Light List (US Aids to Navigation)'
           enabled={state.uscgLightListEnabled === true}
           summary={uscgLightListSummary(state)}
           expanded={expanded[USCG_LIGHT_LIST_SOURCE_ID] === true}
@@ -238,7 +240,6 @@ export default memo(function DataSourcesSection (
         </DataSourceCard>
         <DataSourceCard
           cardId={NOAA_ENC_SOURCE_ID}
-          name='NOAA ENC Direct (US wrecks, obstructions, and rocks)'
           enabled={state.noaaEncEnabled === true}
           summary={noaaEncSummary(state)}
           expanded={expanded[NOAA_ENC_SOURCE_ID] === true}
@@ -250,7 +251,6 @@ export default memo(function DataSourcesSection (
         </DataSourceCard>
         <DataSourceCard
           cardId={NOAA_COOPS_SOURCE_ID}
-          name='NOAA CO-OPS (US tide and current stations)'
           enabled={state.noaaCoopsEnabled === true}
           summary={noaaCoopsSummary(state)}
           expanded={expanded[NOAA_COOPS_SOURCE_ID] === true}
@@ -262,7 +262,6 @@ export default memo(function DataSourcesSection (
         </DataSourceCard>
         <DataSourceCard
           cardId={USCG_LNM_SOURCE_ID}
-          name='USCG Local Notice to Mariners (US live safety notices)'
           enabled={state.uscgLnmEnabled === true}
           summary={uscgLnmSummary(state)}
           expanded={expanded[USCG_LNM_SOURCE_ID] === true}
@@ -274,7 +273,6 @@ export default memo(function DataSourcesSection (
         </DataSourceCard>
         <DataSourceCard
           cardId={WPI_SOURCE_ID}
-          name='NGA World Port Index (worldwide ports)'
           enabled={state.wpiEnabled === true}
           summary={wpiSummary(state)}
           expanded={expanded[WPI_SOURCE_ID] === true}
@@ -286,7 +284,6 @@ export default memo(function DataSourcesSection (
         </DataSourceCard>
         <DataSourceCard
           cardId={USACE_SOURCE_ID}
-          name='USACE locks and dams (US waterways)'
           enabled={state.usaceEnabled === true}
           summary={usaceSummary(state)}
           expanded={expanded[USACE_SOURCE_ID] === true}

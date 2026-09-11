@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   fetchLengthUnitSystem,
+  lengthDisplayBounds,
   lengthDisplayFromMeters,
   lengthMetersFromDisplay,
   lengthUnitLabel,
@@ -156,4 +157,32 @@ test('the preset name is URL-encoded into the presets path', async () => {
 test('every endpoint failing resolves to metric, the pre-unitpreferences default', async () => {
   const { fetchFn } = stubFetch({})
   assert.equal(await fetchLengthUnitSystem(fetchFn), 'metric')
+})
+
+test('metric display bounds pass the stored ones straight through', () => {
+  assert.deepEqual(lengthDisplayBounds(1, undefined, 'metric', true), { min: 1, max: undefined })
+  assert.deepEqual(lengthDisplayBounds(0, 30, 'metric', true), { min: 0, max: 30 })
+})
+
+test('a fractional-unit field keeps its exact converted bounds', () => {
+  // Not a whole-unit field, so nothing rounds: the clearance margin is the
+  // one bounded length field in the panel and it takes fractions.
+  assert.deepEqual(lengthDisplayBounds(0, 30, 'imperial', false), { min: 0, max: 98.43 })
+})
+
+test('a whole-unit field rounds imperial bounds inward, never outward', () => {
+  // 1 m is 3.28 ft: the floor rises to the next whole foot so every value the
+  // input admits is still at or above the stored minimum, and a numeric
+  // keypad with no decimal key can reach the floor at all.
+  assert.deepEqual(lengthDisplayBounds(1, undefined, 'imperial', true), { min: 4, max: undefined })
+  // 30 m is 98.43 ft: the ceiling drops to the last whole foot inside it.
+  assert.deepEqual(lengthDisplayBounds(1, 30, 'imperial', true), { min: 4, max: 98 })
+})
+
+test('bounds with no whole unit between them keep their fractions rather than crossing', () => {
+  // 1 m to 1.2 m is 3.28 ft to 3.94 ft, which contains no whole foot. Rounding
+  // inward would give a min of 4 above a max of 3, so the field keeps the
+  // exact bounds and stays usable. No field in the panel is this narrow; the
+  // guard is here so adding one is not a trap.
+  assert.deepEqual(lengthDisplayBounds(1, 1.2, 'imperial', true), { min: 3.28, max: 3.94 })
 })

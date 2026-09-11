@@ -8,6 +8,12 @@
  * wants the chart overlay should not scroll past the alarm fieldsets to get
  * to the save bar). The shared section retains its children while collapsed
  * so an in-progress numeric draft survives a collapse-and-expand round trip.
+ *
+ * Because it is collapsed by default and the three settings it holds are the
+ * only ones that can raise an alarm, the collapsed row states which of them
+ * are armed. Every source card already promises that much, and an operator
+ * should not have to expand a section to learn whether the vessel will be
+ * warned about anything.
  */
 
 import type * as React from 'react'
@@ -18,6 +24,7 @@ import type { ConfigAction } from '../config-reducer.js'
 import { DEFAULT_PROXIMITY_ALARM_RADIUS_METERS } from '../../shared/proximity-radius.js'
 import { DEFAULT_ROUTE_CORRIDOR_WIDTH_METERS } from '../../shared/route-corridor.js'
 import { DEFAULT_CLEARANCE_MARGIN_METERS, NO_FALLBACK_AIR_DRAFT_METERS } from '../../shared/bridge-clearance.js'
+import { joinWords } from '../../shared/strings.js'
 import type { PluginConfig } from '../../shared/types.js'
 import ProximityAlarmFields from './ProximityAlarmFields.js'
 import RouteHazardScanFields from './RouteHazardScanFields.js'
@@ -26,6 +33,16 @@ import BridgeAirDraftFields from './BridgeAirDraftFields.js'
 interface Props {
   state: PluginConfig
   dispatch: Dispatch<ConfigAction>
+}
+
+/** Name each armed alarm, or say plainly that none is. */
+function alertsSummary (state: PluginConfig): string {
+  const armed: string[] = []
+  if (state.enableProximityAlarms === true) armed.push('proximity')
+  if (state.enableRouteHazardScan === true) armed.push('route corridor')
+  if (state.enableBridgeAirDraftCheck === true) armed.push('bridge air draft')
+  if (armed.length === 0) return 'No alarms enabled'
+  return `${joinWords(armed)} ${armed.length === 1 ? 'alarm' : 'alarms'} enabled`
 }
 
 /**
@@ -38,7 +55,11 @@ export default memo(function AlertsSection ({ state, dispatch }: Props): React.R
   // expands Alerts when they want to configure an alarm; saved config does
   // not auto-open it.
   return (
-    <CollapsibleSection title='Alerts'>
+    <CollapsibleSection
+      title='Alerts'
+      summary={alertsSummary(state)}
+      summaryPlacement='header'
+    >
       <Stack gap={3}>
         <ProximityAlarmFields
           enabled={state.enableProximityAlarms === true}

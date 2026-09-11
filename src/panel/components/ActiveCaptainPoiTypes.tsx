@@ -10,12 +10,18 @@
  */
 
 import type * as React from 'react'
+import { useId } from 'react'
 import { Checkbox, FieldGroup, StatusIndicator } from 'signalk-nearlcrews-ui'
 import { CheckboxGroup } from 'signalk-nearlcrews-ui/composites'
 import { ACTIVE_CAPTAIN_POI_TYPE_GROUPS } from '../active-captain-poi-types.js'
 import { applySelectedValues, selectedValues, type ValueToggle } from '../checkbox-group-value.js'
 import { selectAllState, selectAllTarget } from '../select-all-state.js'
 import type { PluginConfig, PoiTypeFlag } from '../../shared/types.js'
+
+/** Shown, and announced, while no POI type is selected. */
+const NOTHING_SELECTED_WARNING =
+  'No POI types are selected, so no notes appear on the chart. ' +
+  'Enabled safety alerts still fetch the hazard types they need.'
 
 interface Props {
   config: PluginConfig
@@ -40,6 +46,15 @@ export default function ActiveCaptainPoiTypes ({ config, onToggle, onSetAll }: P
     0
   )
   const selectAll = selectAllState(selectedCount, totalCount)
+  // The outer fieldset points at the warning while it shows, the way each
+  // inner CheckboxGroup points at its own empty-selection warning. Without it
+  // the only group whose warning was not part of its own description was the
+  // one covering all four.
+  const warningId = useId()
+  // Named once: the description link and the warning body are the same
+  // condition, and writing it twice lets them drift into pointing at an id
+  // that renders nothing.
+  const nothingSelected = selectedCount === 0
 
   // The whole selector lives inside one outer `Import layers` fieldset so
   // the ActiveCaptain card carries the same bordered "layers" container
@@ -48,6 +63,7 @@ export default function ActiveCaptainPoiTypes ({ config, onToggle, onSetAll }: P
   return (
     <FieldGroup
       legend='Import layers'
+      aria-describedby={nothingSelected ? warningId : undefined}
       actions={
         <Checkbox
           label='All types'
@@ -66,18 +82,12 @@ export default function ActiveCaptainPoiTypes ({ config, onToggle, onSetAll }: P
           onValueChange={(values) => applySelectedValues(group.toggles, values)}
         />
       ))}
-      {/* The region is mounted before the warning arrives so the announcement
-          is not lost; the role alone makes it live, per the shared rule. */}
-      <div role='status'>
-        {selectedCount === 0
-          ? (
-            <StatusIndicator tone='warning'>
-              No POI types are selected, so no notes appear on the chart. Enabled
-              safety alerts still fetch the hazard types they need.
-            </StatusIndicator>
-            )
-          : null}
-      </div>
+      {/* One announcing indicator, mounted before the warning arrives so the
+          announcement is not lost. It renders empty, and takes up no space,
+          while a type is selected. */}
+      <StatusIndicator id={warningId} tone='warning' live='polite'>
+        {nothingSelected ? NOTHING_SELECTED_WARNING : null}
+      </StatusIndicator>
     </FieldGroup>
   )
 }

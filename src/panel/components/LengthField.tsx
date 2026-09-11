@@ -8,6 +8,10 @@
  *
  * The field clamps rather than validates: an empty or unparsable draft
  * commits the display minimum, matching the schema floor the plugin enforces.
+ *
+ * An `integer` field rounds its display bounds inward to whole units, which
+ * `lengthDisplayBounds` owns along with the case where rounding would cross
+ * them.
  */
 
 import type * as React from 'react'
@@ -17,6 +21,7 @@ import { useDraftResetKey } from '../hooks/draft-reset-context.js'
 import { UnitSystemContext } from '../hooks/use-unit-system.js'
 import { clampNumber } from '../../shared/numbers.js'
 import {
+  lengthDisplayBounds,
   lengthDisplayFromMeters,
   lengthMetersFromDisplay,
   lengthUnitLabel
@@ -57,7 +62,7 @@ export default function LengthField ({
 }: Props): React.ReactElement {
   const system = useContext(UnitSystemContext)
   const resetKey = useDraftResetKey()
-  const displayMin = lengthDisplayFromMeters(minMeters, system)
+  const bounds = lengthDisplayBounds(minMeters, maxMeters, system, integer === true)
 
   return (
     <NumberField
@@ -74,9 +79,9 @@ export default function LengthField ({
         // 1 m minimum) without this.
         clampNumber(lengthMetersFromDisplay(display, system), minMeters, maxMeters ?? Infinity, minMeters)
       )}
-      min={displayMin}
-      max={maxMeters === undefined ? undefined : lengthDisplayFromMeters(maxMeters, system)}
-      fallback={displayMin}
+      min={bounds.min}
+      max={bounds.max}
+      fallback={bounds.min}
       integer={integer}
       disabled={disabled}
       resetKey={resetKey}
