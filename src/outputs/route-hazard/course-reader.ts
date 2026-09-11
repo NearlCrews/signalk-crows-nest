@@ -413,11 +413,16 @@ export function createCourseReader (config: CourseReaderConfig): CourseReader {
       return
     }
     if (delta.value === null) {
-      // Bump the generation so a refresh that resolves later cannot
-      // overwrite the clear, then drop the cached polyline immediately.
+      // Bump the generation so a refresh that resolves later cannot overwrite
+      // the clear, whether or not there is a route to drop, then commit the
+      // cleared route through the one function that owns the notify rule.
+      // Hand-rolling the comparison here is what let this path fire a forced
+      // scan for a republished clear that changed nothing, and a forced scan
+      // bypasses the position monitor's interval and movement gates at the
+      // cost of one list request to every enabled upstream. `applyRefresh`
+      // already decides that correctly for every other route transition.
       refreshGeneration += 1
-      currentRoute = null
-      onRouteChange()
+      applyRefresh(refreshGeneration, null)
       return
     }
     scheduleRefresh()

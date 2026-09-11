@@ -562,3 +562,30 @@ test('getVesselState returns null fields when getSelfPath throws', () => {
   assert.equal(state.speedOverGround, null)
   reader.stop()
 })
+
+test('a cleared-route delta republished with no route cached requests no scan', async () => {
+  // onRouteChange reaches a forced scan that bypasses the position monitor's
+  // interval and movement gates, and that scan costs one list request to every
+  // enabled upstream. A source that keeps republishing a null
+  // activeRoute.href changes nothing, so it must fire the clear exactly once.
+  let course = courseWithRoute('/resources/routes/route-1', 0, false)
+  let changes = 0
+  const { app, emitCourseDelta } = createMockApp({
+    course: async () => course,
+    resource: routeResource(THREE_LEG_ROUTE)
+  })
+  const reader = createCourseReader({ app, onRouteChange: () => { changes++ } })
+  await flush()
+  assert.equal(changes, 1, 'the route resolved at construction requests a scan')
+
+  course = courseWithoutRoute()
+  emitCourseDelta({ value: null })
+  await flush()
+  assert.equal(changes, 2, 'the first clear requests a scan')
+
+  emitCourseDelta({ value: null })
+  emitCourseDelta({ value: null })
+  await flush()
+  assert.equal(changes, 2, 'a republished clear of an already-cleared route forces nothing')
+  reader.stop()
+})

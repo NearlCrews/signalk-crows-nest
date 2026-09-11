@@ -49,12 +49,12 @@ test('builds normalized sections for a tag-rich lateral buoy with a light, mirro
 
   assert.deepEqual(section(sections, 'feature')?.items, [
     { label: 'Category', value: 'port hand', kind: 'text' },
-    { label: 'Colour', value: 'red', kind: 'text' },
+    { label: 'Color', value: 'red', kind: 'text' },
     { label: 'Shape', value: 'can', kind: 'text' }
   ])
   assert.deepEqual(section(sections, 'light')?.items, [
     { label: 'Character', value: 'flashing (2)', kind: 'text' },
-    { label: 'Colour', value: 'red', kind: 'text' },
+    { label: 'Color', value: 'red', kind: 'text' },
     { label: 'Period', value: 6, kind: 'measure', unit: 's' },
     { label: 'Range', value: 4, kind: 'measure', unit: 'NM' },
     { label: 'Height', value: 3.5, kind: 'measure', unit: 'm' },

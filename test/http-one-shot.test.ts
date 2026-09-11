@@ -195,7 +195,7 @@ test('requestText decodes a compressed error body', async () => {
   }
 })
 
-test('requestText surfaces a decompressor failure as a labelled client error', async () => {
+test('requestText surfaces a decompressor failure as a labeled client error', async () => {
   // Truncated or corrupt compressed bytes must reject through the same path
   // every other transport failure takes, so the source's status recording sees
   // it, rather than escaping as an unhandled stream error.

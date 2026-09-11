@@ -274,3 +274,126 @@ export async function startStubServer (
     })
   }
 }
+
+/**
+ * Sleep for `ms`. The real-clock wait a test needs when it is asserting on
+ * something a timer drives rather than on a resolved promise. Prefer
+ * {@link flush} whenever draining microtasks is enough: this one costs wall
+ * time in every run.
+ */
+export async function sleep (ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/** A subscribable bus plus the controls a test drives it with. */
+export interface PositionBus {
+  /** Drop-in for `app.streambundle.getSelfBus`, recording the path it is asked for. */
+  getSelfBus: (path: unknown) => { onValue: (handler: (delta: never) => void) => () => void }
+  /** Push a value to every live subscriber on `path`, as a `NormalizedDelta` would arrive. */
+  emit: (path: string, value: unknown) => void
+  /** Push a `navigation.position` fix, the overwhelmingly common case. */
+  emitPosition: (latitude: number, longitude: number) => void
+  /** Every path a subscription was opened on, in order. */
+  subscribedPaths: () => string[]
+  /** How many subscriptions have been released. */
+  unsubscribedCount: () => number
+}
+
+/**
+ * Build the subscribe-emit-unsubscribe half of a stub SignalK app.
+ *
+ * Every test that drives the position monitor or the course reader needs the
+ * same three things from `streambundle`: hand out a bus, keep the handler so
+ * the test can push a delta, and return an unsubscribe the test can observe.
+ * Six files had grown their own copy, so the `ServerAPI` stream surface was
+ * described in six places and a change to it was a six-file edit.
+ *
+ * Deliberately knob-free. A test that needs a bus which THROWS, or one that
+ * counts `getSelfBus` calls, is testing that behavior rather than merely
+ * needing a bus, so it wraps this or keeps its own rather than growing an
+ * option here that every other caller then has to read past.
+ */
+export function createPositionBus (): PositionBus {
+  const handlers = new Map<string, Array<(delta: never) => void>>()
+  const subscribedPaths: string[] = []
+  let unsubscribed = 0
+  return {
+    getSelfBus: (path: unknown) => {
+      const key = String(path)
+      subscribedPaths.push(key)
+      return {
+        onValue: (handler: (delta: never) => void) => {
+          handlers.set(key, [...(handlers.get(key) ?? []), handler])
+          return () => {
+            unsubscribed += 1
+            handlers.set(key, (handlers.get(key) ?? []).filter((entry) => entry !== handler))
+          }
+        }
+      }
+    },
+    emit: (path: string, value: unknown) => {
+      // Snapshot first: a handler may unsubscribe itself while being called.
+      for (const handler of [...(handlers.get(path) ?? [])]) {
+        (handler as (delta: unknown) => void)({ path, value })
+      }
+    },
+    emitPosition: (latitude: number, longitude: number) => {
+      for (const handler of [...(handlers.get('navigation.position') ?? [])]) {
+        (handler as (delta: unknown) => void)({
+          path: 'navigation.position',
+          value: { latitude, longitude }
+        })
+      }
+    },
+    subscribedPaths: () => [...subscribedPaths],
+    unsubscribedCount: () => unsubscribed
+  }
+}
+
+/** A captured resource provider: the registrar to install, and what it caught. */
+export interface CapturedResourceProvider {
+  /** Drop-in for `app.registerResourceProvider`. */
+  registerResourceProvider: (provider: { methods: Record<string, unknown> }) => void
+  /** The registered methods, or undefined until the output registers them. */
+  methods: () => Record<string, unknown> | undefined
+  /** Call `listResources` on the registered provider, or resolve empty when none. */
+  listResources: (query: Record<string, unknown>) => Promise<Record<string, unknown>>
+}
+
+/**
+ * Capture the `notes` resource provider an output registers, so a test can
+ * call its methods. Three files had grown the same four-line closure.
+ */
+export function captureResourceProvider (): CapturedResourceProvider {
+  let methods: Record<string, unknown> | undefined
+  return {
+    registerResourceProvider: (provider) => { methods = provider.methods },
+    methods: () => methods,
+    listResources: async (query) => {
+      const list = methods?.listResources as
+        ((q: Record<string, unknown>) => Promise<Record<string, unknown>>) | undefined
+      return await (list?.(query) ?? Promise.resolve({}))
+    }
+  }
+}
+
+/**
+ * Every ActiveCaptain POI-type toggle on. The type filter is opt-in per type,
+ * so a test that wants the source to return anything has to set them, and two
+ * files had written the list out in full.
+ */
+export const ALL_POI_TYPES_ON: Readonly<Record<string, boolean>> = {
+  includeMarinas: true,
+  includeAnchorages: true,
+  includeHazards: true,
+  includeBusinesses: true,
+  includeBoatRamps: true,
+  includeBridges: true,
+  includeDams: true,
+  includeFerries: true,
+  includeInlets: true,
+  includeLocks: true,
+  includeLocalKnowledge: true,
+  includeNavigational: true,
+  includeAirports: true
+}

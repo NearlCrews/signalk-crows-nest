@@ -42,7 +42,7 @@ test('queued HTTP client rejects an oversized advertised body', async () => {
 })
 
 test('queued HTTP client cancels a streaming body after it crosses the cap', async () => {
-  let cancelled = false
+  let canceled = false
   const encoder = new TextEncoder()
   await withMockFetch(
     () => new Response(new ReadableStream<Uint8Array>({
@@ -51,7 +51,7 @@ test('queued HTTP client cancels a streaming body after it crosses the cap', asy
         controller.enqueue(encoder.encode('5678'))
       },
       cancel () {
-        cancelled = true
+        canceled = true
       }
     })),
     async () => {
@@ -63,7 +63,7 @@ test('queued HTTP client cancels a streaming body after it crosses the cap', asy
       })
       const response = await client.fetch('https://example.test/data', {})
       await assert.rejects(response.text(), /response exceeds 6 bytes/)
-      assert.equal(cancelled, true)
+      assert.equal(canceled, true)
       client.close()
     }
   )

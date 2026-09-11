@@ -57,7 +57,7 @@ function familyItems (family: FamilyTags | null): NormalizedItem[] {
     items.push({ label: 'Category', value: humanizeEnum(family.category), kind: 'text' })
   }
   if (family.colour !== undefined) {
-    items.push({ label: 'Colour', value: humanizeEnum(family.colour), kind: 'text' })
+    items.push({ label: 'Color', value: humanizeEnum(family.colour), kind: 'text' })
   }
   if (family.shape !== undefined) {
     items.push({ label: 'Shape', value: humanizeEnum(family.shape), kind: 'text' })
@@ -67,7 +67,7 @@ function familyItems (family: FamilyTags | null): NormalizedItem[] {
 
 /**
  * Items for the `seamark:light:*` family. Mirrors `buildLightLine`: the
- * character is humanized, the colour and exhibition have their underscores
+ * character is humanized, the color and exhibition have their underscores
  * normalized, and the period (s), range (NM), and height (m) are measures.
  */
 function lightItems (light: LightTags): NormalizedItem[] {
@@ -76,7 +76,7 @@ function lightItems (light: LightTags): NormalizedItem[] {
     items.push({ label: 'Character', value: humanizeLightCharacter(light.character), kind: 'text' })
   }
   if (light.colour !== undefined) {
-    items.push({ label: 'Colour', value: humanizeEnum(light.colour), kind: 'text' })
+    items.push({ label: 'Color', value: humanizeEnum(light.colour), kind: 'text' })
   }
   pushMeasure(items, 'Period', light.period, 's')
   pushMeasure(items, 'Range', light.range, 'NM')

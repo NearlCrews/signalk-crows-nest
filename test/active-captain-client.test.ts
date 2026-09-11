@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createActiveCaptainClient, type RateLimitOptions, type Sleep } from '../src/inputs/active-captain/active-captain-client.js'
 import type { Bbox } from '../src/shared/types.js'
-import { jsonResponse, silentLog } from './helpers.js'
+import { jsonResponse, silentLog, sleep } from './helpers.js'
 
 /** Fast rate-limit settings so the retry tests do not sleep for whole seconds. */
 const fastLimits: Partial<RateLimitOptions> = {
@@ -13,10 +13,6 @@ const fastLimits: Partial<RateLimitOptions> = {
 }
 
 const sampleBbox: Bbox = { north: 1, south: 0, east: 1, west: 0 }
-
-/** Sleep for the given number of milliseconds. */
-const delayMs = (ms: number): Promise<void> =>
-  new Promise(resolve => setTimeout(resolve, ms))
 
 /**
  * Swap in a stubbed global fetch for the duration of fn, then restore it. The
@@ -407,7 +403,7 @@ test('the request queue caps in-flight requests at maxConcurrency', async () => 
     async () => {
       active++
       peak = Math.max(peak, active)
-      await delayMs(15)
+      await sleep(15)
       active--
       return jsonResponse({ pointsOfInterest: [] })
     },

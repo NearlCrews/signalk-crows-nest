@@ -88,3 +88,28 @@ test('omits empty sections and flags an inactive daymark-only aid', () => {
   const source = section(sections, 'source')
   assert.ok(source?.items.some((i) => i.label === 'Inactive' && i.value === true && i.kind === 'flag'))
 })
+
+test('a light character that humanizes to nothing yields no Character item', () => {
+  // pushSection drops a section with no ITEMS, which does not help against an
+  // item with an empty VALUE: a structured client would show a blank Character
+  // row while the HTML renderer dropped the line. The two renderings carry the
+  // same content, so both test the humanized value.
+  for (const lightChar of ['', '   ', '\t\n']) {
+    const sections = buildLightListSections(record({ lightChar }))
+    assert.equal(
+      section(sections, 'light'),
+      undefined,
+      `a lightChar of ${JSON.stringify(lightChar)} must not produce a Light section`
+    )
+  }
+})
+
+test('a blank light character leaves the rest of the Light section intact', () => {
+  const sections = buildLightListSections(record({
+    lightChar: '   ',
+    nominalRange: { value: 14, unit: 'NAUT MI' }
+  }))
+  assert.deepEqual(section(sections, 'light')?.items, [
+    { label: 'Nominal range', value: 14, kind: 'measure', unit: 'NM' }
+  ])
+})

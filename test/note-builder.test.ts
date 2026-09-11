@@ -123,3 +123,16 @@ test('readProperty returns undefined when an intermediate segment is not an obje
   assert.doesNotThrow(() => readProperty(note, 'name.foo'))
   assert.equal(readProperty(note, 'name.foo'), undefined)
 })
+
+test('readProperty resolves only own properties, never inherited ones', () => {
+  // The property path arrives on the resource request. Walking inherited
+  // properties would answer `constructor` and `toString` with built-ins the
+  // note does not carry, and the resource provider would report them as real
+  // properties of the note instead of the 404 they are.
+  const note = buildNoteResource(input())
+  for (const path of ['__proto__', 'constructor', 'toString', 'properties.constructor']) {
+    assert.equal(readProperty(note, path), undefined, `${path} is not a note property`)
+  }
+  // An own property still resolves.
+  assert.equal(readProperty(note, 'position.latitude'), 1)
+})

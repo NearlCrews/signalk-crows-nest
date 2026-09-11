@@ -1,5 +1,5 @@
 /**
- * Shared periodic-refresh scheduler for the full-download inputs.
+ * Shared periodic-refresh scheduler for the scheduled bulk-download inputs.
  *
  * The USCG Light List, NOAA CO-OPS, and USCG Local Notice to Mariners inputs
  * each re-download their whole dataset on a fixed cadence rather than per
@@ -29,9 +29,14 @@ export interface LoadableStore {
  *
  * A failure is logged and swallowed rather than blocking plugin start: the
  * store falls back to an empty index, which the next successful refresh
- * repopulates from upstream. The three full-download inputs all want exactly
- * this, so the pattern lives here beside the scheduler rather than in three
- * copies that could drift on whether a load failure is fatal.
+ * repopulates from upstream. The scheduled inputs named above all want exactly
+ * this, so the pattern lives here beside the scheduler rather than in a copy
+ * per input that could drift on whether a load failure is fatal.
+ *
+ * "Scheduled" rather than "full-download": the World Port Index also downloads
+ * a whole dataset, but it carries no scheduler and fetches lazily on its first
+ * list call instead, so it is not one of these and does not wait out the
+ * initial delay.
  */
 export function loadStoreInBackground (store: LoadableStore, app: ServerAPI, name: string): void {
   store.load().catch((error: unknown) => {

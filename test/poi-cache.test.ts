@@ -6,11 +6,7 @@ import { tmpdir } from 'node:os'
 import { createPoiCache, type PoiDetailsSource } from '../src/inputs/active-captain/poi-cache.js'
 import { createPoiStore } from '../src/inputs/active-captain/poi-store.js'
 import type { PoiDetails } from '../src/inputs/active-captain/active-captain-types.js'
-import { makeDetails } from './helpers.js'
-
-/** Sleep for `ms`, letting a short cache TTL lapse mid-test. */
-const delayMs = async (ms: number): Promise<void> =>
-  await new Promise(resolve => setTimeout(resolve, ms))
+import { makeDetails, sleep } from './helpers.js'
 
 /** Generous cache lifetime so entries never expire mid-test. */
 const TTL_MINUTES = 60
@@ -83,7 +79,7 @@ test('an entry past its in-memory TTL is reloaded from the source', async () => 
 
   // Wait past the TTL window, then fetch again: the stale entry must trigger a
   // fresh load rather than serving an expired value.
-  await delayMs(90)
+  await sleep(90)
 
   const reloaded = await cache.get('1')
   assert.equal(reloaded.pointOfInterest.name, 'POI 1')
@@ -218,7 +214,7 @@ test('a stale entry is served when the refetch fails (stale-on-error)', async ()
   await cache.get('1')
   assert.equal(source.callCount(), 1)
 
-  await delayMs(90)
+  await sleep(90)
   source.failNext(1)
 
   const stale = await cache.get('1')
@@ -234,7 +230,7 @@ test('a hydrated entry older than the freshness TTL is the offline fallback', as
     const seedStore = createPoiStore(dir)
     seedStore.persist('1', makeDetails('1'))
     seedStore.flush()
-    await delayMs(90)
+    await sleep(90)
 
     const source = createFakeSource()
     source.failNext(Number.POSITIVE_INFINITY)

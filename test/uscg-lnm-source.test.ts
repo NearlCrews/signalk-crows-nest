@@ -336,7 +336,7 @@ test('refreshAll prunes a store file that left the pinned catalog', async () => 
 
 test('a file the upstream really publishes empty clears its stored notices', async () => {
   // The other half of the guard: a file NAVCEN genuinely empties still
-  // replaces its record set, so a cancelled notice stops serving. Only
+  // replaces its record set, so a canceled notice stops serving. Only
   // "features arrived and none parsed" is treated as a failure.
   await withStore(async (store) => {
     store.upsertFile('haznav_1', [noticeRecord(58, 42.4, -70.9)], { etag: '"good"' })

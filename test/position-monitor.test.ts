@@ -1,15 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import type { NormalizedDelta } from '@signalk/server-api'
 import {
   createPositionMonitor,
   type MonitorApp,
-  type PoiListSource,
-  type PositionStream
+  type PoiListSource
 } from '../src/monitoring/position-monitor.js'
 import type { PositionScanContributor } from '../src/outputs/output.js'
 import type { Bbox, PoiSummary, PoiType, Position } from '../src/shared/types.js'
-import { flush, poiSummary } from './helpers.js'
+import { createPositionBus, flush, poiSummary } from './helpers.js'
 
 /** A controllable monotonic clock, so the throttle is tested without waiting. */
 function createClock (): { now: () => number, advance: (ms: number) => void } {
@@ -20,32 +18,35 @@ function createClock (): { now: () => number, advance: (ms: number) => void } {
   }
 }
 
-/** A mock SignalK app exposing a single position stream the test drives. */
+/**
+ * A mock SignalK app exposing a single position stream the test drives.
+ *
+ * The stream half comes from the shared {@link createPositionBus} rather than
+ * being hand-rolled here, so the `ServerAPI` stream surface is described once
+ * for the whole suite. The convenience wrappers below are this file's own: 43
+ * call sites push a bare position value, including deliberately malformed
+ * ones, and that shape is worth keeping local.
+ */
 function createMockApp (): {
   app: MonitorApp
   emit: (value: unknown) => void
   isUnsubscribed: () => boolean
+  /**
+   * Subscriptions opened but not yet released. Zero is the property a failed
+   * construction has to leave behind, and it reads the same whether the
+   * monitor never subscribed or subscribed and then unwound.
+   */
+  liveSubscriptions: () => number
   subscribedPath: () => string | undefined
   debugMessages: () => string[]
   errorMessages: () => string[]
 } {
-  let handler: ((delta: NormalizedDelta) => void) | undefined
-  let unsubscribed = false
-  let path: string | undefined
+  const bus = createPositionBus()
   const debugMessages: string[] = []
   const errorMessages: string[] = []
-  const stream: PositionStream = {
-    onValue: (incoming) => {
-      handler = incoming
-      return () => { unsubscribed = true }
-    }
-  }
   const app: MonitorApp = {
     streambundle: {
-      getSelfBus: (requestedPath) => {
-        path = String(requestedPath)
-        return stream
-      }
+      getSelfBus: bus.getSelfBus as MonitorApp['streambundle']['getSelfBus']
     },
     debug: (message) => { debugMessages.push(message) },
     error: (message) => { errorMessages.push(message) }
@@ -53,9 +54,10 @@ function createMockApp (): {
   return {
     app,
     // A position delta carries only `value` for the monitor's purposes.
-    emit: (value) => { handler?.({ value } as unknown as NormalizedDelta) },
-    isUnsubscribed: () => unsubscribed,
-    subscribedPath: () => path,
+    emit: (value) => { bus.emit('navigation.position', value) },
+    isUnsubscribed: () => bus.unsubscribedCount() > 0,
+    liveSubscriptions: () => bus.subscribedPaths().length - bus.unsubscribedCount(),
+    subscribedPath: () => bus.subscribedPaths()[0],
     debugMessages: () => debugMessages,
     errorMessages: () => errorMessages
   }
@@ -996,4 +998,67 @@ test('a replay carries exactly the points each zone contributor would see in the
   assert.ok(replayList.length < combined.length, 'the replay really is narrower')
 
   monitor.stop()
+})
+
+test('no live subscription survives a contributor that throws during construction', () => {
+  // The plugin shell catches a failed monitor construction, reports it as a
+  // plugin error, and leaves the run going, so a construction that fails must
+  // not leave a live position handler behind: every disable-and-re-enable
+  // cycle would stack another one. Asserted as "nothing live", not as
+  // "unsubscribed", so it holds however the monitor achieves it.
+  const mockApp = createMockApp()
+  const mockClient = createMockClient()
+  const good = createMockContributor(['Hazard'], SCAN_BOX)
+  const broken: PositionScanContributor = {
+    poiTypes: ['Hazard'],
+    setScanRequester: () => { throw new Error('broken contributor') },
+    buildFetchBox: () => SCAN_BOX,
+    evaluate: () => {}
+  }
+
+  assert.throws(
+    () => createPositionMonitor({
+      app: mockApp.app,
+      client: mockClient.client,
+      contributors: [good.contributor, broken],
+      poiTypes: 'Hazard',
+      now: createClock().now
+    }),
+    /broken contributor/
+  )
+
+  assert.equal(mockApp.liveSubscriptions(), 0, 'no position subscription is left live')
+  mockApp.emit({ latitude: 10, longitude: 20 })
+  assert.equal(mockClient.calls.length, 0, 'a later fix drives no work')
+})
+
+test('no live subscription survives a throwing logger during construction', () => {
+  // `app.debug` and `app.error` are the HOST's functions, not this module's,
+  // so they can fail too. The same property has to hold for them as for a
+  // throwing contributor, which is why construction takes its subscription
+  // last rather than guarding the steps before it.
+  const mockApp = createMockApp()
+  const mockClient = createMockClient()
+  const throwingApp: MonitorApp = {
+    ...mockApp.app,
+    error: () => { throw new Error('logger exploded') }
+  }
+  const scan = createMockContributor(['Hazard'], SCAN_BOX)
+  // A radius below the sampling floor is the branch that reaches app.error.
+  const tooTight: PositionScanContributor = { ...scan.contributor, alarmRadiusMeters: 1 }
+
+  assert.throws(
+    () => createPositionMonitor({
+      app: throwingApp,
+      client: mockClient.client,
+      contributors: [tooTight],
+      poiTypes: 'Hazard',
+      now: createClock().now
+    }),
+    /logger exploded/
+  )
+
+  assert.equal(mockApp.liveSubscriptions(), 0, 'no position subscription is left live')
+  mockApp.emit({ latitude: 10, longitude: 20 })
+  assert.equal(mockClient.calls.length, 0, 'a later fix drives no work')
 })

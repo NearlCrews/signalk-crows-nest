@@ -36,8 +36,21 @@ export const RECOMMENDED_OVERPASS_FALLBACK_ENDPOINTS: readonly string[] = [
   'https://overpass.private.coffee/api/interpreter'
 ]
 
-/** Return a trimmed absolute HTTP(S) endpoint, or undefined when unsafe. */
-function httpEndpoint (raw: unknown): string | undefined {
+/**
+ * Return a trimmed absolute HTTP(S) endpoint, or `undefined` when the value is
+ * not usable as one: a non-string, blank, unparseable, non-HTTP(S), or
+ * credential-bearing URL.
+ *
+ * This is also the module's validity predicate, and the one callers should
+ * reach for when they want the question rather than the value. Asking it
+ * through {@link resolvePrimaryEndpoint} (comparing the result against the
+ * trimmed input) or through {@link normalizeFallbackEndpoints} (checking a
+ * one-element array's length) gives the same answer in every case, since the
+ * default endpoint itself passes this check and so can never be returned for
+ * an input that fails it, but both spellings pay a resolver round trip or an
+ * array allocation to recover a boolean this returns directly.
+ */
+export function usableEndpoint (raw: unknown): string | undefined {
   if (typeof raw !== 'string') return undefined
   const trimmed = raw.trim()
   if (trimmed.length === 0) return undefined
@@ -59,7 +72,7 @@ function httpEndpoint (raw: unknown): string | undefined {
  * one place alongside the default constant and the fallback cleaner.
  */
 export function resolvePrimaryEndpoint (raw: unknown): string {
-  return httpEndpoint(raw) ?? DEFAULT_OVERPASS_ENDPOINT
+  return usableEndpoint(raw) ?? DEFAULT_OVERPASS_ENDPOINT
 }
 
 /**
@@ -77,7 +90,7 @@ export function normalizeFallbackEndpoints (raw: unknown): string[] {
   const seen = new Set<string>()
   const endpoints: string[] = []
   for (const value of raw) {
-    const endpoint = httpEndpoint(value)
+    const endpoint = usableEndpoint(value)
     if (endpoint === undefined || seen.has(endpoint)) {
       continue
     }

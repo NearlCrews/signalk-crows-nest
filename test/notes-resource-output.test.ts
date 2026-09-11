@@ -3,9 +3,10 @@ import assert from 'node:assert/strict'
 import { notesResourceOutput } from '../src/outputs/notes-resource/notes-resource-output.js'
 import type { OutputContext } from '../src/outputs/output.js'
 import type { PoiDetailView } from '../src/shared/types.js'
+import { ALL_POI_TYPES_ON, captureResourceProvider } from './helpers.js'
 
 function recordingApp () {
-  const provider: { methods?: Record<string, unknown> } = {}
+  const provider = captureResourceProvider()
   return {
     provider,
     app: {
@@ -13,28 +14,12 @@ function recordingApp () {
       error: () => {},
       setPluginStatus: () => {},
       setPluginError: () => {},
-      registerResourceProvider: (r: { methods: Record<string, unknown> }) => {
-        provider.methods = r.methods
-      }
+      registerResourceProvider: provider.registerResourceProvider
     }
   }
 }
 
-const allTypesOn = {
-  includeMarinas: true,
-  includeAnchorages: true,
-  includeHazards: true,
-  includeBusinesses: true,
-  includeBoatRamps: true,
-  includeBridges: true,
-  includeDams: true,
-  includeFerries: true,
-  includeInlets: true,
-  includeLocks: true,
-  includeLocalKnowledge: true,
-  includeNavigational: true,
-  includeAirports: true
-}
+const allTypesOn = ALL_POI_TYPES_ON
 
 const allTypesOff = {
   includeMarinas: false,
@@ -97,7 +82,7 @@ function contextWith (overrides: Partial<OutputContext>): OutputContext {
 function startMethods (overrides: Partial<OutputContext>): Record<string, unknown> {
   const { app, provider } = recordingApp()
   notesResourceOutput.start(contextWith({ app: app as never, ...overrides }))
-  return provider.methods as Record<string, unknown>
+  return provider.methods() as Record<string, unknown>
 }
 
 /**
@@ -111,18 +96,16 @@ function startCapturing (overrides: Partial<OutputContext> = {}): {
 } {
   const statusMessages: string[] = []
   const pluginErrors: string[] = []
-  const provider: { methods?: Record<string, unknown> } = {}
+  const provider = captureResourceProvider()
   const app = {
     debug: () => {},
     error: () => {},
     setPluginStatus: (message: string) => { statusMessages.push(message) },
     setPluginError: (message: string) => { pluginErrors.push(message) },
-    registerResourceProvider: (r: { methods: Record<string, unknown> }) => {
-      provider.methods = r.methods
-    }
+    registerResourceProvider: provider.registerResourceProvider
   }
   notesResourceOutput.start(contextWith({ app: app as never, ...overrides }))
-  return { methods: provider.methods as Record<string, unknown>, statusMessages, pluginErrors }
+  return { methods: provider.methods() as Record<string, unknown>, statusMessages, pluginErrors }
 }
 
 test('listResources returns notes keyed by id', async () => {
@@ -278,7 +261,7 @@ test('the note publishes the source-provided skIcon verbatim, not a type-derived
   })
   const { app, provider } = recordingApp()
   notesResourceOutput.start({ ...iconContext, app: app as never })
-  const methods = provider.methods as Record<string, unknown>
+  const methods = provider.methods() as Record<string, unknown>
   const listResources = methods.listResources as (q: object) => Promise<Record<string, { properties: { skIcon: string } }>>
   const result = await listResources({ bbox: '0,0,1,1' })
   assert.equal(result['7'].properties.skIcon, 'notice-to-mariners')

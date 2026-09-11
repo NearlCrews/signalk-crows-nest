@@ -36,7 +36,7 @@ const LIGHT_CHARACTER_PATTERN = /^([A-Za-z]+)(\(.+\))?$/
 /**
  * Translate an IALA light-character value like `Fl(2)` into a phrase like
  * `flashing (2)`. An unmapped base abbreviation is left as-is so an exotic
- * character is at least recognisable; the group count rides along unchanged.
+ * character is at least recognizable; the group count rides along unchanged.
  */
 export function humanizeLightCharacter (raw: string): string {
   const match = raw.match(LIGHT_CHARACTER_PATTERN)

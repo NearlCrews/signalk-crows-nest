@@ -46,7 +46,7 @@ export function elementOsmUrl (element: OverpassElement): string {
  * A display name for an element: its `name` tag, then `seamark:name`, then a
  * type-derived fallback. Each tag is read through {@link tagValue} so a
  * whitespace-only value is rejected and falls through rather than yielding a
- * blank title, matching the detail renderer's header behaviour.
+ * blank title, matching the detail renderer's header behavior.
  */
 export function elementName (element: OverpassElement, type: PoiType): string {
   const name = nameFromTags(element.tags)

@@ -53,9 +53,16 @@ export function isInUsWaters (position: Position): boolean {
  * The outbound-HTTP gate the US-only inputs share. Returns true (and records a
  * skip on `status`) when there is a fix and it lies outside US waters, so the
  * caller can bail out of its upstream request. A position that is unknown, or
- * inside US waters, returns false and the caller proceeds. The two US-only
- * sources call this so the "gate on the latest fix, record the skip" rule lives
- * in one place rather than in each source body.
+ * inside US waters, returns false and the caller proceeds. Every US-only source
+ * calls this, so the "gate on the latest fix, record the skip" rule lives in
+ * one place rather than in each source body.
+ *
+ * Count the callers rather than trusting a number written here. Some sources
+ * call it directly and the rest reach it through `arcgis-poi-source.ts`, the
+ * shared ArcGIS base, which gates on behalf of every source built on it. That
+ * indirection is what made an earlier count here go stale, and a stale count
+ * has already misled a troubleshooting document into telling an operator
+ * offshore that the skip did not apply to them.
  */
 export function shouldSkipOutsideUsWaters (
   getCurrentPosition: () => Position | undefined,

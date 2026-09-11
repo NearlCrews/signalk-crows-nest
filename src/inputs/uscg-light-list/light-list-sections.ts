@@ -14,7 +14,7 @@
  */
 
 import type { LightListRecord } from './light-list-types.js'
-import { humanizeLightChar, rangeUnit, heightUnit } from './light-list-detail.js'
+import { lightCharacterPhrase, rangeUnit, heightUnit } from './light-list-detail.js'
 import { pushSection } from '../../shared/normalized-detail.js'
 import type { NormalizedItem, NormalizedSection } from '../../shared/normalized-detail.js'
 
@@ -23,8 +23,14 @@ export function buildLightListSections (record: LightListRecord): NormalizedSect
   const sections: NormalizedSection[] = []
 
   const light: NormalizedItem[] = []
-  if (record.lightChar !== undefined) {
-    light.push({ label: 'Character', value: humanizeLightChar(record.lightChar), kind: 'text' })
+  // `pushSection` drops a section with no ITEMS, which is no help against an
+  // item with an empty VALUE: that would leave a structured client a blank
+  // Character row while the HTML renderer dropped the line. Asking the shared
+  // helper, which answers `undefined` for an absent field and for one that
+  // humanizes to nothing alike, is what keeps the two renderings agreeing.
+  const character = lightCharacterPhrase(record.lightChar)
+  if (character !== undefined) {
+    light.push({ label: 'Character', value: character, kind: 'text' })
   }
   if (record.nominalRange !== undefined) {
     light.push({ label: 'Nominal range', value: record.nominalRange.value, kind: 'measure', unit: rangeUnit(record.nominalRange.unit) })

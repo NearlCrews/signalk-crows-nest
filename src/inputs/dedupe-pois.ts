@@ -230,9 +230,22 @@ export function dedupeAgainstBase (
   // most one cell apart on each axis, so a 3x3 neighbor scan is exhaustive
   // at the LARGEST source radius. Both passes (base merge and same-source
   // collapse) use this projection.
-  const meanLatRad =
-    (pois.reduce((sum, poi) => sum + poi.position.latitude, 0) / pois.length) * Math.PI / 180
-  const lonScale = METERS_PER_DEGREE * Math.cos(meanLatRad)
+  //
+  // The reference is the POLEWARD-most latitude in the set, because a degree
+  // of longitude shrinks toward the pole. Two points `cellRadius` apart at
+  // latitude L span `cellRadius / cos(L)` degrees, so a reference whose cosine
+  // is larger than any point's own would place a genuine pair two cells apart
+  // and the scan would miss it. Taking the smallest cosine in the set makes
+  // every cell at least as wide as the point it holds needs: the scan stays
+  // exhaustive, at the cost of a slightly coarser grid for the points nearer
+  // the equator. A mean latitude broke this for every point poleward of it,
+  // and those duplicates survived the pass.
+  let referenceLatitude = 0
+  for (const poi of pois) {
+    const absolute = Math.abs(poi.position.latitude)
+    if (absolute > referenceLatitude) referenceLatitude = absolute
+  }
+  const lonScale = METERS_PER_DEGREE * Math.cos(referenceLatitude * Math.PI / 180)
   /** Project a POI to its grid cell on the shared scale. */
   const cellCoords = (poi: PoiSummary): [number, number] => [
     Math.floor((poi.position.longitude * lonScale) / cellRadius),

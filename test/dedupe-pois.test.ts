@@ -238,3 +238,22 @@ test('a per-source radius map applies each source\'s radius independently', () =
 test('the default merge radius is 150 feet, expressed in meters', () => {
   assert.equal(DEFAULT_DEDUPE_RADIUS_METERS, 45.72)
 })
+
+test('a high-latitude duplicate merges even with lower-latitude points in the list', () => {
+  // The cell grid projects longitude through one reference latitude for the
+  // whole list. A degree of longitude shrinks toward the pole, so a reference
+  // taken from the middle of the list makes the cells too narrow for the
+  // poleward points: this pair is 49 m apart at latitude 75, inside the 50 m
+  // radius, but a mid-list reference placed it two cells away and the 3x3
+  // neighbor scan never saw it. The poleward-most reference keeps the scan
+  // exhaustive for every point in the list.
+  const base = poi('1', BASE_SOURCE_ID, 'Marina', 75, 0)
+  const osm = poi('node/9', 'openseamap', 'Marina', 75, 0.0017)
+  // An unrelated equatorial POI, which is what drags a mid-list reference
+  // latitude away from the pair above.
+  const equatorial = poi('2', BASE_SOURCE_ID, 'Marina', 0, 0)
+  const result = dedupeAgainstBase([base, osm, equatorial], new Set(['openseamap']), 50)
+  assert.equal(result.length, 2, 'the high-latitude duplicate merges; the equatorial POI stands')
+  const merged = result.find((entry) => entry.id === '1')
+  assert.deepEqual(merged?.sources, ['activecaptain', 'openseamap'])
+})

@@ -30,7 +30,7 @@ export function escapeHtml (value: string): string {
 }
 
 /**
- * Render a labelled paragraph: `<p><strong>Label:</strong> value.</p>` with
+ * Render a labeled paragraph: `<p><strong>Label:</strong> value.</p>` with
  * both the label and the value HTML-escaped. The structured detail renderers
  * (NOAA ENC, OpenSeaMap, USCG Light List) each build a run of these lines, so
  * the one period-terminated shape lives here. A line that omits the trailing
@@ -42,7 +42,7 @@ export function labeledParagraph (label: string, value: string): string {
 }
 
 /**
- * Render a labelled metric line: `<p><strong>Label:</strong> X.X m.</p>` with
+ * Render a labeled metric line: `<p><strong>Label:</strong> X.X m.</p>` with
  * the value formatted to one decimal in meters. The USACE and World Port Index
  * renderers each build this exact metric-paragraph shape, so it lives here once;
  * each caller does its own wire parsing and unit conversion before handing the

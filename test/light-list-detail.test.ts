@@ -74,3 +74,29 @@ test('renders the clean integer volume (not a zero-padded string)', () => {
   assert.ok(html.includes('Volume 1'))
   assert.ok(html.includes('District D01'))
 })
+
+test('a light character that humanizes to nothing renders no Light line', () => {
+  // A bare `Light: .` once shipped onto the chart, in the screenshot the
+  // package publishes, because the line decided emptiness from which fields
+  // were present rather than from what the line would render. Whitespace-only
+  // is the surviving way a present field still contributes nothing: it
+  // tokenizes to a single empty token.
+  for (const lightChar of ['', '   ', '\t\n']) {
+    const html = renderLightListDetail(record({ lightChar }))
+    assert.ok(
+      !html.includes('<strong>Light:</strong>'),
+      `a lightChar of ${JSON.stringify(lightChar)} must not render a Light line`
+    )
+    assert.ok(!html.includes('Light:</strong> .'), 'no bare label and period')
+  }
+})
+
+test('a light character that humanizes to nothing still renders its range and focal plane', () => {
+  // The empty part drops out; the line itself survives on what is left, so an
+  // aid with a usable range does not lose it to an unusable character.
+  const html = renderLightListDetail(record({
+    lightChar: '   ',
+    nominalRange: { value: 14, unit: 'NAUT MI' }
+  }))
+  assert.ok(html.includes('<strong>Light:</strong> 14 NM range.'))
+})

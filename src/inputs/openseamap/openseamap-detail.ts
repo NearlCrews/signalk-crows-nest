@@ -35,7 +35,7 @@ export function humanizeEnum (value: string): string {
  * with leading or trailing whitespace; the lookup tables in this file and in
  * seamark-mapping.ts key on the trimmed form, so reading every tag through
  * this helper keeps the curation working on those records too. Exported so the
- * source's name resolver shares the same trim-and-reject-empty behaviour.
+ * source's name resolver shares the same trim-and-reject-empty behavior.
  */
 export function tagValue (tags: Readonly<Record<string, string>>, key: string): string | undefined {
   return presentString(tags[key])

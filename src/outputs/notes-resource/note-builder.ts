@@ -155,10 +155,17 @@ export function buildNoteResource (input: NoteResourceInput): Record<string, unk
   return note
 }
 
-/** Read a dot-notation property path out of a note object. */
+/**
+ * Read a dot-notation property path out of a note object.
+ *
+ * Only own properties resolve. The path comes off the resource request, so an
+ * inherited-property walk would answer `__proto__`, `constructor`, and
+ * `toString` with built-ins the note does not carry, and the caller would
+ * report them as real resource properties instead of the 404 they are.
+ */
 export function readProperty (note: Record<string, unknown>, path: string): unknown {
   return path.split('.').reduce<unknown>((value, key) => {
-    if (value !== null && typeof value === 'object') {
+    if (value !== null && typeof value === 'object' && Object.hasOwn(value, key)) {
       return (value as Record<string, unknown>)[key]
     }
     return undefined

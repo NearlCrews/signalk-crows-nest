@@ -421,31 +421,48 @@ export function createPositionMonitor (config: PositionMonitorConfig): PositionM
     maybeEvaluate()
   }
 
-  const unsubscribe = app.streambundle
-    .getSelfBus(SELF_POSITION_PATH as Path)
-    .onValue(onPosition)
-  for (const contributor of contributors) {
-    contributor.setScanRequester?.(requestScan)
-  }
-  app.debug('Position monitor started; subscribed to navigation.position')
-  if (cadence.tightestRadiusMeters !== undefined) {
+  /** Announce the sampling this monitor will run at, once, at construction. */
+  function reportStartupCadence (): void {
+    app.debug('Position monitor started; subscribing to navigation.position')
+    if (cadence.tightestRadiusMeters === undefined) {
+      return
+    }
     const summary =
       `Position monitor alarm sampling: every ${Math.round(cadence.evaluationMoveMeters)} m ` +
       `for a ${Math.round(cadence.tightestRadiusMeters)} m alarm radius`
     if (cadence.maxCoveredSpeedMps > 0) {
       app.debug(`${summary}; covered up to ${knots(cadence.maxCoveredSpeedMps)} kn`)
-    } else {
-      // Nothing the monitor can do about this one: the alarm zone is narrower
-      // than the shortest distance the sampling can resolve, so an alarm this
-      // tight fires only by luck. Say so at start rather than leaving the
-      // operator to infer it from alarms that never come.
-      app.error(
-        `${summary}. A radius this tight is narrower than the sampling can resolve, so a point of ` +
-        'interest can pass through it without raising an alarm. Widen the proximity alarm radius ' +
-        `to at least ${Math.ceil(SMALLEST_COVERED_RADIUS_METERS)} m.`
-      )
+      return
     }
+    // Nothing the monitor can do about this one: the alarm zone is narrower
+    // than the shortest distance the sampling can resolve, so an alarm this
+    // tight fires only by luck. Say so at start rather than leaving the
+    // operator to infer it from alarms that never come.
+    app.error(
+      `${summary}. A radius this tight is narrower than the sampling can resolve, so a point of ` +
+      'interest can pass through it without raising an alarm. Widen the proximity alarm radius ' +
+      `to at least ${Math.ceil(SMALLEST_COVERED_RADIUS_METERS)} m.`
+    )
   }
+
+  for (const contributor of contributors) {
+    contributor.setScanRequester?.(requestScan)
+  }
+  reportStartupCadence()
+
+  // The subscription is acquired LAST, deliberately, and it is the only
+  // resource this function acquires. Everything above can throw: a contributor
+  // rejecting the scan requester, or the host's own `app.debug` and
+  // `app.error`. Subscribing first meant any of those left a live
+  // `navigation.position` handler with no handle to release it, because the
+  // plugin shell catches a failed monitor construction, reports it, and leaves
+  // the run going, so each restart stacked another one. Acquiring last removes
+  // that failure rather than unwinding it: a throw above happens before there
+  // is anything to leak. It also means every contributor holds its scan
+  // requester before the first fix can reach it.
+  const unsubscribe = app.streambundle
+    .getSelfBus(SELF_POSITION_PATH as Path)
+    .onValue(onPosition)
 
   return {
     getCurrentPosition: () => latestPosition,

@@ -11,6 +11,7 @@ import { notesResourceOutput } from '../src/outputs/notes-resource/notes-resourc
 import { createPluginStatus } from '../src/status/plugin-status.js'
 import type { OutputContext } from '../src/outputs/output.js'
 import type { PluginConfig } from '../src/shared/types.js'
+import { captureResourceProvider } from './helpers.js'
 
 /** Canned ActiveCaptain bounding-box list response: one marina. */
 const AC_LIST = {
@@ -77,16 +78,14 @@ function startMultiSource (dataDir: string): {
   listResources: (query: object) => Promise<Record<string, unknown>>
   getResource: (id: string, property?: string) => Promise<Record<string, unknown>>
 } {
-  const provider: { methods?: Record<string, unknown> } = {}
+  const provider = captureResourceProvider()
   const app = {
     debug: () => {},
     error: () => {},
     setPluginStatus: () => {},
     setPluginError: () => {},
     getDataDirPath: () => dataDir,
-    registerResourceProvider: (r: { methods: Record<string, unknown> }) => {
-      provider.methods = r.methods
-    }
+    registerResourceProvider: provider.registerResourceProvider
   } as unknown as ServerAPI
 
   const status = createPluginStatus([
@@ -108,7 +107,7 @@ function startMultiSource (dataDir: string): {
   }
   notesResourceOutput.start(context)
 
-  const methods = provider.methods as Record<string, unknown>
+  const methods = provider.methods() as Record<string, unknown>
   return {
     listResources: methods.listResources as (q: object) => Promise<Record<string, unknown>>,
     getResource: methods.getResource as (id: string, p?: string) => Promise<Record<string, unknown>>

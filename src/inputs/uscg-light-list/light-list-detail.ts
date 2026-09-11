@@ -53,10 +53,11 @@ function humanizeColor (token: string): string {
  * comma-separated, lowercase, English phrase such as "flashing, white, 4 s
  * period". Tokens are space-separated on the wire: the first carries the
  * IALA character abbreviation, the second the color, the third the period.
- * A shorter input simply produces a shorter phrase. Exported so the
- * normalized-section builder humanizes the light character identically.
+ * A shorter input simply produces a shorter phrase, and a blank one produces
+ * no phrase at all, which is why callers go through
+ * {@link lightCharacterPhrase} rather than this function directly.
  */
-export function humanizeLightChar (raw: string): string {
+function humanizeLightChar (raw: string): string {
   const tokens = raw.trim().split(/\s+/)
   const parts: string[] = []
   if (tokens[0] !== '') {
@@ -75,20 +76,46 @@ export function humanizeLightChar (raw: string): string {
 }
 
 /**
+ * The humanized light character, or `undefined` when the aid has none to show.
+ *
+ * It takes the raw field including its absence, so "no character" is one
+ * answer rather than a condition each caller tests before asking. That is the
+ * same rule the Light line follows, made structural: an absent field and a
+ * present one that humanizes to nothing are the same outcome to a renderer,
+ * and a caller that has to spot the difference is a caller that can get it
+ * wrong. A present field really can humanize to nothing, since a
+ * whitespace-only wire value tokenizes to a single empty token, so every
+ * branch of the humanizer is skipped and the join yields `''`.
+ *
+ * This is the light character's shared surface: the normalized-section builder
+ * asks through it too, so the two renderings cannot disagree about whether an
+ * aid has a character.
+ */
+export function lightCharacterPhrase (raw: string | undefined): string | undefined {
+  if (raw === undefined) {
+    return undefined
+  }
+  const phrase = humanizeLightChar(raw)
+  return phrase === '' ? undefined : phrase
+}
+
+/**
  * Compose the descriptive Light line from the three light-related fields, or
- * null when the aid carries none of them (a daymark-only buoy, for example).
+ * null when none of them contributes anything (a daymark-only buoy, for
+ * example).
+ *
+ * Emptiness is decided on what the line would actually render, not on which
+ * fields are present. A separate presence guard is what once shipped a bare
+ * `Light: .` onto the chart: the guard tested a field the body never read, so
+ * a record carrying only that field passed the guard and then built no parts.
+ * With the decision made here there is no second list of fields to drift from
+ * this one.
  */
 function lightLine (record: LightListRecord): string | null {
-  if (
-    record.lightChar === undefined &&
-    record.nominalRange === undefined &&
-    record.focalPlane === undefined
-  ) {
-    return null
-  }
   const parts: string[] = []
-  if (record.lightChar !== undefined) {
-    parts.push(humanizeLightChar(record.lightChar))
+  const character = lightCharacterPhrase(record.lightChar)
+  if (character !== undefined) {
+    parts.push(character)
   }
   if (record.nominalRange !== undefined) {
     parts.push(`${record.nominalRange.value} ${rangeUnit(record.nominalRange.unit)} range`)
@@ -96,7 +123,7 @@ function lightLine (record: LightListRecord): string | null {
   if (record.focalPlane !== undefined) {
     parts.push(`${record.focalPlane.value} ${heightUnit(record.focalPlane.unit)} focal plane`)
   }
-  return parts.join(', ')
+  return parts.length > 0 ? parts.join(', ') : null
 }
 
 /** Compose the Structure line from the structure-type and -height fields. */
