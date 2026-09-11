@@ -31,6 +31,20 @@ async function gotoFixture (page: Page, query = ''): Promise<void> {
 }
 
 /**
+ * Match a source card's toggle, and the recent-error list's jump button for
+ * that source, by their EXACT accessible names, never by a regex or a
+ * substring.
+ *
+ * The card toggle is named for the source and the jump button is named
+ * "Show <source>", so any partial match resolves to both wherever the
+ * `?errors` fixture puts jump buttons on the page. That collision was
+ * invisible while the button rendered a raw slug, `Show openseamap` against a
+ * card named `OpenSeaMap`, so the partial matches here were passing on a
+ * defect rather than on a property. They started failing the moment the
+ * button began rendering the real display name.
+ */
+
+/**
  * Open Alerts and arm the proximity alarm, returning the radius field, which
  * is disabled until the toggle is on. Four tests need a live length control
  * and this is the cheapest one to reach.
@@ -58,7 +72,7 @@ test('loads the production remote with the current shared UI and saves defaults'
   await expect(root).not.toHaveAttribute('data-snui-theme')
   await expect(page.getByRole('radio', { name: 'Auto' })).toBeChecked()
 
-  await page.getByRole('button', { name: /Garmin ActiveCaptain/ }).click()
+  await page.getByRole('button', { name: 'Garmin ActiveCaptain', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Advanced' }).first()).toBeVisible()
 
   await page.getByRole('button', { name: 'Save', exact: true }).click()
@@ -80,7 +94,7 @@ test('renders each roled live region without a redundant aria-live', async ({ pa
   // A roled live region must not also carry aria-live, which double announces
   // on some screen readers. Sweep every status and alert in the panel,
   // including the ones inside expanded cards.
-  await page.getByRole('button', { name: /Garmin ActiveCaptain/ }).click()
+  await page.getByRole('button', { name: 'Garmin ActiveCaptain', exact: true }).click()
   await page.getByRole('button', { name: 'Alerts' }).click()
   const roledRegions = page.locator('[data-snui-root] [role="status"], [data-snui-root] [role="alert"]')
   const count = await roledRegions.count()
@@ -100,13 +114,18 @@ test('builds one heading outline from the sections down to each card', async ({ 
   await expect(page.getByRole('heading', { level: 2, name: 'Alerts' })).toBeVisible()
   await expect(page.getByRole('heading', { level: 3 })).toHaveCount(8)
   await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1)
-  await page.getByRole('button', { name: /OpenSeaMap/ }).click()
+  await page.getByRole('button', { name: 'OpenSeaMap', exact: true }).click()
   await expect(page.getByRole('heading', { level: 4, name: 'Advanced' })).toHaveCount(1)
   // The enable checkbox sits beside the heading, outside the toggle button,
   // and keeps its name through a visually hidden label.
   const enable = page.getByRole('checkbox', { name: 'Enable OpenSeaMap' })
   await expect(enable).toBeVisible()
-  await expect(page.getByRole('button', { name: /OpenSeaMap/ })).not.toContainText('Enable')
+  // Exactly one toggle is named for the source and nothing more, which is
+  // what fails if the checkbox's label is ever absorbed into the button: the
+  // name becomes "Enable OpenSeaMap" and this resolves to nothing.
+  const toggle = page.getByRole('button', { name: 'OpenSeaMap', exact: true })
+  await expect(toggle).toHaveCount(1)
+  await expect(toggle).not.toContainText('Enable')
 })
 
 test('preserves unknown configuration keys through an edit and save request', async ({ page }) => {
@@ -137,7 +156,7 @@ test('provides deterministic populated state for the release screenshot', async 
   await expect(page.getByText('Success. Healthy')).toHaveCount(8)
   await expect(page.getByText('1 POI in last fetch')).toHaveCount(8)
   // Every retained body holds the line; only the expanded card shows it.
-  await page.getByRole('button', { name: /OpenSeaMap/ }).click()
+  await page.getByRole('button', { name: 'OpenSeaMap', exact: true }).click()
   await expect(page.getByText('1 POI in last fetch, now.').filter({ visible: true })).toHaveCount(1)
 })
 
@@ -228,7 +247,7 @@ test('Discard drops a number draft that did not change the committed value', asy
 })
 
 test('Discard restores an edited field and clears the dirty state', async ({ page }) => {
-  await page.getByRole('button', { name: /Garmin ActiveCaptain/ }).click()
+  await page.getByRole('button', { name: 'Garmin ActiveCaptain', exact: true }).click()
   await page.getByRole('button', { name: 'Advanced' }).first().click()
 
   const cache = page.getByRole('spinbutton', { name: /Cache duration/ })
@@ -250,7 +269,7 @@ test('blocks Save on an Overpass endpoint the plugin would silently replace', as
   // input module and in the panel's own normalizeConfig alike, so a typo that
   // reached the save was written, ignored, and gone by the next mount with
   // OpenSeaMap querying an endpoint other than the one on screen.
-  await page.getByRole('button', { name: /OpenSeaMap/ }).click()
+  await page.getByRole('button', { name: 'OpenSeaMap', exact: true }).click()
   await page.getByRole('button', { name: 'Advanced' }).first().click()
 
   const endpoint = page.getByRole('textbox', { name: /Overpass API endpoint URL/ })
@@ -294,7 +313,7 @@ test('has no Axe findings or horizontal overflow at 320 pixels', async ({ page }
   // fixture that renders the recent-error list with its jump buttons.
   await page.setViewportSize({ width: 320, height: 900 })
   await gotoFixture(page, '?errors')
-  await page.getByRole('button', { name: /OpenSeaMap/ }).click()
+  await page.getByRole('button', { name: 'OpenSeaMap', exact: true }).click()
   await page.getByRole('button', { name: 'Advanced' }).first().click()
   // Armed, so the radius renders as a live control: Axe exempts a disabled
   // one from the contrast rules this sweep is here to run.
@@ -425,7 +444,7 @@ test('opens a collapsed Data sources section when jumping to a source', async ({
 
   // The recent-error list is the only place this button exists, and the
   // section it points into is the one the operator just closed.
-  await page.getByRole('button', { name: 'Show openseamap' }).click()
+  await page.getByRole('button', { name: 'Show OpenSeaMap', exact: true }).click()
 
   await expect(section).toHaveAttribute('aria-expanded', 'true')
   await expect(card).toBeVisible()
@@ -439,7 +458,7 @@ test('opens a collapsed Data sources section when jumping to a source', async ({
 test('moves focus to the revealed card when jumping to a source', async ({ page }) => {
   await gotoFixture(page, '?errors')
 
-  await page.getByRole('button', { name: 'Show openseamap' }).click()
+  await page.getByRole('button', { name: 'Show OpenSeaMap', exact: true }).click()
 
   // Focus lands on the card's own disclosure toggle: it names the source and
   // reports that the card is now expanded, so the destination is announced
