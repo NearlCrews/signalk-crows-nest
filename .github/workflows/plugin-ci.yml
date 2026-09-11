@@ -1,7 +1,7 @@
 name: SignalK Plugin CI
 
 # Calls the official SignalK reusable plugin-ci workflow. The community plugin
-# registry (dirkwa.github.io/signalk-plugin-registry) credits a plugin only
+# registry (https://signalk.org/signalk-plugin-registry/) credits a plugin only
 # when a workflow run referencing
 # SignalK/signalk-server/.github/workflows/plugin-ci.yml exists on the
 # published version's commit; without one it applies a scoring penalty. The
@@ -14,6 +14,13 @@ name: SignalK Plugin CI
 # printed notice and the lane proves the plugin installs, compiles, and passes
 # its tests; public/ is a prebuilt release artifact a Node 20 install never
 # rebuilds.
+#
+# Its lifecycle check also watches for an asynchronous crash: it installs
+# uncaught-exception and unhandled-rejection handlers, drains briefly after
+# `start()` resolves, and fails on anything it catches. That covers a plugin
+# that starts cleanly and then takes the server down through an unowned
+# 'error' event or a floating rejected promise, neither of which reaches the
+# promise `start()` returns.
 
 on:
   push:
@@ -28,7 +35,7 @@ permissions:
 
 jobs:
   plugin-ci:
-    uses: SignalK/signalk-server/.github/workflows/plugin-ci.yml@9edfbf958eb7addb69140a605b4d21a0df249fdc
+    uses: SignalK/signalk-server/.github/workflows/plugin-ci.yml@0495a4a94acd69443d94498b3b431738c2ba4eff
     with:
       build-command: npm run build
       test-command: npm test

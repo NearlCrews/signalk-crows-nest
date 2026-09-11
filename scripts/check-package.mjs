@@ -5,6 +5,26 @@ import { normalizePackReport } from './package-report.mjs'
 
 const execFileAsync = promisify(execFile)
 const packageJson = JSON.parse(await readFile('package.json', 'utf8'))
+
+// npm 10, which ships with the Node 22 lanes of the Signal K plugin CI matrix,
+// runs a `prepare` script during `npm pack --ignore-scripts` and prints its
+// banner and output on stdout; npm 11 does not. Any caller that reads a bare
+// `npm pack` capture then takes that noise for the tarball name and fails, so
+// this package must never grow one. `prepack` is safe, because both majors
+// print only the tarball name when one is defined, which is why the build
+// hangs off `prepack` instead. Git hooks belong behind a non-lifecycle script
+// a contributor opts into once, never behind `prepare` or `postinstall`.
+// Checked before the pack below so the failure names the cause rather than
+// surfacing as unparsable JSON on npm 10.
+for (const forbidden of ['prepare', 'postinstall', 'preinstall']) {
+  if (packageJson.scripts?.[forbidden] !== undefined) {
+    throw new Error(
+      `package.json declares a ${forbidden} script; use prepack for build steps, ` +
+      'and a non-lifecycle script for git hooks.'
+    )
+  }
+}
+
 const { stdout } = await execFileAsync(
   process.platform === 'win32' ? 'npm.cmd' : 'npm',
   ['pack', '--dry-run', '--json', '--ignore-scripts'],

@@ -9,6 +9,31 @@ const pkg = require('./package.json')
 // strict.
 const { shared } = require('signalk-nearlcrews-ui/federation')
 
+// The Admin publishes its dependency inventory as
+// @signalk/server-admin-ui-dependencies, and the usual advice is to require it
+// here so a React drift from the host fails the build. This package
+// deliberately does not, for three reasons.
+//
+// Requiring it would end the build outright. Its index.js validates peers when
+// it loads and calls process.exit(-1) on any that are missing, and it asks for
+// bootstrap, font-awesome, @fortawesome/fontawesome-free, react-bootstrap,
+// react-select, and simple-line-icons. This panel uses none of those, so the
+// guard would fail until six unused UI libraries were installed to appease it.
+//
+// It would also assert less than the line above already does. The inventory
+// asks for React ^19.0.0, while the shared UI requires ^19.2.0, so the check
+// would pass on versions this panel's own peer rejects.
+//
+// And it lags the Admin it describes: the inventory is 2.23.0 while the Admin
+// is 2.32.0, so a drift it reported would be its own rather than this panel's.
+// That is the failure mode already seen once here, when the Admin registered
+// its React share as 19.0.0 while bundling 19.2.4 and a version comparison
+// against the host's own number kept a compatible panel from mounting.
+//
+// The property is covered another way: `npm run check:panel` asserts this
+// build consumes the published share map unchanged, and its --runtime mode
+// renders the panel under the host's own share scope.
+
 // The SignalK admin UI looks up a configurator panel on window[<safeName>],
 // so the Module Federation container name must be the package name with any
 // non-word characters replaced.
