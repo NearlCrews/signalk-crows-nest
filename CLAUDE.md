@@ -564,7 +564,7 @@ self-contained module registered on one line in `src/index.ts`.
   bundled production `react/jsx-dev-runtime` does not implement, which breaks
   the panel at first render. The `test/panel-babel-config.test.ts` contract
   test locks this in.
-- `signalk-nearlcrews-ui` 0.11.1 supplies the panel shell (`PanelShell`, with
+- `signalk-nearlcrews-ui` supplies the panel shell (`PanelShell`, with
   the browser preflight and the error boundary built in), the theme system,
   the save bar (`SaveActionBar` plus `useUnsavedChangesGuard`), the numeric
   field (`NumberField`), collapsible sections, checkbox groups, the status
@@ -584,10 +584,10 @@ self-contained module registered on one line in `src/index.ts`.
   which `verify` already sequences before it. The `--expect` anchor is the same
   string `tests/browser/panel.spec.ts` asserts, so three places now depend on
   that heading text.
-  Fresh profiles use Match Admin, which follows an explicit host theme and
-  otherwise uses Light. Match device follows the operating system preference.
-  The host supplies React and React DOM `^19.2.0` singletons without bundled
-  fallbacks.
+  A fresh profile follows the host theme and falls back to Light; the
+  configuration panel tour in README.md describes every theme choice, and is
+  the only place that does. The host supplies React and React DOM `^19.2.0`
+  singletons without bundled fallbacks.
 - Two shared components own state the panel used to hold, so do not rebuild
   either by hand. `SaveActionBar` owns how long its saved message stays up,
   measured from `saveRequestedAt`, so the panel records that timestamp and

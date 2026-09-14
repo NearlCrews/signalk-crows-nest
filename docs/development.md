@@ -88,12 +88,12 @@ across restarts.
 The plugin ships its own configuration panel: a federated React app, loaded by
 the Signal K admin UI through Module Federation, that replaces the generated
 settings form with a live status section and grouped POI-type toggles. The
-panel uses the exact `signalk-nearlcrews-ui` 0.11.1 package for its shell,
-themes, and shared controls, while the Signal K host supplies React and React
-DOM at `^19.2.0`. Fresh
-profiles use Match Admin, which follows an explicit host theme and otherwise
-uses Light. Match device follows the operating-system color scheme. The
-panel build transpiles with Babel 8, whose React preset keeps
+panel uses the exact `signalk-nearlcrews-ui` package pinned in `package.json`
+for its shell, themes, and shared controls, while the Signal K host supplies
+React and React DOM at `^19.2.0`. The theme toggle offers a host-matching
+default, a device-matching choice, and Light, Dark, and Night; the
+configuration panel tour in the README describes what each automatic choice
+follows. The panel build transpiles with Babel 8, whose React preset keeps
 `development: false` pinned (see the comment in `webpack.config.cjs` and the
 `test/panel-babel-config.test.ts` contract test): a development transform would
 emit runtime JSX that the bundled production React does not implement.

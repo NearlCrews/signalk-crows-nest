@@ -130,10 +130,9 @@ air-draft check).
   has not been confirmed in over two years.
 - **A React configuration panel** with a per-source health table, an
   accordion of cards each with a live-status pill, an Alerts section, and
-  shared `signalk-nearlcrews-ui` controls and themes. Fresh profiles use
-  Match Admin, which follows an explicit host theme and otherwise uses Light.
-  Match device follows the operating-system color scheme, while Light, Dark,
-  and red-preserving Night are also available from the theme toggle.
+  shared `signalk-nearlcrews-ui` controls and five themes, including a
+  red-preserving Night mode for the helm. The panel tour below describes what
+  each theme follows.
 
 ## Screenshots
 
@@ -332,9 +331,10 @@ caches while retaining the on-disk data used for offline operation.
 This project targets Node 20.3 or newer, or 22 or newer (`engines.node` is
 `^20.3.0 || >=22`, which excludes Node 21), and develops against
 `@signalk/server-api` 2.32.0 or newer, with TypeScript 7 and the exact shared
-UI package `signalk-nearlcrews-ui` 0.11.1 (development only). The full local
-toolchain supports Node 22 from 22.22.2, Node 24 from 24.15.0, and Node 26,
-while the published plugin runtime keeps its Node 20.3 compatibility floor.
+UI package `signalk-nearlcrews-ui` pinned in `package.json` (development only).
+The full local toolchain supports Node 22 from 22.22.2, Node 24 from 24.15.0,
+and Node 26, while the published plugin runtime keeps its Node 20.3
+compatibility floor.
 
 ```bash
 git clone https://github.com/NearlCrews/signalk-crows-nest.git
