@@ -17,6 +17,15 @@ if (typeof uiPackage !== 'object' || uiPackage === null ||
 }
 const uiVersion = uiPackage.version
 
+// Copy owned by `signalk-nearlcrews-ui` rather than by this panel: the theme
+// segments come from its ThemeToggle and the save confirmation from its
+// SaveActionBar, and the panel overrides neither. Naming them once keeps a
+// package rewording to one edit, and keeps a rename reading as a rename rather
+// than as a locator that suddenly matches nothing.
+const THEME_HOST = 'Match Admin'
+const THEME_DEVICE = 'Match device'
+const SAVE_SENT = 'Save sent to the server'
+
 /**
  * Load a fixture mode and wait for the panel to mount.
  *
@@ -70,7 +79,7 @@ test('loads the production remote with the current shared UI and saves defaults'
   const root = page.locator('[data-snui-root]')
   await expect(root).toHaveAttribute('data-snui-version', uiVersion)
   await expect(root).not.toHaveAttribute('data-snui-theme')
-  await expect(page.getByRole('radio', { name: 'Match Admin' })).toBeChecked()
+  await expect(page.getByRole('radio', { name: THEME_HOST })).toBeChecked()
 
   await page.getByRole('button', { name: 'Garmin ActiveCaptain', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Advanced' }).first()).toBeVisible()
@@ -80,13 +89,15 @@ test('loads the production remote with the current shared UI and saves defaults'
   // Never query role="status" bare in this file. Several regions carry it at
   // once: the save bar's own status, which also reports an unusable endpoint
   // through invalidMessage, the always-mounted status-poll banner, the
-  // ActiveCaptain empty-selection chip, and one per checkbox group. A text
-  // filter or a scoped locator is what picks out the one under test.
-  const saveStatus = page.getByRole('status').filter({ hasText: 'Save sent to the server' })
+  // ActiveCaptain empty-selection chip, and one per checkbox group. The action
+  // bar's own status element picks out the save bar's without depending on
+  // what it says.
+  const saveStatus = page.locator('[data-snui-action-bar-status]').getByRole('status')
   await expect(saveStatus).toBeVisible()
+  await expect(saveStatus).toContainText(SAVE_SENT)
   // Focus moves to the bar's status destination, which wraps the live region,
   // so the focused element contains the confirmation rather than being it.
-  await expect(page.locator(':focus')).toContainText('Save sent to the server')
+  await expect(page.locator(':focus')).toContainText(SAVE_SENT)
   await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled()
 })
 
@@ -160,11 +171,11 @@ test('provides deterministic populated state for the release screenshot', async 
   await expect(page.getByText('1 POI in last fetch, now.').filter({ visible: true })).toHaveCount(1)
 })
 
-test('supports every explicit theme and returns to Match Admin', async ({ page }) => {
+test('supports every explicit theme and returns to the host default', async ({ page }) => {
   const root = page.locator('[data-snui-root]')
   const themeGroup = page.getByRole('radiogroup', { name: 'Panel theme' })
   for (const [label, value] of [
-    ['Match device', 'system'],
+    [THEME_DEVICE, 'system'],
     ['Light', 'light'],
     ['Dark', 'dark'],
     ['Night', 'night']
@@ -172,7 +183,7 @@ test('supports every explicit theme and returns to Match Admin', async ({ page }
     await themeGroup.getByRole('radio', { name: label }).click()
     await expect(root).toHaveAttribute('data-snui-theme', value)
   }
-  await themeGroup.getByRole('radio', { name: 'Match Admin' }).click()
+  await themeGroup.getByRole('radio', { name: THEME_HOST }).click()
   await expect(root).not.toHaveAttribute('data-snui-theme')
 
   // The selector is chrome, not the operator's task, so it trails the panel
