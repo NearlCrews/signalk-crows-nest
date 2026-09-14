@@ -64,6 +64,10 @@ async function armProximityAlarm (page: Page): Promise<Locator> {
   return page.getByRole('spinbutton', { name: /Alarm radius/ })
 }
 
+// Only the error handlers are shared. Loading a fixture here would mount the
+// panel for the eight tests that open a different one as their first action,
+// and each mount costs a navigation, a federated remote fetch, and a React
+// render.
 test.beforeEach(async ({ page }) => {
   page.on('console', (message) => {
     if (message.type() === 'error') throw new Error(`Browser console error: ${message.text()}`)
@@ -71,11 +75,11 @@ test.beforeEach(async ({ page }) => {
   page.on('pageerror', (error) => {
     throw error
   })
-  await gotoFixture(page)
-  await expect(page.getByText('Plugin status', { exact: true })).toBeVisible()
 })
 
 test('loads the production remote with the current shared UI and saves defaults', async ({ page }) => {
+  await gotoFixture(page)
+  await expect(page.getByText('Plugin status', { exact: true })).toBeVisible()
   const root = page.locator('[data-snui-root]')
   await expect(root).toHaveAttribute('data-snui-version', uiVersion)
   await expect(root).not.toHaveAttribute('data-snui-theme')
@@ -105,6 +109,7 @@ test('renders each roled live region without a redundant aria-live', async ({ pa
   // A roled live region must not also carry aria-live, which double announces
   // on some screen readers. Sweep every status and alert in the panel,
   // including the ones inside expanded cards.
+  await gotoFixture(page)
   await page.getByRole('button', { name: 'Garmin ActiveCaptain', exact: true }).click()
   await page.getByRole('button', { name: 'Alerts' }).click()
   const roledRegions = page.locator('[data-snui-root] [role="status"], [data-snui-root] [role="alert"]')
@@ -120,6 +125,7 @@ test('builds one heading outline from the sections down to each card', async ({ 
   // starts at h2: the status section, Data sources, and Alerts. Each source
   // card is an h3 under Data sources and its Advanced disclosure an h4, so a
   // screen reader's heading list reads as a tree rather than eight siblings.
+  await gotoFixture(page)
   await expect(page.getByRole('heading', { level: 2, name: 'Plugin status' })).toBeVisible()
   await expect(page.getByRole('heading', { level: 2, name: 'Data sources' })).toBeVisible()
   await expect(page.getByRole('heading', { level: 2, name: 'Alerts' })).toBeVisible()
@@ -172,6 +178,7 @@ test('provides deterministic populated state for the release screenshot', async 
 })
 
 test('supports every explicit theme and returns to the host default', async ({ page }) => {
+  await gotoFixture(page)
   const root = page.locator('[data-snui-root]')
   const themeGroup = page.getByRole('radiogroup', { name: 'Panel theme' })
   for (const [label, value] of [
@@ -211,6 +218,7 @@ test('holds a below-minimum numeric draft while editing and normalizes it on blu
   // a collapse to be stranded by the effects React Activity re-runs on reopen.
   // A raw "0" is below the one metre floor, so the committed value clamps away
   // from it. That is what makes this discriminating rather than tautological.
+  await gotoFixture(page)
   const radius = await armProximityAlarm(page)
   await radius.fill('0')
   await expect(radius).toHaveValue('0')
@@ -233,6 +241,7 @@ test('Discard drops a number draft that did not change the committed value', asy
   // reason; the full matrix under `verify:release` is what exercises it. If
   // the project list is ever trimmed for speed, this test needs WebKit or it
   // stops discriminating.
+  await gotoFixture(page)
   const radius = await armProximityAlarm(page)
   // Drive the committed value down to the 1 m floor and let it settle. The
   // focus move is load-bearing, not cosmetic: it blurs the input so the draft
@@ -258,6 +267,7 @@ test('Discard drops a number draft that did not change the committed value', asy
 })
 
 test('Discard restores an edited field and clears the dirty state', async ({ page }) => {
+  await gotoFixture(page)
   await page.getByRole('button', { name: 'Garmin ActiveCaptain', exact: true }).click()
   await page.getByRole('button', { name: 'Advanced' }).first().click()
 
@@ -280,6 +290,7 @@ test('blocks Save on an Overpass endpoint the plugin would silently replace', as
   // input module and in the panel's own normalizeConfig alike, so a typo that
   // reached the save was written, ignored, and gone by the next mount with
   // OpenSeaMap querying an endpoint other than the one on screen.
+  await gotoFixture(page)
   await page.getByRole('button', { name: 'OpenSeaMap', exact: true }).click()
   await page.getByRole('button', { name: 'Advanced' }).first().click()
 
@@ -425,6 +436,7 @@ test('announces a status-poll failure from a region that predates the message', 
   // reliably, so the banner stays mounted and empty while the endpoint is
   // healthy and only its content changes when a poll fails. The empty region
   // on a healthy panel is the half a conditional banner cannot have.
+  await gotoFixture(page)
   const banner = page.locator('#ac-status-banner')
   await expect(banner).toHaveAttribute('role', 'status')
   await expect(banner).toBeEmpty()
