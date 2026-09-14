@@ -54,6 +54,19 @@ async function gotoFixture (page: Page, query = ''): Promise<void> {
  */
 
 /**
+ * Scroll a control to the middle of the viewport before interacting with it.
+ *
+ * The save bar is sticky at the foot of the panel, so a control that
+ * Playwright scrolls only just inside the viewport can come to rest under the
+ * bar, and the click then lands on the bar rather than on the control.
+ */
+async function scrollToCenter (target: Locator): Promise<void> {
+  await target.evaluate((control) => {
+    control.scrollIntoView({ block: 'center' })
+  })
+}
+
+/**
  * Open Alerts and arm the proximity alarm, returning the radius field, which
  * is disabled until the toggle is on. Four tests need a live length control
  * and this is the cheapest one to reach.
@@ -368,22 +381,18 @@ test('gives every interactive control a 44-pixel coarse-pointer target @coarse',
     const collapsed = page.locator('[data-snui-root] button[aria-expanded="false"]')
     if (await collapsed.count() === 0) break
     const next = collapsed.first()
-    await next.scrollIntoViewIfNeeded()
+    await scrollToCenter(next)
     await next.click()
   }
   expect(await page.locator('[data-snui-root] button[aria-expanded="false"]').count()).toBe(0)
 
   // Enable every toggle so the fields they gate render as live controls. Each
-  // box is scrolled to the middle of the viewport first, because the save bar
-  // is sticky at the foot of the panel: a box that Playwright scrolls just
-  // inside the viewport can come to rest under the bar, and a forced click
-  // then lands on the bar rather than on the box.
+  // box is scrolled clear of the sticky save bar first, for the reason
+  // `scrollToCenter` records. Nothing here adds a checkbox, so the set is
+  // resolved once rather than re-queried per box.
   const toggles = page.locator('[data-snui-root] input[type="checkbox"]')
-  for (let index = 0; index < await toggles.count(); index++) {
-    const toggle = toggles.nth(index)
-    await toggle.evaluate((box) => {
-      box.scrollIntoView({ block: 'center' })
-    })
+  for (const toggle of await toggles.all()) {
+    await scrollToCenter(toggle)
     await toggle.check({ force: true })
   }
 
