@@ -43,11 +43,12 @@ test('the composites entry exposes the save bar rules the panel footer follows',
     clean: 'clean',
     discard: 'discard',
     save: 'save',
+    saved: 'saved',
     saving: 'saving',
     unconfigured: 'unconfigured',
     unsaved: 'unsaved'
   }
-  const shared = { invalidMessage: null, labels, savedMessage: 'saved', saveRequestedAt: null, saving: false }
+  const shared = { invalidMessage: null, labels, saveRequestedAt: null, saving: false }
   assert.equal(resolveSaveActionBarState({ ...shared, dirty: false, unconfigured: false }).saveDisabled, true)
   assert.equal(resolveSaveActionBarState({ ...shared, dirty: false, unconfigured: true }).saveDisabled, false)
   assert.equal(resolveSaveActionBarState({ ...shared, dirty: true, unconfigured: false }).saveDisabled, false)

@@ -70,7 +70,7 @@ test('loads the production remote with the current shared UI and saves defaults'
   const root = page.locator('[data-snui-root]')
   await expect(root).toHaveAttribute('data-snui-version', uiVersion)
   await expect(root).not.toHaveAttribute('data-snui-theme')
-  await expect(page.getByRole('radio', { name: 'Auto' })).toBeChecked()
+  await expect(page.getByRole('radio', { name: 'Match Admin' })).toBeChecked()
 
   await page.getByRole('button', { name: 'Garmin ActiveCaptain', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Advanced' }).first()).toBeVisible()
@@ -82,11 +82,11 @@ test('loads the production remote with the current shared UI and saves defaults'
   // through invalidMessage, the always-mounted status-poll banner, the
   // ActiveCaptain empty-selection chip, and one per checkbox group. A text
   // filter or a scoped locator is what picks out the one under test.
-  const saveStatus = page.getByRole('status').filter({ hasText: 'Save requested' })
+  const saveStatus = page.getByRole('status').filter({ hasText: 'Save sent to the server' })
   await expect(saveStatus).toBeVisible()
   // Focus moves to the bar's status destination, which wraps the live region,
   // so the focused element contains the confirmation rather than being it.
-  await expect(page.locator(':focus')).toContainText('Save requested')
+  await expect(page.locator(':focus')).toContainText('Save sent to the server')
   await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled()
 })
 
@@ -160,11 +160,11 @@ test('provides deterministic populated state for the release screenshot', async 
   await expect(page.getByText('1 POI in last fetch, now.').filter({ visible: true })).toHaveCount(1)
 })
 
-test('supports every explicit theme and returns to Auto', async ({ page }) => {
+test('supports every explicit theme and returns to Match Admin', async ({ page }) => {
   const root = page.locator('[data-snui-root]')
   const themeGroup = page.getByRole('radiogroup', { name: 'Panel theme' })
   for (const [label, value] of [
-    ['System', 'system'],
+    ['Match device', 'system'],
     ['Light', 'light'],
     ['Dark', 'dark'],
     ['Night', 'night']
@@ -172,7 +172,7 @@ test('supports every explicit theme and returns to Auto', async ({ page }) => {
     await themeGroup.getByRole('radio', { name: label }).click()
     await expect(root).toHaveAttribute('data-snui-theme', value)
   }
-  await themeGroup.getByRole('radio', { name: 'Auto' }).click()
+  await themeGroup.getByRole('radio', { name: 'Match Admin' }).click()
   await expect(root).not.toHaveAttribute('data-snui-theme')
 
   // The selector is chrome, not the operator's task, so it trails the panel

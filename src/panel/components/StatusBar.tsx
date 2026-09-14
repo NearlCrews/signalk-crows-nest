@@ -87,7 +87,7 @@ interface RecentErrorsProps {
   sources: SourceStatus[]
   onJumpToSource: ((slug: string) => void) | undefined
   /** Where focus lands if the banner goes while the operator is standing in it. */
-  focusFallbackRef: RefObject<HTMLElement | null>
+  focusFallbackRef: RefObject<HTMLHeadingElement | null>
 }
 
 /**
@@ -99,7 +99,7 @@ interface RecentErrorsProps {
  * The banner carries those buttons, so a poll that clears the errors while
  * one of them has focus would otherwise take the focused control away and
  * drop the reader on the body. `dismissFocusRef` catches that: the section
- * itself is the destination, so the reader is told where it landed.
+ * heading is the destination, so the reader is told where it landed.
  *
  * Known gap: no browser test covers that handoff. The fixture serves one
  * status payload for the life of the page, so driving a mid-session clear
@@ -161,14 +161,14 @@ interface Props {
  * does not re-render the table. The relative ages own their own clocks.
  */
 export default memo(function StatusBar ({ status, lastUpdatedMs, onJumpToSource }: Props): React.ReactElement {
-  // Focus destination for the recent-error banner. The section is programmatically
-  // focusable only, so it adds no tab stop; a screen reader landing on it reads
-  // "Plugin status, region", which says where the errors went.
-  const sectionRef = useRef<HTMLElement>(null)
+  // Focus destination for the recent-error banner. `headingRef` is the shared
+  // Section's own answer for this: it makes the heading programmatically
+  // focusable and nothing more, so it adds no tab stop, and a screen reader
+  // landing on it reads "Plugin status", which says where the errors went.
+  const headingRef = useRef<HTMLHeadingElement>(null)
   return (
     <Section
-      ref={sectionRef}
-      tabIndex={-1}
+      headingRef={headingRef}
       title='Plugin status'
       actions={lastUpdatedMs !== null
         ? <Text tone='muted' size='sm'>Checked <RelativeAge since={lastUpdatedMs} /></Text>
@@ -197,7 +197,7 @@ export default memo(function StatusBar ({ status, lastUpdatedMs, onJumpToSource 
             errors={status.recentErrors}
             sources={status.sources}
             onJumpToSource={onJumpToSource}
-            focusFallbackRef={sectionRef}
+            focusFallbackRef={headingRef}
           />
           )
         : null}
