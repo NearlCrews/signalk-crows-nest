@@ -39,16 +39,12 @@ test('the root entry exposes the relative-age formatter the panel renders ages w
 test('the composites entry exposes the save bar rules the panel footer follows', () => {
   // A configured, clean plugin has nothing to save; an unconfigured one can
   // save its defaults. Both rules used to live in this repository.
-  const labels = {
-    clean: 'clean',
-    discard: 'discard',
-    save: 'save',
-    saved: 'saved',
-    saving: 'saving',
-    unconfigured: 'unconfigured',
-    unsaved: 'unsaved'
-  }
-  const shared = { invalidMessage: null, labels, saveRequestedAt: null, saving: false }
+  //
+  // No labels: the resolver falls back to the package's own, which is what the
+  // rendered bar shows, and the disable rule these assertions name does not
+  // read them at all. A fixture that copied the label set would track every
+  // wording change in the package for nothing.
+  const shared = { invalidMessage: null, saveRequestedAt: null, saving: false }
   assert.equal(resolveSaveActionBarState({ ...shared, dirty: false, unconfigured: false }).saveDisabled, true)
   assert.equal(resolveSaveActionBarState({ ...shared, dirty: false, unconfigured: true }).saveDisabled, false)
   assert.equal(resolveSaveActionBarState({ ...shared, dirty: true, unconfigured: false }).saveDisabled, false)
