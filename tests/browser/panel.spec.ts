@@ -351,10 +351,18 @@ test('gives every interactive control a 44-pixel coarse-pointer target @coarse',
   }
   expect(await page.locator('[data-snui-root] button[aria-expanded="false"]').count()).toBe(0)
 
-  // Enable every toggle so the fields they gate render as live controls.
+  // Enable every toggle so the fields they gate render as live controls. Each
+  // box is scrolled to the middle of the viewport first, because the save bar
+  // is sticky at the foot of the panel: a box that Playwright scrolls just
+  // inside the viewport can come to rest under the bar, and a forced click
+  // then lands on the bar rather than on the box.
   const toggles = page.locator('[data-snui-root] input[type="checkbox"]')
   for (let index = 0; index < await toggles.count(); index++) {
-    await toggles.nth(index).check({ force: true })
+    const toggle = toggles.nth(index)
+    await toggle.evaluate((box) => {
+      box.scrollIntoView({ block: 'center' })
+    })
+    await toggle.check({ force: true })
   }
 
   const measured = await page.evaluate(() => {
