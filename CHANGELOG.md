@@ -11,6 +11,25 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The configuration panel builds on `signalk-nearlcrews-ui` 0.11.1. The theme
+  toggle now offers Match Admin, Match device, Light, Dark, and Night: the two
+  automatic choices are named for what they follow rather than for being
+  automatic, and the selector shows its "Panel theme" label. The save bar
+  reports "All changes saved", "Unsaved changes", "Save sent to the server",
+  and "Save to enable the plugin".
+- A save the panel refuses, which today means an unusable Overpass endpoint,
+  keeps Save and Discard in the keyboard tab order and names the reason on the
+  status line beside them. Both buttons used to leave the tab order while the
+  endpoint was unusable, which dropped focus wherever it was standing on one of
+  them.
+- A relative age of a day or more counts in numbers, so the source health table
+  reads "1 day ago" rather than "yesterday".
+- Focus lands on the Plugin status heading, rather than on the section around
+  it, when a poll clears the recent errors while a "Show source" button holds
+  focus.
+
 <a id="v0170"></a>
 
 ## [0.17.0] - 2026-09-11
