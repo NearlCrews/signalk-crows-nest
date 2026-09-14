@@ -21,10 +21,9 @@ npm-debug.log*
 .env
 .env.*.local
 
-# Output of 'npm pack'
+# Output of 'npm pack', at the repository root and in the staging directory
+# scripts/create-release-tarball.mjs packs into
 *.tgz
-
-# Release tarball staging directory (scripts/create-release-tarball.mjs)
 artifacts/
 
 # Claude Code local tooling artifacts
