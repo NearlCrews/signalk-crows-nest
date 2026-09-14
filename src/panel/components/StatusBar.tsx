@@ -18,9 +18,10 @@
  */
 
 import type * as React from 'react'
-import { memo, useRef, type RefObject } from 'react'
+import { memo, useRef } from 'react'
 import {
   Banner,
+  type BannerProps,
   Button,
   Cluster,
   RelativeAge,
@@ -86,8 +87,12 @@ interface RecentErrorsProps {
   errors: StatusError[]
   sources: SourceStatus[]
   onJumpToSource: ((slug: string) => void) | undefined
-  /** Where focus lands if the banner goes while the operator is standing in it. */
-  focusFallbackRef: RefObject<HTMLHeadingElement | null>
+  /**
+   * Where focus lands if the banner goes while the operator is standing in it.
+   * Typed from the `Banner` prop it is forwarded to, so the destination can
+   * move to another element kind without editing this line.
+   */
+  dismissFocusRef: BannerProps['dismissFocusRef']
 }
 
 /**
@@ -110,7 +115,7 @@ interface RecentErrorsProps {
  * deliberately rather than overlooked.
  */
 function RecentErrors (
-  { errors, sources, onJumpToSource, focusFallbackRef }: RecentErrorsProps
+  { errors, sources, onJumpToSource, dismissFocusRef }: RecentErrorsProps
 ): React.ReactElement {
   // The snapshot is the authority where it has a row, and it does not always
   // have one: plugin-status.ts records an error against a source that failed
@@ -118,7 +123,7 @@ function RecentErrors (
   // openseamap". The panel's own names answer for those.
   const nameBySlug = new Map(sources.map((source) => [source.source, source.name]))
   return (
-    <Banner tone='danger' title='Recent errors' dismissFocusRef={focusFallbackRef}>
+    <Banner tone='danger' title='Recent errors' dismissFocusRef={dismissFocusRef}>
       {/* A list Stack wraps each child in its own list item. */}
       <Stack as='ul' gap={2}>
         {errors.map(({ at, message, source }, index) => (
@@ -197,7 +202,7 @@ export default memo(function StatusBar ({ status, lastUpdatedMs, onJumpToSource 
             errors={status.recentErrors}
             sources={status.sources}
             onJumpToSource={onJumpToSource}
-            focusFallbackRef={headingRef}
+            dismissFocusRef={headingRef}
           />
           )
         : null}
