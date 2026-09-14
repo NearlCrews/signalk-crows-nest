@@ -24,6 +24,9 @@ npm-debug.log*
 # Output of 'npm pack'
 *.tgz
 
+# Release tarball staging directory (scripts/create-release-tarball.mjs)
+artifacts/
+
 # Claude Code local tooling artifacts
 .claude/
 
