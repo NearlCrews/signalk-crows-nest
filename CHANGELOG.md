@@ -30,6 +30,14 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   it, when a poll clears the recent errors while a "Show source" button holds
   focus.
 
+### Internal
+
+- The configuration panel's size gate allows 5% growth over its recorded
+  baseline instead of 10%. The shared UI update added about 10.7 KB gzipped to
+  the panel remote, all of it inside the library's own module graph, and an
+  allowance measured as a percentage of the larger baseline would have widened
+  the room for the next update too.
+
 <a id="v0170"></a>
 
 ## [0.17.0] - 2026-09-11
