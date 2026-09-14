@@ -11,6 +11,10 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+<a id="v0180"></a>
+
+## [0.18.0] - 2026-09-14
+
 ### Changed
 
 - The configuration panel builds on `signalk-nearlcrews-ui` 0.11.1. The theme
@@ -37,6 +41,9 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the panel remote, all of it inside the library's own module graph, and an
   allowance measured as a percentage of the larger baseline would have widened
   the room for the next update too.
+- The documentation spell checker and the panel bundler move to current
+  releases. Neither reaches an installed plugin, whose runtime dependencies are
+  unchanged.
 
 <a id="v0170"></a>
 
@@ -2313,7 +2320,8 @@ bridges, and locks along it.**
   health through `setPluginStatus`, and documents its HTTP API with
   `getOpenApi`.
 
-[Unreleased]: https://github.com/NearlCrews/signalk-crows-nest/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/NearlCrews/signalk-crows-nest/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/NearlCrews/signalk-crows-nest/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/NearlCrews/signalk-crows-nest/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/NearlCrews/signalk-crows-nest/compare/v0.15.6...v0.16.0
 [0.15.6]: https://github.com/NearlCrews/signalk-crows-nest/compare/v0.15.5...v0.15.6

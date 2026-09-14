@@ -22,41 +22,33 @@ route-corridor, and bridge air-draft alarms.
 > safety-of-life navigation: always cross-check against official charts and
 > your primary instruments.
 
-## What's new in 0.17.0
+## What's new in 0.18.0
 
-This release is corrections and panel work. Nothing you have configured
-changes, and no alarm changes when it sounds, but two fixes change what reaches
-the chart and one changes what the panel will let you save.
+This release is configuration panel work. Nothing you have configured changes,
+no alarm changes when it sounds, and the data reaching the chart is unchanged.
+What changes is what the panel calls things and how it behaves under the
+keyboard.
 
-- **Duplicate markers merge where they used to slip through.** Two sources
-  reporting the same harbour or hazard could both stay on the chart. The
-  duplicate pass sized its search grid from the average latitude of each
-  batch, which is too fine for every point nearer the pole than that average,
-  so real pairs were never compared. The further north or south a batch
-  spread, the more it missed.
-- **An unusable Overpass endpoint is refused instead of discarded.** A typo in
-  the OpenSeaMap endpoint or in any fallback line used to be saved, silently
-  replaced with the default the next time the panel loaded, and lost, so
-  OpenSeaMap ran against an endpoint other than the one on screen. Both fields
-  now say so and hold Save until it is corrected.
-- **Aids with no readable light characteristic no longer show an empty
-  line.** A navigation aid whose light characteristic arrived blank rendered a
-  bare "Light:" in the popup, and handed a structured chartplotter an empty
-  Character row. An aid that still has a usable range or focal plane keeps
-  those.
-- **Fewer pointless requests to the data sources.** A cleared-route message
-  arriving while no route was loaded forced a full scan, one list request to
-  every enabled source, and produced nothing.
-- **Plain language when the panel cannot reach the plugin.** A signed-out
-  admin session now says so and tells you to sign in again, rather than
-  showing a raw HTTP status and promising a retry that could never recover it.
-- **Clearer source status.** The per-source labels read `Healthy`, `Idle`,
-  `Fetching`, and `Unreachable`, the health table reads `Reachable`,
-  `Unreachable`, and `Not yet contacted`, and the collapsed Alerts section
-  names which alarms are armed. On a server set to imperial units, a length
-  field's own minimum is now reachable from a numeric keypad.
+- **The theme choices say what they follow.** The toggle at the foot of the
+  panel now reads Match Admin, Match device, Light, Dark, and Night. The two
+  automatic choices are named for the thing they track rather than for being
+  automatic, and the selector carries its "Panel theme" label. The themes
+  themselves are unchanged, and an explicit choice still persists across
+  visits.
+- **A refused save keeps its buttons reachable.** When the panel holds a save
+  back, which today means an unusable Overpass endpoint, Save and Discard stay
+  in the keyboard tab order and the reason is named on the status line beside
+  them. Both buttons used to leave the tab order, which dropped focus wherever
+  it was standing on one of them.
+- **Clearer save and age wording.** The save bar reports "All changes saved",
+  "Unsaved changes", "Save sent to the server", and "Save to enable the
+  plugin". In the source health table a relative age of a day or more counts in
+  numbers, so a source last reached yesterday reads "1 day ago".
+- **Focus lands on the heading it announces.** When a status poll clears the
+  recent errors while a "Show source" button holds focus, focus moves to the
+  Plugin status heading rather than to the section around it.
 
-See the [v0.17.0 changelog entry](https://github.com/NearlCrews/signalk-crows-nest/blob/main/CHANGELOG.md#v0170)
+See the [v0.18.0 changelog entry](https://github.com/NearlCrews/signalk-crows-nest/blob/main/CHANGELOG.md#v0180)
 and [full release history](https://github.com/NearlCrews/signalk-crows-nest/blob/main/CHANGELOG.md).
 
 ## What it does
