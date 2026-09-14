@@ -447,7 +447,7 @@ Apache License
 
 ## webpack
 
-Version: 5.110.3
+Version: 5.111.0
 
 License: MIT
 
