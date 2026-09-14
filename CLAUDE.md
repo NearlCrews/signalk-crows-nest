@@ -462,10 +462,16 @@ self-contained module registered on one line in `src/index.ts`.
     pure translation between per-layer boolean flags and the shared
     `CheckboxGroup`'s value array), `select-all-state.ts` (the pure tri-state
     select-all derivation for the ActiveCaptain POI-type selector),
-    `request-timeout.ts` (the panel-wide per-request timeout the status
-    poller and the unit-preferences fetch share), and `unit-system.ts` (the
-    React-free display-units module keyed off the server unit-preset's
-    `categories.length.targetUnit`). `hooks/` holds `use-config`,
+    `endpoint-validation.ts` (the usable-endpoint checks the two OpenSeaMap
+    connection fields and the save bar report from, built on the same
+    `usableEndpoint` predicate the plugin itself coerces with, so the panel and
+    the plugin cannot drift on what counts as usable), `source-names.ts` (the
+    display name per source, read by the accordion card titles and by the
+    status section's jump buttons, including for a source the status snapshot
+    carries no row for), `request-timeout.ts` (the panel-wide per-request
+    timeout the status poller and the unit-preferences fetch share), and
+    `unit-system.ts` (the React-free display-units module keyed off the server
+    unit-preset's `categories.length.targetUnit`). `hooks/` holds `use-config`,
     `use-status` (which also exposes `lastUpdatedMs`), `use-unit-system`
     (resolves the display system from the server's unit preferences), and
     `draft-reset-context` (the Discard epoch every shared `NumberField`
