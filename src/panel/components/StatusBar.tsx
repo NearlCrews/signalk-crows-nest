@@ -18,7 +18,7 @@
  */
 
 import type * as React from 'react'
-import { memo, useRef } from 'react'
+import { memo, useMemo, useRef } from 'react'
 import {
   Banner,
   type BannerProps,
@@ -121,7 +121,12 @@ function RecentErrors (
   // have one: plugin-status.ts records an error against a source that failed
   // before it registered, which used to leave the button reading "Show
   // openseamap". The panel's own names answer for those.
-  const nameBySlug = new Map(sources.map((source) => [source.source, source.name]))
+  // Rebuilt only when the poll returns a new sources array, rather than on
+  // every 5 s status tick that leaves the array alone.
+  const nameBySlug = useMemo(
+    () => new Map(sources.map((source) => [source.source, source.name])),
+    [sources]
+  )
   return (
     <Banner tone='danger' title='Recent errors' dismissFocusRef={dismissFocusRef}>
       {/* A list Stack wraps each child in its own list item. */}
