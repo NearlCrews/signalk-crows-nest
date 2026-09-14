@@ -217,12 +217,9 @@ src/                      # TypeScript source
     ├── unit-system.ts     # The display-units resolver keyed off the server unit preset
     ├── select-all-state.ts# Pure tri-state select-all derivation
     ├── source-status-pill.ts  # Pure per-source pill variant, label, and detail wording
-    ├── endpoint-validation.ts # The usable-Overpass-endpoint checks the two
-    │                      #   connection fields and the save bar report from
-    ├── request-timeout.ts  # The panel-wide per-request timeout the status poll
-    │                      #   and the unit-preferences fetch share
-    ├── source-names.ts     # The display name per source, for the card titles and
-    │                      #   the status section's jump buttons
+    ├── endpoint-validation.ts # The usable-Overpass-endpoint checks
+    ├── request-timeout.ts  # The panel-wide per-request timeout
+    ├── source-names.ts     # The display name per source
     ├── hooks/             # use-config, use-status, use-unit-system,
     │                      #   draft-reset-context
     └── components/        # StatusBar, DataSourcesSection (per-source
