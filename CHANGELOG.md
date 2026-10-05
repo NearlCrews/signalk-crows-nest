@@ -17,6 +17,12 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Admin behaves after a save: it hands the saved configuration straight back
   to the panel without waiting for the server, so the panel treats that as its
   own value rather than as confirmation. No behavior changes.
+- The Signal K plugin workflow moves to the 2026-10-04 master commit of the
+  reusable plugin CI and drops the `enable-armv7` input, which upstream now
+  ignores because it removed the armv7 (Cerbo GX) Node 20 job. The plugin CI
+  runs Node 22 and 24 only, with npm 11 on its Node 22 lanes, so the Node 20
+  leg in CI is the only Node 20 coverage and no CI exercises 32-bit ARM.
+  `engines.node` is unchanged.
 
 <a id="v0180"></a>
 

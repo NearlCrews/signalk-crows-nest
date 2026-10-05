@@ -124,11 +124,10 @@ runs the full gate on Node.js 22. The Node.js 20 leg does not build the panel:
 Babel 8 requires Node.js 22.18 or newer (or 24.11 or newer), so the panel
 toolchain is exercised
 on Node.js 22 and 24 only. The official Signal K plugin CI
-(`.github/workflows/plugin-ci.yml`) exercises Node.js 22 and 24 across Linux,
-macOS, and Windows, plus its advisory Node.js 20 armv7 lane, where
-`npm run build` skips the panel bundle with a notice and the lane proves the
-plugin installs, compiles, and passes its tests on the lowest Node it
-advertises. The publish workflow runs on Node.js 22. The `engines` field in `package.json` is
+(`.github/workflows/plugin-ci.yml`) exercises Node.js 22 and 24 across Linux
+x64, Linux arm64, macOS, and Windows. It no longer has an armv7 (Cerbo GX) or
+Node.js 20 job, so the ci.yml Node.js 20 leg is the only Node.js 20 coverage,
+and no CI exercises 32-bit ARM. The publish workflow runs on Node.js 22. The `engines` field in `package.json` is
 `^20.3.0 || >=22` (the ActiveCaptain client uses `AbortSignal.any`, added in
 Node 20.3, and `lru-cache` excludes Node 21); keep its floor at or below the
 lowest Node.js version CI exercises.

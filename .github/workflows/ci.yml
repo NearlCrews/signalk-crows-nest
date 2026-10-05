@@ -35,9 +35,11 @@ jobs:
 
       # The plugin runtime keeps its Node 20.3 floor, so this leg compiles the
       # plugin, type-checks, runs the node tests, lints, and audits on Node 20.
-      # It does not build the panel: Babel 8 requires Node 22.18 or newer, so
-      # the panel toolchain is exercised by the Node 22 leg below, and the Babel
-      # contract test skips itself here.
+      # It is the only Node 20 coverage: the Signal K plugin CI has no Node 20
+      # or armv7 job, and no CI exercises 32-bit ARM. It does not build the
+      # panel: Babel 8 requires Node 22.18 or newer, so the panel toolchain is
+      # exercised by the Node 22 leg below, and the Babel contract test skips
+      # itself here.
       - name: Verify Node 20 runtime compatibility
         if: matrix.node-version == 20
         run: npm run build:plugin && npm run typecheck && npm test && npm run lint:code && npm run audit:runtime

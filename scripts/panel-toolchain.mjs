@@ -5,8 +5,8 @@
  * `babel-loader` cannot bundle the panel on the Node 20 the plugin still
  * advertises at runtime. The plugin itself never builds the panel on such a
  * machine: `public/` ships prebuilt inside the npm tarball. `build-panel.mjs`
- * consults this predicate so `npm run build` on a Node 20 lane compiles the
- * plugin, prints a notice, and skips the panel rather than failing.
+ * consults this predicate so `npm run build` on Node 20 compiles the plugin,
+ * prints a notice, and skips the panel rather than failing.
  *
  * The floors are spelled out here rather than parsed from Babel's `engines`
  * string, so the rule stays readable and testable; bump them when Babel does.

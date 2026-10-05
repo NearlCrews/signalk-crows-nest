@@ -554,11 +554,13 @@ self-contained module registered on one line in `src/index.ts`.
   notice on a Node below that floor (`scripts/panel-toolchain.mjs` holds the
   predicate, tested by `scripts/test-panel-toolchain.mjs` in `package:check`),
   because `public/` is a prebuilt release artifact that a Node 20 install
-  never rebuilds. So the Signal K plugin-ci armv7 Node 20 lane still runs
-  `npm run build` and `npm test` and stays green: it compiles the plugin,
-  skips the panel, and runs the node tests, with the Babel contract test
-  skipping itself below Node 22. The ci.yml Node 20 leg runs `build:plugin`,
-  `typecheck`, `test`, `lint:code`, and `audit:runtime`. The React preset
+  never rebuilds. So `npm run build` and `npm test` stay green on Node 20:
+  the build compiles the plugin and skips the panel, and the Babel contract
+  test skips itself below Node 22. No CI lane runs `npm run build` on Node 20.
+  The ci.yml Node 20 leg runs `build:plugin`, `typecheck`, `test`,
+  `lint:code`, and `audit:runtime`, and it is the only Node 20 coverage: the
+  Signal K plugin CI dropped its armv7 (Cerbo GX) Node 20 job upstream, so it
+  runs Node 22 and 24 only, and no CI exercises 32-bit ARM. The React preset
   pins `development: false` so an unset `NODE_ENV`
   cannot select a development transform and emit `jsxDEV` calls that the
   bundled production `react/jsx-dev-runtime` does not implement, which breaks
@@ -634,10 +636,9 @@ self-contained module registered on one line in `src/index.ts`.
   toolchain range starts at Node 22.22.2, while ci.yml runs a Node 20 matrix
   leg whose first step is `npm ci`. With `onFail: "error"` npm exits 1 with
   EBADDEVENGINES on a runtime outside the range, which would abort that leg
-  before it tested anything. That leg is this repository's only BLOCKING
-  Node 20 defense, because the Signal K plugin-ci armv7 Cerbo GX job is
-  continue-on-error and stays green even when Node 20 is broken. Treat any
-  proposal to normalize this to "error" as refuted.
+  before it tested anything. That leg is this repository's only Node 20
+  defense, because the Signal K plugin CI has no Node 20 or armv7 job. Treat
+  any proposal to normalize this to "error" as refuted.
 - Node.js 20.3 or newer (the ActiveCaptain client uses `AbortSignal.any`).
   `engines.node` is `^20.3.0 || >=22` rather than `>=20.3.0`: `lru-cache`
   declares `20 || >=22` and deliberately excludes Node 21, so the plain
@@ -693,10 +694,12 @@ self-contained module registered on one line in `src/index.ts`.
 - No `prepare`, `preinstall`, or `postinstall` lifecycle script, ever. Build
   steps hang off `prepack`, and git hooks belong behind a non-lifecycle script
   a contributor opts into once. `scripts/check-package.mjs` fails the packaging
-  gate on all three and its comment carries the reasoning: npm 10, which the
-  plugin CI's Node 22 lanes ship, runs `prepare` during
+  gate on all three and its comment carries the reasoning: npm 10, which
+  Node 22 bundles and the ci.yml Node 22 leg runs, executes `prepare` during
   `npm pack --ignore-scripts` and prints it on stdout, so any caller reading a
-  bare pack capture takes that banner for the tarball name.
+  bare pack capture takes that banner for the tarball name. The Signal K
+  plugin CI installs npm 11 on its Node 22 lanes, which does not, but the rule
+  stands for every other npm 10 caller.
 
 ## Shared skills
 

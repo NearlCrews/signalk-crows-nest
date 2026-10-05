@@ -2,13 +2,13 @@
  * Bundles the configuration panel with webpack when this Node can run the
  * panel toolchain, and otherwise prints a notice and exits successfully.
  *
- * `npm run build` runs on the lowest Node the plugin advertises, through the
- * Signal K plugin CI's advisory armv7 Node 20 lane, to prove the plugin
- * installs, compiles, and passes its tests there. The panel is a prebuilt
- * release artifact in `public/`: a Node 20 machine installing from npm never
- * builds it, and Babel 8 cannot run there, so skipping the bundle on such a
- * Node keeps that lane meaningful instead of failing it at a step the runtime
- * does not need.
+ * The plugin advertises Node 20 at runtime, but Babel 8 cannot run there. The
+ * panel is a prebuilt release artifact in `public/`: a Node 20 machine
+ * installing from npm never builds it, so skipping the bundle on such a Node
+ * lets `npm run build` compile the plugin instead of failing at a step the
+ * runtime does not need. No CI lane runs `npm run build` on Node 20: the
+ * ci.yml Node 20 leg calls `build:plugin` directly, and the Signal K plugin CI
+ * has no Node 20 job.
  */
 
 import { spawnSync } from 'node:child_process'
