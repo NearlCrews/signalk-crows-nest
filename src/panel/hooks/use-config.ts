@@ -22,10 +22,14 @@ export interface UseConfigResult {
   /** Records the current state as requested, clearing the dirty flag. */
   markSaveRequested: () => void
   /**
-   * True until the host has supplied a configuration or this session has
-   * issued a save request. The admin UI passes a null or undefined configuration
-   * for a never-configured plugin and does not re-send the prop after the panel's
-   * fire-and-forget save, so the first markSaveRequested clears this here.
+   * True when the host mounted the panel without a configuration and this
+   * session has not yet issued a save request. The admin UI passes `undefined`
+   * for a plugin that was never configured; it would pass `{}` only for a
+   * package that sets `signalk-plugin-enabled-by-default` to true, which this
+   * one does not. After a save the host hands the saved object straight back
+   * as the prop without waiting for the request, and keeps it when the request
+   * fails, so that echo is the panel's own value rather than confirmation. The
+   * first markSaveRequested therefore clears this on the panel's own request.
    */
   unconfigured: boolean
 }

@@ -11,6 +11,13 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Internal
+
+- Source comments in the configuration panel now describe how the Signal K
+  Admin behaves after a save: it hands the saved configuration straight back
+  to the panel without waiting for the server, so the panel treats that as its
+  own value rather than as confirmation. No behavior changes.
+
 <a id="v0180"></a>
 
 ## [0.18.0] - 2026-09-14
