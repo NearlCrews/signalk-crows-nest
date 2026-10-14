@@ -1,5 +1,5 @@
 import { readdir, readFile } from 'node:fs/promises'
-import { tsImport } from 'tsx/esm/api'
+import { require as tsxRequire } from 'tsx/cjs/api'
 import {
   concurrencyProblem,
   cronSchedules,
@@ -27,7 +27,9 @@ const failures = []
 // This package is CommonJS, so the config's default export arrives one level
 // down. An empty project list would pass every browser-install check, so it
 // fails instead.
-const playwrightModule = await tsImport('../playwright.config.ts', import.meta.url)
+// tsx's CommonJS loader, not tsImport: on Node 22 tsImport appends a namespace query to
+// @playwright/test's resolved path and the import fails with ERR_MODULE_NOT_FOUND.
+const playwrightModule = tsxRequire('../playwright.config.ts', import.meta.url)
 const playwrightProjects = (playwrightModule.default?.default ?? playwrightModule.default)?.projects ?? []
 if (playwrightProjects.length === 0) {
   failures.push('playwright.config.ts declares no projects for the browser-install check to read.')
