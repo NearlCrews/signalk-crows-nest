@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process'
 import { readdir, readFile } from 'node:fs/promises'
 import { promisify } from 'node:util'
 import { normalizePackReport } from './package-report.mjs'
+import { findRelativeLinkTargets } from './readme-links.mjs'
 
 const execFileAsync = promisify(execFile)
 const packageJson = JSON.parse(await readFile('package.json', 'utf8'))
@@ -24,6 +25,17 @@ for (const forbidden of ['prepare', 'postinstall', 'preinstall']) {
       'and a non-lifecycle script for git hooks.'
     )
   }
+}
+
+// README.md is what the Signal K App Store renders for this package, and it
+// leaves link targets untouched, so a relative link is dead there. Name a
+// shipped guide in plain text, or link it with an absolute GitHub URL.
+const deadReadmeLinks = findRelativeLinkTargets(await readFile('README.md', 'utf8'))
+if (deadReadmeLinks.length > 0) {
+  throw new Error(
+    `README.md links to ${deadReadmeLinks.map((target) => `"${target}"`).join(', ')}; ` +
+    'the Signal K App Store cannot resolve a relative link.'
+  )
 }
 
 const { stdout } = await execFileAsync(

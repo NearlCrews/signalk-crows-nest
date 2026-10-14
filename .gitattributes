@@ -1,5 +1,5 @@
-# Check text files out with LF everywhere. The Windows plugin-ci lanes check
-# out with autocrlf otherwise, and the prettier format check (endOfLine "lf")
-# then flags every file in the repository.
+# Check text files out with LF everywhere. Windows checkouts, including the
+# Windows plugin-ci lanes, use autocrlf otherwise, and the formatter
+# (endOfLine "lf") would then flag every file a contributor touches there.
 * text=auto eol=lf
 *.png binary

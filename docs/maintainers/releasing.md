@@ -5,10 +5,11 @@ Maintainer reference for cutting a release of `signalk-crows-nest`.
 ## Process
 
 Publishing is driven by GitHub Releases. The `Node.js Package` workflow
-(`.github/workflows/npm-publish.yml`) fires on the `release: created` event. It
-runs in two jobs. The first verifies that the release tag matches the
-`package.json` version, installs the browser engines, runs
-`npm run verify:release`, and packs the verified package. The second downloads
+(`.github/workflows/npm-publish.yml`) fires on the `release: published` event
+and skips prereleases. It runs in two jobs. The first verifies that the
+release tag matches the `package.json` version and that the tagged commit is
+already on `main`, installs the browser engines, runs `npm run verify:release`,
+and packs the verified package. The second downloads
 that exact tarball and publishes it with provenance. This handoff ensures the
 registry artifact is the one that passed the complete release gate. The
 publish job grants the `id-token: write` and `contents: read` permissions
@@ -36,9 +37,12 @@ files, so an uncommitted screenshot would ship a tarball with a dangling
 
 ## Checklist
 
+Release, tag, publish, and the version number each need the owner's
+explicit go. A proposed version number is welcome, but the owner decides it.
+
 Before creating the GitHub release:
 
-1. Bump the version with `npm version <x.y.z> --no-git-tag-version`, which
+1. Bump the agreed version with `npm version <x.y.z> --no-git-tag-version`, which
    updates both `package.json` and the `package-lock.json` version field so the
    two never drift. (A stale lockfile version is harmless to `npm ci`, which
    validates the dependency tree rather than the project version, but keeping
@@ -61,17 +65,19 @@ Before creating the GitHub release:
    This gate includes code and documentation checks, type checking, coverage,
    production builds, the cross-browser panel matrix, accessibility checks,
    the shared UI consumer check with its panel size baseline and its host-style
-   render of the built panel, packed-package validation, and the runtime
-   dependency audit. Inspect the package-check output, not only its exit code.
+   render of the built panel, packed-package validation, the runtime
+   dependency audit, and the development-dependency audit. Inspect the
+   package-check output, not only its exit code.
 
-   Two audits exist and only one gates a release. `npm run audit:runtime`
-   covers the tree a consumer installs, which is also what the Signal K
-   plugin registry scores, so it blocks. `npm run audit:full` covers the
-   development toolchain, where an advisory carries no runtime exposure for
-   an operator and sometimes has no upstream fix to take, so it runs as its
-   own reporting job in CI and does not hold up a release. Read it before
-   every release and take any fix that exists; do not add an allowlist to
-   either one.
+   Two audits exist, and both gate a release. `npm run audit:runtime` covers
+   the tree a consumer installs, which is also what the Signal K plugin
+   registry scores, so it also blocks every push inside `npm run verify`.
+   `npm run audit:full` covers the development toolchain as well. An advisory
+   there carries no runtime exposure for an operator, so it never blocks a
+   push or a pull request: it runs weekly in a schedule-gated job of
+   `workflow-security.yml` and at release time inside
+   `npm run verify:release`. When it fails, take the fix that exists, or hold
+   the release until one does. Do not add an allowlist to either audit.
 
 4. Update `README.md`, `CHANGELOG.md`, and the `docs/` tree if the release
    changes documented behavior, commands, or configuration options. Three of
@@ -104,23 +110,29 @@ Before creating the GitHub release:
    entry, and any new published assets (for example new `assets/screenshots/`
    images). Confirm with `git status` that nothing under `assets/` is left
    untracked, since the publish workflow ships only committed files.
-8. Push the preparation commit and confirm the CI, ESLint, and Signal K Plugin
-   CI workflows pass on that exact commit.
+8. Push the preparation commit to `main` only under the owner's standing or
+   explicit go, then confirm the CI and Signal K Plugin CI workflows pass on
+   that exact commit.
 9. Get explicit final approval before creating a tag or GitHub release. A
-   GitHub release immediately triggers npm publication, so preparing and
-   pushing the release commit is not approval to publish it.
+   published GitHub release immediately triggers npm publication, so preparing
+   and pushing the release commit is not approval to publish it.
 10. After approval, create a GitHub release whose tag matches the new
-    `package.json` version (for example, tag `v0.6.0`). The build job fails fast
-    if the tag and version disagree. Watch the `Node.js Package` workflow to
-    completion, confirm Signal K Plugin CI ran on the tagged commit, and verify
-    the GitHub release, npm version, npm `latest` tag, registry `gitHead`, and
-    provenance statement before calling the release complete.
+    `package.json` version (for example, tag `v0.6.0`) on that commit. The
+    build job fails fast if the tag and version disagree or the commit is not
+    on `main`. Watch the `Node.js Package` workflow to completion, confirm the
+    Signal K Plugin CI push run on `main` exists for the tagged commit (the
+    plugin registry credits that run, so no tag-triggered run is needed), and
+    verify the GitHub release, npm version, npm `latest` tag, registry
+    `gitHead`, and provenance statement before calling the release complete.
 
 ## Supported Node.js versions
 
-CI (`.github/workflows/ci.yml`) compiles the plugin, type-checks, runs the
-node tests, lints, and audits on Node.js 20 for runtime compatibility, and
-runs the full gate on Node.js 22. The Node.js 20 leg does not build the panel:
+CI (`.github/workflows/ci.yml`) compiles the plugin and runs the node tests
+on Node.js 20 for runtime compatibility, and runs the full gate once on
+Node.js 22. Its `panel-browser` and `signalk-admin` jobs run on Node.js 24:
+the first runs the cross-browser panel suite, and the second mounts the
+production panel in Signal K 2.26.0 and the latest Signal K release. The
+Node.js 20 leg does not build the panel:
 Babel 8 requires Node.js 22.18 or newer (or 24.11 or newer), so the panel
 toolchain is exercised
 on Node.js 22 and 24 only. The official Signal K plugin CI

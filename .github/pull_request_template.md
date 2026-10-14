@@ -15,8 +15,8 @@
 
 ## Verification
 
-- [ ] `npm run verify` passes
-- [ ] Browser-facing changes pass `npm run test:browser`
+- [ ] `npm run verify` passes (the pre-push hook runs it)
+- [ ] Configuration panel changes pass `npm run verify:browser`
 
 ## Data sources, POI types, and resources affected
 

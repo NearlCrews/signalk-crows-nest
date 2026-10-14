@@ -557,10 +557,11 @@ self-contained module registered on one line in `src/index.ts`.
   never rebuilds. So `npm run build` and `npm test` stay green on Node 20:
   the build compiles the plugin and skips the panel, and the Babel contract
   test skips itself below Node 22. No CI lane runs `npm run build` on Node 20.
-  The ci.yml Node 20 leg runs `build:plugin`, `typecheck`, `test`,
-  `lint:code`, and `audit:runtime`, and it is the only Node 20 coverage: the
-  Signal K plugin CI dropped its armv7 (Cerbo GX) Node 20 job upstream, so it
-  runs Node 22 and 24 only, and no CI exercises 32-bit ARM. The React preset
+  The ci.yml Node 20 leg runs only what varies by Node, `build:plugin` and
+  `test`, because lint, type checks, and the audits run once in the Node 22
+  `verify` leg. It is the only Node 20 coverage: the Signal K plugin CI
+  removed its armv7 (Cerbo GX) Node 20 job upstream, so it runs Node 22 and
+  24 only, and no CI exercises 32-bit ARM. The React preset
   pins `development: false` so an unset `NODE_ENV`
   cannot select a development transform and emit `jsxDEV` calls that the
   bundled production `react/jsx-dev-runtime` does not implement, which breaks
@@ -630,8 +631,9 @@ self-contained module registered on one line in `src/index.ts`.
   configs run under `npm run typecheck`.
 - ESLint 9 with [neostandard](https://github.com/neostandard/neostandard)
   flat config (`eslint.config.js`). neostandard is the modern successor to the
-  project's old `eslint-config-standard` setup. The lint toolchain caps at
-  ESLint 9 because neostandard peers to `eslint ^9`.
+  project's old `eslint-config-standard` setup. The lint toolchain stays on
+  ESLint 9 because eslint-plugin-react 7.37.5 does not support ESLint 10;
+  neostandard 0.14 already accepts ESLint 10.
 - `devEngines.runtime` keeps `onFail: "warn"`, and it must stay that way. The
   toolchain range starts at Node 22.22.2, while ci.yml runs a Node 20 matrix
   leg whose first step is `npm ci`. With `onFail: "error"` npm exits 1 with
@@ -661,8 +663,21 @@ self-contained module registered on one line in `src/index.ts`.
 - `npm run typecheck` - type-check the plugin, the panel, and the tests without emitting.
 - `npm run lint` - run code, Markdown, and spelling checks.
 - `npm run lint:fix` - lint and auto-fix.
-- `npm run verify` - run the complete local verification gate.
-- `npm run verify:release` - add cross-browser tests and the full audit.
+- `npm run verify:commit` - the fast commit gate: lint, documentation,
+  spelling, formatting, workflow and script shape (`ci:workflows`), and dead
+  code.
+- `npm run verify` - run the complete local verification gate without
+  browsers or the development-tree audit.
+- `npm run verify:browser` - `verify` plus the cross-browser Playwright matrix.
+- `npm run verify:release` - `verify:browser` plus the development-tree audit
+  (`audit:full`). The publish workflow runs it.
+- `npm run hooks` - enable the `.githooks/` pre-commit (`verify:commit`) and
+  pre-push (`verify`) hooks, once per clone.
+- `npm run test:integration` - mount the installed production panel in a
+  running Signal K Admin UI (`SIGNALK_URL`). The ci.yml `signalk-admin` job
+  installs the release tarball into signalk-server 2.26.0, the README panel
+  floor, and `latest`, starts it, and runs this. Run it locally only against a
+  throwaway server on a port other than 3000 and a temporary config directory.
 - `npm run licenses` - regenerate `THIRD_PARTY_NOTICES.md` from the packages
   webpack bundles into the panel. `npm run licenses:check`, wired into
   `package:check`, verifies the committed file still matches the installed
@@ -676,7 +691,26 @@ self-contained module registered on one line in `src/index.ts`.
 - All new code is TypeScript under `src/`.
 - Keep modules focused and small. Shared types belong in `src/shared/types.ts`.
 - Do not edit `dist/` or `public/`; they are generated.
-- Run `npm run verify` before committing.
+- Enable the git hooks once per clone with `npm run hooks`. The pre-commit
+  hook runs `npm run verify:commit` and the pre-push hook runs
+  `npm run verify`; neither runs a browser suite or the development-tree
+  audit; the ci.yml `panel-browser` job runs the cross-browser suite once per
+  push instead. `scripts/check-workflows.mjs` pins both hooks, the gate placement,
+  workflow concurrency and timeouts, the Playwright browser installs (derived
+  from `playwright.config.ts`), and the Admin integration matrix floor, with
+  its rules tested by `scripts/test-workflow-guards.mjs`.
+- The development-tree audit (`audit:full`) is never a push or pull request
+  gate. It runs weekly in a schedule-gated job of `workflow-security.yml` and
+  inside `verify:release`. The runtime audit (`audit:runtime`) gates every
+  push inside `verify`.
+- The Signal K plugin registry reads only the newest 20 workflow runs for a
+  release commit, so every scheduled run on the main HEAD can push the
+  credited plugin-ci run out of that window. Only `codeql.yml`,
+  `workflow-security.yml`, and `plugin-ci.yml` run on a schedule, and
+  `plugin-ci.yml` runs weekly after the other two so a fresh plugin-ci run
+  stays among the newest. Add a scheduled job to an existing scheduled
+  workflow rather than a new scheduled workflow; `scripts/check-workflows.mjs`
+  enforces both rules.
 - `README.md` carries NO relative Markdown file links. The Signal K App Store
   renders the npm README and rewrites relative IMAGE paths against the package
   root, but leaves every other link target untouched, so a relative link to
@@ -686,6 +720,7 @@ self-contained module registered on one line in `src/index.ts`.
   long as the file ships in the tarball, which is why `assets/screenshots/`
   stays relative. This shipped as a fix in 0.15.6. The rule does not apply to
   `docs/` or `.github/`, which are read on GitHub and are not packed.
+  `scripts/check-package.mjs` enforces it with `scripts/readme-links.mjs`.
 - The README carries exactly one `## What's new in X.Y.Z` section, describing
   the current release alone and matching the `package.json` version. Overwrite
   it every release rather than letting it accumulate.

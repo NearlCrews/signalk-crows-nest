@@ -42,7 +42,11 @@ npm run test:browser  # Build and test the panel in Chromium
 npm run deadcode      # Report high-signal Knip findings
 npm run check:panel   # Check the built panel against the shared UI consumer contract, then render it as the Admin host does
 npm run package:check # Validate package metadata and packed contents
-npm run verify        # Run the complete local verification gate
+npm run test:integration # Mount the installed panel in a running Signal K Admin UI (SIGNALK_URL)
+npm run hooks         # Enable the pre-commit and pre-push hooks once per clone
+npm run verify:commit # Run the fast commit gate (the pre-commit hook)
+npm run verify        # Run the complete local verification gate (the pre-push hook)
+npm run verify:browser # Add the full browser matrix
 npm run verify:release # Add the full browser matrix and full dependency audit
 npm run clean         # Remove dist/ and the panel build artifacts
 ```
@@ -262,10 +266,25 @@ per module, named for the module it covers (for example,
 (`tsconfig.json`, which excludes `test/` and `src/panel/`), the React panel
 (`tsconfig.panel.json`), and the test suite (`tsconfig.test.json`).
 
-Run `npm run verify` before committing. It combines code and documentation
-checks, type checking, coverage, builds, size limits, package validation, and
-the runtime audit. Run `npm run verify:release` before a release to add the
-full browser matrix and development-dependency audit.
+Enable the git hooks once per clone with `npm run hooks`. The pre-commit hook
+runs `npm run verify:commit`: code, documentation, spelling, formatting,
+workflow, and dead-code checks. The pre-push hook runs `npm run verify`, which
+adds type checking, coverage, builds, the panel consumer check with its size
+limit, package validation, and the runtime audit. Neither runs a browser or
+the development-dependency audit. Run `npm run verify:browser` after a panel
+change to add the full browser matrix, and `npm run verify:release` before a
+release to add that matrix and the development-dependency audit.
+
+CI runs `npm run verify` once on Node 22, builds the plugin and runs the unit
+tests on Node 20, runs the cross-browser panel suite once in its
+`panel-browser` job, and runs the `signalk-admin` job, which installs the
+release tarball into a real Signal K server and mounts the production panel
+through the Admin UI. To run that check locally, install `signalk-server` and the
+packed tarball into a temporary directory, start the server on a free port
+other than 3000 with `SIGNALK_NODE_CONFIG_DIR` pointing at that directory, and
+run `npm run test:integration` with `SIGNALK_URL` set to its address. The
+development-dependency audit runs weekly in a scheduled job of the workflow
+security workflow rather than on every push.
 
 ## Adding functionality
 

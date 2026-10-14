@@ -4,13 +4,16 @@ name: SignalK Plugin CI
 # registry (https://signalk.org/signalk-plugin-registry/) credits a plugin only
 # when a workflow run referencing
 # SignalK/signalk-server/.github/workflows/plugin-ci.yml exists on the
-# published version's commit; without one it applies a scoring penalty. The
-# tag trigger guarantees a run exists on the exact commit each release is
-# published from. The reusable workflow runs npm ci, the build, the tests, and
-# npm pack across Linux x64, Linux arm64, macOS, and Windows on Node 22 and 24,
-# with npm 11 on its Node 22 lanes. It no longer has an armv7 (Cerbo GX) or
-# Node 20 job: the Node 20 leg in ci.yml is the only Node 20 coverage, and no
-# CI exercises 32-bit ARM.
+# published version's commit; without one it applies a scoring penalty. A
+# release is tagged from a commit already on main whose CI is green, so the push
+# run on main is the run the registry credits, and no tag trigger is needed.
+# The reusable workflow runs npm ci, the build, the tests, and npm pack across
+# Linux x64, Linux arm64, macOS, and Windows on Node 22 and 24, with npm 11 on
+# its Node 22 lanes. It no longer has an armv7 (Cerbo GX) or Node 20 job: the
+# Node 20 leg in ci.yml is the only Node 20 coverage, and no CI exercises
+# 32-bit ARM. Formatting and the coverage thresholds run once, inside the
+# ci.yml verification gate, so this caller passes neither command, and the
+# signalk-admin job in ci.yml supersedes the reusable integration job.
 #
 # Its lifecycle check also watches for an asynchronous crash: it installs
 # uncaught-exception and unhandled-rejection handlers, drains briefly after
@@ -22,13 +25,23 @@ name: SignalK Plugin CI
 on:
   push:
     branches: [main]
-    tags: ['v*']
   pull_request:
     branches: [main]
+  # The registry reads only the newest 20 workflow runs for a release commit,
+  # so the scheduled CodeQL and workflow security runs, and Dependabot, can push
+  # the credited plugin-ci run out of that window while the release commit is
+  # still the main HEAD. A weekly run, timed after every other Monday schedule
+  # in this repository, keeps a fresh plugin-ci run among the newest.
+  schedule:
+    - cron: '23 8 * * 1'
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   plugin-ci:
@@ -36,6 +49,4 @@ jobs:
     with:
       build-command: npm run build
       test-command: npm test
-      format-check-command: npm run format:check
-      coverage-command: npm run test:coverage
       node-versions: '["22", "24"]'

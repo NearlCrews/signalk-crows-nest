@@ -3,7 +3,6 @@
 [![npm version](https://img.shields.io/npm/v/signalk-crows-nest.svg)](https://www.npmjs.com/package/signalk-crows-nest)
 [![npm downloads](https://img.shields.io/npm/dm/signalk-crows-nest.svg)](https://www.npmjs.com/package/signalk-crows-nest)
 [![CI](https://github.com/NearlCrews/signalk-crows-nest/actions/workflows/ci.yml/badge.svg)](https://github.com/NearlCrews/signalk-crows-nest/actions/workflows/ci.yml)
-[![ESLint](https://github.com/NearlCrews/signalk-crows-nest/actions/workflows/eslint.yml/badge.svg)](https://github.com/NearlCrews/signalk-crows-nest/actions/workflows/eslint.yml)
 [![SignalK Plugin CI](https://github.com/NearlCrews/signalk-crows-nest/actions/workflows/plugin-ci.yml/badge.svg)](https://github.com/NearlCrews/signalk-crows-nest/actions/workflows/plugin-ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/NearlCrews/signalk-crows-nest/blob/main/LICENSE)
 [![node](https://img.shields.io/badge/node-%5E20.3%20%7C%7C%20%3E%3D22-brightgreen.svg)](https://nodejs.org)
@@ -337,13 +336,15 @@ npm test             # node:test suite via tsx
 npm run typecheck    # type-check the plugin, the panel, and the tests
 npm run lint         # code, Markdown, and spelling checks
 npm run lint:fix     # lint and auto-fix
-npm run verify       # full local verification without cross-browser tests
-npm run verify:release # full verification and the cross-browser matrix
+npm run hooks        # enable the pre-commit and pre-push hooks once per clone
+npm run verify       # full local verification without browsers
+npm run verify:browser # full verification and the cross-browser matrix
+npm run verify:release # the browser run plus the full dependency audit
 npm run clean        # remove dist/ and the panel build artifacts
 ```
 
-Run `npm run verify` before committing and `npm run verify:release` before a
-release.
+With the hooks enabled, every commit runs `npm run verify:commit` and every
+push runs `npm run verify`. Run `npm run verify:release` before a release.
 See the
 [development guide](https://github.com/NearlCrews/signalk-crows-nest/blob/main/docs/development.md)
 for the full workflow.

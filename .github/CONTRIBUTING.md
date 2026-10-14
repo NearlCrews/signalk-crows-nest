@@ -29,7 +29,9 @@ serves, and any implementation ideas you have.
    test commands.
 3. Make focused commits with clear messages (see below).
 4. Add tests for any new functionality and keep the existing suite green.
-5. Run `npm run verify` before pushing.
+5. Enable the git hooks once with `npm run hooks`. The pre-commit hook runs
+   `npm run verify:commit` and the pre-push hook runs `npm run verify`. For a
+   configuration panel change, also run `npm run verify:browser`.
 6. Update documentation (`README.md`, `CHANGELOG.md`, `docs/`) as needed.
 7. Open a pull request with a clear description of the change.
 

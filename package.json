@@ -37,12 +37,13 @@
     "test": "node --import tsx --test test/*.test.ts",
     "test:coverage": "c8 --reporter=text --reporter=lcov --check-coverage --lines 90 --branches 80 --functions 90 node --import tsx --test test/*.test.ts",
     "test:browser": "npm run build && playwright test --project=chromium",
+    "test:integration": "node scripts/check-signalk-integration.mjs",
     "screenshot:panel": "npm run build && node scripts/capture-panel-screenshot.mjs",
     "format": "eslint . --fix && prettier --write \"*.{json,jsonc,md,yml,yaml}\" \".github/**/*.{md,yml,yaml}\" \"docs/**/*.{json,jsonc,md,yml,yaml}\"",
     "format:check": "prettier --check \"*.{json,jsonc,md,yml,yaml}\" \".github/**/*.{md,yml,yaml}\" \"docs/**/*.{json,jsonc,md,yml,yaml}\"",
     "deadcode": "knip --include files,dependencies,unlisted,binaries",
-    "ci:workflows": "node scripts/check-workflows.mjs",
-    "package:check": "node scripts/test-package-report.mjs && node scripts/test-panel-toolchain.mjs && publint --pack npm --strict && node scripts/check-package.mjs && npm run licenses:check",
+    "ci:workflows": "node scripts/test-workflow-guards.mjs && node scripts/check-workflows.mjs",
+    "package:check": "node scripts/test-package-report.mjs && node scripts/test-readme-links.mjs && node scripts/test-panel-toolchain.mjs && publint --pack npm --strict && node scripts/check-package.mjs && npm run licenses:check",
     "pack:release": "node scripts/create-release-tarball.mjs",
     "licenses": "node scripts/generate-third-party-notices.mjs",
     "licenses:check": "node scripts/generate-third-party-notices.mjs --check",
@@ -51,8 +52,10 @@
     "verify:commit": "npm run lint && npm run format:check && npm run ci:workflows && npm run deadcode",
     "verify:fast": "npm run verify:commit && npm run typecheck && npm run typecheck:ts6",
     "verify": "npm run verify:fast && npm run test:coverage && npm run build && npm run check:panel && npm run package:check && npm run audit:runtime",
-    "verify:release": "npm run verify && playwright test",
-    "prepack": "npm run clean && npm run build"
+    "verify:browser": "npm run verify && playwright test",
+    "verify:release": "npm run verify:browser && npm run audit:full",
+    "prepack": "npm run clean && npm run build",
+    "hooks": "git config core.hooksPath .githooks"
   },
   "keywords": [
     "signalk-node-server-plugin",

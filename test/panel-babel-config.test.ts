@@ -67,16 +67,25 @@ test('React and React DOM are host-provided singletons while the UI stays bundle
   // The config spreads the share map the shared UI package publishes, so the
   // remote is verified against exactly the map the library was tested with:
   // React and React DOM as non-strict singletons with no bundled fallback.
-  // strictVersion must stay absent: Signal K Admin releases up to at least
-  // 2.24.0 register their React share as 19.0.0 while shipping a newer React,
-  // so a strict check would reject a healthy host and the panel would never
-  // mount.
   const published = require('signalk-nearlcrews-ui/federation') as { shared: unknown }
   assert.deepEqual(federation.options.shared, published.shared)
   assert.deepEqual(Object.keys(federation.options.shared).sort(), ['react', 'react-dom'])
   for (const packageName of ['react', 'react-dom']) {
     assert.equal(federation.options.shared[packageName]?.singleton, true)
     assert.equal(federation.options.shared[packageName]?.import, false)
-    assert.equal('strictVersion' in (federation.options.shared[packageName] ?? {}), false)
+  }
+})
+
+test('no federation share sets strictVersion', () => {
+  // Signal K Admin releases up to at least 2.24.0 register their React share
+  // as 19.0.0 while shipping a newer React, so a strict share rejects a
+  // healthy host and the panel never mounts. The rule covers every share,
+  // including one added after React and React DOM. A share given as a bare
+  // version string carries no options, so only object shares can set it.
+  const shares = webpackConfig.plugins.flatMap((plugin) => Object.entries(plugin.options?.shared ?? {}))
+  assert.ok(shares.length > 0)
+  for (const [packageName, share] of shares) {
+    const strict = typeof share === 'object' && share !== null && 'strictVersion' in share
+    assert.equal(strict, false, `the ${packageName} share sets strictVersion`)
   }
 })

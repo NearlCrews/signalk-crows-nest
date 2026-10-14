@@ -1,5 +1,10 @@
-# Continuous integration: build, type-check, test, and lint the plugin on every
-# push and pull request against main, across the supported Node.js versions.
+# Continuous integration on every push and pull request against main. The Node
+# 22 leg runs the full local verification gate once; the Node 20 leg covers
+# only what varies by Node on the plugin's runtime floor. The panel-browser job
+# runs the cross-browser panel suite once, and the signalk-admin job installs
+# the packed tarball into a real Signal K server and mounts the production
+# configuration panel through the Admin UI. The development-tree audit runs
+# weekly in workflow-security.yml instead of on every push.
 
 name: CI
 
@@ -12,9 +17,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -34,27 +44,106 @@ jobs:
       - run: npm ci
 
       # The plugin runtime keeps its Node 20.3 floor, so this leg compiles the
-      # plugin, type-checks, runs the node tests, lints, and audits on Node 20.
-      # It is the only Node 20 coverage: the Signal K plugin CI has no Node 20
-      # or armv7 job, and no CI exercises 32-bit ARM. It does not build the
-      # panel: Babel 8 requires Node 22.18 or newer, so the panel toolchain is
+      # plugin and runs the node tests on Node 20. Lint, type checks, and the
+      # audit do not vary by Node and run once, in the full gate below. This is
+      # the only Node 20 coverage: the Signal K plugin CI has no Node 20 or
+      # armv7 job, and no CI exercises 32-bit ARM. It does not build the panel:
+      # Babel 8 requires Node 22.18 or newer, so the panel toolchain is
       # exercised by the Node 22 leg below, and the Babel contract test skips
       # itself here.
       - name: Verify Node 20 runtime compatibility
         if: matrix.node-version == 20
-        run: npm run build:plugin && npm run typecheck && npm test && npm run lint:code && npm run audit:runtime
+        run: npm run build:plugin && npm test
 
       - name: Run the full project verification
         if: matrix.node-version == 22
         run: npm run verify
 
-      # Informational, and deliberately allowed to fail. The runtime audit
-      # above gates the release, because it covers the tree a consumer
-      # installs, which is also what the Signal K plugin registry scores. This
-      # one covers development tooling, where an advisory carries no runtime
-      # exposure and may have no upstream fix to take, so it reports rather
-      # than blocks. See docs/maintainers/releasing.md.
-      - name: Full dependency audit
-        if: matrix.node-version == 22
-        continue-on-error: true
-        run: npm run audit:full
+  # The cross-browser panel suite, once per push. Local hooks never run a
+  # browser, so this is where a panel regression surfaces before a release.
+  panel-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx --no-install playwright install --with-deps chromium firefox webkit
+      - run: npm run build
+      - run: npx --no-install playwright test
+
+  # Installs the release tarball into a real Signal K server, starts it, and
+  # mounts the production configuration panel through the Admin UI in a real
+  # browser. The matrix pairs the oldest Admin the panel supports (2.26.0, the
+  # floor README.md documents) with the current release, so a share-scope or
+  # federation regression that only a real host exposes fails here.
+  signalk-admin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        signalk_server: ['2.26.0', 'latest']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run pack:release
+      - name: Install in Signal K ${{ matrix.signalk_server }}
+        env:
+          SIGNALK_SERVER_VERSION: ${{ matrix.signalk_server }}
+        # zizmor: ignore[adhoc-packages] This job must install the exact matrix server version and the
+        # locally built tarball because those artifacts are what the integration test validates.
+        run: |
+          mkdir -p /tmp/sk-test
+          cd /tmp/sk-test
+          npm init --yes
+          npm install "signalk-server@${SIGNALK_SERVER_VERSION}"
+          npm install "$GITHUB_WORKSPACE"/artifacts/signalk-crows-nest-*.tgz --ignore-scripts
+          # npm may hoist the Admin package even though signalk-server serves it from its
+          # dependency-local path. Link the same installed package back to that expected location.
+          node "$GITHUB_WORKSPACE/scripts/link-signalk-admin.mjs" /tmp/sk-test
+          mkdir -p plugin-config-data
+          echo '{"enabled":true,"configuration":{}}' > plugin-config-data/signalk-crows-nest.json
+      - name: Start the Admin host and mount the production panel
+        env:
+          PORT: 3000
+          SIGNALK_BROWSER_CHANNEL: chrome
+          SIGNALK_URL: http://127.0.0.1:3000
+          SIGNALK_NODE_CONFIG_DIR: /tmp/sk-test
+        run: |
+          set -euo pipefail
+          cd /tmp/sk-test
+          # Start the server binary itself rather than through npx, so the
+          # trap below stops the server and not only a wrapper process.
+          node node_modules/signalk-server/bin/signalk-server > /tmp/signalk.log 2>&1 &
+          server_pid=$!
+          trap 'kill $server_pid 2>/dev/null || true' EXIT
+          ready=false
+          for _ in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:3000/signalk/v1/api/ > /dev/null; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" != true ]; then
+            cat /tmp/signalk.log
+            exit 1
+          fi
+          cd "$GITHUB_WORKSPACE"
+          if ! npm run test:integration; then
+            cat /tmp/signalk.log
+            exit 1
+          fi

@@ -11,6 +11,12 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- The note templates render with Handlebars 4.7.10, which fixes three
+  JavaScript injection advisories in 4.7.9 and earlier (GHSA-xw65-4hp5-5hc7,
+  GHSA-8r5x-fm3f-whwj, and GHSA-p8wg-vrv2-v86f).
+
 ### Internal
 
 - Source comments in the configuration panel now describe how the Signal K
@@ -23,6 +29,37 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   runs Node 22 and 24 only, with npm 11 on its Node 22 lanes, so the Node 20
   leg in CI is the only Node 20 coverage and no CI exercises 32-bit ARM.
   `engines.node` is unchanged.
+- CI runs each check once per push. The Node 22 leg runs the full
+  verification gate, and the Node 20 leg now only builds the plugin and runs
+  the unit tests on the runtime floor. A new `panel-browser` job runs the
+  cross-browser panel suite, and a new `signalk-admin` job installs the release
+  tarball into Signal K 2.26.0 and the latest release and mounts the production
+  configuration panel through the Admin UI. The plugin CI caller no longer
+  repeats the format and coverage checks or runs on tags, and the ESLint SARIF
+  workflow and its formatter dependency are removed, since CI already lints
+  every push.
+- The full dependency audit no longer runs on pushes and pull requests. It
+  runs weekly in a scheduled job of the workflow security workflow and inside
+  `npm run verify:release`, and the runtime audit still gates every push.
+- The Signal K plugin workflow also runs weekly, after the other scheduled
+  workflows, so a recent plugin CI run stays among the newest runs the plugin
+  registry reads for the release commit.
+- Every workflow cancels superseded runs and sets job timeouts. The publish
+  workflow now fires when a release is published, skips prereleases, and
+  refuses a tag whose commit is not on `main`.
+- Opt-in git hooks (`npm run hooks`) run `npm run verify:commit` before each
+  commit and `npm run verify` before each push, and `npm run verify:browser`
+  adds the browser matrix to `verify`.
+- The Markdown check calls the markdownlint library directly through
+  `scripts/check-markdown.mjs`, with the same files and rules, instead of the
+  markdownlint-cli2 wrapper, whose glob dependencies carried a denial of
+  service advisory with no fixed release. In-range development dependency
+  updates clear the remaining high and moderate advisories in the full audit.
+- New guards: the package check rejects a relative link in `README.md`, the
+  workflow check pins concurrency, timeouts, audit placement, Playwright
+  browser installs derived from `playwright.config.ts`, the hooks, and the
+  Admin integration floor, and the panel federation test rejects
+  `strictVersion` on any share.
 
 <a id="v0180"></a>
 

@@ -1,0 +1,8 @@
+#!/bin/sh
+# Full local gate before every push: the commit checks plus type checks,
+# coverage, the build, the panel consumer check, package validation, and the
+# runtime audit. Browser suites and the development-tree audit run in
+# `npm run verify:release` instead. Enable once per clone with `npm run hooks`.
+set -eu
+
+npm run verify

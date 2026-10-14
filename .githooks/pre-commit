@@ -1,0 +1,7 @@
+#!/bin/sh
+# Fast gate on every commit: lint, documentation, spelling, formatting,
+# workflow shape, and dead-code checks. Enable once per clone with
+# `npm run hooks`.
+set -eu
+
+npm run verify:commit

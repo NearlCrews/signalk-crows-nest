@@ -21,11 +21,13 @@
     "*.cjs",
   ],
   "ignoreDependencies": [
-    "@microsoft/eslint-formatter-sarif",
     // @signalk/server-api's public PluginRouter extends Express types without
     // declaring their package, so consumers that use the contract need this.
     "@types/express",
-    "eslint-formatter-",
+    // Resolved at runtime by scripts/link-signalk-admin.mjs from the Signal K
+    // host the signalk-admin CI job installs, not from this package's tree.
+    "@signalk/server-admin-ui",
+    "signalk-server",
   ],
   "includeEntryExports": true,
   "ignoreIssues": {
