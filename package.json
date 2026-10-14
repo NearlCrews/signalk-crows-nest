@@ -31,7 +31,7 @@
     "typecheck:ts6": "tsc6 --noEmit && tsc6 --noEmit -p tsconfig.panel.json && tsc6 --noEmit -p tsconfig.test.json",
     "lint": "npm run lint:code && npm run lint:docs && npm run spellcheck",
     "lint:code": "eslint .",
-    "lint:docs": "markdownlint-cli2 \"*.md\" \".github/*.md\" \"docs/*.md\" \"docs/decisions/*.md\" \"docs/maintainers/*.md\"",
+    "lint:docs": "node scripts/check-markdown.mjs",
     "spellcheck": "cspell --no-progress --show-suggestions README.md CHANGELOG.md THIRD_PARTY_NOTICES.md CLAUDE.md \".github/**/*.{md,yml,yaml}\" \"docs/*.md\" \"docs/decisions/*.md\" \"docs/maintainers/*.md\"",
     "lint:fix": "eslint . --fix",
     "test": "node --import tsx --test test/*.test.ts",
@@ -137,7 +137,6 @@
     "@babel/core": "^8.0.5",
     "@babel/preset-react": "^8.0.1",
     "@babel/preset-typescript": "^8.0.1",
-    "@microsoft/eslint-formatter-sarif": "3.1.0",
     "@playwright/test": "^1.63.0",
     "@signalk/server-api": "^2.32.0",
     "@types/express": "^5.0.6",
@@ -152,7 +151,7 @@
     "eslint": "^9.39.5",
     "eslint-plugin-react": "^7.37.5",
     "knip": "6.35.1",
-    "markdownlint-cli2": "0.23.2",
+    "markdownlint": "0.41.1",
     "neostandard": "^0.13.0",
     "prettier": "3.9.6",
     "publint": "0.3.24",
@@ -166,7 +165,7 @@
     "webpack-cli": "^7.2.3"
   },
   "overrides": {
-    "smol-toml": "1.8.0"
+    "smol-toml": "1.9.1"
   },
   "allowScripts": {
     "esbuild@0.28.2": true
