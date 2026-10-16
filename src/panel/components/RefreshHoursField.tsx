@@ -9,7 +9,6 @@
 
 import type * as React from 'react'
 import { NumberField } from 'signalk-nearlcrews-ui'
-import { useDraftResetKey } from '../hooks/draft-reset-context.js'
 import { MAX_REFRESH_HOURS, MIN_REFRESH_HOURS } from '../../shared/refresh-hours.js'
 
 interface Props {
@@ -50,7 +49,6 @@ export default function RefreshHoursField ({
       max={MAX_REFRESH_HOURS}
       fallback={MIN_REFRESH_HOURS}
       integer
-      resetKey={useDraftResetKey()}
     />
   )
 }

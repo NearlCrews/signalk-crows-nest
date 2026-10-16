@@ -6,7 +6,6 @@
 
 import type * as React from 'react'
 import { NumberField } from 'signalk-nearlcrews-ui'
-import { useDraftResetKey } from '../hooks/draft-reset-context.js'
 import { MIN_CACHE_DURATION_MINUTES } from '../../shared/cache-duration.js'
 
 interface Props {
@@ -27,7 +26,6 @@ export default function CacheDurationField ({ value, onChange }: Props): React.R
       min={MIN_CACHE_DURATION_MINUTES}
       fallback={MIN_CACHE_DURATION_MINUTES}
       integer
-      resetKey={useDraftResetKey()}
     />
   )
 }

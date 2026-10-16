@@ -12,7 +12,11 @@
  */
 
 import { spawnSync } from 'node:child_process'
+import { mkdirSync } from 'node:fs'
 import { PANEL_TOOLCHAIN_FLOOR_TEXT, supportsPanelToolchain } from './panel-toolchain.mjs'
+
+/** Where a one-off build writes its webpack stats; gitignored scratch. */
+const STATS_PATH = 'tmp/panel-stats.json'
 
 const nodeVersion = process.versions.node
 if (!supportsPanelToolchain(nodeVersion)) {
@@ -24,9 +28,16 @@ if (!supportsPanelToolchain(nodeVersion)) {
   process.exit(0)
 }
 
+// A one-off build records its module graph beside the output for
+// `check:panel --stats`. A watch session or an explicit mode keeps the
+// compiler's normal output instead.
+const extraArgs = process.argv.slice(2)
+const statsArgs = extraArgs.length === 0 ? ['--json', STATS_PATH] : []
+if (statsArgs.length > 0) mkdirSync(new URL('../tmp/', import.meta.url), { recursive: true })
+
 const result = spawnSync(
   process.execPath,
-  ['node_modules/webpack-cli/bin/cli.js', '--config', 'webpack.config.cjs', ...process.argv.slice(2)],
+  ['node_modules/webpack-cli/bin/cli.js', '--config', 'webpack.config.cjs', ...statsArgs, ...extraArgs],
   { stdio: 'inherit' }
 )
 if (result.error !== undefined) throw result.error

@@ -12,15 +12,15 @@
 
 import type * as React from 'react'
 import { useCallback, useRef, useState } from 'react'
-import { Banner, PanelShell, useUnsavedChangesGuard } from 'signalk-nearlcrews-ui'
+import { flushSync } from 'react-dom'
+import { Banner, PanelShell, revealAndFocus, useResetDrafts, useUnsavedChangesGuard } from 'signalk-nearlcrews-ui'
 import { SaveActionBar } from 'signalk-nearlcrews-ui/composites'
 import AlertsSection from './components/AlertsSection.js'
 import DataSourcesSection from './components/DataSourcesSection.js'
-import { revealSourceCard } from './components/DataSourceCard.js'
+import { type SourceTriggerRefs } from './components/DataSourceCard.js'
 import StatusBar from './components/StatusBar.js'
 import { endpointInvalidMessage } from './endpoint-validation.js'
 import { isSourceSlug } from './source-names.js'
-import { DraftResetContext } from './hooks/draft-reset-context.js'
 import { useConfig } from './hooks/use-config.js'
 import { useStatus, type StatusPollError } from './hooks/use-status.js'
 import { UnitSystemContext, useUnitSystem } from './hooks/use-unit-system.js'
@@ -60,18 +60,13 @@ interface Props {
   save: (configuration: unknown) => void
 }
 
-/** The error boundary's secondary recovery: a full page reload. */
-function reloadPage (): void {
-  window.location.reload()
-}
-
 /**
  * The configuration panel rendered inside the Signal K admin UI. The shared
  * shell runs the native CSS scope preflight, installs the theme root, places
  * the theme toggle, and wraps the panel in an error boundary whose first
  * recovery remounts the panel subtree; only its second action reloads the
- * page, so a render error does not cost the operator the rest of the Admin
- * state by default.
+ * page (the shell's default), so a render error does not cost the operator
+ * the rest of the Admin state by default.
  *
  * The theme selector trails the panel. It is chrome rather than the operator's
  * task, so it should not take the first tab stop ahead of the status readout
@@ -81,7 +76,7 @@ function reloadPage (): void {
  */
 export default function PluginConfigurationPanel (props: Props): React.ReactElement {
   return (
-    <PanelShell themeToggle='end' onReload={reloadPage}>
+    <PanelShell themeToggle='end'>
       <SupportedPluginConfigurationPanel {...props} />
     </PanelShell>
   )
@@ -116,17 +111,22 @@ function SupportedPluginConfigurationPanel ({ configuration, save }: Props): Rea
   // attribute, so a card inside a closed section can be neither displayed,
   // scrolled to, nor focused.
   const [dataSourcesOpen, setDataSourcesOpen] = useState(true)
+  // Each card files its disclosure button here as it mounts.
+  const triggerRefs: SourceTriggerRefs = useRef({})
 
   // Jump-to-error shortcut: reveal the offending source's card and hand focus
   // to it. The guard narrows, so a status error recorded under an unexpected
   // slug is ignored rather than keying the card map with it.
   const jumpToSource = useCallback((slug: string): void => {
     if (!isSourceSlug(slug)) return
-    // Open the section first, or the card stays hidden inside it.
-    setDataSourcesOpen(true)
-    setExpandedCards((prev) => ({ ...prev, [slug]: true }))
-    // Reveal after both expansions have been committed and laid out.
-    requestAnimationFrame(() => revealSourceCard(slug))
+    // Open the section and the card inside flushSync, so both are committed
+    // before the card's disclosure button is focused.
+    flushSync(() => {
+      setDataSourcesOpen(true)
+      setExpandedCards((prev) => ({ ...prev, [slug]: true }))
+    })
+    const trigger = triggerRefs.current[slug]
+    if (trigger !== null && trigger !== undefined) revealAndFocus(trigger, { block: 'start' })
   }, [])
 
   // Every reducer case returns a new object only on a real change, so identity
@@ -147,64 +147,62 @@ function SupportedPluginConfigurationPanel ({ configuration, save }: Props): Rea
     setSaveRequestedAt(Date.now())
   }, [save, markSaveRequested])
 
-  // Bumped on every Discard so each numeric field drops its raw-text draft
-  // even when the restored value is identical to the committed one (see
-  // draft-reset-context.ts for why the value-change rule misses that).
-  const [discardEpoch, setDiscardEpoch] = useState(0)
+  // Discard also drops each numeric field's raw-text draft, which restoring
+  // the committed value cannot reach when the value is unchanged.
+  const resetDrafts = useResetDrafts()
   const handleDiscard = useCallback((): void => {
     dispatch({ type: 'discard', config: requestedState })
-    setDiscardEpoch((epoch) => epoch + 1)
-  }, [dispatch, requestedState])
+    resetDrafts()
+  }, [dispatch, requestedState, resetDrafts])
 
   return (
     <UnitSystemContext.Provider value={unitSystem}>
-      <DraftResetContext.Provider value={discardEpoch}>
-        <StatusBar status={status} lastUpdatedMs={lastUpdatedMs} onJumpToSource={jumpToSource} />
-        {/*
-          One announcing banner rather than a hidden live region beside a
-          conditional banner. It is mounted before the first failure, because
-          a live region created together with its text is not announced
-          reliably, and it shows and speaks the same words, so the failure is
-          spoken once. With nothing to report it renders empty and takes up
-          no space.
+      <StatusBar status={status} lastUpdatedMs={lastUpdatedMs} onJumpToSource={jumpToSource} />
+      {/*
+        One announcing banner rather than a hidden live region beside a
+        conditional banner. It is mounted before the first failure, because
+        a live region created together with its text is not announced
+        reliably, and it shows and speaks the same words, so the failure is
+        spoken once. With nothing to report it renders empty and takes up
+        no space.
 
-          Polite rather than assertive, despite the danger tone: nothing is
-          lost, no action is required, and the next poll recovers on its own,
-          so interrupting whatever the operator is reading, again on every
-          changed status code, would cost more than it tells them.
-        */}
-        <Banner
-          id={STATUS_BANNER_DOM_ID}
-          tone='danger'
-          live='polite'
-          title={bannerText?.title}
-        >
-          {bannerText?.body}
-        </Banner>
-        <DataSourcesSection
-          state={state}
-          dispatch={dispatch}
-          status={status}
-          expanded={expandedCards}
-          onToggleExpanded={setCardExpanded}
-          open={dataSourcesOpen}
-          onOpenChange={setDataSourcesOpen}
-        />
-        <AlertsSection state={state} dispatch={dispatch} />
-        {/*
-          The save bar blocks on an unusable endpoint rather than letting the
-          plugin swallow it: both endpoint fields are coerced on load, so a
-          typo that reaches the save is replaced by the default and lost.
-        */}
-        <SaveActionBar
-          dirty={dirty}
-          unconfigured={unconfigured}
-          invalidMessage={endpointInvalidMessage(state)}
-          saveRequestedAt={saveRequestedAt}
-          onSave={handleSave}
-          onDiscard={handleDiscard}
-        />
-      </DraftResetContext.Provider>
+        Polite rather than assertive, despite the danger tone: nothing is
+        lost, no action is required, and the next poll recovers on its own,
+        so interrupting whatever the operator is reading, again on every
+        changed status code, would cost more than it tells them.
+      */}
+      <Banner
+        id={STATUS_BANNER_DOM_ID}
+        tone='danger'
+        live='polite'
+        title={bannerText?.title}
+      >
+        {bannerText?.body}
+      </Banner>
+      <DataSourcesSection
+        state={state}
+        dispatch={dispatch}
+        status={status}
+        expanded={expandedCards}
+        onToggleExpanded={setCardExpanded}
+        triggerRefs={triggerRefs}
+        open={dataSourcesOpen}
+        onOpenChange={setDataSourcesOpen}
+      />
+      <AlertsSection state={state} dispatch={dispatch} />
+      {/*
+        The save bar blocks on an unusable endpoint rather than letting the
+        plugin swallow it: both endpoint fields are coerced on load, so a
+        typo that reaches the save is replaced by the default and lost.
+      */}
+      <SaveActionBar
+        dirty={dirty}
+        unconfigured={unconfigured}
+        invalidMessage={endpointInvalidMessage(state)}
+        saveRequestedAt={saveRequestedAt}
+        onSave={handleSave}
+        onDiscard={handleDiscard}
+      />
     </UnitSystemContext.Provider>
   )
 }

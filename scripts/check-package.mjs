@@ -133,14 +133,11 @@ for (const file of files) {
   }
 }
 
-// The shared UI must stay a bundled development dependency: it ships inside
-// the panel remote, never as a runtime dependency of the plugin. The exact
-// pin, its agreement with the installed package, the version stamp in the
-// built remote, the host share map, and the size baseline are asserted by the
-// library's own `snui-check-consumer` command (`npm run check:panel`).
-if (packageJson.dependencies?.['signalk-nearlcrews-ui']) {
-  throw new Error('signalk-nearlcrews-ui must be a bundled development dependency.')
-}
+// The shared UI stays a bundled development dependency: the exact pin, its
+// agreement with the installed package, the dependency placement, the version
+// stamp in the built remote, the host share map, the module graph, and the size
+// baseline are all asserted by the library's own `snui-check-consumer` command
+// (`npm run check:panel`).
 
 // THIRD_PARTY_NOTICES.md ships in the tarball, so it is a published
 // attribution record for the code the panel bundle redistributes. It is

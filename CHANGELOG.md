@@ -11,6 +11,20 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The configuration panel moves to signalk-nearlcrews-ui 0.14.0. Checkboxes,
+  switches, and radio groups with an invalid value now draw a dashed outline.
+  Section titles, borders, and focus rings are repainted, and the panel bundle
+  is slightly smaller.
+- The status section's freshness note now reads "Checked 5 seconds ago" while
+  the status is current and "Out of date: updated 20 seconds ago" with a warning
+  mark once three polls in a row have gone unanswered. Screen readers are told
+  once when the status goes out of date and once when it is current again.
+- Jumping from a recent error to its source card now opens the Data sources
+  section and the card, then moves focus to the card's heading button in one
+  step.
+
 ### Security
 
 - The note templates render with Handlebars 4.7.10, which fixes three
@@ -19,6 +33,15 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Internal
 
+- Discard clears an unfinished number entry through the shared library rather
+  than panel code. No behavior changes.
+- The consumer check now also verifies the Webpack module graph (one copy of
+  the shared UI, no stray React or React Aria copies) and the Signal K host
+  loading contract, so the package check no longer repeats the dependency
+  placement test. The browser test fixture loads the panel through the shared
+  UI's host harness instead of its own loader and share scope, and the browser
+  tests read the theme choices and the save confirmation from the library
+  instead of retyping its copy.
 - Source comments in the configuration panel now describe how the Signal K
   Admin behaves after a save: it hands the saved configuration straight back
   to the panel without waiting for the server, so the panel treats that as its

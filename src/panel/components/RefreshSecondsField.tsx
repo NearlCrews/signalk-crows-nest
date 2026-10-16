@@ -13,7 +13,6 @@
 
 import type * as React from 'react'
 import { NumberField } from 'signalk-nearlcrews-ui'
-import { useDraftResetKey } from '../hooks/draft-reset-context.js'
 import {
   MAX_BBOX_DEBOUNCE_SECONDS,
   MIN_BBOX_DEBOUNCE_SECONDS
@@ -82,7 +81,6 @@ export default function RefreshSecondsField ({
       max={MAX_BBOX_DEBOUNCE_SECONDS}
       fallback={MIN_BBOX_DEBOUNCE_SECONDS}
       integer
-      resetKey={useDraftResetKey()}
     />
   )
 }

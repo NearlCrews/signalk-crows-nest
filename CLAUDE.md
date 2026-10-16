@@ -472,11 +472,8 @@ self-contained module registered on one line in `src/index.ts`.
     timeout the status poller and the unit-preferences fetch share), and
     `unit-system.ts` (the React-free display-units module keyed off the server
     unit-preset's `categories.length.targetUnit`). `hooks/` holds `use-config`,
-    `use-status` (which also exposes `lastUpdatedMs`), `use-unit-system`
-    (resolves the display system from the server's unit preferences), and
-    `draft-reset-context` (the Discard epoch every shared `NumberField`
-    receives as its `resetKey`, so a stale draft clears even when the restored
-    value is unchanged).
+    `use-status` (which also exposes `lastUpdatedMs`), and `use-unit-system`
+    (resolves the display system from the server's unit preferences).
     `components/` holds the layout pieces: `StatusBar` (a shared `Section`
     holding the per-source health `Table` and the recent-error `Banner`),
     `DataSourcesSection` (the per-source accordion shell),
@@ -573,10 +570,14 @@ self-contained module registered on one line in `src/index.ts`.
   field (`NumberField`), collapsible sections, checkbox groups, the status
   indicators, and the relative-age formatter. It is pinned exactly, and
   `npm run check:panel` runs the library's own `snui-check-consumer` against
-  the built remote. The static half checks the exact pin, the version stamp,
-  no bundled React, the published share map
-  (`signalk-nearlcrews-ui/federation`, which `webpack.config.cjs` spreads), and
-  the gzip size baseline in `scripts/panel-size-baseline.json`. On top of that,
+  the built remote. The static half checks the exact pin and its placement as a
+  development dependency, the version stamp, no bundled React, the published
+  share map (`signalk-nearlcrews-ui/federation`, which `webpack.config.cjs`
+  spreads), the host loading contract, the module graph from
+  `tmp/panel-stats.json` (which `build:panel` writes: one copy of the library,
+  no stray React or React Aria copies, `--stats`), and the gzip size baseline in
+  `scripts/panel-size-baseline.json`. `--styles` is not used: the panel has no
+  CSS modules, and the check refuses a directory that holds none. On top of that,
   `--runtime --expose ./PluginConfigurationPanel --expect "Plugin status"`
   renders the built panel the way the Signal K Admin host does, on `node:vm`
   with no extra dependency, and asserts that the exposed module evaluates and
@@ -586,7 +587,11 @@ self-contained module registered on one line in `src/index.ts`.
   `save` while it renders. That half needs a built `public/remoteEntry.js`,
   which `verify` already sequences before it. The `--expect` anchor is the same
   string `tests/browser/panel.spec.ts` asserts, so three places now depend on
-  that heading text.
+  that heading text. The browser fixture (`fixtures/browser/main.tsx`) loads
+  the built remote through `signalk-nearlcrews-ui/host-harness`, the library's
+  stand-in for the Admin loader, and the browser tests read the theme choices
+  by `data-snui-theme-choice` and the save confirmation from
+  `PANEL_LABEL_DEFAULTS`.
   A fresh profile follows the host theme and falls back to Light; the
   configuration panel tour in README.md describes every theme choice, and is
   the only place that does. The host supplies React and React DOM `^19.2.0`
@@ -610,8 +615,8 @@ self-contained module registered on one line in `src/index.ts`.
   retained section that resets state, reports validity upward, or holds an
   abortable request must be written to tolerate being replayed. The shared
   `NumberField` stores its draft beside the value it was typed against, so a
-  collapse cannot discard an edit, and the Discard epoch reaches it as
-  `resetKey` rather than through an effect.
+  collapse cannot discard an edit, and Discard reaches it through the shared
+  `useResetDrafts()` rather than through an effect.
 - The shared UI package is ESM-only, and every entry in its export map
   declares a `default` condition beside `import`, so Node's `require(esm)`
   (Node 20.19 and 22.12 or newer; the CI lanes install the latest Node 20,
@@ -651,13 +656,14 @@ self-contained module registered on one line in `src/index.ts`.
 
 - `npm run build` - build the plugin and the configuration panel.
 - `npm run build:plugin` - compile `src/` to `dist/` with `tsc`.
-- `npm run build:panel` - bundle the React panel to `public/` with webpack;
+- `npm run build:panel` - bundle the React panel to `public/` with webpack
+  and write the module graph to `tmp/panel-stats.json` for `check:panel`;
   on a Node outside Babel 8's range it prints a notice and skips instead,
   because the
   panel toolchain (Babel 8) cannot run there.
 - `npm run check:panel` - run the shared UI's consumer check against the
-  built panel: exact pin, version stamp, host shares, and the gzip size
-  baseline, then render it as the Admin host does and assert it mounts on the
+  built panel: exact pin, version stamp, host shares, module graph, and the gzip
+  size baseline, then render it as the Admin host does and assert it mounts on the
   production JSX runtime with its Plugin status section present.
 - `npm test` - run the test suite under `test/`.
 - `npm run typecheck` - type-check the plugin, the panel, and the tests without emitting.

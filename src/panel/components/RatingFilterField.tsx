@@ -8,7 +8,6 @@
 
 import type * as React from 'react'
 import { NumberField } from 'signalk-nearlcrews-ui'
-import { useDraftResetKey } from '../hooks/draft-reset-context.js'
 import { MAX_RATING, MIN_RATING } from '../../shared/rating.js'
 
 /** Half a star per arrow press, and the resolution typed ratings snap to. */
@@ -32,7 +31,6 @@ export default function RatingFilterField ({ value, onChange }: Props): React.Re
       max={MAX_RATING}
       step={HALF_STAR_STEP}
       fallback={MIN_RATING}
-      resetKey={useDraftResetKey()}
     />
   )
 }

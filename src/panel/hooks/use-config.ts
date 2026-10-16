@@ -24,12 +24,13 @@ export interface UseConfigResult {
   /**
    * True when the host mounted the panel without a configuration and this
    * session has not yet issued a save request. The admin UI passes `undefined`
-   * for a plugin that was never configured; it would pass `{}` only for a
-   * package that sets `signalk-plugin-enabled-by-default` to true, which this
-   * one does not. After a save the host hands the saved object straight back
-   * as the prop without waiting for the request, and keeps it when the request
-   * fails, so that echo is the panel's own value rather than confirmation. The
-   * first markSaveRequested therefore clears this on the panel's own request.
+   * for a plugin that was never configured and never passes `null`; it would
+   * pass `{}` only for a package that sets `signalk-plugin-enabled-by-default`
+   * to true, which this one does not, and that plugin is already running.
+   * After a save the host hands the saved object straight back as the prop
+   * without waiting for the request, and keeps it when the request fails, so
+   * that echo is the panel's own value rather than confirmation. The first
+   * markSaveRequested therefore clears this on the panel's own request.
    */
   unconfigured: boolean
 }
@@ -44,7 +45,7 @@ export function useConfig (configuration: unknown): UseConfigResult {
   const [initial] = useState<PluginConfig>(() => normalizeConfig(configuration))
   const [state, dispatch] = useReducer(configReducer, initial)
   const [requestedState, setRequestedState] = useState<PluginConfig>(initial)
-  const [unconfigured, setUnconfigured] = useState(() => configuration == null)
+  const [unconfigured, setUnconfigured] = useState(() => configuration === undefined)
 
   // Keep markSaveRequested's identity stable across renders by reading the latest
   // state through a ref, assigned during render (the same pattern the panel

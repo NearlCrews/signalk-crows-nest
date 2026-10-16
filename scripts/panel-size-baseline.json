@@ -1,5 +1,5 @@
 {
   "description": "Configuration panel remote (the JavaScript and CSS assets beside remoteEntry.js), gzipped at level 9 the way snui-check-consumer measures it. The gate catches growth the panel did not intend: a shared UI upgrade that lands new primitives is re-recorded deliberately, and the allowance is kept narrow so a larger baseline does not widen the room for the next one.",
-  "gzipBytes": 55950,
+  "gzipBytes": 55821,
   "maximumIncreasePercent": 5
 }

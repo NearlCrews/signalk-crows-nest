@@ -17,7 +17,6 @@
 import type * as React from 'react'
 import { useContext } from 'react'
 import { NumberField } from 'signalk-nearlcrews-ui'
-import { useDraftResetKey } from '../hooks/draft-reset-context.js'
 import { UnitSystemContext } from '../hooks/use-unit-system.js'
 import { clampNumber } from '../../shared/numbers.js'
 import {
@@ -61,7 +60,6 @@ export default function LengthField ({
   dense
 }: Props): React.ReactElement {
   const system = useContext(UnitSystemContext)
-  const resetKey = useDraftResetKey()
   const bounds = lengthDisplayBounds(minMeters, maxMeters, system, integer === true)
 
   return (
@@ -84,7 +82,6 @@ export default function LengthField ({
       fallback={bounds.min}
       integer={integer}
       disabled={disabled}
-      resetKey={resetKey}
     />
   )
 }

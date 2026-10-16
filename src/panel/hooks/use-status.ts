@@ -17,6 +17,12 @@ const STATUS_URL = `/plugins/${PLUGIN_ID}/api/status`
 const POLL_INTERVAL_MS = 5000
 
 /**
+ * Age at which the last good poll stops counting as current: three missed
+ * polls, so one slow response does not flag the readout.
+ */
+export const STATUS_STALE_AFTER_MS = 3 * POLL_INTERVAL_MS
+
+/**
  * What to tell the operator about a failed poll.
  *
  * The raw `HTTP 401` a thrown status carried was developer text, and the

@@ -27,7 +27,7 @@ npm install
 ```bash
 npm run build         # Build the plugin and the configuration panel
 npm run build:plugin  # Compile src/ (excluding src/panel/) to dist/ with tsc
-npm run build:panel   # Bundle the React panel to public/ with webpack (skipped with a notice outside Babel 8's Node range)
+npm run build:panel   # Bundle the React panel to public/ with webpack and write tmp/panel-stats.json (skipped with a notice outside Babel 8's Node range)
 npm run build:icons   # Copy the Signal K admin-UI icon set into public/assets/icons/
 npm run watch:panel   # Rebuild the panel on every change while iterating on it
 npm test              # Run the test suite under test/
@@ -224,8 +224,7 @@ src/                      # TypeScript source
     ├── endpoint-validation.ts # The usable-Overpass-endpoint checks
     ├── request-timeout.ts  # The panel-wide per-request timeout
     ├── source-names.ts     # The display name per source
-    ├── hooks/             # use-config, use-status, use-unit-system,
-    │                      #   draft-reset-context
+    ├── hooks/             # use-config, use-status, use-unit-system
     └── components/        # StatusBar, DataSourcesSection (per-source
                            #   accordion shell), DataSourceCard (one collapsible card),
                            #   ActiveCaptainSource, OpenSeaMapSource, UscgLightListSource,

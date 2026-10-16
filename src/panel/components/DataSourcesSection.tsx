@@ -48,7 +48,7 @@ import type { PluginConfig } from '../../shared/types.js'
 import type { SourceStatus, StatusSnapshot } from '../../status/status-types.js'
 import { activeCaptainPoiTypeSelectionLabel } from '../active-captain-poi-types.js'
 import ActiveCaptainSource from './ActiveCaptainSource.js'
-import DataSourceCard from './DataSourceCard.js'
+import DataSourceCard, { type SourceTriggerRefs } from './DataSourceCard.js'
 import NoaaCoopsSource from './NoaaCoopsSource.js'
 import NoaaEncSource from './NoaaEncSource.js'
 import OpenSeaMapSource from './OpenSeaMapSource.js'
@@ -66,6 +66,8 @@ interface Props {
   expanded: Partial<Record<SourceSlug, boolean>>
   /** Record one card's new open state by its slug. */
   onToggleExpanded: (cardId: SourceSlug, open: boolean) => void
+  /** Receives each card's disclosure button, so a jump can focus it. */
+  triggerRefs: SourceTriggerRefs
   /** Whether the section itself is expanded. */
   open: boolean
   /** Record the section's new open state. */
@@ -180,7 +182,7 @@ function useStatusBySource (
  * identity across a tick.
  */
 export default memo(function DataSourcesSection (
-  { state, dispatch, status, expanded, onToggleExpanded, open, onOpenChange }: Props
+  { state, dispatch, status, expanded, onToggleExpanded, triggerRefs, open, onOpenChange }: Props
 ): React.ReactElement {
   const statusBySource = useStatusBySource(status)
   // Off-by-default sources the getting-started callout points at: shown only
@@ -212,6 +214,7 @@ export default memo(function DataSourcesSection (
           summary={activeCaptainSummary(state)}
           expanded={expanded[ACTIVE_CAPTAIN_SOURCE_ID] === true}
           onToggleExpanded={onToggleExpanded}
+          triggerRefs={triggerRefs}
           status={statusBySource.get(ACTIVE_CAPTAIN_SOURCE_ID)}
         >
           <ActiveCaptainSource state={state} dispatch={dispatch} />
@@ -222,6 +225,7 @@ export default memo(function DataSourcesSection (
           summary={openSeaMapSummary(state)}
           expanded={expanded[OPENSEAMAP_SOURCE_ID] === true}
           onToggleExpanded={onToggleExpanded}
+          triggerRefs={triggerRefs}
           onToggleEnabled={(enabled) => dispatch({ type: 'setOpenSeaMapEnabled', enabled })}
           status={statusBySource.get(OPENSEAMAP_SOURCE_ID)}
         >
@@ -233,6 +237,7 @@ export default memo(function DataSourcesSection (
           summary={uscgLightListSummary(state)}
           expanded={expanded[USCG_LIGHT_LIST_SOURCE_ID] === true}
           onToggleExpanded={onToggleExpanded}
+          triggerRefs={triggerRefs}
           onToggleEnabled={(enabled) => dispatch({ type: 'setUscgLightListEnabled', enabled })}
           status={statusBySource.get(USCG_LIGHT_LIST_SOURCE_ID)}
         >
@@ -244,6 +249,7 @@ export default memo(function DataSourcesSection (
           summary={noaaEncSummary(state)}
           expanded={expanded[NOAA_ENC_SOURCE_ID] === true}
           onToggleExpanded={onToggleExpanded}
+          triggerRefs={triggerRefs}
           onToggleEnabled={(enabled) => dispatch({ type: 'setNoaaEncEnabled', enabled })}
           status={statusBySource.get(NOAA_ENC_SOURCE_ID)}
         >
@@ -255,6 +261,7 @@ export default memo(function DataSourcesSection (
           summary={noaaCoopsSummary(state)}
           expanded={expanded[NOAA_COOPS_SOURCE_ID] === true}
           onToggleExpanded={onToggleExpanded}
+          triggerRefs={triggerRefs}
           onToggleEnabled={(enabled) => dispatch({ type: 'setNoaaCoopsEnabled', enabled })}
           status={statusBySource.get(NOAA_COOPS_SOURCE_ID)}
         >
@@ -266,6 +273,7 @@ export default memo(function DataSourcesSection (
           summary={uscgLnmSummary(state)}
           expanded={expanded[USCG_LNM_SOURCE_ID] === true}
           onToggleExpanded={onToggleExpanded}
+          triggerRefs={triggerRefs}
           onToggleEnabled={(enabled) => dispatch({ type: 'setUscgLnmEnabled', enabled })}
           status={statusBySource.get(USCG_LNM_SOURCE_ID)}
         >
@@ -277,6 +285,7 @@ export default memo(function DataSourcesSection (
           summary={wpiSummary(state)}
           expanded={expanded[WPI_SOURCE_ID] === true}
           onToggleExpanded={onToggleExpanded}
+          triggerRefs={triggerRefs}
           onToggleEnabled={(enabled) => dispatch({ type: 'setWpiEnabled', enabled })}
           status={statusBySource.get(WPI_SOURCE_ID)}
         >
@@ -288,6 +297,7 @@ export default memo(function DataSourcesSection (
           summary={usaceSummary(state)}
           expanded={expanded[USACE_SOURCE_ID] === true}
           onToggleExpanded={onToggleExpanded}
+          triggerRefs={triggerRefs}
           onToggleEnabled={(enabled) => dispatch({ type: 'setUsaceEnabled', enabled })}
           status={statusBySource.get(USACE_SOURCE_ID)}
         >

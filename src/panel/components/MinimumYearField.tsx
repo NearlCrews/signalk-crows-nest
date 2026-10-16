@@ -8,7 +8,6 @@
 
 import type * as React from 'react'
 import { NumberField } from 'signalk-nearlcrews-ui'
-import { useDraftResetKey } from '../hooks/draft-reset-context.js'
 import { clampMinimumYear, DEFAULT_MINIMUM_YEAR, MAX_YEAR } from '../../shared/year-filter.js'
 
 interface Props {
@@ -42,7 +41,6 @@ export default function MinimumYearField ({
       max={MAX_YEAR}
       fallback={DEFAULT_MINIMUM_YEAR}
       integer
-      resetKey={useDraftResetKey()}
     />
   )
 }

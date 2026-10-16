@@ -241,7 +241,9 @@ The panel has these areas, from the top down:
 
 1. **Plugin status section**: a source health table reading `Reachable`,
    `Unreachable`, or `Not yet contacted` for each enabled source, with the last
-   successful upstream list-fetch time and a "checked Ns ago" freshness note.
+   successful upstream list-fetch time and a freshness note that reads "Checked
+   Ns ago" and turns to a warning, "Out of date", once three status polls in a
+   row have gone unanswered.
    Recent errors appear below it, and each one carries its own
    "Show <source>" button that expands the Data sources section, scrolls to
    the source the error came from, and moves focus there. Local cache and index

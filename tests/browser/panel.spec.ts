@@ -2,6 +2,7 @@ import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { PANEL_LABEL_DEFAULTS } from 'signalk-nearlcrews-ui'
 
 // The installed shared UI's version, which the built remote must stamp on its
 // root. The exact pin, its agreement with the installed package, and the stamp
@@ -17,14 +18,17 @@ if (typeof uiPackage !== 'object' || uiPackage === null ||
 }
 const uiVersion = uiPackage.version
 
-// Copy owned by `signalk-nearlcrews-ui` rather than by this panel: the theme
-// segments come from its ThemeToggle and the save confirmation from its
-// SaveActionBar, and the panel overrides neither. Naming them once keeps a
-// package rewording to one edit, and keeps a rename reading as a rename rather
-// than as a locator that suddenly matches nothing.
-const THEME_HOST = 'Match Admin'
-const THEME_DEVICE = 'Match device'
-const SAVE_SENT = 'Save sent to the server'
+// Copy owned by `signalk-nearlcrews-ui` rather than by this panel: the save
+// confirmation comes from its SaveActionBar and the panel overrides neither it
+// nor the theme selector. Reading the words from the package's own defaults
+// keeps a rewording from turning a locator into one that matches nothing. The
+// theme radios are found by `data-snui-theme-choice`, not by their labels.
+const SAVE_SENT = PANEL_LABEL_DEFAULTS.saveActionBar.saved
+
+/** The theme selector's radio for one choice: auto, system, light, dark, or night. */
+function themeChoice (page: Page, choice: string): Locator {
+  return page.locator(`[data-snui-theme-choice="${choice}"]`)
+}
 
 /**
  * Load a fixture mode and wait for the panel to mount.
@@ -96,7 +100,7 @@ test('loads the production remote with the current shared UI and saves defaults'
   const root = page.locator('[data-snui-root]')
   await expect(root).toHaveAttribute('data-snui-version', uiVersion)
   await expect(root).not.toHaveAttribute('data-snui-theme')
-  await expect(page.getByRole('radio', { name: THEME_HOST })).toBeChecked()
+  await expect(themeChoice(page, 'auto')).toBeChecked()
 
   await page.getByRole('button', { name: 'Garmin ActiveCaptain', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Advanced' }).first()).toBeVisible()
@@ -193,17 +197,11 @@ test('provides deterministic populated state for the release screenshot', async 
 test('supports every explicit theme and returns to the host default', async ({ page }) => {
   await gotoFixture(page)
   const root = page.locator('[data-snui-root]')
-  const themeGroup = page.getByRole('radiogroup', { name: 'Panel theme' })
-  for (const [label, value] of [
-    [THEME_DEVICE, 'system'],
-    ['Light', 'light'],
-    ['Dark', 'dark'],
-    ['Night', 'night']
-  ] as const) {
-    await themeGroup.getByRole('radio', { name: label }).click()
+  for (const value of ['system', 'light', 'dark', 'night']) {
+    await themeChoice(page, value).click()
     await expect(root).toHaveAttribute('data-snui-theme', value)
   }
-  await themeGroup.getByRole('radio', { name: THEME_HOST }).click()
+  await themeChoice(page, 'auto').click()
   await expect(root).not.toHaveAttribute('data-snui-theme')
 
   // The selector is chrome, not the operator's task, so it trails the panel
@@ -241,11 +239,11 @@ test('holds a below-minimum numeric draft while editing and normalizes it on blu
 })
 
 test('Discard drops a number draft that did not change the committed value', async ({ page }) => {
-  // The case draft-reset-context.ts exists for, and the only one the Discard
-  // epoch can reach. A draft is shown while the value it was typed against is
+  // The case the shared useResetDrafts() exists for, and the only one it
+  // alone can reach. A draft is shown while the value it was typed against is
   // still committed, so a Discard that moves the value drops the draft by
   // itself; a draft that resolves to the value already committed leaves
-  // nothing stale but the epoch.
+  // nothing stale but the reset.
   //
   // It discriminates on WebKit alone. Chromium moves focus to the Discard
   // button when it is pressed, blurring the input and committing the draft
@@ -267,7 +265,7 @@ test('Discard drops a number draft that did not change the committed value', asy
   expect(await radius.inputValue()).toBe('1')
 
   // Now a draft that resolves to the SAME committed value, so the field
-  // reports no change and only the epoch can clear the raw text.
+  // reports no change and only the reset can clear the raw text.
   await radius.fill('0')
   expect(await radius.inputValue()).toBe('0')
 
@@ -354,6 +352,19 @@ test('has no Axe findings or horizontal overflow at 320 pixels', async ({ page }
   // one from the contrast rules this sweep is here to run.
   const radius = await armProximityAlarm(page)
   await expect(radius).toBeEnabled()
+  // Arming the alarm enables Discard, whose text color eases in from the
+  // disabled tone. Axe reads it mid-transition on a slow WebKit run and
+  // reports a contrast the settled button does not have, so wait for the
+  // color to hold still across two reads before the sweep.
+  const discard = page.getByRole('button', { name: 'Discard', exact: true })
+  await expect(discard).toBeEnabled()
+  let previousColor = ''
+  await expect.poll(async () => {
+    const color = await discard.evaluate((element) => getComputedStyle(element).color)
+    const settled = color === previousColor
+    previousColor = color
+    return settled
+  }, { intervals: [300] }).toBe(true)
 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
   expect(overflow).toBeLessThanOrEqual(0)

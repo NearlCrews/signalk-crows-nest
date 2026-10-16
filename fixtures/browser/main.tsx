@@ -1,6 +1,7 @@
 import * as React from 'react'
 import * as ReactDOM from 'react-dom'
 import { createRoot } from 'react-dom/client'
+import { createHostShareScope, loadPanelRemote } from 'signalk-nearlcrews-ui/host-harness'
 import {
   ACTIVE_CAPTAIN_SOURCE_ID,
   NOAA_COOPS_SOURCE_ID,
@@ -11,32 +12,6 @@ import {
   USCG_LNM_SOURCE_ID,
   WPI_SOURCE_ID
 } from '../../src/shared/source-ids.js'
-
-interface PanelProps {
-  configuration: unknown
-  save: (configuration: unknown) => void
-}
-
-interface RemoteContainer {
-  get: (module: string) => Promise<() => { default: React.ComponentType<PanelProps> }>
-  init: (scope: ShareScope) => Promise<void> | void
-}
-
-interface ShareScope {
-  readonly react: Record<string, ShareScopeEntry<typeof React>>
-  readonly 'react-dom': Record<string, ShareScopeEntry<typeof ReactDOM>>
-}
-
-interface ShareScopeEntry<T> {
-  readonly eager: boolean
-  readonly from: string
-  readonly get: () => Promise<() => T>
-  readonly loaded: boolean
-  readonly shareConfig: {
-    readonly singleton: boolean
-    readonly requiredVersion: string
-  }
-}
 
 const fixtureParams = new URLSearchParams(window.location.search)
 const screenshotTimestamp = '2026-08-12T16:00:00.000Z'
@@ -133,52 +108,18 @@ window.fetch = async (input): Promise<Response> => {
   return jsonResponse({ error: `Unhandled fixture request: ${path}` }, 404)
 }
 
-async function loadRemote (): Promise<RemoteContainer> {
-  await new Promise<void>((resolve, reject) => {
-    const script = document.createElement('script')
-    script.src = '/panel-assets/remoteEntry.js'
-    script.onload = () => resolve()
-    script.onerror = () => reject(new Error('Could not load the production panel remote.'))
-    document.head.append(script)
-  })
-  const container = (window as unknown as Record<string, unknown>).signalk_crows_nest
-  if (typeof container !== 'object' || container === null) {
-    throw new Error('The production panel did not register its remote container.')
-  }
-  return container as unknown as RemoteContainer
-}
-
-const shareScope: ShareScope = {
-  react: {
-    [React.version]: {
-      eager: true,
-      from: 'crows-nest-browser-fixture',
-      get: () => Promise.resolve(() => React),
-      loaded: true,
-      shareConfig: {
-        singleton: true,
-        requiredVersion: `^${React.version}`
-      }
-    }
-  },
-  'react-dom': {
-    [ReactDOM.version]: {
-      eager: true,
-      from: 'crows-nest-browser-fixture',
-      get: () => Promise.resolve(() => ReactDOM),
-      loaded: true,
-      shareConfig: {
-        singleton: true,
-        requiredVersion: `^${ReactDOM.version}`
-      }
-    }
-  }
-}
-
 try {
-  const container = await loadRemote()
-  await container.init(shareScope)
+  // The harness loads the remote and builds the share scope the way the
+  // Signal K Admin does, so neither can drift from the host's own.
+  const container = await loadPanelRemote({
+    packageName: 'signalk-crows-nest',
+    url: '/panel-assets/remoteEntry.js'
+  })
+  await container.init(createHostShareScope(React, ReactDOM))
   const factory = await container.get('./PluginConfigurationPanel')
+  if (factory === undefined || factory === null) {
+    throw new Error('The production panel does not expose ./PluginConfigurationPanel.')
+  }
   const Panel = factory().default
   const rootElement = document.querySelector('#root')
   if (!(rootElement instanceof HTMLElement)) throw new Error('Fixture root is missing.')
@@ -201,7 +142,7 @@ try {
               wpiEnabled: true,
               usaceEnabled: true
             }
-          : null
+          : undefined
     )
     const save = (nextConfiguration: unknown): void => {
       document.body.dataset.saveCount = String(Number(document.body.dataset.saveCount ?? 0) + 1)

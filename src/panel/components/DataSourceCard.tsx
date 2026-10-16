@@ -55,6 +55,9 @@ const PILL_TONE: Record<PillVariant, StatusTone> = {
   ok: 'success'
 }
 
+/** The disclosure button of each source card, filled in as the cards mount. */
+export type SourceTriggerRefs = React.RefObject<Partial<Record<SourceSlug, HTMLButtonElement | null>>>
+
 interface Props {
   /**
    * Stable id used as the disclosure-state key, e.g. `'activecaptain'`.
@@ -70,6 +73,8 @@ interface Props {
   expanded: boolean
   /** Record the card's new open state; receives the cardId. */
   onToggleExpanded: (cardId: SourceSlug, open: boolean) => void
+  /** Registry the card files its disclosure button in, for the jump-to-error shortcut. */
+  triggerRefs: SourceTriggerRefs
   /**
    * Called when the enable checkbox is toggled. Omitted for an always-on
    * source; the header then shows an "Always on" badge in place of the
@@ -95,6 +100,7 @@ export default function DataSourceCard ({
   summary,
   expanded,
   onToggleExpanded,
+  triggerRefs,
   onToggleEnabled,
   status,
   children
@@ -114,6 +120,9 @@ export default function DataSourceCard ({
       title={name}
       headingLevel={3}
       landmark={false}
+      triggerRef={(node) => {
+        triggerRefs.current[cardId] = node
+      }}
       open={expanded}
       onOpenChange={(open) => onToggleExpanded(cardId, open)}
       leading={onToggleEnabled !== undefined
@@ -153,36 +162,9 @@ export default function DataSourceCard ({
   )
 }
 
-/**
- * Stable DOM id of a source card's outer element, so the jump-to-error
- * shortcut can find the offending card without a ref through the accordion.
- */
-export function sourceCardDomId (cardId: string): string {
+/** Stable DOM id of a source card's outer element. */
+function sourceCardDomId (cardId: string): string {
   return `ac-source-card-${cardId}`
-}
-
-/**
- * Bring a source card that has just been expanded into view, and hand focus
- * to it.
- *
- * Focus goes to the card's own disclosure toggle. That names the source and
- * reports the card as expanded, so a screen reader announces the destination
- * instead of the operator being silently scrolled, and it leaves the next Tab
- * on the card's first field rather than on the rest of the error list. It is
- * also where the shared section returns focus when the card is collapsed
- * again, so a jump and a collapse agree on where the card's handle is.
- *
- * The toggle is the button inside the card's own h3: `headingLevel={3}` above
- * is what makes that unambiguous, because the Advanced disclosure nested in
- * the body is an h4. Focus runs first with `preventScroll` so the browser's
- * instant focus scroll does not cancel the smooth scroll that follows.
- */
-export function revealSourceCard (cardId: string): void {
-  const card = document.getElementById(sourceCardDomId(cardId))
-  if (card === null) return
-  card.querySelector<HTMLElement>('h3 button')?.focus({ preventScroll: true })
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  card.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' })
 }
 
 // pillVariant + pillContent are in `../source-status-pill.ts` so the

@@ -24,14 +24,17 @@ import {
   type BannerProps,
   Button,
   Cluster,
+  FreshnessNote,
   RelativeAge,
   Section,
   Stack,
   StatusIndicator,
   Text,
-  type StatusTone
+  type StatusTone,
+  usePollFreshness
 } from 'signalk-nearlcrews-ui'
 import { Table, TableCell, TableHeaderCell } from 'signalk-nearlcrews-ui/composites'
+import { STATUS_STALE_AFTER_MS } from '../hooks/use-status.js'
 import { sourceDisplayName } from '../source-names.js'
 import type { SourceStatus, StatusError, StatusSnapshot } from '../../status/status-types.js'
 
@@ -176,13 +179,12 @@ export default memo(function StatusBar ({ status, lastUpdatedMs, onJumpToSource 
   // focusable and nothing more, so it adds no tab stop, and a screen reader
   // landing on it reads "Plugin status", which says where the errors went.
   const headingRef = useRef<HTMLHeadingElement>(null)
+  const { stale } = usePollFreshness(lastUpdatedMs, { staleAfterMs: STATUS_STALE_AFTER_MS })
   return (
     <Section
       headingRef={headingRef}
       title='Plugin status'
-      actions={lastUpdatedMs !== null
-        ? <Text tone='muted' size='sm'>Checked <RelativeAge since={lastUpdatedMs} /></Text>
-        : undefined}
+      actions={<FreshnessNote since={lastUpdatedMs} stale={stale} />}
     >
       {/*
         Prose rather than the shared EmptyState. This is one sentence inside a
