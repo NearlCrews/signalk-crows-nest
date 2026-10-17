@@ -13,7 +13,7 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- The configuration panel moves to signalk-nearlcrews-ui 0.14.0. Checkboxes,
+- The configuration panel moves to signalk-nearlcrews-ui 0.14.1. Checkboxes,
   switches, and radio groups with an invalid value now draw a dashed outline.
   Section titles, borders, and focus rings are repainted, and the panel bundle
   is slightly smaller.
